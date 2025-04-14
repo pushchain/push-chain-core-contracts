@@ -53,4 +53,7 @@ Here’s how the system works:
 
 ### Deployment Flow:
 1. Factory contract is deployed with SmartAccountV1 as implementation.
-2. New SmartAccount is deployed per user using:
+2. New SmartAccount is deployed per user using Minimal Proxy Contracts ( clones ) for each user.
+3. While the logic of SmartAccountV1 is used, the storage of Proxy is used for every specific user.
+
+---
