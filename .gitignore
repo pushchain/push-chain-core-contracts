@@ -1,14 +1,17 @@
-# Compiler files
-cache/
+# Compiler output
 out/
+cache/
+lib/
 
-# Ignores development broadcast logs
-!/broadcast
+# Environment variables
+.env
+
+# Broadcast logs
 /broadcast/*/31337/
 /broadcast/**/dry-run/
 
-# Docs
+# Docs output
 docs/
 
-# Dotenv file
-.env
+# Foundry config (optional to ignore)
+/foundry.toml
