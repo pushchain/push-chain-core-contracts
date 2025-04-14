@@ -1,66 +1,56 @@
-## Foundry
+# Push Smart Account V1
+This repository contains the implementation of the SmartAccount architecture for PushChain's Fee Abstraction feature.
 
-**Foundry is a blazing fast, portable and modular toolkit for Ethereum application development written in Rust.**
+The main objective is to enable users from external chains (EVM or NON-EVM) to:
 
-Foundry consists of:
+* Interact with smart contracts on PushChain.
+* Have a dedicated Smart Account deterministically created for them
+* Verify their payload execution using signatures (EVM or NON-EVM signing mechanisms).
+* Re-use the same Smart Account across future interactions.
 
--   **Forge**: Ethereum testing framework (like Truffle, Hardhat and DappTools).
--   **Cast**: Swiss army knife for interacting with EVM smart contracts, sending transactions and getting chain data.
--   **Anvil**: Local Ethereum node, akin to Ganache, Hardhat Network.
--   **Chisel**: Fast, utilitarian, and verbose solidity REPL.
+The repo has two main contracts
 
-## Documentation
+## SmartAccountV1.sol
+A lightweight smart contract acting as the user's Smart Account on PushChain.
 
-https://book.getfoundry.sh/
+Core Features:
+* OwnerKey	Stored key of user (bytes) — EVM address or Non-EVM pubkey
 
-## Usage
+* VerifierPrecompile	Verifier address to validate NON-EVM signatures
 
-### Build
+* `executePayload()`	Verify signature, then call target contract
+Signature Verification Flow:
 
-```shell
-$ forge build
+
+## FactoryV1.sol
+The contract responsible for deploying and managing Smart Accounts.
+
+Core Features:
+* create2 with Clones - Deterministic smart account deployment using userKey as salt.
+* tracks the deployed smart accounts for each user
+* `computeSmartAccountAddress()` - Returns predicted smart account address before deployment.
+
+> The Factory uses [EIP1167](https://eips.ethereum.org/EIPS/eip-1167) to create proxyies which significantly reduces deployment costs.
+
+### Architectural Flow
+Here’s how the system works:
+
 ```
 
-### Test
-
-```shell
-$ forge test
+            +-------------------------------------+
+            | SmartAccountImplementation (Logic) |
+            +-------------------------------------+
+                           ^
+                           | (delegatecall)
+                           |
+-------------------------------------------------------
+| Proxy1 (Alice) | Proxy2 (Bob) | Proxy3 (Carol) |
+| Storage:       | Storage:     | Storage:       |
+| ownerKey=...   | ownerKey=... | ownerKey=...   |
+| ownerType=...  | ownerType=...| ownerType=...  |
+-------------------------------------------------------
 ```
 
-### Format
-
-```shell
-$ forge fmt
-```
-
-### Gas Snapshots
-
-```shell
-$ forge snapshot
-```
-
-### Anvil
-
-```shell
-$ anvil
-```
-
-### Deploy
-
-```shell
-$ forge script script/Counter.s.sol:CounterScript --rpc-url <your_rpc_url> --private-key <your_private_key>
-```
-
-### Cast
-
-```shell
-$ cast <subcommand>
-```
-
-### Help
-
-```shell
-$ forge --help
-$ anvil --help
-$ cast --help
-```
+### Deployment Flow:
+1. Factory contract is deployed with SmartAccountV1 as implementation.
+2. New SmartAccount is deployed per user using:
