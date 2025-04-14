@@ -1,14 +1,22 @@
-// SPDX-License-Identifier: UNLICENSED
-pragma solidity 0.8.26;
+// SPDX-License-Identifier: MIT
+pragma solidity ^0.8.20;
 
-contract Counter {
-    uint256 public number;
+contract Target {
+    uint256 public magicNumber;
 
-    function setNumber(uint256 newNumber) public {
-        number = newNumber;
+    // Setter function to set the magic number without any cost
+    function setMagicNumber(uint256 _magicNumber) public {
+        magicNumber = _magicNumber;
     }
 
-    function increment() public {
-        number++;
+    // Setter function to set the magic number with a cost of 0.1 ETH
+    function setMagicNumberWithFee(uint256 _magicNumber) public payable {
+        require(msg.value == 0.1 ether, "Insufficient fee: 0.1 ETH required");
+        magicNumber = _magicNumber;
+    }
+
+    // Getter function to retrieve the magic number
+    function getMagicNumber() public view returns (uint256) {
+        return magicNumber;
     }
 }
