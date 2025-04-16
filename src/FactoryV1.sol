@@ -16,7 +16,7 @@ contract FactoryV1 {
     using Clones for address;
 
     address public smartAccountImplementation;
-    mapping(bytes => address) public userAccounts;
+    mapping(bytes32 => address) public userAccounts;
 
     event SmartAccountDeployed(address indexed smartAccount, bytes userKey);
 
@@ -37,15 +37,16 @@ contract FactoryV1 {
      */
     function deploySmartAccount(
         bytes memory userKey,
+        string memory caipString,
         SmartAccountV1.OwnerType ownerType,
         address verifierPrecompile
     ) external returns(address) {
-        require(userAccounts[userKey] == address(0), "Account already exists");
+        bytes32 salt = keccak256(abi.encode(caipString));
 
-        bytes32 salt = keccak256(userKey);
+        require(userAccounts[salt] == address(0), "Account already exists");
 
         address smartAccount = smartAccountImplementation.cloneDeterministic(salt);
-        userAccounts[userKey] = smartAccount;
+        userAccounts[salt] = smartAccount;
         SmartAccountV1(smartAccount).initialize(userKey, ownerType, verifierPrecompile);
 
         emit SmartAccountDeployed(smartAccount, userKey);
@@ -54,13 +55,13 @@ contract FactoryV1 {
 
     /**
      * @dev Computes the deterministic address of a SmartAccountV1 instance based on the user key.
-     * @param userKey The unique key for the user, used to compute the deterministic address.
+     * @param caipString The unique key for the user, used to compute the deterministic address.
      * @return smartAccount The computed address of the SmartAccountV1 instance.
      */
     function computeSmartAccountAddress(
-        bytes memory userKey
+        string memory caipString
     ) external view returns (address) {
-        bytes32 salt = keccak256(userKey);
+        bytes32 salt = keccak256(abi.encode(caipString));
         return smartAccountImplementation.predictDeterministicAddress(salt, address(this));
     }
 }

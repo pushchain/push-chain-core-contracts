@@ -7,6 +7,7 @@ import "forge-std/console.sol";
 import { Target } from "../src/mocks/Target.sol";
 import {FactoryV1} from "../src/FactoryV1.sol";
 import {SmartAccountV1} from "../src/SmartAccountV1.sol";
+import {CAIP10} from "./utils/caip.sol";
 
 contract SmartAccountTest is Test {
     Target target;
@@ -33,25 +34,32 @@ contract SmartAccountTest is Test {
         bobKey = abi.encodePacked(address(bob));
     }
 
-    function testImplementationAddress() public {
+    function testImplementationAddress() public view {
         assertEq(address(factory.smartAccountImplementation()), address(smartAccount));
     }
 
     // Test deployment of smart account
     function testDeploymentCreate2() public{
+        string memory caip = CAIP10.createCAIP10("eip155", "1", bob);
+        bytes32 salt = keccak256(abi.encode(caip));
+
         address smartAccountAddress = factory.deploySmartAccount(
             bobKey,
+            caip,
             ownerType,
             verifierPrecompile
         );
-        assertEq(smartAccountAddress, address(factory.userAccounts(bobKey)));
-        assertEq(smartAccountAddress, address(factory.computeSmartAccountAddress(bobKey)));
+        assertEq(smartAccountAddress, address(factory.userAccounts(salt)));
+        assertEq(smartAccountAddress, address(factory.computeSmartAccountAddress(caip)));
     }
 
     // Test the state update of SmartAccount Post Deployment
     function testStateUpdate() public {
+        string memory caip = CAIP10.createCAIP10("eip155", "1", bob);
+
         address smartAccountAddress = factory.deploySmartAccount(
             bobKey,
+            caip,
             ownerType,
             verifierPrecompile
         );
@@ -69,9 +77,11 @@ contract SmartAccountTest is Test {
 
     // Test the execution of a payload
     function testExecution() public{
+        string memory caip = CAIP10.createCAIP10("eip155", "1", bob);
         // Deploy the smart account
         address smartAccountAddress = factory.deploySmartAccount(
             bobKey,
+            caip,
             ownerType,
             verifierPrecompile
         );
