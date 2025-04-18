@@ -9,10 +9,12 @@ import {Upgrades} from "openzeppelin-foundry-upgrades/Upgrades.sol";
 
 contract DeployLocker is Script {
     address public constant ADMIN = 0xEbf0Cfc34E07ED03c05615394E2292b387B63F12; // Replace with the actual admin address
-    address _weth;
-    address _usdt;
-    address _router;
-    address _priceFeed;
+    
+    //TODO These are mainnet address.
+    address constant WETH = 0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2;
+    address constant USDT = 0xdAC17F958D2ee523a2206206994597C13D831ec7;
+    address constant ROUTER = 0xE592427A0AEce92De3Edee1F18E0157C05861564;
+    address constant FEED = 0x5f4eC3Df9cbd43714FE2740f5E3616155c5b8419;
 
     function run() external {
         vm.startBroadcast();
@@ -31,7 +33,7 @@ contract DeployLocker is Script {
             "PushLocker.sol",
             abi.encodeCall(
                 PushLocker.initialize,
-                (ADMIN, _weth, _usdt, _router, _priceFeed)
+                (ADMIN, WETH, USDT, ROUTER, FEED) // Initialize with admin and other parameters
             )
         );
 
