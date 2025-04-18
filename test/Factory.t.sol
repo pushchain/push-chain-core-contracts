@@ -4,8 +4,8 @@ pragma solidity ^0.8.20;
 import "forge-std/Test.sol";
 import "forge-std/console.sol";
 
-import {FactoryV1} from "../src/FactoryV1.sol";
-import {SmartAccountV1} from "../src/SmartAccountV1.sol";
+import {FactoryV1} from "../src/SmartAccount/FactoryV1.sol";
+import {SmartAccountV1} from "../src/SmartAccount/SmartAccountV1.sol";
 import {CAIP10} from "./utils/caip.sol";
 
 contract FactoryTest is Test {
