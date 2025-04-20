@@ -7,18 +7,19 @@ import "@openzeppelin/contracts-upgradeable/proxy/utils/UUPSUpgradeable.sol";
 import {ISwapRouter, IWETH, AggregatorV3Interface} from "../Interfaces/AMMInterfaces.sol";
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
-
+import {ReentrancyGuard} from "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
 
 contract PushLocker is
     Initializable,
     UUPSUpgradeable,
-    AccessControlUpgradeable
+    AccessControlUpgradeable,
+    ReentrancyGuard
 {
     using SafeERC20 for IERC20;
     event FundsAdded(
         address indexed user,
-        uint256 ethAmount,
-        uint256 usdtAmount
+        uint256 usdtAmount,
+        bytes32 transactionHash
     );
     event TokenRecovered(address indexed admin, uint256 amount);
 
@@ -48,7 +49,7 @@ contract PushLocker is
         address newImplementation
     ) internal override onlyRole(DEFAULT_ADMIN_ROLE) {}
 
-    function addFunds() external payable {
+    function addFunds(bytes32 _transactionHash) external payable nonReentrant {
         require(msg.value > 0, "No ETH sent");
 
         // Wrap ETH to WETH
@@ -79,18 +80,19 @@ contract PushLocker is
         uint256 usdtReceived = ISwapRouter(UNISWAP_ROUTER).exactInputSingle(
             params
         );
-    // IERC20(USDT).transfer(0x6CA6d1e2D5347Bfab1d91e883F1915560e09129D, usdtReceived);
 
-        emit FundsAdded(msg.sender, msg.value, usdtReceived);
+        emit FundsAdded(msg.sender, usdtReceived, _transactionHash);
     }
 
-function recoverToken(address _recipient, uint256 amount) external onlyRole(DEFAULT_ADMIN_ROLE) {
-    uint256 balance = IERC20(USDT).balanceOf(address(this));
-    require(balance >= amount, "Insufficient balance");
+    function recoverToken(
+        address _recipient,
+        uint256 amount
+    ) external onlyRole(DEFAULT_ADMIN_ROLE) {
+        uint256 balance = IERC20(USDT).balanceOf(address(this));
+        require(balance >= amount, "Insufficient balance");
 
-    IERC20(USDT).safeTransfer(_recipient, amount);
+        IERC20(USDT).safeTransfer(_recipient, amount);
 
-    emit TokenRecovered(_recipient, amount);
-}
-
+        emit TokenRecovered(_recipient, amount);
+    }
 }
