@@ -7,13 +7,13 @@ import "@openzeppelin/contracts-upgradeable/proxy/utils/UUPSUpgradeable.sol";
 import {ISwapRouter, IWETH, AggregatorV3Interface} from "../Interfaces/AMMInterfaces.sol";
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
-import {ReentrancyGuard} from "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
+import {ReentrancyGuardUpgradeable} from "@openzeppelin/contracts-upgradeable/utils/ReentrancyGuardUpgradeable.sol";
 
 contract PushLocker is
     Initializable,
     UUPSUpgradeable,
     AccessControlUpgradeable,
-    ReentrancyGuard
+    ReentrancyGuardUpgradeable
 {
     using SafeERC20 for IERC20;
     event FundsAdded(
@@ -37,6 +37,7 @@ contract PushLocker is
         address _router,
         address _priceFeed
     ) external initializer {
+        __ReentrancyGuard_init();
         _grantRole(DEFAULT_ADMIN_ROLE, _admin);
 
         WETH = _weth;
@@ -54,13 +55,14 @@ contract PushLocker is
 
         // Wrap ETH to WETH
         IWETH(WETH).deposit{value: msg.value}();
-        IWETH(WETH).approve(UNISWAP_ROUTER, msg.value);
+        uint WethBalance = IERC20(WETH).balanceOf(address(this));
+        IWETH(WETH).approve(UNISWAP_ROUTER, WethBalance);
 
         // Get current ETH/USD price from Chainlink
         (, int256 price, , , ) = ethUsdPriceFeed.latestRoundData(); // price is 8 decimals
         require(price > 0, "Invalid oracle price");
 
-        uint256 ethInUsd = (uint256(price) * msg.value) / 1e8;
+        uint256 ethInUsd = (uint256(price) *WethBalance) / 1e8;
 
         // Expect similar USDT amount (1:1 with USD), allow 0.5% slippage
         uint256 minOut = (ethInUsd * 995) / 1000;
@@ -72,7 +74,7 @@ contract PushLocker is
                 fee: POOL_FEE,
                 recipient: address(this),
                 deadline: block.timestamp,
-                amountIn: msg.value,
+                amountIn: WethBalance,
                 amountOutMinimum: minOut / 1e12, // Adjust to USDT decimals (6)
                 sqrtPriceLimitX96: 0
             });
@@ -88,9 +90,6 @@ contract PushLocker is
         address _recipient,
         uint256 amount
     ) external onlyRole(DEFAULT_ADMIN_ROLE) {
-        uint256 balance = IERC20(USDT).balanceOf(address(this));
-        require(balance >= amount, "Insufficient balance");
-
         IERC20(USDT).safeTransfer(_recipient, amount);
 
         emit TokenRecovered(_recipient, amount);

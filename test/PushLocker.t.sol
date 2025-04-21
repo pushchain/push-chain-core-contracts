@@ -11,6 +11,7 @@ contract PushLockerTest is Test {
     address user = makeAddr("user");
     address admin = makeAddr("admin");
     address recipient = makeAddr("recipient");
+    bytes32 transactionHash = keccak256("transactionHash");
 
     address constant WETH = 0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2;
     address constant USDT = 0xdAC17F958D2ee523a2206206994597C13D831ec7;
@@ -33,7 +34,7 @@ contract PushLockerTest is Test {
         vm.startPrank(user);
         uint256 initialUSDTBalance = IERC20(USDT).balanceOf(address(locker));
 
-        locker.addFunds{value: 1 ether}();
+        locker.addFunds{value: 1 ether}(transactionHash);
 
         uint256 finalUSDTBalance = IERC20(USDT).balanceOf(address(locker));
         assertGt(finalUSDTBalance, initialUSDTBalance, "USDT not received");
@@ -44,7 +45,7 @@ contract PushLockerTest is Test {
     function test_RecoverToken_ByAdmin() public {
         // Send some ETH and convert to USDT
         vm.startPrank(user);
-        locker.addFunds{value: 1 ether}();
+        locker.addFunds{value: 1 ether}(transactionHash);
         vm.stopPrank();
 
         uint256 lockerUSDTBalance = IERC20(USDT).balanceOf(address(locker));
@@ -77,7 +78,7 @@ contract PushLockerTest is Test {
 
         // Just assert that it’s still functional after upgrade
         vm.prank(user);
-        locker.addFunds{value: 0.5 ether}();
+        locker.addFunds{value: 0.5 ether}(transactionHash);
     }
 
     event FundsAdded(address indexed user, uint256 ethAmount, uint256 usdtAmount);
