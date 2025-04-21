@@ -73,9 +73,9 @@ contract PushLocker is
                 tokenOut: USDT,
                 fee: POOL_FEE,
                 recipient: address(this),
-                deadline: block.timestamp,
+                 deadline: block.timestamp, //not for sepolia
                 amountIn: WethBalance,
-                amountOutMinimum: minOut / 1e12, // Adjust to USDT decimals (6)
+                amountOutMinimum: minOut / 1e12, // Adjust to USDT decimals (6) && not for sepolia
                 sqrtPriceLimitX96: 0
             });
 
