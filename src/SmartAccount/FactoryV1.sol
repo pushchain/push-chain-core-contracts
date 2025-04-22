@@ -30,7 +30,8 @@ contract FactoryV1 {
 
     /**
      * @dev Deploys a new SmartAccountV1 instance with the given user key and owner type.
-     * @param userKey The unique key for the user, used to compute the deterministic address.
+     * @param userKey The owner key for the SmartAccount in bytes format.
+     * @param caipString The unique key for the user, used to compute the deterministic address.
      * @param ownerType The type of owner (EVM or NON_EVM) for the SmartAccount.
      * @param verifierPrecompile The address of the verifier precompile contract.
      * @return smartAccount The address of the newly deployed SmartAccountV1 instance.
