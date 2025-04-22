@@ -2,8 +2,9 @@
 pragma solidity ^0.8.20;
 
 import "forge-std/Script.sol";
-import {FactoryV1} from "../src/FactoryV1.sol";
-import {SmartAccountV1} from "../src/SmartAccountV1.sol";
+import {FactoryV1} from "../src/SmartAccount/FactoryV1.sol";
+import {SmartAccountV1} from "../src/SmartAccount/SmartAccountV1.sol";
+import {CAIP10} from "../test/utils/caip.sol";
 
 contract DeploySmartAccountScript is Script {
     function run() external {
@@ -20,6 +21,14 @@ contract DeploySmartAccountScript is Script {
         // 3. Deploy SmartAccount for NON-EVM owner
         // Example NON-EVM key (can be changed)
         bytes memory ownerKeyNonEVM = vm.parseBytes('0x30ea71869947818d27b718592ea44010b458903bd9bf0370f50eda79e87d9f69');
+        string memory solanaChainId = "5eykt4UsFv8P8NJdTREpY1vzqKqZKvdp";
+        string memory solanaAddress = "HGyAQb8SeAE6X6RfhgMpGWZQuVYU8kgA5tKitaTrUHfh";
+
+        string memory caip = CAIP10.createSolanaCAIP10(
+            solanaChainId,
+            solanaAddress
+        );
+        bytes32 salt = keccak256(abi.encode(caip));
 
         // Dummy verifier precompile address (replace with real one if required)
         address verifierPrecompile = address(0x0000000000000000000000000000000000000902);
@@ -27,6 +36,7 @@ contract DeploySmartAccountScript is Script {
         // Deploy SmartAccount via factory
         address smartAccountAddr = factory.deploySmartAccount(
             ownerKeyNonEVM,
+            caip,
             SmartAccountV1.OwnerType.NON_EVM,
             verifierPrecompile
         );
