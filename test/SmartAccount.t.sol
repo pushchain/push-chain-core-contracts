@@ -18,12 +18,14 @@ contract SmartAccountTest is Test {
     address bob;
     uint256 bobPk;
     bytes bobKey;
-    address verifierPrecompile = 0x1234567890123456789012345678901234567891;
+    address verifierPrecompile = 0x0000000000000000000000000000000000000902;
     SmartAccountV1.OwnerType ownerType = SmartAccountV1.OwnerType.EVM;
 
     // Set up the test environment - NON-EVM
-    bytes ownerKeyNonEVM = hex"f1d234ab8473c0ab4f55ea1c7c3ea5feec4acb3b9498af9b63722c1b368b8e4c";
+    bytes ownerKeyNonEVM = hex"30ea71869947818d27b718592ea44010b458903bd9bf0370f50eda79e87d9f69";
     SmartAccountV1.OwnerType ownerTypeNonEVM = SmartAccountV1.OwnerType.NON_EVM;
+    string solanaChainId = "5eykt4UsFv8P8NJdTREpY1vzqKqZKvdp";
+    string solanaAddress = "HGyAQb8SeAE6X6RfhgMpGWZQuVYU8kgA5tKitaTrUHfh";
     
     function setUp() public {
         target = new Target();
@@ -106,6 +108,55 @@ contract SmartAccountTest is Test {
         assertEq(magicValueAfter, 786, "Magic value was not set correctly");
     }
 
+    function testNonEVMExecution() public {
+        string memory caip = CAIP10.createSolanaCAIP10(
+            solanaChainId,
+            solanaAddress
+        );
+        bytes32 salt = keccak256(abi.encode(caip));
 
+        // Deploy the smart account
+        address smartAccountAddress = factory.deploySmartAccount(
+            ownerKeyNonEVM,
+            caip,
+            ownerTypeNonEVM,
+            verifierPrecompile
+        );
+        SmartAccountV1 smartAccountInstance = SmartAccountV1(smartAccountAddress);
+        
+        // Calldata and signature for target contract
+        bytes memory data = '0x2ba2ed980000000000000000000000000000000000000000000000000000000000000312';
+        bytes memory signature = '0x16d760987b403d7a27fd095375f2a1275c0734701ad248c3bf9bc8f69456d626c37b9ee1c13da511c71d9ed0f90789327f2c40f3e59e360f7c832b6b0d818d03';
 
+        // Get magic value before execution
+        uint256 magicValueBefore = target.getMagicNumber();
+        console.log("Magic Value Before:", magicValueBefore);
+
+        // Execute the payload using the smart account instance
+        smartAccountInstance.executePayload(address(target), data, signature);
+        
+        // Get magic value after execution
+        uint256 magicValueAfter = target.getMagicNumber();
+        console.log("Magic Value After:", magicValueAfter);
+        
+        // Assert the magic value was set correctly
+        assertEq(magicValueAfter, 786, "Magic value was not set correctly");
+        assertEq(smartAccountAddress, address(factory.userAccounts(salt)));
+    }
+
+    function testVerifyEd25519Precompile() public {
+        bytes memory pubkey = hex"30ea71869947818d27b718592ea44010b458903bd9bf0370f50eda79e87d9f69";
+        bytes memory message = hex"2ba2ed980000000000000000000000000000000000000000000000000000000000000312";
+        bytes memory signature = hex"16d760987b403d7a27fd095375f2a1275c0734701ad248c3bf9bc8f69456d626c37b9ee1c13da511c71d9ed0f90789327f2c40f3e59e360f7c832b6b0d818d03";
+
+        // Perform staticcall
+        (bool success, bytes memory result) = address(0x902).staticcall(
+            abi.encodeWithSignature("verifyEd25519(bytes,bytes,bytes)", pubkey, message, signature)
+        );
+
+        require(success, "Precompile call failed");
+
+        bool verified = abi.decode(result, (bool));
+        assertTrue(verified, "Signature should be valid");
+    }
 }

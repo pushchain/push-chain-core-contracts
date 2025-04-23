@@ -57,17 +57,18 @@ contract SmartAccountV1 is Initializable, ReentrancyGuard {
 
     /**
      * @dev Verifies the NON-EVM signature using the verifier precompile.
-     * @param messageHash The hash of the message to verify.
+     * @param message The message to verify.
      * @param signature The signature to verify.
      * @return bool indicating whether the signature is valid.
      */
-    function verifySignature(bytes32 messageHash, bytes memory signature) internal view returns (bool) {
+    function verifySignatureNonEVM(bytes calldata message, bytes memory signature) internal view returns (bool) {
         (bool success, bytes memory result) = verifierPrecompile.staticcall(
-            abi.encodeWithSignature("verify(bytes32,bytes,bytes)", messageHash, signature, ownerKey)
+            abi.encodeWithSignature("verifyEd25519(bytes,bytes,bytes)", ownerKey, message, signature)
         );
         require(success, "Verifier call failed");
         return abi.decode(result, (bool));
     }
+    
     /**
      * @dev Executes a payload on the target address with the given data and signature.
      * @param target The target address to execute the payload on.
@@ -75,12 +76,12 @@ contract SmartAccountV1 is Initializable, ReentrancyGuard {
      * @param signature The signature to verify the execution.
      */
     function executePayload(address target, bytes calldata data, bytes calldata signature) external nonReentrant {
-        bytes32 messageHash = keccak256(data);
-
+        
         if (ownerType == OwnerType.EVM) {
+            bytes32 messageHash = keccak256(data);
             require(verifySignatureEVM(messageHash, signature), "Invalid EVM signature");
         } else {
-            require(verifySignature(messageHash, signature), "Invalid NON-EVM signature");
+            require(verifySignatureNonEVM(data, signature), "Invalid NON-EVM signature");
         }
 
         (bool success, ) = target.call(data);
