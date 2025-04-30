@@ -46,7 +46,7 @@ contract FactoryV1 {
 
         require(userAccounts[salt] == address(0), "Account already exists");
 
-        address smartAccount = smartAccountImplementation.cloneDeterministic(salt);
+        address payable smartAccount = payable(smartAccountImplementation.cloneDeterministic(salt));
         userAccounts[salt] = smartAccount;
         SmartAccountV1(smartAccount).initialize(userKey, ownerType, verifierPrecompile);
 

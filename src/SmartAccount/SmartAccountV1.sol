@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.20;
 
+
 import { ECDSA } from "@openzeppelin/contracts/utils/cryptography/ECDSA.sol";
 import {Initializable} from "@openzeppelin/contracts/proxy/utils/Initializable.sol";
 import { ReentrancyGuard } from "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
@@ -21,15 +22,52 @@ contract SmartAccountV1 is Initializable, ReentrancyGuard {
         NON_EVM
     }
 
+    // @notice Push Cross Chain Payload Struct
+    struct CrossChainPayload {
+        address target;      // target address to execute the payload on
+        uint256 value;       // value to send with the payload
+        bytes data;          // data to send with the payload
+        uint256 baseGas;     // base gas for the payload execution
+        uint256 gasPrice;    // gas price for the payload execution
+        uint256 gasLimit;    // gas limit for the payload execution
+        uint256 maxFeePerGas;// max fee per gas for the payload execution
+        address refundRecp;  // address to refund the gas
+        uint256 nonce;       // nonce for the payload execution
+    }
+
+    uint256 public nonce;
     bytes public ownerKey;
     OwnerType public ownerType;
     address public verifierPrecompile;
+    string public constant VERSION = "0.1.0";
+
+
+    bytes32 private constant DOMAIN_SEPARATOR_TYPEHASH = keccak256(
+        "EIP712Domain(string version,uint256 chainId,address verifyingContract)"
+    );
+
+    bytes32 private constant PUSH_CROSS_CHAIN_PAYLOAD_TYPEHASH = keccak256(
+        "CrossChainPayload(address target,uint256 value,bytes data,uint256 baseGas,uint256 gasPrice,uint256 gasLimit,uint256 maxFeePerGas,address refundRecp,uint256 nonce)"
+    );
+  
 
     event PayloadExecuted(bytes caller, address target, bytes data);
 
     /// @custom:oz-upgrades-unsafe-allow constructor
     constructor() {
         _disableInitializers();
+    }
+
+    function domainSeparator() public view returns (bytes32) {
+        uint256 chainId;
+        /* solhint-disable no-inline-assembly */
+        /// @solidity memory-safe-assembly
+        assembly {
+            chainId := chainid()
+        }
+        /* solhint-enable no-inline-assembly */
+
+        return keccak256(abi.encode(DOMAIN_SEPARATOR_TYPEHASH, keccak256(bytes(VERSION)), chainId, address(this)));
     }
 
     /**
@@ -71,22 +109,65 @@ contract SmartAccountV1 is Initializable, ReentrancyGuard {
     
     /**
      * @dev Executes a payload on the target address with the given data and signature.
-     * @param target The target address to execute the payload on.
-     * @param data The data to send to the target address.
+     * @param payload The target address to execute the payload on.
      * @param signature The signature to verify the execution.
      */
-    function executePayload(address target, bytes calldata data, bytes calldata signature) external nonReentrant {
-        
+    function executePayload( CrossChainPayload calldata payload, bytes calldata signature) external nonReentrant {
+        uint256 startGas = gasleft();
+
+        bytes32 txHash = getTransactionHash(payload);
+
         if (ownerType == OwnerType.EVM) {
-            bytes32 messageHash = keccak256(data);
-            require(verifySignatureEVM(messageHash, signature), "Invalid EVM signature");
+            require(verifySignatureEVM(txHash, signature), "Invalid EVM signature");
         } else {
-            require(verifySignatureNonEVM(data, signature), "Invalid NON-EVM signature");
+            require(verifySignatureNonEVM(payload.data, signature), "Invalid NON-EVM signature");
         }
 
-        (bool success, ) = target.call(data);
+        (bool success, ) = payload.target.call{value: payload.value}(payload.data);
         require(success, "Execution failed");
 
-        emit PayloadExecuted(ownerKey, target, data);
+        // Refund gas to the caller
+
+        // Options 1 : Inlcude overhead consumption
+        uint256 gasUsed = startGas - gasleft() + 21000 + 5000;
+
+        uint256 gasRefund = gasUsed * tx.gasprice;
+
+        bool sent = payable(msg.sender).send(gasRefund);
+        require(sent, "Gas refund failed");
+
+        unchecked {
+            nonce++;
+        }
+
+        emit PayloadExecuted(ownerKey, payload.target, payload.data);
     }
+
+    function getTransactionHash(CrossChainPayload calldata payload) public view returns (bytes32) {
+        // Calculate the hash of the payload using EIP-712
+        bytes32 structHash = keccak256(
+            abi.encode(
+                PUSH_CROSS_CHAIN_PAYLOAD_TYPEHASH,
+                payload.target,
+                payload.value,
+                keccak256(payload.data),
+                payload.baseGas,
+                payload.gasPrice,
+                payload.gasLimit,
+                payload.maxFeePerGas,
+                payload.refundRecp,
+                payload.nonce
+            )
+        );
+
+        // Calculate the domain separator using EIP-712
+        bytes32 _domainSeparator = domainSeparator();
+
+        return keccak256(abi.encodePacked("\x19\x01", _domainSeparator, structHash));
+    }   
+
+
+    // @dev Fallback function to receive ether.
+    receive() external payable {}
+
 }
