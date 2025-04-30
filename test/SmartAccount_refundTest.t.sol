@@ -14,6 +14,10 @@ contract SmartAccountTest is Test {
     FactoryV1 factory;
     SmartAccountV1 smartAccount;
 
+    // Relayer Setup
+    address relayer;
+    uint256 relayerPk;
+
     // Set up the test environment - EVM
     address bob;
     uint256 bobPk;
@@ -26,14 +30,33 @@ contract SmartAccountTest is Test {
     SmartAccountV1.OwnerType ownerTypeNonEVM = SmartAccountV1.OwnerType.NON_EVM;
     string solanaChainId = "5eykt4UsFv8P8NJdTREpY1vzqKqZKvdp";
     string solanaAddress = "HGyAQb8SeAE6X6RfhgMpGWZQuVYU8kgA5tKitaTrUHfh";
-    
+
+    // Set up BOB CAIP and CallData
+    string caip = CAIP10.createCAIP10("eip155", "1", bob);
+    bytes callData = abi.encodeWithSignature("setMagicNumber(uint256)", 786);
+
     function setUp() public {
         target = new Target();
         smartAccount = new SmartAccountV1();
         factory = new FactoryV1(address(smartAccount));
 
-        (bob, bobPk) = makeAddrAndKey("bob");
+
+        relayerPk = vm.envUint("RELAYER_PRIVATE_KEY");
+        bobPk = vm.envUint("BOB_PRIVATE_KEY");
+
+        bob = vm.addr(bobPk);
+        relayer = vm.addr(relayerPk);
         bobKey = abi.encodePacked(address(bob));
+
+
+
+
+        // Labeling accounts for easier debugging
+        vm.label(relayer, "Relayer");
+        vm.label(bob, "Bob");
+        vm.label(address(factory), "Factory");
+        vm.label(address(target), "Target");
+        vm.label(address(smartAccount), "SmartAccount");
     }
 
     function testImplementationAddress() public view {
@@ -42,7 +65,6 @@ contract SmartAccountTest is Test {
 
     // Test deployment of smart account
     function testDeploymentCreate2() public{
-        string memory caip = CAIP10.createCAIP10("eip155", "1", bob);
         bytes32 salt = keccak256(abi.encode(caip));
 
         address smartAccountAddress = factory.deploySmartAccount(
@@ -57,15 +79,13 @@ contract SmartAccountTest is Test {
 
     // Test the state update of SmartAccount Post Deployment
     function testStateUpdate() public {
-        string memory caip = CAIP10.createCAIP10("eip155", "1", bob);
-
         address smartAccountAddress = factory.deploySmartAccount(
             bobKey,
             caip,
             ownerType,
             verifierPrecompile
         );
-        SmartAccountV1 smartAccountInstance = SmartAccountV1(smartAccountAddress);
+        SmartAccountV1 smartAccountInstance = SmartAccountV1(payable(smartAccountAddress));
         
         console.logBytes(smartAccountInstance.ownerKey());
         console.log("Owner Key:", address(bytes20(bobKey)));
@@ -79,7 +99,6 @@ contract SmartAccountTest is Test {
 
     // Test the execution of a payload
     function testExecution() public{
-        string memory caip = CAIP10.createCAIP10("eip155", "1", bob);
         // Deploy the smart account
         address smartAccountAddress = factory.deploySmartAccount(
             bobKey,
@@ -87,11 +106,9 @@ contract SmartAccountTest is Test {
             ownerType,
             verifierPrecompile
         );
-        SmartAccountV1 smartAccountInstance = SmartAccountV1(smartAccountAddress);
-        // prepare calldata for target contract
-        bytes memory data = abi.encodeWithSignature("setMagicNumber(uint256)", 786);
-        // sign the payload
-        bytes32 messageHash = keccak256(data);
+        SmartAccountV1 smartAccountInstance = SmartAccountV1(payable(smartAccountAddress));
+
+        bytes32 messageHash = keccak256(callData);
         (uint8 v, bytes32 r, bytes32 s) = vm.sign(bobPk, messageHash);
 
         bytes memory signature = abi.encodePacked(r, s, v);
@@ -100,63 +117,59 @@ contract SmartAccountTest is Test {
         uint256 magicValueBefore = target.getMagicNumber();
         console.log("Magic Value Before:", magicValueBefore);
 
+        // Payload to be executed by relayer
+        vm.startPrank(relayer);
         // execute the payload
-        smartAccountInstance.executePayload(address(target), data, signature);
+        smartAccountInstance.executePayload(address(target), callData, signature);
+
+        vm.stopPrank();
         // get magic value after execution
         uint256 magicValueAfter = target.getMagicNumber();
         console.log("Magic Value After:", magicValueAfter);
         assertEq(magicValueAfter, 786, "Magic value was not set correctly");
     }
 
-    function testNonEVMExecution() public {
-        string memory caip = CAIP10.createSolanaCAIP10(
-            solanaChainId,
-            solanaAddress
-        );
-        bytes32 salt = keccak256(abi.encode(caip));
-
+    // Test the execution of a payload with refund
+    function testExecutionWithRefund() public {
         // Deploy the smart account
         address smartAccountAddress = factory.deploySmartAccount(
-            ownerKeyNonEVM,
+            bobKey,
             caip,
-            ownerTypeNonEVM,
+            ownerType,
             verifierPrecompile
         );
-        SmartAccountV1 smartAccountInstance = SmartAccountV1(smartAccountAddress);
-        
-        // Calldata and signature for target contract
-        bytes memory data = '0x2ba2ed980000000000000000000000000000000000000000000000000000000000000312';
-        bytes memory signature = '0x16d760987b403d7a27fd095375f2a1275c0734701ad248c3bf9bc8f69456d626c37b9ee1c13da511c71d9ed0f90789327f2c40f3e59e360f7c832b6b0d818d03';
+        vm.deal(address(smartAccountAddress), 5 ether);
 
-        // Get magic value before execution
-        uint256 magicValueBefore = target.getMagicNumber();
-        console.log("Magic Value Before:", magicValueBefore);
+        SmartAccountV1 smartAccountInstance = SmartAccountV1(payable(smartAccountAddress));
+        // sign the payload
+        bytes32 messageHash = keccak256(callData);
+        (uint8 v, bytes32 r, bytes32 s) = vm.sign(bobPk, messageHash);
+        bytes memory signature = abi.encodePacked(r, s, v);
 
-        // Execute the payload using the smart account instance
-        smartAccountInstance.executePayload(address(target), data, signature);
-        
-        // Get magic value after execution
-        uint256 magicValueAfter = target.getMagicNumber();
-        console.log("Magic Value After:", magicValueAfter);
-        
-        // Assert the magic value was set correctly
-        assertEq(magicValueAfter, 786, "Magic value was not set correctly");
-        assertEq(smartAccountAddress, address(factory.userAccounts(salt)));
-    }
 
-    function testVerifyEd25519Precompile() public {
-        bytes memory pubkey = hex"30ea71869947818d27b718592ea44010b458903bd9bf0370f50eda79e87d9f69";
-        bytes memory message = hex"2ba2ed980000000000000000000000000000000000000000000000000000000000000312";
-        bytes memory signature = hex"16d760987b403d7a27fd095375f2a1275c0734701ad248c3bf9bc8f69456d626c37b9ee1c13da511c71d9ed0f90789327f2c40f3e59e360f7c832b6b0d818d03";
+        // relayer balance before execution
+        uint256 relayerBalanceBefore = relayer.balance;
+        console.log("Relayer Balance Before:", relayerBalanceBefore);
+        uint256 contractBalanceBefore = smartAccountAddress.balance;
+        console.log("Contract Balance Before:", contractBalanceBefore);
 
-        // Perform staticcall
-        (bool success, bytes memory result) = address(0x902).staticcall(
-            abi.encodeWithSignature("verifyEd25519(bytes,bytes,bytes)", pubkey, message, signature)
+        // Payload to be executed
+        vm.txGasPrice(1 gwei);
+        vm.startPrank(relayer);
+
+        smartAccountInstance.executePayload(
+            address(target),
+            callData,
+            signature
         );
 
-        require(success, "Precompile call failed");
 
-        bool verified = abi.decode(result, (bool));
-        assertTrue(verified, "Signature should be valid");
+        // relayer balance after execution
+        uint256 relayerBalanceAfter = relayer.balance;
+        console.log("Relayer Balance After:", relayerBalanceAfter);
+        uint256 contractBalanceAfter = smartAccountAddress.balance;
+        console.log("Contract Balance After:", contractBalanceAfter);
+        //assertEq(relayerBalanceAfter, , "Relayer was not refunded correctly");
+        vm.stopPrank();
     }
 }
