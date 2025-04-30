@@ -22,17 +22,21 @@ contract SmartAccountV1 is Initializable, ReentrancyGuard {
         NON_EVM
     }
 
-    // @notice Push Cross Chain Payload Struct
+    // TODO: Confirm the final implementation of the cross-chain payload
     struct CrossChainPayload {
-        address target;      // target address to execute the payload on
-        uint256 value;       // value to send with the payload
-        bytes data;          // data to send with the payload
-        uint256 baseGas;     // base gas for the payload execution
-        uint256 gasPrice;    // gas price for the payload execution
-        uint256 gasLimit;    // gas limit for the payload execution
-        uint256 maxFeePerGas;// max fee per gas for the payload execution
-        address refundRecp;  // address to refund the gas
-        uint256 nonce;       // nonce for the payload execution
+        // Core execution parameters
+        address target;          // Target contract address to call
+        uint256 value;           // Native token amount to send
+        bytes data;              // Call data for the function execution
+        
+        // Gas refund parameters
+        uint256 gasLimit;             // Maximum gas to be used for this tx (caps refund amount)
+        uint256 maxFeePerGas;         // Maximum fee per gas unit
+        uint256 maxPriorityFeePerGas; // Maximum priority fee per gas unit
+        
+        // Security parameters
+        uint256 nonce;          // Chain ID where this should be executed
+        uint256 deadline;       // Timestamp after which this payload is invalid
     }
 
     uint256 public nonce;
@@ -40,16 +44,15 @@ contract SmartAccountV1 is Initializable, ReentrancyGuard {
     OwnerType public ownerType;
     address public verifierPrecompile;
     string public constant VERSION = "0.1.0";
-
+    // TODO: Confirm the final value of the GAS_OVERHEAD
+    uint256 private GAS_OVERHEAD = 30000; // Overhead for operations after the gas measurement
 
     bytes32 private constant DOMAIN_SEPARATOR_TYPEHASH = keccak256(
         "EIP712Domain(string version,uint256 chainId,address verifyingContract)"
     );
-
     bytes32 private constant PUSH_CROSS_CHAIN_PAYLOAD_TYPEHASH = keccak256(
         "CrossChainPayload(address target,uint256 value,bytes data,uint256 baseGas,uint256 gasPrice,uint256 gasLimit,uint256 maxFeePerGas,address refundRecp,uint256 nonce)"
     );
-  
 
     event PayloadExecuted(bytes caller, address target, bytes data);
 
@@ -58,6 +61,10 @@ contract SmartAccountV1 is Initializable, ReentrancyGuard {
         _disableInitializers();
     }
 
+    /**
+     * @dev Returns the domain separator for EIP-712 signing.
+     * @return bytes32 The domain separator.
+     */
     function domainSeparator() public view returns (bytes32) {
         uint256 chainId;
         /* solhint-disable no-inline-assembly */
@@ -123,26 +130,35 @@ contract SmartAccountV1 is Initializable, ReentrancyGuard {
             require(verifySignatureNonEVM(payload.data, signature), "Invalid NON-EVM signature");
         }
 
-        (bool success, ) = payload.target.call{value: payload.value}(payload.data);
-        require(success, "Execution failed");
-
-        // Refund gas to the caller
-
-        // Options 1 : Inlcude overhead consumption
-        uint256 gasUsed = startGas - gasleft() + 21000 + 5000;
-
-        uint256 gasRefund = gasUsed * tx.gasprice;
-
-        bool sent = payable(msg.sender).send(gasRefund);
-        require(sent, "Gas refund failed");
-
         unchecked {
             nonce++;
         }
 
+        (bool success, bytes memory returnData) = payload.target.call{value: payload.value}(payload.data);
+
+        if(!success) {
+            if ( returnData.length > 0 )  {
+
+                assembly {
+                    let returnDataSize := mload(returnData)
+                    revert(add(32, returnData), returnDataSize)
+                }
+            }else{
+                revert("Execution failed without reason");
+            }
+        }
+
+        // TODO: Check if the gas refund is capped by the gasLimit 
+
+        uint256 gasUsed = startGas - gasleft() + GAS_OVERHEAD;
+        uint256 gasRefund = gasUsed * tx.gasprice;
+        
+        // TODO: Decide the implementation for GAS BURN 
+        (bool sent, ) = payable(msg.sender).call{value: gasRefund}("");
+        require(sent, "Gas refund failed");
+
         emit PayloadExecuted(ownerKey, payload.target, payload.data);
     }
-
     function getTransactionHash(CrossChainPayload calldata payload) public view returns (bytes32) {
         // Calculate the hash of the payload using EIP-712
         bytes32 structHash = keccak256(
@@ -151,12 +167,11 @@ contract SmartAccountV1 is Initializable, ReentrancyGuard {
                 payload.target,
                 payload.value,
                 keccak256(payload.data),
-                payload.baseGas,
-                payload.gasPrice,
                 payload.gasLimit,
                 payload.maxFeePerGas,
-                payload.refundRecp,
-                payload.nonce
+                payload.maxPriorityFeePerGas,
+                payload.nonce,
+                payload.deadline
             )
         );
 
