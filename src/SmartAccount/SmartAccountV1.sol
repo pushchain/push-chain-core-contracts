@@ -120,8 +120,6 @@ contract SmartAccountV1 is Initializable, ReentrancyGuard {
      * @param signature The signature to verify the execution.
      */
     function executePayload( CrossChainPayload calldata payload, bytes calldata signature) external nonReentrant {
-        uint256 startGas = gasleft();
-
         bytes32 txHash = getTransactionHash(payload);
 
         if (ownerType == OwnerType.EVM) {
@@ -147,15 +145,6 @@ contract SmartAccountV1 is Initializable, ReentrancyGuard {
                 revert("Execution failed without reason");
             }
         }
-
-        // TODO: Check if the gas refund is capped by the gasLimit 
-
-        uint256 gasUsed = startGas - gasleft() + GAS_OVERHEAD;
-        uint256 gasRefund = gasUsed * tx.gasprice;
-        
-        // TODO: Decide the implementation for GAS BURN 
-        (bool sent, ) = payable(msg.sender).call{value: gasRefund}("");
-        require(sent, "Gas refund failed");
 
         emit PayloadExecuted(ownerKey, payload.target, payload.data);
     }
