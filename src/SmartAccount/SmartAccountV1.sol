@@ -25,14 +25,14 @@ contract SmartAccountV1 is Initializable, ReentrancyGuard {
     // TODO: Confirm the final implementation of the cross-chain payload
     struct CrossChainPayload {
         // Core execution parameters
-        address target;             // Target contract address to call
-        uint256 value;              // Native token amount to send
-        bytes data;                 // Call data for the function execution
+        address target;               // Target contract address to call
+        uint256 value;                // Native token amount to send
+        bytes data;                   // Call data for the function execution
         uint256 gasLimit;             // Maximum gas to be used for this tx (caps refund amount)
         uint256 maxFeePerGas;         // Maximum fee per gas unit
         uint256 maxPriorityFeePerGas; // Maximum priority fee per gas unit
-        uint256 nonce;          // Chain ID where this should be executed
-        uint256 deadline;       // Timestamp after which this payload is invalid
+        uint256 nonce;                // Chain ID where this should be executed
+        uint256 deadline;             // Timestamp after which this payload is invalid
     }
 
     uint256 public nonce;
@@ -40,8 +40,6 @@ contract SmartAccountV1 is Initializable, ReentrancyGuard {
     OwnerType public ownerType;
     address public verifierPrecompile;
     string public constant VERSION = "0.1.0";
-    // TODO: Confirm the final value of the GAS_OVERHEAD
-    uint256 private GAS_OVERHEAD = 30000; // Overhead for operations after the gas measurement
 
     bytes32 private constant DOMAIN_SEPARATOR_TYPEHASH = keccak256(
         "EIP712Domain(string version,uint256 chainId,address verifyingContract)"
