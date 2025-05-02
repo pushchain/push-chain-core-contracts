@@ -25,16 +25,12 @@ contract SmartAccountV1 is Initializable, ReentrancyGuard {
     // TODO: Confirm the final implementation of the cross-chain payload
     struct CrossChainPayload {
         // Core execution parameters
-        address target;          // Target contract address to call
-        uint256 value;           // Native token amount to send
-        bytes data;              // Call data for the function execution
-        
-        // Gas refund parameters
+        address target;             // Target contract address to call
+        uint256 value;              // Native token amount to send
+        bytes data;                 // Call data for the function execution
         uint256 gasLimit;             // Maximum gas to be used for this tx (caps refund amount)
         uint256 maxFeePerGas;         // Maximum fee per gas unit
         uint256 maxPriorityFeePerGas; // Maximum priority fee per gas unit
-        
-        // Security parameters
         uint256 nonce;          // Chain ID where this should be executed
         uint256 deadline;       // Timestamp after which this payload is invalid
     }
@@ -51,7 +47,7 @@ contract SmartAccountV1 is Initializable, ReentrancyGuard {
         "EIP712Domain(string version,uint256 chainId,address verifyingContract)"
     );
     bytes32 private constant PUSH_CROSS_CHAIN_PAYLOAD_TYPEHASH = keccak256(
-        "CrossChainPayload(address target,uint256 value,bytes data,uint256 baseGas,uint256 gasPrice,uint256 gasLimit,uint256 maxFeePerGas,address refundRecp,uint256 nonce)"
+        "CrossChainPayload(address target,uint256 value,bytes data,uint256 gasLimit,uint256 maxFeePerGas,uint256 maxPriorityFeePerGas,uint256 nonce,uint256 deadline)"
     );
 
     event PayloadExecuted(bytes caller, address target, bytes data);
@@ -106,9 +102,9 @@ contract SmartAccountV1 is Initializable, ReentrancyGuard {
      * @param signature The signature to verify.
      * @return bool indicating whether the signature is valid.
      */
-    function verifySignatureNonEVM(bytes calldata message, bytes memory signature) internal view returns (bool) {
+    function verifySignatureNonEVM(bytes32 message, bytes memory signature) internal view returns (bool) {
         (bool success, bytes memory result) = verifierPrecompile.staticcall(
-            abi.encodeWithSignature("verifyEd25519(bytes,bytes,bytes)", ownerKey, message, signature)
+            abi.encodeWithSignature("verifyEd25519(bytes,bytes32,bytes)", ownerKey, message, signature)
         );
         require(success, "Verifier call failed");
         return abi.decode(result, (bool));
@@ -125,7 +121,7 @@ contract SmartAccountV1 is Initializable, ReentrancyGuard {
         if (ownerType == OwnerType.EVM) {
             require(verifySignatureEVM(txHash, signature), "Invalid EVM signature");
         } else {
-            require(verifySignatureNonEVM(payload.data, signature), "Invalid NON-EVM signature");
+            require(verifySignatureNonEVM(txHash, signature), "Invalid NON-EVM signature");
         }
 
         unchecked {
