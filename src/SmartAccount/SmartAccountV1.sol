@@ -142,8 +142,7 @@ contract SmartAccountV1 is Initializable, ReentrancyGuard {
 
         emit PayloadExecuted(ownerKey, payload.target, payload.data);
     }
-    function getTransactionHash(CrossChainPayload calldata payload) public view returns (bytes32) {
-        // Calculate the hash of the payload using EIP-712
+    function getTransactionHash(CrossChainPayload calldata payload) public view returns (bytes32) {        // Calculate the hash of the payload using EIP-712
         bytes32 structHash = keccak256(
             abi.encode(
                 PUSH_CROSS_CHAIN_PAYLOAD_TYPEHASH,
@@ -153,7 +152,7 @@ contract SmartAccountV1 is Initializable, ReentrancyGuard {
                 payload.gasLimit,
                 payload.maxFeePerGas,
                 payload.maxPriorityFeePerGas,
-                payload.nonce,
+                nonce,
                 payload.deadline
             )
         );
