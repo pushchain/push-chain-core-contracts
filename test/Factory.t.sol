@@ -35,7 +35,7 @@ contract FactoryTest is Test {
         ownerKey = abi.encodePacked(owner);
 
         // Set up verifier precompile
-        verifierPrecompile = makeAddr("verifierPrecompile");
+     address verifierPrecompile = 0x0000000000000000000000000000000000000902;
 
         // Set up owner type
         ownerType = SmartAccountV1.OwnerType.EVM;
@@ -60,8 +60,7 @@ contract FactoryTest is Test {
         address smartAccountAddress = factory.deploySmartAccount(
             ownerKey,
             caip,
-            ownerType,
-            verifierPrecompile
+            ownerType
         );
         assertEq(smartAccountAddress, address(factory.userAccounts(salt)));
         assertEq(
@@ -76,8 +75,7 @@ contract FactoryTest is Test {
         factory.deploySmartAccount(
             ownerKey,
             caip,
-            ownerType,
-            verifierPrecompile
+            ownerType
         );
 
         vm.expectRevert("Account already exists");
@@ -85,8 +83,7 @@ contract FactoryTest is Test {
         factory.deploySmartAccount(
             ownerKey,
             caip,
-            ownerType,
-            verifierPrecompile
+            ownerType
         );
     }
 
@@ -97,8 +94,7 @@ contract FactoryTest is Test {
         address smartAccountAddress = factory.deploySmartAccount(
             ownerKey,
             caip,
-            ownerType,
-            verifierPrecompile
+            ownerType
         );
 
         address computedAddress = factory.computeSmartAccountAddress(caip);
@@ -120,8 +116,7 @@ contract FactoryTest is Test {
         address smartAccountAddress = factory.deploySmartAccount(
             ownerKeyNonEVM,
             caip,
-            ownerTypeNonEVM,
-            verifierPrecompile
+            ownerTypeNonEVM
         );
         assertEq(smartAccountAddress, address(factory.userAccounts(salt)));
         assertEq(
@@ -140,16 +135,14 @@ contract FactoryTest is Test {
         factory.deploySmartAccount(
             ownerKeyNonEVM,
             caip,
-            ownerTypeNonEVM,
-            verifierPrecompile
+            ownerTypeNonEVM
         );
 
         vm.expectRevert("Account already exists");
         factory.deploySmartAccount(
             ownerKeyNonEVM,
             caip,
-            ownerTypeNonEVM,
-            verifierPrecompile
+            ownerTypeNonEVM
         );
     }
 
@@ -163,8 +156,7 @@ contract FactoryTest is Test {
         address smartAccountAddress = factory.deploySmartAccount(
             ownerKeyNonEVM,
             caip,
-            ownerTypeNonEVM,
-            verifierPrecompile
+            ownerTypeNonEVM
         );
 
         address computedAddress = factory.computeSmartAccountAddress(caip);

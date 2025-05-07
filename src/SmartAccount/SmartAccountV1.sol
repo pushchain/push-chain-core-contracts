@@ -38,8 +38,8 @@ contract SmartAccountV1 is Initializable, ReentrancyGuard {
     uint256 public nonce;
     bytes public ownerKey;
     OwnerType public ownerType;
-    address public verifierPrecompile;
     string public constant VERSION = "0.1.0";
+    address public constant verifierPrecompile = 0x0000000000000000000000000000000000000902;
 
     bytes32 private constant DOMAIN_SEPARATOR_TYPEHASH = keccak256(
         "EIP712Domain(string version,uint256 chainId,address verifyingContract)"
@@ -75,12 +75,10 @@ contract SmartAccountV1 is Initializable, ReentrancyGuard {
      * @dev Initializes the contract with the given parameters.
      * @param _ownerKey The key of the owner (EVM or NON_EVM).
      * @param _ownerType The type of owner (EVM or NON_EVM).
-     * @param _verifierPrecompile The address of the verifier precompile contract.
      */
-    function initialize(bytes memory _ownerKey, OwnerType _ownerType, address _verifierPrecompile) external initializer {
+    function initialize(bytes memory _ownerKey, OwnerType _ownerType) external initializer {
         ownerKey = _ownerKey;
         ownerType = _ownerType;
-        verifierPrecompile = _verifierPrecompile;
     }
 
     /**

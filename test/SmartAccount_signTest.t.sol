@@ -28,9 +28,9 @@ contract SmartAccountTest is Test {
     // Set up the test environment - NON-EVM
     bytes ownerKeyNonEVM =
         hex"30ea71869947818d27b718592ea44010b458903bd9bf0370f50eda79e87d9f69";
-    SmartAccountV1.OwnerType ownerTypeNonEVM = SmartAccountV1.OwnerType.NON_EVM;
+    string solanaAddress = "4HwuvaEVT4qnvb5TkSvMyYPrprqpnJjz8LSL6TPnuJ2U";
     string solanaChainId = "5eykt4UsFv8P8NJdTREpY1vzqKqZKvdp";
-    string solanaAddress = "HGyAQb8SeAE6X6RfhgMpGWZQuVYU8kgA5tKitaTrUHfh";
+    SmartAccountV1.OwnerType ownerTypeNonEVM = SmartAccountV1.OwnerType.NON_EVM;
 
     function setUp() public {
         target = new Target();
@@ -54,8 +54,7 @@ contract SmartAccountTest is Test {
         address smartAccountAddress = factory.deploySmartAccount(
             bobKey,
             caip,
-            ownerType,
-            verifierPrecompile
+            ownerType
         );
         evmSmartAccountInstance = SmartAccountV1(payable(smartAccountAddress));
         _;
@@ -197,8 +196,8 @@ contract SmartAccountTest is Test {
         address smartAccountAddress = factory.deploySmartAccount(
             ownerKeyNonEVM,
             caip,
-            ownerTypeNonEVM,
-            verifierPrecompile
+            ownerTypeNonEVM
+            
         );
         SmartAccountV1 smartAccountInstance = SmartAccountV1(
             payable(smartAccountAddress)

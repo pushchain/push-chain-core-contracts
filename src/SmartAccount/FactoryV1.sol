@@ -33,14 +33,12 @@ contract FactoryV1 {
      * @param userKey The owner key for the SmartAccount in bytes format.
      * @param caipString The unique key for the user, used to compute the deterministic address.
      * @param ownerType The type of owner (EVM or NON_EVM) for the SmartAccount.
-     * @param verifierPrecompile The address of the verifier precompile contract.
      * @return smartAccount The address of the newly deployed SmartAccountV1 instance.
      */
     function deploySmartAccount(
         bytes memory userKey,
         string memory caipString,
-        SmartAccountV1.OwnerType ownerType,
-        address verifierPrecompile
+        SmartAccountV1.OwnerType ownerType
     ) external returns(address) {
         bytes32 salt = keccak256(abi.encode(caipString));
 
@@ -48,7 +46,7 @@ contract FactoryV1 {
 
         address payable smartAccount = payable(smartAccountImplementation.cloneDeterministic(salt));
         userAccounts[salt] = smartAccount;
-        SmartAccountV1(smartAccount).initialize(userKey, ownerType, verifierPrecompile);
+        SmartAccountV1(smartAccount).initialize(userKey, ownerType);
 
         emit SmartAccountDeployed(smartAccount, userKey);
         return smartAccount;
