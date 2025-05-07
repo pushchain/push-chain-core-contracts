@@ -92,6 +92,8 @@ contract SmartAccountTest is Test {
     //When nonce is incorrect
     function testRevet_whenIncorrectNonce() public deployEvmSmartAccount {
         // prepare calldata for target contract
+
+        uint previousNonce = evmSmartAccountInstance.nonce();
         SmartAccountV1.CrossChainPayload memory payload = SmartAccountV1
             .CrossChainPayload({
                 target: address(target),
@@ -116,11 +118,14 @@ contract SmartAccountTest is Test {
         // get magic value after execution
         uint256 magicValueAfter = target.getMagicNumber();
         assertEq(magicValueAfter, 0, "Magic value was not set correctly");
+        assertEq(previousNonce, evmSmartAccountInstance.nonce());
     }
 
     // Test the execution of a payload
     function testExecution() public deployEvmSmartAccount {
         // prepare calldata for target contract
+        uint previousNonce = evmSmartAccountInstance.nonce();
+
         SmartAccountV1.CrossChainPayload memory payload = SmartAccountV1
             .CrossChainPayload({
                 target: address(target),
@@ -150,12 +155,18 @@ contract SmartAccountTest is Test {
         // get magic value after execution
         uint256 magicValueAfter = target.getMagicNumber();
         assertEq(magicValueAfter, 786, "Magic value was not set correctly");
+
+        assertEq(previousNonce + 1, evmSmartAccountInstance.nonce());
+
     }
 
     // Test the execution of a payload
     function testRevert_WhenSameNonceused() public {
         testExecution();
+        uint previousNonce = evmSmartAccountInstance.nonce();
+
         // prepare calldata for target contract
+
         SmartAccountV1.CrossChainPayload memory payload = SmartAccountV1
             .CrossChainPayload({
                 target: address(target),
@@ -179,6 +190,7 @@ contract SmartAccountTest is Test {
         evmSmartAccountInstance.executePayload(payload, signature); // get magic value after execution
         uint256 magicValueAfter = target.getMagicNumber();
         assertEq(magicValueAfter, 786, "Magic value was not set correctly");
+        assertEq(previousNonce, evmSmartAccountInstance.nonce());
     }
 
     function testNonEVMExecution() public {
