@@ -16,9 +16,9 @@ contract FactoryV1 {
     using Clones for address;
 
     address public smartAccountImplementation;
-    mapping(bytes32 => address) public userAccounts;
+    mapping(bytes => address) public userAccounts;
 
-    event SmartAccountDeployed(address indexed smartAccount, bytes userKey);
+    event SmartAccountDeployed(address indexed smartAccount, bytes ownerKey);
 
     /**
      * @dev Constructor to set the implementation address for SmartAccountV1.
@@ -30,37 +30,32 @@ contract FactoryV1 {
 
     /**
      * @dev Deploys a new SmartAccountV1 instance with the given user key and owner type.
-     * @param userKey The owner key for the SmartAccount in bytes format.
-     * @param caipString The unique key for the user, used to compute the deterministic address.
-     * @param ownerType The type of owner (EVM or NON_EVM) for the SmartAccount.
-     * @return smartAccount The address of the newly deployed SmartAccountV1 instance.
+     * @param _owner Owner struct containing all details
      */
     function deploySmartAccount(
-        bytes memory userKey,
-        string memory caipString,
-        SmartAccountV1.OwnerType ownerType
+       SmartAccountV1.Owner memory _owner
     ) external returns(address) {
-        bytes32 salt = keccak256(abi.encode(caipString));
+        bytes32 salt = keccak256(abi.encode(_owner.ownerKey));
 
-        require(userAccounts[salt] == address(0), "Account already exists");
+        require(userAccounts[_owner.ownerKey] == address(0), "Account already exists");
 
         address payable smartAccount = payable(smartAccountImplementation.cloneDeterministic(salt));
-        userAccounts[salt] = smartAccount;
-        SmartAccountV1(smartAccount).initialize(userKey, ownerType);
+        userAccounts[_owner.ownerKey] = smartAccount;
+        SmartAccountV1(smartAccount).initialize(_owner);
 
-        emit SmartAccountDeployed(smartAccount, userKey);
+        emit SmartAccountDeployed(smartAccount, _owner.ownerKey);
         return smartAccount;
     }
 
     /**
      * @dev Computes the deterministic address of a SmartAccountV1 instance based on the user key.
-     * @param caipString The unique key for the user, used to compute the deterministic address.
+     * @param ownerKey The unique key for the user, used to compute the deterministic address.
      * @return smartAccount The computed address of the SmartAccountV1 instance.
      */
     function computeSmartAccountAddress(
-        string memory caipString
+        bytes memory ownerKey
     ) external view returns (address) {
-        bytes32 salt = keccak256(abi.encode(caipString));
+        bytes32 salt = keccak256(abi.encode(ownerKey));
         return smartAccountImplementation.predictDeterministicAddress(salt, address(this));
     }
 }

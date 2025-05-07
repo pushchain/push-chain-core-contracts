@@ -49,48 +49,44 @@ contract SmartAccountTest is Test {
     }
 
     modifier deployEvmSmartAccount() {
-        string memory caip = CAIP10.createCAIP10("eip155", "1", bob);
+        SmartAccountV1.Owner memory _owner = SmartAccountV1.Owner({
+            namespace: "eip155",
+            chainId: "1",
+            ownerKey: bobKey,
+            ownerType: ownerType
+        });
 
-        address smartAccountAddress = factory.deploySmartAccount(
-            bobKey,
-            caip,
-            ownerType
-        );
+        address smartAccountAddress = factory.deploySmartAccount(_owner);
         evmSmartAccountInstance = SmartAccountV1(payable(smartAccountAddress));
         _;
     }
 
     // Test deployment of smart account
     function testDeploymentCreate2() public deployEvmSmartAccount {
-        string memory caip = CAIP10.createCAIP10("eip155", "1", bob);
-        bytes32 salt = keccak256(abi.encode(caip));
-
         assertEq(
             address(evmSmartAccountInstance),
-            address(factory.userAccounts(salt))
+            address(factory.userAccounts(bobKey))
         );
         assertEq(
             address(evmSmartAccountInstance),
-            address(factory.computeSmartAccountAddress(caip))
+            address(factory.computeSmartAccountAddress(bobKey))
         );
     }
 
     // Test the state update of SmartAccount Post Deployment
     function testStateUpdate() public deployEvmSmartAccount {
-        console.logBytes(evmSmartAccountInstance.ownerKey());
-        console.log("Owner Key:", address(bytes20(bobKey)));
-        console.log(
-            "Verifier Precompile:",
-            evmSmartAccountInstance.verifierPrecompile()
-        );
-        console.log("Owner Type:", uint(evmSmartAccountInstance.ownerType()));
-
-        assertEq(evmSmartAccountInstance.ownerKey(), bobKey);
+        (
+            ,
+            ,
+            bytes memory ownerKey,
+            SmartAccountV1.OwnerType _ownerType
+        ) = evmSmartAccountInstance.owner();
+        assertEq(ownerKey, bobKey);
         assertEq(
             address(evmSmartAccountInstance.verifierPrecompile()),
             verifierPrecompile
         );
-        assertEq(uint(evmSmartAccountInstance.ownerType()), 0);
+        assertEq(uint(_ownerType), 0);
     }
 
     //When nonce is incorrect
@@ -186,18 +182,16 @@ contract SmartAccountTest is Test {
     }
 
     function testNonEVMExecution() public {
-        string memory caip = CAIP10.createSolanaCAIP10(
-            solanaChainId,
-            solanaAddress
-        );
-        bytes32 salt = keccak256(abi.encode(caip));
+        SmartAccountV1.Owner memory _owner = SmartAccountV1.Owner({
+            namespace: "eip155",
+            chainId: "1",
+            ownerKey: bobKey,
+            ownerType: ownerType
+        });
 
         // Deploy the smart account
         address smartAccountAddress = factory.deploySmartAccount(
-            ownerKeyNonEVM,
-            caip,
-            ownerTypeNonEVM
-            
+            _owner
         );
         SmartAccountV1 smartAccountInstance = SmartAccountV1(
             payable(smartAccountAddress)
@@ -232,7 +226,7 @@ contract SmartAccountTest is Test {
 
         // Assert the magic value was set correctly
         assertEq(magicValueAfter, 786, "Magic value was not set correctly");
-        assertEq(smartAccountAddress, address(factory.userAccounts(salt)));
+        assertEq(smartAccountAddress, address(factory.userAccounts(ownerKeyNonEVM)));
     }
 
     function testVerifyEd25519Precompile() public {
