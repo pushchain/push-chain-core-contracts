@@ -6,7 +6,6 @@ import "forge-std/console.sol";
 
 import {FactoryV1} from "../src/SmartAccount/FactoryV1.sol";
 import {SmartAccountV1} from "../src/SmartAccount/SmartAccountV1.sol";
-import {CAIP10} from "./utils/caip.sol";
 
 contract FactoryTest is Test {
     FactoryV1 factory;
@@ -35,7 +34,7 @@ contract FactoryTest is Test {
         ownerKey = abi.encodePacked(owner);
 
         // Set up verifier precompile
-        verifierPrecompile = makeAddr("verifierPrecompile");
+        verifierPrecompile = 0x0000000000000000000000000000000000000902;
 
         // Set up owner type
         ownerType = SmartAccountV1.OwnerType.EVM;
@@ -55,53 +54,46 @@ contract FactoryTest is Test {
 
     // Test deployment of smart account
     function testDeploymentCreate2() public {
-        string memory caip = CAIP10.createCAIP10("eip155", "1", owner);
-        bytes32 salt = keccak256(abi.encode(caip));
-        address smartAccountAddress = factory.deploySmartAccount(
-            ownerKey,
-            caip,
-            ownerType,
-            verifierPrecompile
-        );
-        assertEq(smartAccountAddress, address(factory.userAccounts(salt)));
+        SmartAccountV1.Owner memory _owner = SmartAccountV1.Owner({
+            namespace: "eip155",
+            chainId: "1",
+            ownerKey: ownerKey,
+            ownerType: ownerType
+        });
+        address smartAccountAddress = factory.deploySmartAccount(_owner);
+        assertEq(smartAccountAddress, address(factory.userAccounts(ownerKey)));
         assertEq(
             smartAccountAddress,
-            address(factory.computeSmartAccountAddress(caip))
+            address(factory.computeSmartAccountAddress(ownerKey))
         );
     }
 
     // Test that the same account cannot be deployed twice
     function testDeploymentTwice() public {
-        string memory caip = CAIP10.createCAIP10("eip155", "1", owner);
-        factory.deploySmartAccount(
-            ownerKey,
-            caip,
-            ownerType,
-            verifierPrecompile
-        );
+        SmartAccountV1.Owner memory _owner = SmartAccountV1.Owner({
+            namespace: "eip155",
+            chainId: "1",
+            ownerKey: ownerKey,
+            ownerType: ownerType
+        });
+        address smartAccountAddress = factory.deploySmartAccount(_owner);
 
         vm.expectRevert("Account already exists");
 
-        factory.deploySmartAccount(
-            ownerKey,
-            caip,
-            ownerType,
-            verifierPrecompile
-        );
+        factory.deploySmartAccount(_owner);
     }
 
     // Test that the computed address matches the deployed address
     function testComputeSmartAccountAddress() public {
-        string memory caip = CAIP10.createCAIP10("eip155", "1", owner);
+        SmartAccountV1.Owner memory _owner = SmartAccountV1.Owner({
+            namespace: "eip155",
+            chainId: "1",
+            ownerKey: ownerKey,
+            ownerType: ownerType
+        });
+        address smartAccountAddress = factory.deploySmartAccount(_owner);
 
-        address smartAccountAddress = factory.deploySmartAccount(
-            ownerKey,
-            caip,
-            ownerType,
-            verifierPrecompile
-        );
-
-        address computedAddress = factory.computeSmartAccountAddress(caip);
+        address computedAddress = factory.computeSmartAccountAddress(ownerKey);
 
         console.log("Computed Address: ", computedAddress);
         console.log("Deployed Address: ", smartAccountAddress);
@@ -111,68 +103,51 @@ contract FactoryTest is Test {
 
     // Test deployment of smart account with NON-EVM
     function testDeploymentCreate2NonEVM() public {
-        string memory caip = CAIP10.createSolanaCAIP10(
-            solanaChainId,
-            solanaAddress
-        );
-        bytes32 salt = keccak256(abi.encode(caip));
-
-        address smartAccountAddress = factory.deploySmartAccount(
-            ownerKeyNonEVM,
-            caip,
-            ownerTypeNonEVM,
-            verifierPrecompile
-        );
-        assertEq(smartAccountAddress, address(factory.userAccounts(salt)));
+        SmartAccountV1.Owner memory _owner = SmartAccountV1.Owner({
+            namespace: "solana",
+            chainId: "5eykt4UsFv8P8NJdTREpY1vzqKqZKvdp",
+            ownerKey: ownerKeyNonEVM,
+            ownerType: ownerTypeNonEVM
+        });
+        address smartAccountAddress = factory.deploySmartAccount(_owner);
+        assertEq(smartAccountAddress, address(factory.userAccounts(ownerKeyNonEVM)));
         assertEq(
             smartAccountAddress,
-            address(factory.computeSmartAccountAddress(caip))
+            address(factory.computeSmartAccountAddress(ownerKeyNonEVM))
         );
     }
 
     // Test that the same account cannot be deployed twice with NON-EVM
     function testDeploymentTwiceNonEVM() public {
-        string memory caip = CAIP10.createSolanaCAIP10(
-            solanaChainId,
-            solanaAddress
-        );
-
-        factory.deploySmartAccount(
-            ownerKeyNonEVM,
-            caip,
-            ownerTypeNonEVM,
-            verifierPrecompile
-        );
+        SmartAccountV1.Owner memory _owner = SmartAccountV1.Owner({
+            namespace: "solana",
+            chainId: "5eykt4UsFv8P8NJdTREpY1vzqKqZKvdp",
+            ownerKey: ownerKeyNonEVM,
+            ownerType: ownerTypeNonEVM
+        });
+        address smartAccountAddress = factory.deploySmartAccount(_owner);
 
         vm.expectRevert("Account already exists");
-        factory.deploySmartAccount(
-            ownerKeyNonEVM,
-            caip,
-            ownerTypeNonEVM,
-            verifierPrecompile
-        );
+        factory.deploySmartAccount(_owner);
     }
 
     // Test that the computed address matches the deployed address with NON-EVM
     function testComputeSmartAccountAddressNonEVM() public {
-        string memory caip = CAIP10.createSolanaCAIP10(
-            solanaChainId,
-            solanaAddress
-        );
+        SmartAccountV1.Owner memory _owner = SmartAccountV1.Owner({
+            namespace: "solana",
+            chainId: "5eykt4UsFv8P8NJdTREpY1vzqKqZKvdp",
+            ownerKey: ownerKeyNonEVM,
+            ownerType: ownerTypeNonEVM
+        });
+        address smartAccountAddress = factory.deploySmartAccount(_owner);
 
-        address smartAccountAddress = factory.deploySmartAccount(
-            ownerKeyNonEVM,
-            caip,
-            ownerTypeNonEVM,
-            verifierPrecompile
+        address computedAddress = factory.computeSmartAccountAddress(
+            ownerKeyNonEVM
         );
-
-        address computedAddress = factory.computeSmartAccountAddress(caip);
 
         console.log("Computed Address: ", computedAddress);
         console.log("Deployed Address: ", smartAccountAddress);
 
         assertEq(smartAccountAddress, computedAddress);
     }
-
 }
