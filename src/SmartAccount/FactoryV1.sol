@@ -35,9 +35,9 @@ contract FactoryV1 {
     function deploySmartAccount(
        SmartAccountV1.Owner memory _owner
     ) external returns(address) {
-        bytes32 salt = keccak256(abi.encode(_owner.ownerKey));
-
         require(userAccounts[_owner.ownerKey] == address(0), "Account already exists");
+        
+        bytes32 salt = keccak256(abi.encode(_owner.ownerKey));
 
         address payable smartAccount = payable(smartAccountImplementation.cloneDeterministic(salt));
         userAccounts[_owner.ownerKey] = smartAccount;
