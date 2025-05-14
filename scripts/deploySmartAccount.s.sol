@@ -37,7 +37,7 @@ contract DeploySmartAccountScript is Script {
         address smartAccountAddr = factory.deploySmartAccount(
             ownerKeyNonEVM,
             caip,
-            SmartAccountV1.OwnerType.NON_EVM,
+            SmartAccountV1.VM_TYPE.NON_EVM,
             verifierPrecompile
         );
         console.log("SmartAccount (NON-EVM) deployed at:", smartAccountAddr);

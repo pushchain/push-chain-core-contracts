@@ -1,25 +1,25 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.20;
 
-import { Errors } from "../libraries/Errors.sol";
-import { ISmartAccount } from "../Interfaces/ISmartAccount.sol";
-import { ECDSA } from "@openzeppelin/contracts/utils/cryptography/ECDSA.sol";
+import {Errors} from "../libraries/Errors.sol";
+import {ISmartAccount} from "../Interfaces/ISmartAccount.sol";
+import {ECDSA} from "@openzeppelin/contracts/utils/cryptography/ECDSA.sol";
 import {Initializable} from "@openzeppelin/contracts/proxy/utils/Initializable.sol";
-import { ReentrancyGuard } from "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
-import {  VM_TYPE, 
-            AccountId, 
-                CrossChainPayload, 
-                    DOMAIN_SEPARATOR_TYPEHASH, 
-                        PUSH_CROSS_CHAIN_PAYLOAD_TYPEHASH } from "../libraries/Types.sol";
-
+import {ReentrancyGuard} from "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
+import {
+    VM_TYPE,
+    AccountId,
+    CrossChainPayload,
+    DOMAIN_SEPARATOR_TYPEHASH,
+    PUSH_CROSS_CHAIN_PAYLOAD_TYPEHASH
+} from "../libraries/Types.sol";
 
 /**
  * @title SmartAccountEVM
- * @dev The contract represents an external EVM user's account on Push Chain. 
+ * @dev The contract represents an external EVM user's account on Push Chain.
  *      It allows for the execution of payloads based on EVM signatures by the user/owner of this account.
  * @notice Use this contract as implementation logic of a user's Smart Account on Push Chain.
  */
-
 contract SmartAccountEVM is Initializable, ReentrancyGuard, ISmartAccount {
     using ECDSA for bytes32;
 
@@ -53,7 +53,7 @@ contract SmartAccountEVM is Initializable, ReentrancyGuard, ISmartAccount {
      * @param _accountId the AccountId struct
      */
     function initialize(AccountId memory _accountId) external initializer {
-        if(_accountId.vmType != VM_TYPE.EVM) {
+        if (_accountId.vmType != VM_TYPE.EVM) {
             revert Errors.InvalidInputArgs();
         }
         id = _accountId;
@@ -88,16 +88,16 @@ contract SmartAccountEVM is Initializable, ReentrancyGuard, ISmartAccount {
         address recoveredSigner = messageHash.recover(signature);
         return recoveredSigner == address(bytes20(id.ownerKey));
     }
-    
+
     /**
      * @dev Executes a payload on the target address with the given data and signature.
      * @param payload The target address to execute the payload on.
      * @param signature The signature to verify the execution.
      */
-    function executePayload( CrossChainPayload calldata payload, bytes calldata signature) external nonReentrant {
+    function executePayload(CrossChainPayload calldata payload, bytes calldata signature) external nonReentrant {
         bytes32 txHash = getTransactionHash(payload);
 
-        if(!verifyPayloadSignature(txHash, signature)) {
+        if (!verifyPayloadSignature(txHash, signature)) {
             revert Errors.InvalidEVMSignature();
         }
 
@@ -107,24 +107,23 @@ contract SmartAccountEVM is Initializable, ReentrancyGuard, ISmartAccount {
 
         (bool success, bytes memory returnData) = payload.target.call{value: payload.value}(payload.data);
 
-        if(!success) {
-            if ( returnData.length > 0 )  {
-
+        if (!success) {
+            if (returnData.length > 0) {
                 assembly {
                     let returnDataSize := mload(returnData)
                     revert(add(32, returnData), returnDataSize)
                 }
-            }else{
+            } else {
                 revert Errors.ExecutionFailed();
-                }
+            }
         }
 
         emit PayloadExecuted(id.ownerKey, payload.target, payload.data);
     }
-    function getTransactionHash(CrossChainPayload calldata payload) public view returns (bytes32) {    
-        
-        if(payload.deadline > 0){
-            if(block.timestamp > payload.deadline) {
+
+    function getTransactionHash(CrossChainPayload calldata payload) public view returns (bytes32) {
+        if (payload.deadline > 0) {
+            if (block.timestamp > payload.deadline) {
                 revert Errors.ExpiredDeadline();
             }
         }
@@ -147,10 +146,8 @@ contract SmartAccountEVM is Initializable, ReentrancyGuard, ISmartAccount {
         bytes32 _domainSeparator = domainSeparator();
 
         return keccak256(abi.encodePacked("\x19\x01", _domainSeparator, structHash));
-    }   
-
+    }
 
     // @dev Fallback function to receive ether.
     receive() external payable {}
-
 }

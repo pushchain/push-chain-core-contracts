@@ -1,12 +1,12 @@
 // SPDX-License-Identifier: MIT
 pragma solidity 0.8.26;
 
-import { SmartAccountV1 } from "./smartAccounts/SmartAccountV1.sol";
-import { Clones } from "@openzeppelin/contracts/proxy/Clones.sol";
+import {SmartAccountV1} from "./smartAccounts/SmartAccountV1.sol";
+import {Clones} from "@openzeppelin/contracts/proxy/Clones.sol";
 
-import { Errors } from "./libraries/Errors.sol";
-import { AccountId, VM_TYPE } from "./libraries/Types.sol";
-import { Ownable } from "@openzeppelin/contracts/access/Ownable.sol";
+import {Errors} from "./libraries/Errors.sol";
+import {AccountId, VM_TYPE} from "./libraries/Types.sol";
+import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
 
 /**
  * @title FactoryV1
@@ -30,15 +30,11 @@ contract FactoryV1 is Ownable {
      * @param _implementations Array of implementation addresses
      * @param _vmTypes Array of VM types corresponding to each implementation
      */
-    constructor(
-        address[] memory _implementations,
-        uint256[] memory _vmTypes
-    ) Ownable(msg.sender) {
-        if(_implementations.length != _vmTypes.length )
-        {
+    constructor(address[] memory _implementations, uint256[] memory _vmTypes) Ownable(msg.sender) {
+        if (_implementations.length != _vmTypes.length) {
             revert Errors.InvalidInputArgs();
         }
-        
+
         // Register all implementations
         for (uint256 i = 0; i < _implementations.length; i++) {
             registerImplementation(_vmTypes[i], _implementations[i]);
@@ -57,14 +53,14 @@ contract FactoryV1 is Ownable {
      * @param _vmTypes Array of VM types
      * @param _implementations Array of implementation addresses
      */
-    function registerMultipleImplementations(
-        uint256[] memory _vmTypes,
-        address[] memory _implementations
-    ) external onlyOwner {
-        if(_implementations.length != _vmTypes.length) {
+    function registerMultipleImplementations(uint256[] memory _vmTypes, address[] memory _implementations)
+        external
+        onlyOwner
+    {
+        if (_implementations.length != _vmTypes.length) {
             revert Errors.InvalidInputArgs();
         }
-        
+
         for (uint256 i = 0; i < _implementations.length; i++) {
             registerImplementation(_vmTypes[i], _implementations[i]);
         }
@@ -85,22 +81,19 @@ contract FactoryV1 is Ownable {
      * @dev Deploys a new SmartAccount instance with the given user key and VM type.
      * @param _id AccountId struct containing all details
      */
-    function deploySmartAccount(
-       AccountId memory _id
-    ) external returns(address) {
-
-        if(userAccounts[_id.ownerKey] != address(0)) {
+    function deploySmartAccount(AccountId memory _id) external returns (address) {
+        if (userAccounts[_id.ownerKey] != address(0)) {
             revert Errors.AccountAlreadyExists();
         }
 
-        if(uint256(_id.vmType) >= uint256(VM_TYPE.OTHER_VM) + 1) {
+        if (uint256(_id.vmType) >= uint256(VM_TYPE.OTHER_VM) + 1) {
             revert Errors.InvalidInputArgs();
         }
-        
+
         // Get the appropriate implementation based on VM type
         address implementation = accountImplmentationForVM[uint256(_id.vmType)];
         require(implementation != address(0), "No implementation for this VM type");
-        
+
         bytes32 salt = keccak256(abi.encode(_id.ownerKey));
 
         address payable smartAccount = payable(implementation.cloneDeterministic(salt));
@@ -116,17 +109,14 @@ contract FactoryV1 is Ownable {
      * @param _id AccountId struct containing all details
      * @return smartAccount The computed address of the SmartAccountV1 instance.
      */
-    function computeSmartAccountAddress(
-        AccountId memory _id
-    ) external view returns (address) {
-
-        if(uint256(_id.vmType) >= uint256(VM_TYPE.OTHER_VM) + 1) {
+    function computeSmartAccountAddress(AccountId memory _id) external view returns (address) {
+        if (uint256(_id.vmType) >= uint256(VM_TYPE.OTHER_VM) + 1) {
             revert Errors.InvalidInputArgs();
         }
 
         address implementation = accountImplmentationForVM[uint256(_id.vmType)];
         require(implementation != address(0), "No implementation for this VM type");
-        
+
         bytes32 salt = keccak256(abi.encode(_id.ownerKey));
         return implementation.predictDeterministicAddress(salt, address(this));
     }

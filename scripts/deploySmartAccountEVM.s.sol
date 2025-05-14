@@ -45,7 +45,7 @@ contract DeploySmartAccountScript is Script {
         address smartAccountAddr = factory.deploySmartAccount(
             bobKey,
             caip,
-            SmartAccountV1.OwnerType.EVM,
+            SmartAccountV1.VM_TYPE.EVM,
             verifierPrecompile
         );
         console.log("SmartAccount (BOB) deployed at:", smartAccountAddr);

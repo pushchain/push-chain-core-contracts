@@ -1,26 +1,26 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.20;
 
-import { Errors } from "../libraries/Errors.sol";
-import { ISmartAccount } from "../Interfaces/ISmartAccount.sol";
-import { ECDSA } from "@openzeppelin/contracts/utils/cryptography/ECDSA.sol";
+import {Errors} from "../libraries/Errors.sol";
+import {ISmartAccount} from "../Interfaces/ISmartAccount.sol";
+import {ECDSA} from "@openzeppelin/contracts/utils/cryptography/ECDSA.sol";
 import {Initializable} from "@openzeppelin/contracts/proxy/utils/Initializable.sol";
-import { ReentrancyGuard } from "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
-import { VM_TYPE, 
-    AccountId, 
-    CrossChainPayload, 
-    DOMAIN_SEPARATOR_TYPEHASH, 
-    PUSH_CROSS_CHAIN_PAYLOAD_TYPEHASH } from "../libraries/Types.sol";
-
+import {ReentrancyGuard} from "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
+import {
+    VM_TYPE,
+    AccountId,
+    CrossChainPayload,
+    DOMAIN_SEPARATOR_TYPEHASH,
+    PUSH_CROSS_CHAIN_PAYLOAD_TYPEHASH
+} from "../libraries/Types.sol";
 
 /**
  * @title SmartAccountSVM
- * @dev The contract represents an external SVM(solana) user's account on Push Chain. 
+ * @dev The contract represents an external SVM(solana) user's account on Push Chain.
  *      It allows for the execution of payloads based on non-EVM signatures.
  *      It uses a native precompile for signature verification of Non-EVM users.
  * @notice Use this contract as implementation logic of a user's Smart Account on Push Chain.
  */
-
 contract SmartAccountSVM is Initializable, ReentrancyGuard, ISmartAccount {
     using ECDSA for bytes32;
 
@@ -55,7 +55,7 @@ contract SmartAccountSVM is Initializable, ReentrancyGuard, ISmartAccount {
      * @param _accountId the AccountId struct
      */
     function initialize(AccountId memory _accountId) external initializer {
-        if(_accountId.vmType != VM_TYPE.SVM) {
+        if (_accountId.vmType != VM_TYPE.SVM) {
             revert Errors.InvalidInputArgs();
         }
         id = _accountId;
@@ -79,7 +79,7 @@ contract SmartAccountSVM is Initializable, ReentrancyGuard, ISmartAccount {
     function verifyPayloadSignature(bytes32 messageHash, bytes memory signature) public view returns (bool) {
         return _verifySignatureSVM(messageHash, signature);
     }
-    
+
     /**
      * @dev Verifies the NON-EVM signature using the verifier precompile.
      * @param message The message to verify.
@@ -90,13 +90,13 @@ contract SmartAccountSVM is Initializable, ReentrancyGuard, ISmartAccount {
         (bool success, bytes memory result) = VERIFIER_PRECOMPILE.staticcall(
             abi.encodeWithSignature("verifyEd25519(bytes,bytes32,bytes)", id.ownerKey, message, signature)
         );
-        if(!success) {
+        if (!success) {
             revert Errors.PrecompileCallFailed();
         }
 
         return abi.decode(result, (bool));
     }
-    
+
     /**
      * @dev Executes a payload on the target address with the given data and signature.
      * @param payload The target address to execute the payload on.
@@ -105,7 +105,7 @@ contract SmartAccountSVM is Initializable, ReentrancyGuard, ISmartAccount {
     function executePayload(CrossChainPayload calldata payload, bytes calldata signature) external nonReentrant {
         bytes32 txHash = getTransactionHash(payload);
 
-        if(!verifyPayloadSignature(txHash, signature)) {
+        if (!verifyPayloadSignature(txHash, signature)) {
             revert Errors.InvalidSVMSignature();
         }
 
@@ -115,7 +115,7 @@ contract SmartAccountSVM is Initializable, ReentrancyGuard, ISmartAccount {
 
         (bool success, bytes memory returnData) = payload.target.call{value: payload.value}(payload.data);
 
-        if(!success) {
+        if (!success) {
             if (returnData.length > 0) {
                 assembly {
                     let returnDataSize := mload(returnData)
@@ -128,10 +128,10 @@ contract SmartAccountSVM is Initializable, ReentrancyGuard, ISmartAccount {
 
         emit PayloadExecuted(id.ownerKey, payload.target, payload.data);
     }
-    
-    function getTransactionHash(CrossChainPayload calldata payload) public view returns (bytes32) {    
-        if(payload.deadline > 0) {
-            if(block.timestamp > payload.deadline) {
+
+    function getTransactionHash(CrossChainPayload calldata payload) public view returns (bytes32) {
+        if (payload.deadline > 0) {
+            if (block.timestamp > payload.deadline) {
                 revert Errors.ExpiredDeadline();
             }
         }
@@ -154,7 +154,7 @@ contract SmartAccountSVM is Initializable, ReentrancyGuard, ISmartAccount {
         bytes32 _domainSeparator = domainSeparator();
 
         return keccak256(abi.encodePacked("\x19\x01", _domainSeparator, structHash));
-    }   
+    }
 
     // @dev Fallback function to receive ether.
     receive() external payable {}

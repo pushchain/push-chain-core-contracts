@@ -1,6 +1,7 @@
 pragma solidity ^0.8.20;
 
-import { AccountId, CrossChainPayload } from "../libraries/Types.sol";
+import {AccountId, CrossChainPayload} from "../libraries/Types.sol";
+
 interface ISmartAccount {
     // Events
     event PayloadExecuted(bytes caller, address target, bytes data);

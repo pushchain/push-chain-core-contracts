@@ -30,8 +30,7 @@ contract PushLockerTest is Test {
         vm.createSelectFork(vm.envString("SEPOLIA_RPC_URL"));
 
         address deployedAddress = Upgrades.deployUUPSProxy(
-            "PushLocker.sol",
-            abi.encodeCall(PushLocker.initialize, (admin, WETH, USDT, ROUTER, FEED))
+            "PushLocker.sol", abi.encodeCall(PushLocker.initialize, (admin, WETH, USDT, ROUTER, FEED))
         );
         locker = PushLocker(deployedAddress);
         console2.logBytes32(locker.getRoleAdmin(0x00));
@@ -77,10 +76,7 @@ contract PushLockerTest is Test {
     function test_Upgradeability() public {
         //@dev: This is a workaround for the upgradeability test. In a real scenario, the admin can upgrade.
         vm.prank(admin);
-        locker.grantRole(
-            0x00,
-            address(this)
-        );
+        locker.grantRole(0x00, address(this));
 
         Upgrades.upgradeProxy(address(locker), "PushLockerV2.sol", "");
 
