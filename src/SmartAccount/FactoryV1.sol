@@ -3,6 +3,7 @@ pragma solidity 0.8.26;
 
 import { SmartAccountV1 } from "./SmartAccountV1.sol";
 import { Clones } from "@openzeppelin/contracts/proxy/Clones.sol";
+import { Errors } from "../libraries/Errors.sol";
 
 
 /**

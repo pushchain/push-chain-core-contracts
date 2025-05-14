@@ -6,6 +6,7 @@ import "forge-std/console.sol";
 
 import {FactoryV1} from "../src/SmartAccount/FactoryV1.sol";
 import {SmartAccountV1} from "../src/SmartAccount/SmartAccountV1.sol";
+import {Errors} from "../src/libraries/Errors.sol";
 
 contract FactoryTest is Test {
     FactoryV1 factory;

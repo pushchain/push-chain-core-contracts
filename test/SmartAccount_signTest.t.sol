@@ -8,7 +8,7 @@ import {Target} from "../src/mocks/Target.sol";
 import {FactoryV1} from "../src/SmartAccount/FactoryV1.sol";
 import {SmartAccountV1} from "../src/SmartAccount/SmartAccountV1.sol";
 import {CAIP10} from "./utils/caip.sol";
-
+import {Errors} from "../src/libraries/Errors.sol";
 contract SmartAccountTest is Test {
     Target target;
     FactoryV1 factory;
@@ -104,7 +104,7 @@ contract SmartAccountTest is Test {
 
         bytes memory signature = abi.encodePacked(r, s, v);
 
-        vm.expectRevert("Invalid EVM signature");
+        vm.expectRevert(abi.encodeWithSelector(Errors.InvalidSignature.selector));
         // execute the payload
         evmSmartAccountInstance.executePayload(payload, signature);
         // get magic value after execution
@@ -177,7 +177,8 @@ contract SmartAccountTest is Test {
 
         bytes memory signature = abi.encodePacked(r, s, v);
 
-        vm.expectRevert("Invalid EVM signature"); // execute the payload
+        vm.expectRevert(abi.encodeWithSelector(Errors.InvalidSignature.selector));          
+        // execute the payload
 
         evmSmartAccountInstance.executePayload(payload, signature); // get magic value after execution
         uint256 magicValueAfter = target.getMagicNumber();

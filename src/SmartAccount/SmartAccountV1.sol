@@ -5,6 +5,7 @@ pragma solidity ^0.8.20;
 import { ECDSA } from "@openzeppelin/contracts/utils/cryptography/ECDSA.sol";
 import {Initializable} from "@openzeppelin/contracts/proxy/utils/Initializable.sol";
 import { ReentrancyGuard } from "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
+import { Errors } from "../libraries/Errors.sol";
 
 /**
  * @title SmartAccountV1
@@ -115,7 +116,10 @@ contract SmartAccountV1 is Initializable, ReentrancyGuard {
         (bool success, bytes memory result) = verifierPrecompile.staticcall(
             abi.encodeWithSignature("verifyEd25519(bytes,bytes32,bytes)", id.ownerKey, message, signature)
         );
-        require(success, "Verifier call failed");
+        if(!success) {
+            revert Errors.PrecompileCallFailed();
+        }
+
         return abi.decode(result, (bool));
     }
     
@@ -128,9 +132,13 @@ contract SmartAccountV1 is Initializable, ReentrancyGuard {
         bytes32 txHash = getTransactionHash(payload);
 
         if (id.ownerType == OwnerType.EVM) {
-            require(verifySignatureEVM(txHash, signature), "Invalid EVM signature");
+            if(!verifySignatureEVM(txHash, signature)) {
+                revert Errors.InvalidSignature();
+            }
         } else {
-            require(verifySignatureNonEVM(txHash, signature), "Invalid NON-EVM signature");
+            if(!verifySignatureNonEVM(txHash, signature)) {
+                revert Errors.InvalidNonEVMSignature();
+            }
         }
 
         unchecked {
@@ -147,8 +155,8 @@ contract SmartAccountV1 is Initializable, ReentrancyGuard {
                     revert(add(32, returnData), returnDataSize)
                 }
             }else{
-                revert("Execution failed without reason");
-            }
+                revert Errors.ExecutionFailed();
+                }
         }
 
         emit PayloadExecuted(id.ownerKey, payload.target, payload.data);
@@ -156,7 +164,9 @@ contract SmartAccountV1 is Initializable, ReentrancyGuard {
     function getTransactionHash(CrossChainPayload calldata payload) public view returns (bytes32) {    
         
         if(payload.deadline > 0){
-            require(block.timestamp < payload.deadline, "Payload deadline expired");
+            if(block.timestamp > payload.deadline) {
+                revert Errors.ExpiredDeadline();
+            }
         }
         // Calculate the hash of the payload using EIP-712
         bytes32 structHash = keccak256(
