@@ -6,7 +6,7 @@ import { ISmartAccount } from "../Interfaces/ISmartAccount.sol";
 import { ECDSA } from "@openzeppelin/contracts/utils/cryptography/ECDSA.sol";
 import {Initializable} from "@openzeppelin/contracts/proxy/utils/Initializable.sol";
 import { ReentrancyGuard } from "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
-import { OwnerType, 
+import { VM_TYPE, 
             AccountId, 
                 CrossChainPayload, 
                     DOMAIN_SEPARATOR_TYPEHASH, 
@@ -74,7 +74,7 @@ contract SmartAccountV1 is Initializable, ReentrancyGuard, ISmartAccount {
      * @return bool indicating whether the signature is valid.
      */
     function verifyPayloadSignature(bytes32 messageHash, bytes memory signature) public view returns (bool) {
-        if(id.ownerType == OwnerType.EVM) {
+        if(id.vmType == VM_TYPE.EVM) {
             return verifySignatureEVM(messageHash, signature);
         } else {
             return verifySignatureNonEVM(messageHash, signature);
@@ -118,7 +118,7 @@ contract SmartAccountV1 is Initializable, ReentrancyGuard, ISmartAccount {
         bytes32 txHash = getTransactionHash(payload);
 
         if(!verifyPayloadSignature(txHash, signature)) {
-            revert Errors.InvalidSignature();
+            revert Errors.InvalidEVMSignature();
         }
 
         unchecked {

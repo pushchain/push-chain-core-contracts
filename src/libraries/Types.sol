@@ -1,16 +1,21 @@
 // SPDX-License-Identifier: MIT
 pragma solidity 0.8.26;
 
-enum OwnerType {
+enum VM_TYPE {
         EVM,
-        NON_EVM
+        SVM,
+        MOVE_VM,
+        WASM_VM,
+        CAIRO_VM,
+        OTHER_VM
+
 }
     // User Struct 
 struct AccountId {
     string namespace;
     string chainId;
     bytes ownerKey; 
-    OwnerType ownerType;
+    VM_TYPE vmType;
 }
 
 // TODO: Confirm the final implementation of the cross-chain payload

@@ -9,10 +9,10 @@ library Errors {
 
     // Precompile related errors
     error PrecompileCallFailed();
-    
+
     // Signature related errors
-    error InvalidSignature();
-    error InvalidNonEVMSignature();
+    error InvalidEVMSignature();
+    error InvalidSVMSignature();
     
     // Execution related errors
     error ExecutionFailed();
@@ -22,6 +22,7 @@ library Errors {
     
     // Account related errors
     error InvalidAccount();
+    error AccountAlreadyExists();
     
     // Owner related errors
     error InvalidOwner();
