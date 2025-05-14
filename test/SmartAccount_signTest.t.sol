@@ -18,7 +18,7 @@ contract SmartAccountTest is Test {
     address bob;
     uint256 bobPk;
     bytes bobKey;
-    address verifierPrecompile = 0x0000000000000000000000000000000000000902;
+    address verifierPrecompile = 0x0000000000000000000000000000000000000901;
     SmartAccountV1.OwnerType ownerType = SmartAccountV1.OwnerType.EVM;
 
     bytes32 private constant PUSH_CROSS_CHAIN_PAYLOAD_TYPEHASH =
@@ -48,8 +48,16 @@ contract SmartAccountTest is Test {
         );
     }
 
+    function testAccountId() public deployEvmSmartAccount {
+        SmartAccountV1.AccountId memory accountId = evmSmartAccountInstance.accountId();
+        assertEq(accountId.namespace, "eip155");
+        assertEq(accountId.chainId, "1");
+        assertEq(accountId.ownerKey, bobKey);
+        assertEq(uint(accountId.ownerType), 0);
+    }
+
     modifier deployEvmSmartAccount() {
-        SmartAccountV1.Owner memory _owner = SmartAccountV1.Owner({
+        SmartAccountV1.AccountId memory _owner = SmartAccountV1.AccountId({
             namespace: "eip155",
             chainId: "1",
             ownerKey: bobKey,
@@ -71,22 +79,6 @@ contract SmartAccountTest is Test {
             address(evmSmartAccountInstance),
             address(factory.computeSmartAccountAddress(bobKey))
         );
-    }
-
-    // Test the state update of SmartAccount Post Deployment
-    function testStateUpdate() public deployEvmSmartAccount {
-        (
-            ,
-            ,
-            bytes memory ownerKey,
-            SmartAccountV1.OwnerType _ownerType
-        ) = evmSmartAccountInstance.owner();
-        assertEq(ownerKey, bobKey);
-        assertEq(
-            address(evmSmartAccountInstance.verifierPrecompile()),
-            verifierPrecompile
-        );
-        assertEq(uint(_ownerType), 0);
     }
 
     //When nonce is incorrect
@@ -194,7 +186,7 @@ contract SmartAccountTest is Test {
     }
 
     function testNonEVMExecution() public {
-        SmartAccountV1.Owner memory _owner = SmartAccountV1.Owner({
+        SmartAccountV1.AccountId memory _owner = SmartAccountV1.AccountId({
             namespace: "eip155",
             chainId: "1",
             ownerKey: bobKey,

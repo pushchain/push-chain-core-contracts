@@ -22,7 +22,7 @@ contract SmartAccountV1 is Initializable, ReentrancyGuard {
         NON_EVM
     }
     // User Struct 
-    struct Owner {
+    struct AccountId {
      string namespace;
      string chainId;
      bytes ownerKey; 
@@ -42,7 +42,7 @@ contract SmartAccountV1 is Initializable, ReentrancyGuard {
         uint256 deadline;             // Timestamp after which this payload is invalid
     }
 
-    Owner public owner;
+    AccountId id;
     uint256 public nonce;
     string public constant VERSION = "0.1.0";
     address public constant verifierPrecompile = 0x0000000000000000000000000000000000000901;
@@ -79,10 +79,19 @@ contract SmartAccountV1 is Initializable, ReentrancyGuard {
 
     /**
      * @dev Initializes the contract with the given parameters.
-     * @param _owner the Owner struct
+     * @param _accountId the AccountId struct
      */
-    function initialize(Owner memory _owner) external initializer {
-        owner = _owner;
+    function initialize(AccountId memory _accountId) external initializer {
+        id = _accountId;
+    }
+
+    /**
+     * @notice Must be implemented by all Smart Accounts to return the account identifier.
+     * @dev Returns the account ID.
+     * @return AccountId The account ID.
+     */
+    function accountId() public view returns (AccountId memory) {
+        return id;
     }
 
     /**
@@ -93,7 +102,7 @@ contract SmartAccountV1 is Initializable, ReentrancyGuard {
      */
     function verifySignatureEVM(bytes32 messageHash, bytes memory signature) internal view returns (bool) {
         address recoveredSigner = messageHash.recover(signature);
-        return recoveredSigner == address(bytes20(owner.ownerKey));
+        return recoveredSigner == address(bytes20(id.ownerKey));
     }
 
     /**
@@ -104,7 +113,7 @@ contract SmartAccountV1 is Initializable, ReentrancyGuard {
      */
     function verifySignatureNonEVM(bytes32 message, bytes memory signature) internal view returns (bool) {
         (bool success, bytes memory result) = verifierPrecompile.staticcall(
-            abi.encodeWithSignature("verifyEd25519(bytes,bytes32,bytes)", owner.ownerKey, message, signature)
+            abi.encodeWithSignature("verifyEd25519(bytes,bytes32,bytes)", id.ownerKey, message, signature)
         );
         require(success, "Verifier call failed");
         return abi.decode(result, (bool));
@@ -118,7 +127,7 @@ contract SmartAccountV1 is Initializable, ReentrancyGuard {
     function executePayload( CrossChainPayload calldata payload, bytes calldata signature) external nonReentrant {
         bytes32 txHash = getTransactionHash(payload);
 
-        if (owner.ownerType == OwnerType.EVM) {
+        if (id.ownerType == OwnerType.EVM) {
             require(verifySignatureEVM(txHash, signature), "Invalid EVM signature");
         } else {
             require(verifySignatureNonEVM(txHash, signature), "Invalid NON-EVM signature");
@@ -142,7 +151,7 @@ contract SmartAccountV1 is Initializable, ReentrancyGuard {
             }
         }
 
-        emit PayloadExecuted(owner.ownerKey, payload.target, payload.data);
+        emit PayloadExecuted(id.ownerKey, payload.target, payload.data);
     }
     function getTransactionHash(CrossChainPayload calldata payload) public view returns (bytes32) {    
         

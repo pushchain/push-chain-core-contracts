@@ -30,20 +30,20 @@ contract FactoryV1 {
 
     /**
      * @dev Deploys a new SmartAccountV1 instance with the given user key and owner type.
-     * @param _owner Owner struct containing all details
+     * @param _id AccountId struct containing all details
      */
     function deploySmartAccount(
-       SmartAccountV1.Owner memory _owner
+       SmartAccountV1.AccountId memory _id
     ) external returns(address) {
-        require(userAccounts[_owner.ownerKey] == address(0), "Account already exists");
+        require(userAccounts[_id.ownerKey] == address(0), "Account already exists");
         
-        bytes32 salt = keccak256(abi.encode(_owner.ownerKey));
+        bytes32 salt = keccak256(abi.encode(_id.ownerKey));
 
         address payable smartAccount = payable(smartAccountImplementation.cloneDeterministic(salt));
-        userAccounts[_owner.ownerKey] = smartAccount;
-        SmartAccountV1(smartAccount).initialize(_owner);
+        userAccounts[_id.ownerKey] = smartAccount;
+        SmartAccountV1(smartAccount).initialize(_id);
 
-        emit SmartAccountDeployed(smartAccount, _owner.ownerKey);
+        emit SmartAccountDeployed(smartAccount, _id.ownerKey);
         return smartAccount;
     }
 

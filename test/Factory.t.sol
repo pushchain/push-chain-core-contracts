@@ -54,13 +54,13 @@ contract FactoryTest is Test {
 
     // Test deployment of smart account
     function testDeploymentCreate2() public {
-        SmartAccountV1.Owner memory _owner = SmartAccountV1.Owner({
+        SmartAccountV1.AccountId memory _id = SmartAccountV1.AccountId({
             namespace: "eip155",
             chainId: "1",
             ownerKey: ownerKey,
             ownerType: ownerType
         });
-        address smartAccountAddress = factory.deploySmartAccount(_owner);
+        address smartAccountAddress = factory.deploySmartAccount(_id);
         assertEq(smartAccountAddress, address(factory.userAccounts(ownerKey)));
         assertEq(
             smartAccountAddress,
@@ -70,28 +70,28 @@ contract FactoryTest is Test {
 
     // Test that the same account cannot be deployed twice
     function testDeploymentTwice() public {
-        SmartAccountV1.Owner memory _owner = SmartAccountV1.Owner({
+        SmartAccountV1.AccountId memory _id = SmartAccountV1.AccountId({
             namespace: "eip155",
             chainId: "1",
             ownerKey: ownerKey,
             ownerType: ownerType
         });
-        address smartAccountAddress = factory.deploySmartAccount(_owner);
+        address smartAccountAddress = factory.deploySmartAccount(_id);
 
         vm.expectRevert("Account already exists");
 
-        factory.deploySmartAccount(_owner);
+        factory.deploySmartAccount(_id);
     }
 
     // Test that the computed address matches the deployed address
     function testComputeSmartAccountAddress() public {
-        SmartAccountV1.Owner memory _owner = SmartAccountV1.Owner({
+        SmartAccountV1.AccountId memory _id = SmartAccountV1.AccountId({
             namespace: "eip155",
             chainId: "1",
             ownerKey: ownerKey,
             ownerType: ownerType
         });
-        address smartAccountAddress = factory.deploySmartAccount(_owner);
+        address smartAccountAddress = factory.deploySmartAccount(_id);
 
         address computedAddress = factory.computeSmartAccountAddress(ownerKey);
 
@@ -103,13 +103,13 @@ contract FactoryTest is Test {
 
     // Test deployment of smart account with NON-EVM
     function testDeploymentCreate2NonEVM() public {
-        SmartAccountV1.Owner memory _owner = SmartAccountV1.Owner({
+        SmartAccountV1.AccountId memory _id = SmartAccountV1.AccountId({
             namespace: "solana",
             chainId: "5eykt4UsFv8P8NJdTREpY1vzqKqZKvdp",
             ownerKey: ownerKeyNonEVM,
             ownerType: ownerTypeNonEVM
         });
-        address smartAccountAddress = factory.deploySmartAccount(_owner);
+        address smartAccountAddress = factory.deploySmartAccount(_id);
         assertEq(smartAccountAddress, address(factory.userAccounts(ownerKeyNonEVM)));
         assertEq(
             smartAccountAddress,
@@ -119,27 +119,27 @@ contract FactoryTest is Test {
 
     // Test that the same account cannot be deployed twice with NON-EVM
     function testDeploymentTwiceNonEVM() public {
-        SmartAccountV1.Owner memory _owner = SmartAccountV1.Owner({
+        SmartAccountV1.AccountId memory _id = SmartAccountV1.AccountId({
             namespace: "solana",
             chainId: "5eykt4UsFv8P8NJdTREpY1vzqKqZKvdp",
             ownerKey: ownerKeyNonEVM,
             ownerType: ownerTypeNonEVM
         });
-        address smartAccountAddress = factory.deploySmartAccount(_owner);
+        address smartAccountAddress = factory.deploySmartAccount(_id);
 
         vm.expectRevert("Account already exists");
-        factory.deploySmartAccount(_owner);
+        factory.deploySmartAccount(_id);
     }
 
     // Test that the computed address matches the deployed address with NON-EVM
     function testComputeSmartAccountAddressNonEVM() public {
-        SmartAccountV1.Owner memory _owner = SmartAccountV1.Owner({
+        SmartAccountV1.AccountId memory _id = SmartAccountV1.AccountId({
             namespace: "solana",
             chainId: "5eykt4UsFv8P8NJdTREpY1vzqKqZKvdp",
             ownerKey: ownerKeyNonEVM,
             ownerType: ownerTypeNonEVM
         });
-        address smartAccountAddress = factory.deploySmartAccount(_owner);
+        address smartAccountAddress = factory.deploySmartAccount(_id);
 
         address computedAddress = factory.computeSmartAccountAddress(
             ownerKeyNonEVM
