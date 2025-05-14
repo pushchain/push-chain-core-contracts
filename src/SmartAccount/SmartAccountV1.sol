@@ -1,11 +1,17 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.20;
 
-
+import { Errors } from "../libraries/Errors.sol";
+import { ISmartAccount } from "../Interfaces/ISmartAccount.sol";
 import { ECDSA } from "@openzeppelin/contracts/utils/cryptography/ECDSA.sol";
 import {Initializable} from "@openzeppelin/contracts/proxy/utils/Initializable.sol";
 import { ReentrancyGuard } from "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
-import { Errors } from "../libraries/Errors.sol";
+import { OwnerType, 
+            AccountId, 
+                CrossChainPayload, 
+                    DOMAIN_SEPARATOR_TYPEHASH, 
+                        PUSH_CROSS_CHAIN_PAYLOAD_TYPEHASH } from "../libraries/Types.sol";
+
 
 /**
  * @title SmartAccountV1
@@ -15,47 +21,13 @@ import { Errors } from "../libraries/Errors.sol";
  * @notice Use this contract as implementation logic of a user's Smart Account on Push Chain.
  */
 
-contract SmartAccountV1 is Initializable, ReentrancyGuard {
+contract SmartAccountV1 is Initializable, ReentrancyGuard, ISmartAccount {
     using ECDSA for bytes32;
-
-    enum OwnerType {
-        EVM,
-        NON_EVM
-    }
-    // User Struct 
-    struct AccountId {
-     string namespace;
-     string chainId;
-     bytes ownerKey; 
-     OwnerType ownerType;
-    }
-
-    // TODO: Confirm the final implementation of the cross-chain payload
-    struct CrossChainPayload {
-        // Core execution parameters
-        address target;               // Target contract address to call
-        uint256 value;                // Native token amount to send
-        bytes data;                   // Call data for the function execution
-        uint256 gasLimit;             // Maximum gas to be used for this tx (caps refund amount)
-        uint256 maxFeePerGas;         // Maximum fee per gas unit
-        uint256 maxPriorityFeePerGas; // Maximum priority fee per gas unit
-        uint256 nonce;                // Chain ID where this should be executed
-        uint256 deadline;             // Timestamp after which this payload is invalid
-    }
 
     AccountId id;
     uint256 public nonce;
     string public constant VERSION = "0.1.0";
     address public constant verifierPrecompile = 0x0000000000000000000000000000000000000901;
-
-    bytes32 private constant DOMAIN_SEPARATOR_TYPEHASH = keccak256(
-        "EIP712Domain(string version,uint256 chainId,address verifyingContract)"
-    );
-    bytes32 private constant PUSH_CROSS_CHAIN_PAYLOAD_TYPEHASH = keccak256(
-        "CrossChainPayload(address target,uint256 value,bytes data,uint256 gasLimit,uint256 maxFeePerGas,uint256 maxPriorityFeePerGas,uint256 nonce,uint256 deadline)"
-    );
-
-    event PayloadExecuted(bytes caller, address target, bytes data);
 
     /// @custom:oz-upgrades-unsafe-allow constructor
     constructor() {
@@ -96,6 +68,20 @@ contract SmartAccountV1 is Initializable, ReentrancyGuard {
     }
 
     /**
+     * @dev Verifies the payload signature.
+     * @param messageHash The hash of the message to verify.
+     * @param signature The signature to verify.
+     * @return bool indicating whether the signature is valid.
+     */
+    function verifyPayloadSignature(bytes32 messageHash, bytes memory signature) public view returns (bool) {
+        if(id.ownerType == OwnerType.EVM) {
+            return verifySignatureEVM(messageHash, signature);
+        } else {
+            return verifySignatureNonEVM(messageHash, signature);
+        }
+    }
+
+    /**
      * @dev Verifies the EVM signature using the ECDSA library.
      * @param messageHash The hash of the message to verify.
      * @param signature The signature to verify.
@@ -131,14 +117,8 @@ contract SmartAccountV1 is Initializable, ReentrancyGuard {
     function executePayload( CrossChainPayload calldata payload, bytes calldata signature) external nonReentrant {
         bytes32 txHash = getTransactionHash(payload);
 
-        if (id.ownerType == OwnerType.EVM) {
-            if(!verifySignatureEVM(txHash, signature)) {
-                revert Errors.InvalidSignature();
-            }
-        } else {
-            if(!verifySignatureNonEVM(txHash, signature)) {
-                revert Errors.InvalidNonEVMSignature();
-            }
+        if(!verifyPayloadSignature(txHash, signature)) {
+            revert Errors.InvalidSignature();
         }
 
         unchecked {

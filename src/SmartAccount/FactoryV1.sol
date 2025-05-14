@@ -4,7 +4,7 @@ pragma solidity 0.8.26;
 import { SmartAccountV1 } from "./SmartAccountV1.sol";
 import { Clones } from "@openzeppelin/contracts/proxy/Clones.sol";
 import { Errors } from "../libraries/Errors.sol";
-
+import { AccountId } from "../libraries/Types.sol";
 
 /**
  * @title FactoryV1
@@ -34,7 +34,7 @@ contract FactoryV1 {
      * @param _id AccountId struct containing all details
      */
     function deploySmartAccount(
-       SmartAccountV1.AccountId memory _id
+       AccountId memory _id
     ) external returns(address) {
         require(userAccounts[_id.ownerKey] == address(0), "Account already exists");
         

@@ -7,6 +7,7 @@ import "forge-std/console.sol";
 import {FactoryV1} from "../src/SmartAccount/FactoryV1.sol";
 import {SmartAccountV1} from "../src/SmartAccount/SmartAccountV1.sol";
 import {Errors} from "../src/libraries/Errors.sol";
+import { AccountId, OwnerType } from "../src/libraries/Types.sol";
 
 contract FactoryTest is Test {
     FactoryV1 factory;
@@ -18,11 +19,11 @@ contract FactoryTest is Test {
     bytes ownerKey;
 
     address verifierPrecompile;
-    SmartAccountV1.OwnerType ownerType;
+    OwnerType ownerType;
 
     // Set up the test environment - NON-EVM
     bytes ownerKeyNonEVM;
-    SmartAccountV1.OwnerType ownerTypeNonEVM;
+    OwnerType ownerTypeNonEVM;
     string solanaChainId;
     string solanaAddress;
 
@@ -38,8 +39,8 @@ contract FactoryTest is Test {
         verifierPrecompile = 0x0000000000000000000000000000000000000902;
 
         // Set up owner type
-        ownerType = SmartAccountV1.OwnerType.EVM;
-        ownerTypeNonEVM = SmartAccountV1.OwnerType.NON_EVM;
+        ownerType = OwnerType.EVM;
+        ownerTypeNonEVM = OwnerType.NON_EVM;
 
         ownerKeyNonEVM = hex"f1d234ab8473c0ab4f55ea1c7c3ea5feec4acb3b9498af9b63722c1b368b8e4c";
         solanaChainId = "5eykt4UsFv8P8NJdTREpY1vzqKqZKvdp";
@@ -55,7 +56,7 @@ contract FactoryTest is Test {
 
     // Test deployment of smart account
     function testDeploymentCreate2() public {
-        SmartAccountV1.AccountId memory _id = SmartAccountV1.AccountId({
+        AccountId memory _id = AccountId({
             namespace: "eip155",
             chainId: "1",
             ownerKey: ownerKey,
@@ -71,7 +72,7 @@ contract FactoryTest is Test {
 
     // Test that the same account cannot be deployed twice
     function testDeploymentTwice() public {
-        SmartAccountV1.AccountId memory _id = SmartAccountV1.AccountId({
+        AccountId memory _id = AccountId({
             namespace: "eip155",
             chainId: "1",
             ownerKey: ownerKey,
@@ -86,7 +87,7 @@ contract FactoryTest is Test {
 
     // Test that the computed address matches the deployed address
     function testComputeSmartAccountAddress() public {
-        SmartAccountV1.AccountId memory _id = SmartAccountV1.AccountId({
+        AccountId memory _id = AccountId({
             namespace: "eip155",
             chainId: "1",
             ownerKey: ownerKey,
@@ -104,7 +105,7 @@ contract FactoryTest is Test {
 
     // Test deployment of smart account with NON-EVM
     function testDeploymentCreate2NonEVM() public {
-        SmartAccountV1.AccountId memory _id = SmartAccountV1.AccountId({
+        AccountId memory _id = AccountId({
             namespace: "solana",
             chainId: "5eykt4UsFv8P8NJdTREpY1vzqKqZKvdp",
             ownerKey: ownerKeyNonEVM,
@@ -120,7 +121,7 @@ contract FactoryTest is Test {
 
     // Test that the same account cannot be deployed twice with NON-EVM
     function testDeploymentTwiceNonEVM() public {
-        SmartAccountV1.AccountId memory _id = SmartAccountV1.AccountId({
+        AccountId memory _id = AccountId({
             namespace: "solana",
             chainId: "5eykt4UsFv8P8NJdTREpY1vzqKqZKvdp",
             ownerKey: ownerKeyNonEVM,
@@ -134,7 +135,7 @@ contract FactoryTest is Test {
 
     // Test that the computed address matches the deployed address with NON-EVM
     function testComputeSmartAccountAddressNonEVM() public {
-        SmartAccountV1.AccountId memory _id = SmartAccountV1.AccountId({
+        AccountId memory _id = AccountId({
             namespace: "solana",
             chainId: "5eykt4UsFv8P8NJdTREpY1vzqKqZKvdp",
             ownerKey: ownerKeyNonEVM,

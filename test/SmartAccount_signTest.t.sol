@@ -9,6 +9,9 @@ import {FactoryV1} from "../src/SmartAccount/FactoryV1.sol";
 import {SmartAccountV1} from "../src/SmartAccount/SmartAccountV1.sol";
 import {CAIP10} from "./utils/caip.sol";
 import {Errors} from "../src/libraries/Errors.sol";
+import {ISmartAccount} from "../src/Interfaces/ISmartAccount.sol";
+import { AccountId, OwnerType, CrossChainPayload, PUSH_CROSS_CHAIN_PAYLOAD_TYPEHASH     } from "../src/libraries/Types.sol";
+
 contract SmartAccountTest is Test {
     Target target;
     FactoryV1 factory;
@@ -19,18 +22,13 @@ contract SmartAccountTest is Test {
     uint256 bobPk;
     bytes bobKey;
     address verifierPrecompile = 0x0000000000000000000000000000000000000901;
-    SmartAccountV1.OwnerType ownerType = SmartAccountV1.OwnerType.EVM;
-
-    bytes32 private constant PUSH_CROSS_CHAIN_PAYLOAD_TYPEHASH =
-        keccak256(
-            "CrossChainPayload(address target,uint256 value,bytes data,uint256 gasLimit,uint256 maxFeePerGas,uint256 maxPriorityFeePerGas,uint256 nonce,uint256 deadline)"
-        );
+    OwnerType ownerType = OwnerType.EVM;
     // Set up the test environment - NON-EVM
     bytes ownerKeyNonEVM =
         hex"30ea71869947818d27b718592ea44010b458903bd9bf0370f50eda79e87d9f69";
     string solanaAddress = "4HwuvaEVT4qnvb5TkSvMyYPrprqpnJjz8LSL6TPnuJ2U";
     string solanaChainId = "5eykt4UsFv8P8NJdTREpY1vzqKqZKvdp";
-    SmartAccountV1.OwnerType ownerTypeNonEVM = SmartAccountV1.OwnerType.NON_EVM;
+    OwnerType ownerTypeNonEVM = OwnerType.NON_EVM;
 
     function setUp() public {
         target = new Target();
@@ -49,7 +47,7 @@ contract SmartAccountTest is Test {
     }
 
     function testAccountId() public deployEvmSmartAccount {
-        SmartAccountV1.AccountId memory accountId = evmSmartAccountInstance.accountId();
+        AccountId memory accountId = evmSmartAccountInstance.accountId();
         assertEq(accountId.namespace, "eip155");
         assertEq(accountId.chainId, "1");
         assertEq(accountId.ownerKey, bobKey);
@@ -57,7 +55,7 @@ contract SmartAccountTest is Test {
     }
 
     modifier deployEvmSmartAccount() {
-        SmartAccountV1.AccountId memory _owner = SmartAccountV1.AccountId({
+        AccountId memory _owner = AccountId({
             namespace: "eip155",
             chainId: "1",
             ownerKey: bobKey,
@@ -86,8 +84,7 @@ contract SmartAccountTest is Test {
         // prepare calldata for target contract
 
         uint previousNonce = evmSmartAccountInstance.nonce();
-        SmartAccountV1.CrossChainPayload memory payload = SmartAccountV1
-            .CrossChainPayload({
+        CrossChainPayload memory payload = CrossChainPayload({
                 target: address(target),
                 value: 0,
                 data: abi.encodeWithSignature("setMagicNumber(uint256)", 786),
@@ -118,8 +115,7 @@ contract SmartAccountTest is Test {
         // prepare calldata for target contract
         uint previousNonce = evmSmartAccountInstance.nonce();
 
-        SmartAccountV1.CrossChainPayload memory payload = SmartAccountV1
-            .CrossChainPayload({
+        CrossChainPayload memory payload = CrossChainPayload({
                 target: address(target),
                 value: 0,
                 data: abi.encodeWithSignature("setMagicNumber(uint256)", 786),
@@ -137,7 +133,7 @@ contract SmartAccountTest is Test {
         bytes memory signature = abi.encodePacked(r, s, v);
 
         vm.expectEmit(true, true, true, true);
-        emit SmartAccountV1.PayloadExecuted(
+        emit ISmartAccount.PayloadExecuted(
             bobKey,
             payload.target,
             payload.data
@@ -159,8 +155,7 @@ contract SmartAccountTest is Test {
 
         // prepare calldata for target contract
 
-        SmartAccountV1.CrossChainPayload memory payload = SmartAccountV1
-            .CrossChainPayload({
+        CrossChainPayload memory payload = CrossChainPayload({
                 target: address(target),
                 value: 0,
                 data: abi.encodeWithSignature("setMagicNumber(uint256)", 786),
@@ -187,7 +182,7 @@ contract SmartAccountTest is Test {
     }
 
     function testNonEVMExecution() public {
-        SmartAccountV1.AccountId memory _owner = SmartAccountV1.AccountId({
+        AccountId memory _owner = AccountId({
             namespace: "eip155",
             chainId: "1",
             ownerKey: bobKey,
@@ -202,8 +197,7 @@ contract SmartAccountTest is Test {
             payable(smartAccountAddress)
         );
 
-        SmartAccountV1.CrossChainPayload memory payload = SmartAccountV1
-            .CrossChainPayload({
+        CrossChainPayload memory payload = CrossChainPayload({
                 target: address(target),
                 value: 0,
                 data: abi.encodeWithSignature("setMagicNumber(uint256)", 786),
@@ -262,7 +256,7 @@ contract SmartAccountTest is Test {
 
     function getCrosschainTxhash(
         SmartAccountV1 _smartAccountInstance,
-        SmartAccountV1.CrossChainPayload memory payload
+        CrossChainPayload memory payload
     ) internal view returns (bytes32) {
         bytes32 structHash = keccak256(
             abi.encode(
