@@ -45,7 +45,7 @@ contract SmartAccountV1 is Initializable, ReentrancyGuard {
     Owner public owner;
     uint256 public nonce;
     string public constant VERSION = "0.1.0";
-    address public constant verifierPrecompile = 0x0000000000000000000000000000000000000902;
+    address public constant verifierPrecompile = 0x0000000000000000000000000000000000000901;
 
     bytes32 private constant DOMAIN_SEPARATOR_TYPEHASH = keccak256(
         "EIP712Domain(string version,uint256 chainId,address verifyingContract)"
@@ -144,7 +144,12 @@ contract SmartAccountV1 is Initializable, ReentrancyGuard {
 
         emit PayloadExecuted(owner.ownerKey, payload.target, payload.data);
     }
-    function getTransactionHash(CrossChainPayload calldata payload) public view returns (bytes32) {        // Calculate the hash of the payload using EIP-712
+    function getTransactionHash(CrossChainPayload calldata payload) public view returns (bytes32) {    
+        
+        if(payload.deadline > 0){
+            require(block.timestamp < payload.deadline, "Payload deadline expired");
+        }
+        // Calculate the hash of the payload using EIP-712
         bytes32 structHash = keccak256(
             abi.encode(
                 PUSH_CROSS_CHAIN_PAYLOAD_TYPEHASH,
