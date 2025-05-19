@@ -31,9 +31,8 @@ struct CrossChainPayload {
     uint256 deadline; // Timestamp after which this payload is invalid
 }
 
-bytes32 constant DOMAIN_SEPARATOR_TYPEHASH =
-    keccak256("EIP712Domain(string version,uint256 chainId,address verifyingContract)");
+// Hash of keccak256("EIP712Domain(string version,uint256 chainId,address verifyingContract)")
+bytes32 constant DOMAIN_SEPARATOR_TYPEHASH = 0x2aef22f9d7df5f9d21c56d14029233f3fdaa91917727e1eb68e504d27072d6cd;
 
-bytes32 constant PUSH_CROSS_CHAIN_PAYLOAD_TYPEHASH = keccak256(
-    "CrossChainPayload(address target,uint256 value,bytes data,uint256 gasLimit,uint256 maxFeePerGas,uint256 maxPriorityFeePerGas,uint256 nonce,uint256 deadline)"
-);
+// Hash of keccak256("CrossChainPayload(address target,uint256 value,bytes data,uint256 gasLimit,uint256 maxFeePerGas,uint256 maxPriorityFeePerGas,uint256 nonce,uint256 deadline)")
+bytes32 constant PUSH_CROSS_CHAIN_PAYLOAD_TYPEHASH =  0x1d3620918e7e6971531698d3b3f734dade65fd42460c8980f1edceb3372b4b7a;
