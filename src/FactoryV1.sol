@@ -94,7 +94,7 @@ contract FactoryV1 is Ownable {
         address implementation = accountImplmentationForVM[uint256(_id.vmType)];
         require(implementation != address(0), "No implementation for this VM type");
 
-        bytes32 salt = keccak256(abi.encode(_id.ownerKey));
+        bytes32 salt = generateSalt(_id);
 
         address payable smartAccount = payable(implementation.cloneDeterministic(salt));
         userAccounts[_id.ownerKey] = smartAccount;
@@ -117,7 +117,11 @@ contract FactoryV1 is Ownable {
         address implementation = accountImplmentationForVM[uint256(_id.vmType)];
         require(implementation != address(0), "No implementation for this VM type");
 
-        bytes32 salt = keccak256(abi.encode(_id.ownerKey));
+        bytes32 salt = generateSalt(_id);
         return implementation.predictDeterministicAddress(salt, address(this));
+    }
+
+    function generateSalt(AccountId memory _id) public pure returns (bytes32) {
+        return keccak256(abi.encode(_id));
     }
 }
