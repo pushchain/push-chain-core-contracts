@@ -47,7 +47,7 @@ Here’s how the system works:
 | Proxy1 (Alice) | Proxy2 (Bob) | Proxy3 (Carol) |
 | Storage:       | Storage:     | Storage:       |
 | ownerKey=...   | ownerKey=... | ownerKey=...   |
-| ownerType=...  | ownerType=...| ownerType=...  |
+| VM_TYPE=...  | VM_TYPE=...| VM_TYPE=...  |
 -------------------------------------------------------
 ```
 

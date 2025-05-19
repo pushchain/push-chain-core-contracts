@@ -7,15 +7,13 @@ interface ISwapRouter {
         address tokenOut;
         uint24 fee;
         address recipient;
-         uint256 deadline; //remove this line for sepolia
+        uint256 deadline; //remove this line for sepolia
         uint256 amountIn;
         uint256 amountOutMinimum;
         uint160 sqrtPriceLimitX96;
     }
 
-    function exactInputSingle(
-        ExactInputSingleParams calldata params
-    ) external payable returns (uint256 amountOut);
+    function exactInputSingle(ExactInputSingleParams calldata params) external payable returns (uint256 amountOut);
 }
 
 interface IWETH {
@@ -28,11 +26,5 @@ interface AggregatorV3Interface {
     function latestRoundData()
         external
         view
-        returns (
-            uint80 roundId,
-            int256 answer,
-            uint256 startedAt,
-            uint256 updatedAt,
-            uint80 answeredInRound
-        );
+        returns (uint80 roundId, int256 answer, uint256 startedAt, uint256 updatedAt, uint80 answeredInRound);
 }
