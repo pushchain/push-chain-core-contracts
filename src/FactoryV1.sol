@@ -22,7 +22,7 @@ contract FactoryV1 is Ownable {
     mapping(uint256 => address) public accountImplmentationForVM;
     mapping(bytes => address) public userAccounts;
 
-    event SmartAccountDeployed(address indexed smartAccount, bytes ownerKey, VM_TYPE vmType);
+    event SmartAccountDeployed(address indexed smartAccount, bytes ownerKey, AccountId id);
     event ImplementationRegistered(uint256 indexed vmType, address implementation);
 
     /**
@@ -100,7 +100,7 @@ contract FactoryV1 is Ownable {
         userAccounts[_id.ownerKey] = smartAccount;
         SmartAccountV1(smartAccount).initialize(_id);
 
-        emit SmartAccountDeployed(smartAccount, _id.ownerKey, _id.vmType);
+        emit SmartAccountDeployed(smartAccount, _id.ownerKey, _id);
         return smartAccount;
     }
 
