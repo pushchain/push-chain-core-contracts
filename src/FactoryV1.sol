@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 pragma solidity 0.8.26;
 
-import {SmartAccountV1} from "./smartAccounts/SmartAccountV1.sol";
+import {ISmartAccount} from "./Interfaces/ISmartAccount.sol";
 import {Clones} from "@openzeppelin/contracts/proxy/Clones.sol";
 
 import {Errors} from "./libraries/Errors.sol";
@@ -98,7 +98,7 @@ contract FactoryV1 is Ownable {
 
         address payable smartAccount = payable(implementation.cloneDeterministic(salt));
         userAccounts[_id.ownerKey] = smartAccount;
-        SmartAccountV1(smartAccount).initialize(_id);
+        ISmartAccount(smartAccount).initialize(_id);
 
         emit SmartAccountDeployed(smartAccount, _id.ownerKey, _id);
         return smartAccount;

@@ -5,15 +5,16 @@ import "forge-std/Test.sol";
 import "forge-std/console.sol";
 
 import {FactoryV1} from "../src/FactoryV1.sol";
-import {SmartAccountV1} from "../src/smartAccounts/SmartAccountV1.sol";
+import {SmartAccountEVM} from "../src/smartAccounts/SmartAccountEVM.sol";
+import {SmartAccountSVM} from "../src/smartAccounts/SmartAccountSVM.sol";
 import {Errors} from "../src/libraries/Errors.sol";
 import {AccountId, VM_TYPE} from "../src/libraries/Types.sol";
 import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
 
 contract FactoryTest is Test {
     FactoryV1 factory;
-    SmartAccountV1 smartAccountEVM;
-    SmartAccountV1 smartAccountSVM;
+    SmartAccountEVM smartAccountEVM;
+    SmartAccountSVM smartAccountSVM;
 
     address deployer;
     address nonOwner;
@@ -37,8 +38,8 @@ contract FactoryTest is Test {
         nonOwner = makeAddr("nonOwner");
 
         // Deploy implementations for different VM types
-        smartAccountEVM = new SmartAccountV1();
-        smartAccountSVM = new SmartAccountV1();
+        smartAccountEVM = new SmartAccountEVM();
+        smartAccountSVM = new SmartAccountSVM();
 
         // Create arrays for constructor
         address[] memory implementations = new address[](2);
@@ -95,7 +96,7 @@ contract FactoryTest is Test {
         factory.registerImplementation(uint256(VM_TYPE.MOVE_VM), address(0x123));
 
         // Test that owner can register implementations
-        SmartAccountV1 newImpl = new SmartAccountV1();
+        SmartAccountEVM newImpl = new SmartAccountEVM();
         factory.registerImplementation(uint256(VM_TYPE.MOVE_VM), address(newImpl));
 
         // Verify the implementation was registered
@@ -104,8 +105,8 @@ contract FactoryTest is Test {
 
     function testRegisterMultipleImplementations() public {
         // Create new implementations
-        SmartAccountV1 impl1 = new SmartAccountV1();
-        SmartAccountV1 impl2 = new SmartAccountV1();
+        SmartAccountEVM impl1 = new SmartAccountEVM();
+        SmartAccountSVM impl2 = new SmartAccountSVM();
 
         // Create arrays for registration
         address[] memory implementations = new address[](2);

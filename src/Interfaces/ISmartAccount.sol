@@ -13,4 +13,6 @@ interface ISmartAccount {
     function verifyPayloadSignature(bytes32 messageHash, bytes memory signature) external view returns (bool);
 
     function executePayload(CrossChainPayload calldata payload, bytes calldata signature) external;
+
+    function initialize(AccountId memory _accountId) external;
 }
