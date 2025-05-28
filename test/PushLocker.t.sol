@@ -37,6 +37,12 @@ contract PushLockerTest is Test {
         vm.deal(user, 100 ether);
     }
 
+    function test_OraclePrice() public {
+        uint256 price = locker.getEthUsdPrice();
+        assertGt(price, 0, "Incorrect Price");
+        console.log(price);
+    }
+
     function test_AddFunds_ConvertsETHtoUSDT() public {
         vm.startPrank(user);
         uint256 initialUSDTBalance = IERC20(USDT).balanceOf(address(locker));

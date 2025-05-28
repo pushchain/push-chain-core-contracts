@@ -46,8 +46,7 @@ contract PushLocker is Initializable, UUPSUpgradeable, AccessControlUpgradeable,
         IWETH(WETH).approve(UNISWAP_ROUTER, WethBalance);
 
         // Get current ETH/USD price from Chainlink
-        (, int256 price,,,) = ethUsdPriceFeed.latestRoundData(); // price is 8 decimals
-        require(price > 0, "Invalid oracle price");
+        uint256 price = getEthUsdPrice();
 
         uint256 ethInUsd = (uint256(price) * WethBalance) / 1e8;
 
@@ -74,5 +73,12 @@ contract PushLocker is Initializable, UUPSUpgradeable, AccessControlUpgradeable,
         IERC20(USDT).safeTransfer(_recipient, amount);
 
         emit TokenRecovered(_recipient, amount);
+    }
+
+    function getEthUsdPrice() public view returns (uint256) {
+        (, int256 price,,,) = ethUsdPriceFeed.latestRoundData();
+
+        require(price > 0, "Invalid price");
+        return uint256(price); // 8 decimals
     }
 }
