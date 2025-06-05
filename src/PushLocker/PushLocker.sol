@@ -9,11 +9,25 @@ import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import {ReentrancyGuardUpgradeable} from "@openzeppelin/contracts-upgradeable/utils/ReentrancyGuardUpgradeable.sol";
 
-contract PushLocker is Initializable, UUPSUpgradeable, AccessControlUpgradeable, ReentrancyGuardUpgradeable {
+contract PushLocker is
+    Initializable,
+    UUPSUpgradeable,
+    AccessControlUpgradeable,
+    ReentrancyGuardUpgradeable
+{
     using SafeERC20 for IERC20;
 
-    event FundsAdded(address indexed user, uint256 usdtAmount, bytes32 transactionHash);
-    event TokenRecovered(address indexed admin, uint256 amount);
+    struct AmountInUSD {
+        uint256 amountInUSD;
+        uint8 decimals;
+    }
+
+    event FundsAdded(
+        address indexed user,
+        bytes32 indexed transactionHash,
+        AmountInUSD indexed AmountInUSD
+    );
+    event TokenRecovered(address indexed admin, uint256 indexed amount);
 
     address public WETH;
     address public USDT;
@@ -22,10 +36,13 @@ contract PushLocker is Initializable, UUPSUpgradeable, AccessControlUpgradeable,
 
     uint24 constant POOL_FEE = 500; // 0.05%
 
-    function initialize(address _admin, address _weth, address _usdt, address _router, address _priceFeed)
-        external
-        initializer
-    {
+    function initialize(
+        address _admin,
+        address _weth,
+        address _usdt,
+        address _router,
+        address _priceFeed
+    ) external initializer {
         __ReentrancyGuard_init();
         _grantRole(DEFAULT_ADMIN_ROLE, _admin);
 
@@ -35,7 +52,9 @@ contract PushLocker is Initializable, UUPSUpgradeable, AccessControlUpgradeable,
         ethUsdPriceFeed = AggregatorV3Interface(_priceFeed);
     }
 
-    function _authorizeUpgrade(address newImplementation) internal override onlyRole(DEFAULT_ADMIN_ROLE) {}
+    function _authorizeUpgrade(
+        address newImplementation
+    ) internal override onlyRole(DEFAULT_ADMIN_ROLE) {}
 
     function addFunds(bytes32 _transactionHash) external payable nonReentrant {
         require(msg.value > 0, "No ETH sent");
@@ -46,14 +65,20 @@ contract PushLocker is Initializable, UUPSUpgradeable, AccessControlUpgradeable,
         IWETH(WETH).approve(UNISWAP_ROUTER, WethBalance);
 
         // Get current ETH/USD price from Chainlink
-        uint256 price = getEthUsdPrice();
+        (uint256 price, uint8 decimals) = getEthUsdPrice();
 
-        uint256 ethInUsd = (uint256(price) * WethBalance) / 1e8;
+        // Convert WETH to ETH (divide by 1e18) then multiply by price
+        uint256 ethInUsd = (price * WethBalance) / 1e18;
+        AmountInUSD memory usdAmount = AmountInUSD({
+            amountInUSD: ethInUsd,
+            decimals: decimals
+        });
 
         // Expect similar USDT amount (1:1 with USD), allow 0.5% slippage
         uint256 minOut = (ethInUsd * 995) / 1000;
 
-        ISwapRouter.ExactInputSingleParams memory params = ISwapRouter.ExactInputSingleParams({
+        ISwapRouter.ExactInputSingleParams memory params = ISwapRouter
+            .ExactInputSingleParams({
             tokenIn: WETH,
             tokenOut: USDT,
             fee: POOL_FEE,
@@ -64,21 +89,27 @@ contract PushLocker is Initializable, UUPSUpgradeable, AccessControlUpgradeable,
             sqrtPriceLimitX96: 0
         });
 
-        uint256 usdtReceived = ISwapRouter(UNISWAP_ROUTER).exactInputSingle(params);
+        uint256 usdtReceived = ISwapRouter(UNISWAP_ROUTER).exactInputSingle(
+            params
+        );
 
-        emit FundsAdded(msg.sender, usdtReceived, _transactionHash);
+        emit FundsAdded(msg.sender, _transactionHash, usdAmount);
     }
 
-    function recoverToken(address _recipient, uint256 amount) external onlyRole(DEFAULT_ADMIN_ROLE) {
+    function recoverToken(
+        address _recipient,
+        uint256 amount
+    ) external onlyRole(DEFAULT_ADMIN_ROLE) {
         IERC20(USDT).safeTransfer(_recipient, amount);
 
         emit TokenRecovered(_recipient, amount);
     }
 
-    function getEthUsdPrice() public view returns (uint256) {
-        (, int256 price,,,) = ethUsdPriceFeed.latestRoundData();
+    function getEthUsdPrice() public view returns (uint256, uint8) {
+        (, int256 price, , , ) = ethUsdPriceFeed.latestRoundData();
+        uint8 decimals = ethUsdPriceFeed.decimals();
 
         require(price > 0, "Invalid price");
-        return uint256(price); // 8 decimals
+        return (uint256(price), decimals); // 8 decimals
     }
 }

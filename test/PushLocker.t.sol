@@ -30,22 +30,38 @@ contract PushLockerTest is Test {
         vm.createSelectFork(vm.envString("SEPOLIA_RPC_URL"));
 
         address deployedAddress = Upgrades.deployUUPSProxy(
-            "PushLocker.sol", abi.encodeCall(PushLocker.initialize, (admin, WETH, USDT, ROUTER, FEED))
+            "PushLocker.sol",
+            abi.encodeCall(
+                PushLocker.initialize,
+                (admin, WETH, USDT, ROUTER, FEED)
+            )
         );
         locker = PushLocker(deployedAddress);
-        console2.logBytes32(locker.getRoleAdmin(0x00));
         vm.deal(user, 100 ether);
     }
 
     function test_OraclePrice() public {
-        uint256 price = locker.getEthUsdPrice();
+        (uint256 price, uint8 decimals) = locker.getEthUsdPrice();
         assertGt(price, 0, "Incorrect Price");
         console.log(price);
+        assertEq(decimals, 8);
     }
 
     function test_AddFunds_ConvertsETHtoUSDT() public {
         vm.startPrank(user);
         uint256 initialUSDTBalance = IERC20(USDT).balanceOf(address(locker));
+
+        // Get price before the transaction
+        (uint256 price, uint8 decimals) = locker.getEthUsdPrice();
+        uint256 expectedUsdAmount = (price * 1 ether) / 1e18;
+        PushLocker.AmountInUSD memory expectedPrice = PushLocker.AmountInUSD({
+            amountInUSD: expectedUsdAmount,
+            decimals: decimals
+        });
+
+        // Expect the event to be emitted
+        vm.expectEmit(true, true, true, true);
+        emit FundsAdded(user, transactionHash, expectedPrice);
 
         locker.addFunds{value: 1 ether}(transactionHash);
 
@@ -86,11 +102,15 @@ contract PushLockerTest is Test {
 
         Upgrades.upgradeProxy(address(locker), "PushLockerV2.sol", "");
 
-        // Just assert that it’s still functional after upgrade
+        // Just assert that it's still functional after upgrade
         vm.prank(user);
         locker.addFunds{value: 0.5 ether}(transactionHash);
     }
 
-    event FundsAdded(address indexed user, uint256 ethAmount, uint256 usdtAmount);
+    event FundsAdded(
+        address indexed user,
+        bytes32 indexed transactionHash,
+        PushLocker.AmountInUSD indexed AmountInUSD
+    );
     event TokenRecovered(address indexed admin, uint256 amount);
 }
