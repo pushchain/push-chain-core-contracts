@@ -33,6 +33,7 @@ contract PushLocker is
     address public USDT;
     address public UNISWAP_ROUTER;
     AggregatorV3Interface public ethUsdPriceFeed;
+    AggregatorV3Interface public usdtUsdPriceFeed;
 
     uint24 constant POOL_FEE = 500; // 0.05%
 
@@ -41,7 +42,8 @@ contract PushLocker is
         address _weth,
         address _usdt,
         address _router,
-        address _priceFeed
+        address _priceFeed,
+        address _usdtPriceFeed
     ) external initializer {
         __ReentrancyGuard_init();
         _grantRole(DEFAULT_ADMIN_ROLE, _admin);
@@ -50,6 +52,7 @@ contract PushLocker is
         USDT = _usdt;
         UNISWAP_ROUTER = _router;
         ethUsdPriceFeed = AggregatorV3Interface(_priceFeed);
+        usdtUsdPriceFeed = AggregatorV3Interface(_usdtPriceFeed);
     }
 
     function _authorizeUpgrade(
@@ -67,14 +70,8 @@ contract PushLocker is
         // Get current ETH/USD price from Chainlink
         (uint256 price, uint8 decimals) = getEthUsdPrice();
 
-        // Convert WETH to ETH (divide by 1e18) then multiply by price
+        // Calculate minimum output with 0.5% slippage
         uint256 ethInUsd = (price * WethBalance) / 1e18;
-        AmountInUSD memory usdAmount = AmountInUSD({
-            amountInUSD: ethInUsd,
-            decimals: decimals
-        });
-
-        // Expect similar USDT amount (1:1 with USD), allow 0.5% slippage
         uint256 minOut = (ethInUsd * 995) / 1000;
 
         ISwapRouter.ExactInputSingleParams memory params = ISwapRouter
@@ -93,7 +90,18 @@ contract PushLocker is
             params
         );
 
-        emit FundsAdded(msg.sender, _transactionHash, usdAmount);
+        // Get USDT/USD price and calculate final USD amount
+        (, int256 usdtPrice, , , ) = usdtUsdPriceFeed.latestRoundData();
+        uint8 usdtDecimals = usdtUsdPriceFeed.decimals();
+        uint256 usdAmount = (uint256(usdtPrice) * usdtReceived) /
+            10 ** usdtDecimals;
+
+        AmountInUSD memory usdAmountStruct = AmountInUSD({
+            amountInUSD: usdAmount,
+            decimals: usdtDecimals
+        });
+
+        emit FundsAdded(msg.sender, _transactionHash, usdAmountStruct);
     }
 
     function recoverToken(

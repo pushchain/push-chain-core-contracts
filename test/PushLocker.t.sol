@@ -5,6 +5,7 @@ import "forge-std/Test.sol";
 import "../src/PushLocker/PushLocker.sol";
 import "forge-std/console2.sol";
 import {Upgrades} from "openzeppelin-foundry-upgrades/Upgrades.sol";
+import {AggregatorV3Interface} from "../src/Interfaces/AMMInterfaces.sol";
 
 contract PushLockerTest is Test {
     PushLocker locker;
@@ -16,14 +17,15 @@ contract PushLockerTest is Test {
     // address constant WETH = 0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2;
     // address constant USDT = 0xdAC17F958D2ee523a2206206994597C13D831ec7;
     // address constant ROUTER = 0xE592427A0AEce92De3Edee1F18E0157C05861564;
-    // address constant FEED = 0x5f4eC3Df9cbd43714FE2740f5E3616155c5b8419;
+    // address constant ETHUSDFEED = 0x3E7d1eAB13ad0104d2750B8863b489D65364e32D;
 
     //TESTNET SEPOLIA ADDRESS
 
     address constant WETH = 0xfFf9976782d46CC05630D1f6eBAb18b2324d6B14;
     address constant USDT = 0x7169D38820dfd117C3FA1f22a697dBA58d90BA06;
     address constant ROUTER = 0x3bFA4769FB09eefC5a80d6E87c3B9C650f7Ae48E;
-    address constant FEED = 0x694AA1769357215DE4FAC081bf1f309aDC325306;
+    address constant ETHUSDFEED = 0x694AA1769357215DE4FAC081bf1f309aDC325306;
+    address constant USDTUSDFEED = 0x3E7d1eAB13ad0104d2750B8863b489D65364e32D;
 
     function setUp() public {
         // vm.createSelectFork(vm.envString("MAINNET_RPC_URL"));
@@ -33,7 +35,7 @@ contract PushLockerTest is Test {
             "PushLocker.sol",
             abi.encodeCall(
                 PushLocker.initialize,
-                (admin, WETH, USDT, ROUTER, FEED)
+                (admin, WETH, USDT, ROUTER, ETHUSDFEED, USDTUSDFEED)
             )
         );
         locker = PushLocker(deployedAddress);
@@ -51,12 +53,26 @@ contract PushLockerTest is Test {
         vm.startPrank(user);
         uint256 initialUSDTBalance = IERC20(USDT).balanceOf(address(locker));
 
-        // Get price before the transaction
-        (uint256 price, uint8 decimals) = locker.getEthUsdPrice();
-        uint256 expectedUsdAmount = (price * 1 ether) / 1e18;
+        // Get ETH/USD price
+        (uint256 ethPrice, uint8 ethDecimals) = locker.getEthUsdPrice();
+
+        // Get USDT/USD price
+        (, int256 usdtPrice, , , ) = AggregatorV3Interface(USDTUSDFEED)
+            .latestRoundData();
+        uint8 usdtDecimals = AggregatorV3Interface(USDTUSDFEED).decimals();
+
+        // Calculate expected USDT amount (with slippage)
+        uint256 expectedEthInUsd = (ethPrice * 1 ether) / 1e18;
+        uint256 minOut = (expectedEthInUsd * 995) / 1000; // 0.5% slippage
+        uint256 expectedUsdt = minOut / 1e12; // Convert to USDT decimals
+
+        // Calculate final USD amount using USDT price
+        uint256 expectedUsdAmount = (uint256(usdtPrice) * expectedUsdt) /
+            10 ** usdtDecimals;
+
         PushLocker.AmountInUSD memory expectedPrice = PushLocker.AmountInUSD({
             amountInUSD: expectedUsdAmount,
-            decimals: decimals
+            decimals: usdtDecimals
         });
 
         // Expect the event to be emitted
