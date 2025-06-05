@@ -62,9 +62,9 @@ contract PushLockerTest is Test {
         uint8 usdtDecimals = AggregatorV3Interface(USDTUSDFEED).decimals();
 
         // Calculate expected USDT amount (with slippage)
-        uint256 expectedEthInUsd = (ethPrice * 1 ether) / 1e18;
+        uint256 expectedEthInUsd = (ethPrice * 1 ether) / 1e18; // This gives us USD amount in 8 decimals
         uint256 minOut = (expectedEthInUsd * 995) / 1000; // 0.5% slippage
-        uint256 expectedUsdt = minOut / 1e12; // Convert to USDT decimals
+        uint256 expectedUsdt = minOut / 1e2; // Convert to USDT decimals
 
         // Calculate final USD amount using USDT price
         uint256 expectedUsdAmount = (uint256(usdtPrice) * expectedUsdt) /

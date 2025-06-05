@@ -73,18 +73,19 @@ contract PushLocker is
         // Calculate minimum output with 0.5% slippage
         uint256 ethInUsd = (price * WethBalance) / 1e18;
         uint256 minOut = (ethInUsd * 995) / 1000;
+        minOut = minOut / 1e2; // Convert from 8 decimals to 6 decimals (USDT)
 
         ISwapRouter.ExactInputSingleParams memory params = ISwapRouter
             .ExactInputSingleParams({
-            tokenIn: WETH,
-            tokenOut: USDT,
-            fee: POOL_FEE,
-            recipient: address(this),
-            deadline: block.timestamp, //not for sepolia
-            amountIn: WethBalance,
-            amountOutMinimum: minOut / 1e12, // Adjust to USDT decimals (6) && not for sepolia
-            sqrtPriceLimitX96: 0
-        });
+                tokenIn: WETH,
+                tokenOut: USDT,
+                fee: POOL_FEE,
+                recipient: address(this),
+                deadline: block.timestamp, //not for sepolia
+                amountIn: WethBalance,
+                amountOutMinimum: minOut, // Adjust to USDT decimals (6) && not for sepolia
+                sqrtPriceLimitX96: 0
+            });
 
         uint256 usdtReceived = ISwapRouter(UNISWAP_ROUTER).exactInputSingle(
             params
@@ -94,7 +95,7 @@ contract PushLocker is
         (, int256 usdtPrice, , , ) = usdtUsdPriceFeed.latestRoundData();
         uint8 usdtDecimals = usdtUsdPriceFeed.decimals();
         uint256 usdAmount = (uint256(usdtPrice) * usdtReceived) /
-            10 ** usdtDecimals;
+            10 ** 6;
 
         AmountInUSD memory usdAmountStruct = AmountInUSD({
             amountInUSD: usdAmount,
