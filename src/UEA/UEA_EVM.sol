@@ -8,22 +8,22 @@ import {Initializable} from "@openzeppelin/contracts/proxy/utils/Initializable.s
 import {ReentrancyGuard} from "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
 import {
     VM_TYPE,
-    AccountId,
+    UniversalAccount,
     CrossChainPayload,
     DOMAIN_SEPARATOR_TYPEHASH,
     PUSH_CROSS_CHAIN_PAYLOAD_TYPEHASH
 } from "../libraries/Types.sol";
 
 /**
- * @title SmartAccountEVM
+ * @title UEA_EVM
  * @dev The contract represents an external EVM user's account on Push Chain.
  *      It allows for the execution of payloads based on EVM signatures by the user/owner of this account.
  * @notice Use this contract as implementation logic of a user's Smart Account on Push Chain.
  */
-contract SmartAccountEVM is Initializable, ReentrancyGuard, ISmartAccount {
+contract UEA_EVM is Initializable, ReentrancyGuard, ISmartAccount {
     using ECDSA for bytes32;
 
-    AccountId id;
+    UniversalAccount id;
     uint256 public nonce;
     string public constant VERSION = "0.1.0";
 
@@ -50,21 +50,18 @@ contract SmartAccountEVM is Initializable, ReentrancyGuard, ISmartAccount {
 
     /**
      * @dev Initializes the contract with the given parameters.
-     * @param _accountId the AccountId struct
+     * @param _UniversalAccount the UniversalAccount struct
      */
-    function initialize(AccountId memory _accountId) external initializer {
-        if (_accountId.vmType != VM_TYPE.EVM) {
-            revert Errors.InvalidInputArgs();
-        }
-        id = _accountId;
+    function initialize(UniversalAccount memory _UniversalAccount) external initializer {
+        id = _UniversalAccount;
     }
 
     /**
      * @notice Must be implemented by all Smart Accounts to return the account identifier.
      * @dev Returns the account ID.
-     * @return AccountId The account ID.
+     * @return UniversalAccount The account ID.
      */
-    function accountId() public view returns (AccountId memory) {
+    function universalAccount() public view returns (UniversalAccount memory) {
         return id;
     }
 
@@ -90,8 +87,8 @@ contract SmartAccountEVM is Initializable, ReentrancyGuard, ISmartAccount {
     }
 
     /**
-     * @dev Executes a payload on the target address with the given data and signature.
-     * @param payload The target address to execute the payload on.
+     * @dev Executes a payload on the target(to) address with the given data and signature.
+     * @param payload The target(to) address to execute the payload on.
      * @param signature The signature to verify the execution.
      */
     function executePayload(CrossChainPayload calldata payload, bytes calldata signature) external nonReentrant {
@@ -105,7 +102,7 @@ contract SmartAccountEVM is Initializable, ReentrancyGuard, ISmartAccount {
             nonce++;
         }
 
-        (bool success, bytes memory returnData) = payload.target.call{value: payload.value}(payload.data);
+        (bool success, bytes memory returnData) = payload.to.call{value: payload.value}(payload.data);
 
         if (!success) {
             if (returnData.length > 0) {
@@ -118,7 +115,7 @@ contract SmartAccountEVM is Initializable, ReentrancyGuard, ISmartAccount {
             }
         }
 
-        emit PayloadExecuted(id.ownerKey, payload.target, payload.data);
+        emit PayloadExecuted(id.ownerKey, payload.to, payload.data);
     }
 
     function getTransactionHash(CrossChainPayload calldata payload) public view returns (bytes32) {
@@ -131,7 +128,7 @@ contract SmartAccountEVM is Initializable, ReentrancyGuard, ISmartAccount {
         bytes32 structHash = keccak256(
             abi.encode(
                 PUSH_CROSS_CHAIN_PAYLOAD_TYPEHASH,
-                payload.target,
+                payload.to,
                 payload.value,
                 keccak256(payload.data),
                 payload.gasLimit,
