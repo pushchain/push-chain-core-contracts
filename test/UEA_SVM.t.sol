@@ -9,7 +9,9 @@ import {UEAFactoryV1} from "../src/UEAFactoryV1.sol";
 import {UEA_SVM} from "../src/UEA/UEA_SVM.sol";
 import {Errors} from "../src/libraries/Errors.sol";
 import {ISmartAccount} from "../src/Interfaces/ISmartAccount.sol";
-import {UniversalAccount, VM_TYPE, CrossChainPayload, PUSH_CROSS_CHAIN_PAYLOAD_TYPEHASH} from "../src/libraries/Types.sol";
+import {
+    UniversalAccount, VM_TYPE, CrossChainPayload, PUSH_CROSS_CHAIN_PAYLOAD_TYPEHASH
+} from "../src/libraries/Types.sol";
 
 contract UEA_SVMTest is Test {
     Target target;
@@ -50,10 +52,7 @@ contract UEA_SVMTest is Test {
     }
 
     modifier deploySvmSmartAccount() {
-        UniversalAccount memory _owner = UniversalAccount({
-            CHAIN: solanaChainId,
-            ownerKey: ownerKey
-        });
+        UniversalAccount memory _owner = UniversalAccount({CHAIN: solanaChainId, ownerKey: ownerKey});
 
         address smartAccountAddress = factory.deployUEA(_owner);
         svmSmartAccountInstance = UEA_SVM(payable(smartAccountAddress));
@@ -72,10 +71,7 @@ contract UEA_SVMTest is Test {
     }
 
     function testDeploymentCreate2() public deploySvmSmartAccount {
-        UniversalAccount memory _owner = UniversalAccount({
-            CHAIN: solanaChainId,
-            ownerKey: ownerKey
-        });
+        UniversalAccount memory _owner = UniversalAccount({CHAIN: solanaChainId, ownerKey: ownerKey});
 
         assertEq(address(svmSmartAccountInstance), address(factory.UOA_to_UEA(ownerKey)));
         assertEq(address(svmSmartAccountInstance), address(factory.computeUEA(_owner)));
@@ -99,7 +95,8 @@ contract UEA_SVMTest is Test {
         bytes32 txHash = getCrosschainTxhash(svmSmartAccountInstance, payload);
 
         // Create a mock Ed25519 signature
-        bytes memory signature = hex"16d760987b403d7a27fd095375f2a1275c0734701ad248c3bf9bc8f69456d626c37b9ee1c13da511c71d9ed0f90789327f2c40f3e59e360f7c832b6b0d818d03";
+        bytes memory signature =
+            hex"16d760987b403d7a27fd095375f2a1275c0734701ad248c3bf9bc8f69456d626c37b9ee1c13da511c71d9ed0f90789327f2c40f3e59e360f7c832b6b0d818d03";
 
         // Mock the verification for this specific hash
         vm.mockCall(
@@ -135,7 +132,8 @@ contract UEA_SVMTest is Test {
         bytes32 txHash = getCrosschainTxhash(svmSmartAccountInstance, payload);
 
         // Create a signature
-        bytes memory signature = hex"16d760987b403d7a27fd095375f2a1275c0734701ad248c3bf9bc8f69456d626c37b9ee1c13da511c71d9ed0f90789327f2c40f3e59e360f7c832b6b0d818d03";
+        bytes memory signature =
+            hex"16d760987b403d7a27fd095375f2a1275c0734701ad248c3bf9bc8f69456d626c37b9ee1c13da511c71d9ed0f90789327f2c40f3e59e360f7c832b6b0d818d03";
 
         // Mock the verification to return false
         vm.mockCall(
@@ -163,7 +161,8 @@ contract UEA_SVMTest is Test {
         bytes32 txHash = getCrosschainTxhash(svmSmartAccountInstance, payload);
 
         // Create a signature
-        bytes memory signature = hex"16d760987b403d7a27fd095375f2a1275c0734701ad248c3bf9bc8f69456d626c37b9ee1c13da511c71d9ed0f90789327f2c40f3e59e360f7c832b6b0d818d03";
+        bytes memory signature =
+            hex"16d760987b403d7a27fd095375f2a1275c0734701ad248c3bf9bc8f69456d626c37b9ee1c13da511c71d9ed0f90789327f2c40f3e59e360f7c832b6b0d818d03";
 
         // Mock the verification to revert
         vm.mockCallRevert(
@@ -192,7 +191,8 @@ contract UEA_SVMTest is Test {
         });
 
         bytes32 txHash = getCrosschainTxhash(svmSmartAccountInstance, payload);
-        bytes memory signature = hex"16d760987b403d7a27fd095375f2a1275c0734701ad248c3bf9bc8f69456d626c37b9ee1c13da511c71d9ed0f90789327f2c40f3e59e360f7c832b6b0d818d03";
+        bytes memory signature =
+            hex"16d760987b403d7a27fd095375f2a1275c0734701ad248c3bf9bc8f69456d626c37b9ee1c13da511c71d9ed0f90789327f2c40f3e59e360f7c832b6b0d818d03";
 
         vm.expectRevert(Errors.ExpiredDeadline.selector);
         svmSmartAccountInstance.executePayload(payload, signature);
@@ -214,7 +214,8 @@ contract UEA_SVMTest is Test {
         });
 
         bytes32 txHash = getCrosschainTxhash(svmSmartAccountInstance, payload);
-        bytes memory signature = hex"16d760987b403d7a27fd095375f2a1275c0734701ad248c3bf9bc8f69456d626c37b9ee1c13da511c71d9ed0f90789327f2c40f3e59e360f7c832b6b0d818d03";
+        bytes memory signature =
+            hex"16d760987b403d7a27fd095375f2a1275c0734701ad248c3bf9bc8f69456d626c37b9ee1c13da511c71d9ed0f90789327f2c40f3e59e360f7c832b6b0d818d03";
 
         // Mock the verification for this specific hash
         vm.mockCall(

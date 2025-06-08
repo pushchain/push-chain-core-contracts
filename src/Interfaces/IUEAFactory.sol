@@ -65,4 +65,4 @@ interface IUEAFactory {
      * @return isDeployed True if the UEA has already been deployed
      */
     function getUEAForOwner(UniversalAccount memory _id) external view returns (address uea, bool isDeployed);
-} 
+}

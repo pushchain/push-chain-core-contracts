@@ -10,7 +10,9 @@ import {ECDSA} from "@openzeppelin/contracts/utils/cryptography/ECDSA.sol";
 import {UEA_EVM} from "../src/UEA/UEA_EVM.sol";
 import {Errors} from "../src/libraries/Errors.sol";
 import {ISmartAccount} from "../src/Interfaces/ISmartAccount.sol";
-import {UniversalAccount, VM_TYPE, CrossChainPayload, PUSH_CROSS_CHAIN_PAYLOAD_TYPEHASH} from "../src/libraries/Types.sol";
+import {
+    UniversalAccount, VM_TYPE, CrossChainPayload, PUSH_CROSS_CHAIN_PAYLOAD_TYPEHASH
+} from "../src/libraries/Types.sol";
 
 contract UEA_EVMTest is Test {
     Target target;
@@ -40,7 +42,7 @@ contract UEA_EVMTest is Test {
 
         (owner, ownerPK) = makeAddrAndKey("owner");
         ownerKey = abi.encodePacked(owner);
-        
+
         // Register chain and implementation
         bytes32 evmChainHash = keccak256(abi.encode("eip155:1"));
         factory.registerNewChain(evmChainHash, VM_TYPE.EVM);
@@ -48,10 +50,7 @@ contract UEA_EVMTest is Test {
     }
 
     modifier deployEvmSmartAccount() {
-        UniversalAccount memory _owner = UniversalAccount({
-            CHAIN: "eip155:1",
-            ownerKey: ownerKey
-        });
+        UniversalAccount memory _owner = UniversalAccount({CHAIN: "eip155:1", ownerKey: ownerKey});
 
         address smartAccountAddress = factory.deployUEA(_owner);
         evmSmartAccountInstance = UEA_EVM(payable(smartAccountAddress));
@@ -70,10 +69,7 @@ contract UEA_EVMTest is Test {
     }
 
     function testDeploymentCreate2() public deployEvmSmartAccount {
-        UniversalAccount memory _owner = UniversalAccount({
-            CHAIN: "eip155:1",
-            ownerKey: ownerKey
-        });
+        UniversalAccount memory _owner = UniversalAccount({CHAIN: "eip155:1", ownerKey: ownerKey});
 
         assertEq(address(evmSmartAccountInstance), address(factory.UOA_to_UEA(ownerKey)));
         assertEq(address(evmSmartAccountInstance), address(factory.computeUEA(_owner)));
