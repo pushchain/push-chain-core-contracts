@@ -15,10 +15,11 @@ import {
 } from "../libraries/Types.sol";
 
 /**
- * @title UEA_EVM
- * @dev The contract represents an external EVM user's account on Push Chain.
- *      It allows for the execution of payloads based on EVM signatures by the user/owner of this account.
- * @notice Use this contract as implementation logic of a user's Smart Account on Push Chain.
+ * @title UEA_EVM (Universal External Account)
+ * @dev UEA is a smart contract that represents an external user's account(UOA) on Push Chain.
+ *      UEA_EVM is specifically designed for EVM-based UOAs.
+ *      It allows for the execution of payloads based on EVM signatures by the UOA (univrsal owner address ) of this account.
+ * @notice Use this contract as implementation logic of a user's UEA.
  */
 contract UEA_EVM is Initializable, ReentrancyGuard, ISmartAccount {
     using ECDSA for bytes32;
