@@ -9,9 +9,7 @@ import {UEAFactoryV1} from "../src/UEAFactoryV1.sol";
 import {UEA_SVM} from "../src/UEA/UEA_SVM.sol";
 import {Errors} from "../src/libraries/Errors.sol";
 import {ISmartAccount} from "../src/Interfaces/ISmartAccount.sol";
-import {
-    UniversalAccount, CrossChainPayload, PUSH_CROSS_CHAIN_PAYLOAD_TYPEHASH
-} from "../src/libraries/Types.sol";
+import {UniversalAccount, CrossChainPayload, PUSH_CROSS_CHAIN_PAYLOAD_TYPEHASH} from "../src/libraries/Types.sol";
 
 contract UEA_SVMTest is Test {
     Target target;

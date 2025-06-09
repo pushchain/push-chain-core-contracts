@@ -23,8 +23,8 @@ import {IUEAFactory} from "./Interfaces/IUEAFactory.sol";
  *        each VM type hash is mapped to a corresponding UEA implementation contract address.
  *        This allows the factory to deploy the correct UEA implementation for different
  *        blockchain environments.
- *      - Chain identifiers: Simple chain names like "ETHEREUM", "POLYGON", or "SOLANA" 
- *        (not chain IDs like "eip155:1") that are used to identify which blockchain 
+ *      - Chain identifiers: Simple chain names like "ETHEREUM", "POLYGON", or "SOLANA"
+ *        (not chain IDs like "eip155:1") that are used to identify which blockchain
  *        an account belongs to. These chain names are hashed to produce chainHash values.
  *
  *      The contract uses OZ's Clones library to create deterministic addresses (CREATE2) for UEA instances.
@@ -106,11 +106,10 @@ contract UEAFactoryV1 is Ownable, IUEAFactory {
      * @notice Can only be called by the contract owner
      * @notice Will revert if arrays are not the same length
      */
-    function registerMultipleUEA(
-        bytes32[] memory _chainHashes,
-        bytes32[] memory _vmHashes,
-        address[] memory _UEA
-    ) external onlyOwner {
+    function registerMultipleUEA(bytes32[] memory _chainHashes, bytes32[] memory _vmHashes, address[] memory _UEA)
+        external
+        onlyOwner
+    {
         if (_UEA.length != _vmHashes.length || _UEA.length != _chainHashes.length) {
             revert Errors.InvalidInputArgs();
         }
@@ -231,7 +230,7 @@ contract UEAFactoryV1 is Ownable, IUEAFactory {
     function getUEAForOwner(UniversalAccount memory _id) external view returns (address uea, bool isDeployed) {
         // Generate salt from the UniversalAccount struct
         bytes32 salt = generateSalt(_id);
-        
+
         // Check if we already have a mapping
         uea = UOA_to_UEA[salt];
 

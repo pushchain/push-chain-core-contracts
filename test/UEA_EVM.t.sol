@@ -10,9 +10,7 @@ import {ECDSA} from "@openzeppelin/contracts/utils/cryptography/ECDSA.sol";
 import {UEA_EVM} from "../src/UEA/UEA_EVM.sol";
 import {Errors} from "../src/libraries/Errors.sol";
 import {ISmartAccount} from "../src/Interfaces/ISmartAccount.sol";
-import {
-    UniversalAccount, CrossChainPayload, PUSH_CROSS_CHAIN_PAYLOAD_TYPEHASH
-} from "../src/libraries/Types.sol";
+import {UniversalAccount, CrossChainPayload, PUSH_CROSS_CHAIN_PAYLOAD_TYPEHASH} from "../src/libraries/Types.sol";
 
 contract UEA_EVMTest is Test {
     Target target;
@@ -22,7 +20,7 @@ contract UEA_EVMTest is Test {
 
     // VM Hash constants
     bytes32 constant EVM_HASH = keccak256("EVM");
-    
+
     // Set up the test environment - EVM
     address owner;
     uint256 ownerPK;

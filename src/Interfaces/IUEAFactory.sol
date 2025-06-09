@@ -21,11 +21,8 @@ interface IUEAFactory {
      * @param _vmHashes Array of VM type hashes
      * @param _uea Array of UEA implementation addresses
      */
-    function registerMultipleUEA(
-        bytes32[] memory _chainHashes,
-        bytes32[] memory _vmHashes,
-        address[] memory _uea
-    ) external;
+    function registerMultipleUEA(bytes32[] memory _chainHashes, bytes32[] memory _vmHashes, address[] memory _uea)
+        external;
 
     /**
      * @dev Registers a UEA implementation for a specific VM type hash
