@@ -93,13 +93,13 @@ contract PushLocker is
 
         // Get USDT/USD price and calculate final USD amount
         (, int256 usdtPrice, , , ) = usdtUsdPriceFeed.latestRoundData();
-        uint8 usdtDecimals = usdtUsdPriceFeed.decimals();
+        uint8 usdDecimals = usdtUsdPriceFeed.decimals();
         uint256 usdAmount = (uint256(usdtPrice) * usdtReceived) /
             10 ** 6;
 
         AmountInUSD memory usdAmountStruct = AmountInUSD({
             amountInUSD: usdAmount,
-            decimals: usdtDecimals
+            decimals: usdDecimals
         });
 
         emit FundsAdded(msg.sender, _transactionHash, usdAmountStruct);
