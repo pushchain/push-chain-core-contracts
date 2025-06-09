@@ -10,7 +10,7 @@ import {UEA_SVM} from "../src/UEA/UEA_SVM.sol";
 import {Errors} from "../src/libraries/Errors.sol";
 import {ISmartAccount} from "../src/Interfaces/ISmartAccount.sol";
 import {
-    UniversalAccount, VM_TYPE, CrossChainPayload, PUSH_CROSS_CHAIN_PAYLOAD_TYPEHASH
+    UniversalAccount, CrossChainPayload, PUSH_CROSS_CHAIN_PAYLOAD_TYPEHASH
 } from "../src/libraries/Types.sol";
 
 contract UEA_SVMTest is Test {
@@ -19,9 +19,11 @@ contract UEA_SVMTest is Test {
     UEA_SVM ueaSVMImpl;
     UEA_SVM svmSmartAccountInstance;
 
+    // VM Hash constants
+    bytes32 constant SVM_HASH = keccak256("SVM");
+
     // Set up the test environment - SVM (Solana)
-    bytes ownerKey;
-    VM_TYPE vmType = VM_TYPE.SVM;
+    bytes ownerBytes;
     string solanaAddress = "4HwuvaEVT4qnvb5TkSvMyYPrprqpnJjz8LSL6TPnuJ2U";
     string solanaChainId = "5eykt4UsFv8P8NJdTREpY1vzqKqZKvdp";
 
@@ -32,27 +34,20 @@ contract UEA_SVMTest is Test {
         target = new Target();
         ueaSVMImpl = new UEA_SVM();
 
-        // Create arrays for constructor - unused now
-        address[] memory implementations = new address[](1);
-        implementations[0] = address(ueaSVMImpl);
-
-        uint256[] memory vmTypes = new uint256[](1);
-        vmTypes[0] = uint256(VM_TYPE.SVM);
-
         // Deploy factory
         factory = new UEAFactoryV1();
 
         // Set up Solana key
-        ownerKey = hex"30ea71869947818d27b718592ea44010b458903bd9bf0370f50eda79e87d9f69";
+        ownerBytes = hex"30ea71869947818d27b718592ea44010b458903bd9bf0370f50eda79e87d9f69";
 
         // Register chain and implementation
-        bytes32 svmChainHash = keccak256(abi.encode(solanaChainId));
-        factory.registerNewChain(svmChainHash, VM_TYPE.SVM);
-        factory.registerUEA(svmChainHash, address(ueaSVMImpl));
+        bytes32 svmChainHash = keccak256(abi.encode("SOLANA"));
+        factory.registerNewChain(svmChainHash, SVM_HASH);
+        factory.registerUEA(svmChainHash, SVM_HASH, address(ueaSVMImpl));
     }
 
     modifier deploySvmSmartAccount() {
-        UniversalAccount memory _owner = UniversalAccount({CHAIN: solanaChainId, ownerKey: ownerKey});
+        UniversalAccount memory _owner = UniversalAccount({CHAIN: "SOLANA", owner: ownerBytes});
 
         address smartAccountAddress = factory.deployUEA(_owner);
         svmSmartAccountInstance = UEA_SVM(payable(smartAccountAddress));
@@ -60,20 +55,20 @@ contract UEA_SVMTest is Test {
     }
 
     function testUEAImplementation() public view {
-        bytes32 svmChainHash = keccak256(abi.encode(solanaChainId));
+        bytes32 svmChainHash = keccak256(abi.encode("SOLANA"));
         assertEq(address(factory.getUEA(svmChainHash)), address(ueaSVMImpl));
     }
 
     function testUniversalAccount() public deploySvmSmartAccount {
         UniversalAccount memory account = svmSmartAccountInstance.universalAccount();
-        assertEq(account.CHAIN, solanaChainId);
-        assertEq(account.ownerKey, ownerKey);
+        assertEq(account.CHAIN, "SOLANA");
+        assertEq(account.owner, ownerBytes);
     }
 
     function testDeploymentCreate2() public deploySvmSmartAccount {
-        UniversalAccount memory _owner = UniversalAccount({CHAIN: solanaChainId, ownerKey: ownerKey});
-
-        assertEq(address(svmSmartAccountInstance), address(factory.UOA_to_UEA(ownerKey)));
+        UniversalAccount memory _owner = UniversalAccount({CHAIN: "SOLANA", owner: ownerBytes});
+        bytes32 salt = factory.generateSalt(_owner);
+        assertEq(address(svmSmartAccountInstance), address(factory.UOA_to_UEA(salt)));
         assertEq(address(svmSmartAccountInstance), address(factory.computeUEA(_owner)));
     }
 
@@ -87,7 +82,6 @@ contract UEA_SVMTest is Test {
             data: abi.encodeWithSignature("setMagicNumber(uint256)", 786),
             gasLimit: 1000000,
             maxFeePerGas: 0,
-            maxPriorityFeePerGas: 0,
             nonce: 0,
             deadline: block.timestamp + 1000
         });
@@ -101,12 +95,12 @@ contract UEA_SVMTest is Test {
         // Mock the verification for this specific hash
         vm.mockCall(
             VERIFIER_PRECOMPILE,
-            abi.encodeWithSignature("verifyEd25519(bytes,bytes32,bytes)", ownerKey, txHash, signature),
+            abi.encodeWithSignature("verifyEd25519(bytes,bytes32,bytes)", ownerBytes, txHash, signature),
             abi.encode(true)
         );
 
         vm.expectEmit(true, true, true, true);
-        emit ISmartAccount.PayloadExecuted(ownerKey, payload.to, payload.data);
+        emit ISmartAccount.PayloadExecuted(ownerBytes, payload.to, payload.data);
 
         // Execute the payload
         svmSmartAccountInstance.executePayload(payload, signature);
@@ -124,7 +118,6 @@ contract UEA_SVMTest is Test {
             data: abi.encodeWithSignature("setMagicNumber(uint256)", 786),
             gasLimit: 1000000,
             maxFeePerGas: 0,
-            maxPriorityFeePerGas: 0,
             nonce: 0,
             deadline: block.timestamp + 1000
         });
@@ -138,7 +131,7 @@ contract UEA_SVMTest is Test {
         // Mock the verification to return false
         vm.mockCall(
             VERIFIER_PRECOMPILE,
-            abi.encodeWithSignature("verifyEd25519(bytes,bytes32,bytes)", ownerKey, txHash, signature),
+            abi.encodeWithSignature("verifyEd25519(bytes,bytes32,bytes)", ownerBytes, txHash, signature),
             abi.encode(false)
         );
 
@@ -153,7 +146,6 @@ contract UEA_SVMTest is Test {
             data: abi.encodeWithSignature("setMagicNumber(uint256)", 786),
             gasLimit: 1000000,
             maxFeePerGas: 0,
-            maxPriorityFeePerGas: 0,
             nonce: 0,
             deadline: block.timestamp + 1000
         });
@@ -167,7 +159,7 @@ contract UEA_SVMTest is Test {
         // Mock the verification to revert
         vm.mockCallRevert(
             VERIFIER_PRECOMPILE,
-            abi.encodeWithSignature("verifyEd25519(bytes,bytes32,bytes)", ownerKey, txHash, signature),
+            abi.encodeWithSignature("verifyEd25519(bytes,bytes32,bytes)", ownerBytes, txHash, signature),
             "Precompile error"
         );
 
@@ -185,7 +177,6 @@ contract UEA_SVMTest is Test {
             data: abi.encodeWithSignature("setMagicNumber(uint256)", 786),
             gasLimit: 1000000,
             maxFeePerGas: 0,
-            maxPriorityFeePerGas: 0,
             nonce: 0,
             deadline: block.timestamp - 1 // Expired deadline
         });
@@ -208,7 +199,6 @@ contract UEA_SVMTest is Test {
             data: abi.encodeWithSignature("setMagicNumberWithFee(uint256)", 999),
             gasLimit: 1000000,
             maxFeePerGas: 0,
-            maxPriorityFeePerGas: 0,
             nonce: 0,
             deadline: block.timestamp + 1000
         });
@@ -220,7 +210,7 @@ contract UEA_SVMTest is Test {
         // Mock the verification for this specific hash
         vm.mockCall(
             VERIFIER_PRECOMPILE,
-            abi.encodeWithSignature("verifyEd25519(bytes,bytes32,bytes)", ownerKey, txHash, signature),
+            abi.encodeWithSignature("verifyEd25519(bytes,bytes32,bytes)", ownerBytes, txHash, signature),
             abi.encode(true)
         );
 
@@ -247,12 +237,14 @@ contract UEA_SVMTest is Test {
                 keccak256(payload.data),
                 payload.gasLimit,
                 payload.maxFeePerGas,
-                payload.maxPriorityFeePerGas,
                 _smartAccountInstance.nonce(),
                 payload.deadline
             )
         );
 
-        return keccak256(abi.encodePacked("\x19\x01", _smartAccountInstance.domainSeparator(), structHash));
+        // Calculate the domain separator using EIP-712
+        bytes32 _domainSeparator = _smartAccountInstance.domainSeparator();
+
+        return keccak256(abi.encodePacked("\x19\x01", _domainSeparator, structHash));
     }
 }

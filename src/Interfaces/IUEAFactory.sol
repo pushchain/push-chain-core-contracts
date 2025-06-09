@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 pragma solidity 0.8.26;
 
-import {UniversalAccount, VM_TYPE} from "../libraries/Types.sol";
+import {UniversalAccount} from "../libraries/Types.sol";
 
 /**
  * @title IUEAFactory
@@ -9,25 +9,31 @@ import {UniversalAccount, VM_TYPE} from "../libraries/Types.sol";
  */
 interface IUEAFactory {
     /**
-     * @dev Registers a new chain with its VM type
+     * @dev Registers a new chain with its VM type hash
      * @param _chainHash The hash of the chain name to register
-     * @param _vmType The VM type for this chain
+     * @param _vmHash The VM type hash for this chain
      */
-    function registerNewChain(bytes32 _chainHash, VM_TYPE _vmType) external;
+    function registerNewChain(bytes32 _chainHash, bytes32 _vmHash) external;
 
     /**
      * @dev Registers multiple UEA implementations in a batch
      * @param _chainHashes Array of chain hashes
+     * @param _vmHashes Array of VM type hashes
      * @param _uea Array of UEA implementation addresses
      */
-    function registerMultipleUEA(bytes32[] memory _chainHashes, address[] memory _uea) external;
+    function registerMultipleUEA(
+        bytes32[] memory _chainHashes,
+        bytes32[] memory _vmHashes,
+        address[] memory _uea
+    ) external;
 
     /**
-     * @dev Registers a UEA implementation for a specific chain
+     * @dev Registers a UEA implementation for a specific VM type hash
      * @param _chainHash The hash of the chain name
+     * @param _vmHash The VM type hash
      * @param _uea The UEA implementation address
      */
-    function registerUEA(bytes32 _chainHash, address _uea) external;
+    function registerUEA(bytes32 _chainHash, bytes32 _vmHash, address _uea) external;
 
     /**
      * @dev Deploys a new UEA for an external chain user
@@ -44,12 +50,12 @@ interface IUEAFactory {
     function getUEA(bytes32 _chainHash) external view returns (address);
 
     /**
-     * @dev Returns the VM type for a given chain hash and whether it's registered
+     * @dev Returns the VM type hash for a given chain hash and whether it's registered
      * @param _chainHash The hash of the chain name
-     * @return vmType The VM type (will be UNREGISTERED if not explicitly set)
+     * @return vmHash The VM type hash
      * @return isRegistered True if the chain is registered, false otherwise
      */
-    function getVMType(bytes32 _chainHash) external view returns (VM_TYPE vmType, bool isRegistered);
+    function getVMType(bytes32 _chainHash) external view returns (bytes32 vmHash, bool isRegistered);
 
     /**
      * @dev Returns the owner key (UOA) for a given UEA address

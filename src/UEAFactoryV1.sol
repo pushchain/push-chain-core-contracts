@@ -5,7 +5,7 @@ import {ISmartAccount} from "./Interfaces/ISmartAccount.sol";
 import {Clones} from "@openzeppelin/contracts/proxy/Clones.sol";
 
 import {Errors} from "./libraries/Errors.sol";
-import {UniversalAccount, VM_TYPE} from "./libraries/Types.sol";
+import {UniversalAccount} from "./libraries/Types.sol";
 import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
 import {IUEAFactory} from "./Interfaces/IUEAFactory.sol";
 
@@ -19,10 +19,13 @@ import {IUEAFactory} from "./Interfaces/IUEAFactory.sol";
  *      - UOA (Universal Owner Address): The address of the external chain owner who
  *        owns a particular UEA. This key is used for signature verification in UEAs.
  *      - VM Types: Different virtual machine environments (EVM, SVM, etc.) that require
- *        specific implementation logic. Each chain is registered with its VM type, and
- *        each VM type is mapped to a corresponding UEA implementation contract address.
+ *        specific implementation logic. Each chain is registered with its VM type hash, and
+ *        each VM type hash is mapped to a corresponding UEA implementation contract address.
  *        This allows the factory to deploy the correct UEA implementation for different
  *        blockchain environments.
+ *      - Chain identifiers: Simple chain names like "ETHEREUM", "POLYGON", or "SOLANA" 
+ *        (not chain IDs like "eip155:1") that are used to identify which blockchain 
+ *        an account belongs to. These chain names are hashed to produce chainHash values.
  *
  *      The contract uses OZ's Clones library to create deterministic addresses (CREATE2) for UEA instances.
  *      It keeps track of deployed UEAs and their corresponding user keys from external chains.
@@ -32,30 +35,26 @@ import {IUEAFactory} from "./Interfaces/IUEAFactory.sol";
 contract UEAFactoryV1 is Ownable, IUEAFactory {
     using Clones for address;
 
-    /// @notice Maps VM types (as uint256) to their corresponding UEA implementation addresses
-    /// @dev VM_TYPE enum values are used as keys in this mapping
-    mapping(uint256 => address) public UEA_VM;
+    /// @notice Maps VM type hashes to their corresponding UEA implementation addresses
+    mapping(bytes32 => address) public UEA_VM;
 
-    /// @notice Maps owner keys (from external chains) to their deployed UEA contract addresses
-    /// @dev Key is the owner's public key from the external chain (as bytes)
-    mapping(bytes => address) public UOA_to_UEA;
+    /// @notice Maps salt (hash of UniversalAccount) to their deployed UEA contract addresses
+    mapping(bytes32 => address) public UOA_to_UEA;
 
     /// @notice Maps UEA addresses to their owner keys
-    /// @dev Inverse of UOA_to_UEA to allow lookup in both directions
     mapping(address => bytes) private UEA_to_UOA;
 
-    /// @notice Maps chain identifiers to their registered VM types
-    /// @dev Key is the keccak256 hash of the chain name/identifier
-    mapping(bytes32 => VM_TYPE) public CHAIN_to_VM;
+    /// @notice Maps chain identifiers to their registered VM type hashes
+    mapping(bytes32 => bytes32) public CHAIN_to_VM;
 
     /// @notice Emitted when a new chain is registered with its VM type
-    event ChainRegistered(bytes32 indexed chainHash, uint256 vmType);
+    event ChainRegistered(bytes32 indexed chainHash, bytes32 vmHash);
 
     /// @notice Emitted when a new UEA is deployed for an external chain owner
-    event UEADeployed(address indexed UEA, bytes ownerKey, bytes32 chainHash);
+    event UEADeployed(address indexed UEA, bytes owner, bytes32 chainHash);
 
     /// @notice Emitted when a UEA implementation is registered for a specific VM type
-    event UEARegistered(bytes32 indexed chainHash, address UEA_Logic, uint256 vmType);
+    event UEARegistered(bytes32 indexed chainHash, address UEA_Logic, bytes32 vmHash);
 
     constructor() Ownable(msg.sender) {}
 
@@ -65,118 +64,137 @@ contract UEAFactoryV1 is Ownable, IUEAFactory {
      * @return The UEA implementation address for the chain's VM type
      */
     function getUEA(bytes32 _chainHash) external view returns (address) {
-        return UEA_VM[uint256(CHAIN_to_VM[_chainHash])];
+        bytes32 vmHash = CHAIN_to_VM[_chainHash];
+        return UEA_VM[vmHash];
     }
 
     /**
-     * @dev Returns the VM type for a given chain hash and whether it's registered
+     * @dev Returns the VM type hash for a given chain hash and whether it's registered
      * @param _chainHash The hash of the chain name
-     * @return vmType The VM type (will be UNREGISTERED if not explicitly set)
+     * @return vmHash The VM type hash
      * @return isRegistered True if the chain is registered, false otherwise
      */
-    function getVMType(bytes32 _chainHash) public view returns (VM_TYPE vmType, bool isRegistered) {
-        vmType = CHAIN_to_VM[_chainHash];
-        isRegistered = vmType != VM_TYPE.UNREGISTERED;
-        return (vmType, isRegistered);
+    function getVMType(bytes32 _chainHash) public view returns (bytes32 vmHash, bool isRegistered) {
+        vmHash = CHAIN_to_VM[_chainHash];
+        isRegistered = vmHash != bytes32(0);
+        return (vmHash, isRegistered);
     }
 
     /**
-     * @dev Registers a new chain with its VM type
-     * @param _chainHash The hash of the chain name to register
-     * @param _vmType The VM type for this chain
+     * @dev Registers a new chain with its VM type hash
+     * @param _chainHash The hash of the chain name to register (e.g., keccak256(abi.encode("ETHEREUM")))
+     * @param _vmHash The VM type hash for this chain
      * @notice Can only be called by the contract owner
      * @notice Will revert if the chain is already registered or if VM type is invalid
      */
-    function registerNewChain(bytes32 _chainHash, VM_TYPE _vmType) external onlyOwner {
+    function registerNewChain(bytes32 _chainHash, bytes32 _vmHash) external onlyOwner {
         // Check that the chainHash is not already registered. If yes, revert.
-        VM_TYPE currentVmType = CHAIN_to_VM[_chainHash];
-        if (currentVmType != VM_TYPE.UNREGISTERED) {
+        (, bool isRegistered) = getVMType(_chainHash);
+        if (isRegistered) {
             revert Errors.InvalidInputArgs();
         }
         // Register the chain with the specified VM type
-        CHAIN_to_VM[_chainHash] = _vmType;
-        emit ChainRegistered(_chainHash, uint256(_vmType));
+        CHAIN_to_VM[_chainHash] = _vmHash;
+        emit ChainRegistered(_chainHash, _vmHash);
     }
 
     /**
      * @dev Registers multiple UEA implementations in a batch
      * @param _chainHashes Array of chain hashes
+     * @param _vmHashes Array of VM type hashes
      * @param _UEA Array of UEA implementation addresses
      * @notice Can only be called by the contract owner
      * @notice Will revert if arrays are not the same length
      */
-    function registerMultipleUEA(bytes32[] memory _chainHashes, address[] memory _UEA) external onlyOwner {
-        if (_UEA.length != _chainHashes.length) {
+    function registerMultipleUEA(
+        bytes32[] memory _chainHashes,
+        bytes32[] memory _vmHashes,
+        address[] memory _UEA
+    ) external onlyOwner {
+        if (_UEA.length != _vmHashes.length || _UEA.length != _chainHashes.length) {
             revert Errors.InvalidInputArgs();
         }
 
         for (uint256 i = 0; i < _UEA.length; i++) {
-            registerUEA(_chainHashes[i], _UEA[i]);
+            registerUEA(_chainHashes[i], _vmHashes[i], _UEA[i]);
         }
     }
 
     /**
-     * @dev Registers a UEA implementation for a specific chain
-     * @param _chainHash The hash of the chain name
+     * @dev Registers a UEA implementation for a specific VM type hash
+     * @param _chainHash The hash of the chain name (e.g., keccak256(abi.encode("ETHEREUM")))
+     * @param _vmHash The VM type hash for this chain
      * @param _UEA The UEA implementation address
      * @notice Can only be called by the contract owner
-     * @notice Will revert if the UEA address is zero or if the chain is not registered
+     * @notice Will revert if the UEA address is zero or if vmHash doesn't match the chain's registered vmHash
      */
-    function registerUEA(bytes32 _chainHash, address _UEA) public onlyOwner {
-        require(_UEA != address(0), "_UEA address cannot be invalid");
+    function registerUEA(bytes32 _chainHash, bytes32 _vmHash, address _UEA) public onlyOwner {
+        if (_UEA == address(0)) {
+            revert Errors.InvalidInputArgs();
+        }
 
-        (VM_TYPE vmType, bool isRegistered) = getVMType(_chainHash);
-        require(isRegistered, "Chain is not registered");
+        // Get the vmHash registered for this chain and verify it matches the provided vmHash
+        (bytes32 registeredVmHash, bool isRegistered) = getVMType(_chainHash);
+        if (!isRegistered || registeredVmHash != _vmHash) {
+            revert Errors.InvalidInputArgs();
+        }
 
-        UEA_VM[uint256(vmType)] = _UEA;
-        emit UEARegistered(_chainHash, _UEA, uint256(vmType));
+        UEA_VM[_vmHash] = _UEA;
+        emit UEARegistered(_chainHash, _UEA, _vmHash);
     }
 
     /**
      * @dev Deploys a new UEA for an external chain user
-     * @param _id The Universal Account information containing chain and owner key
+     * @param _id The Universal Account information containing chain (e.g., "ETHEREUM") and owner key
      * @return The address of the deployed UEA
      * @notice Will revert if the account already exists, the chain is not registered,
      *         or if no UEA implementation is available for the chain's VM type
      */
     function deployUEA(UniversalAccount memory _id) external returns (address) {
-        if (UOA_to_UEA[_id.ownerKey] != address(0)) {
+        bytes32 salt = generateSalt(_id);
+        if (UOA_to_UEA[salt] != address(0)) {
             revert Errors.AccountAlreadyExists();
         }
 
         // Get the appropriate UEA Implementation based on VM type
         bytes32 chainHash = keccak256(abi.encode(_id.CHAIN));
-        (VM_TYPE vmType, bool isRegistered) = getVMType(chainHash);
-        require(isRegistered, "Chain is not registered");
+        (bytes32 vmHash, bool isRegistered) = getVMType(chainHash);
+        if (!isRegistered) {
+            revert Errors.InvalidInputArgs();
+        }
 
-        address _ueaImplementation = UEA_VM[uint256(vmType)];
-        require(_ueaImplementation != address(0), "No _ueaImplementation for this VM type");
-
-        bytes32 salt = generateSalt(_id);
+        address _ueaImplementation = UEA_VM[vmHash];
+        if (_ueaImplementation == address(0)) {
+            revert Errors.InvalidInputArgs();
+        }
 
         address payable _UEA = payable(_ueaImplementation.cloneDeterministic(salt));
-        UOA_to_UEA[_id.ownerKey] = _UEA;
-        UEA_to_UOA[_UEA] = _id.ownerKey; // Store the inverse mapping
+        UOA_to_UEA[salt] = _UEA;
+        UEA_to_UOA[_UEA] = _id.owner; // Store the inverse mapping
         ISmartAccount(_UEA).initialize(_id);
 
-        emit UEADeployed(_UEA, _id.ownerKey, chainHash);
+        emit UEADeployed(_UEA, _id.owner, chainHash);
         return _UEA;
     }
 
     /**
      * @dev Computes the address of a UEA before it is deployed
-     * @param _id The Universal Account information containing chain and owner key
+     * @param _id The Universal Account information containing chain (e.g., "ETHEREUM") and owner key
      * @return The computed address of the UEA
      * @notice Will revert if the chain is not registered or if no UEA implementation
      *         is available for the chain's VM type
      */
     function computeUEA(UniversalAccount memory _id) public view returns (address) {
         bytes32 chainHash = keccak256(abi.encode(_id.CHAIN));
-        (VM_TYPE vmType, bool isRegistered) = getVMType(chainHash);
-        require(isRegistered, "Chain is not registered");
+        (bytes32 vmHash, bool isRegistered) = getVMType(chainHash);
+        if (!isRegistered) {
+            revert Errors.InvalidInputArgs();
+        }
 
-        address _ueaImplementation = UEA_VM[uint256(vmType)];
-        require(_ueaImplementation != address(0), "No _ueaImplementation for this VM type");
+        address _ueaImplementation = UEA_VM[vmHash];
+        if (_ueaImplementation == address(0)) {
+            revert Errors.InvalidInputArgs();
+        }
 
         bytes32 salt = generateSalt(_id);
         return _ueaImplementation.predictDeterministicAddress(salt, address(this));
@@ -211,8 +229,11 @@ contract UEAFactoryV1 is Ownable, IUEAFactory {
      * @return isDeployed True if the UEA has already been deployed
      */
     function getUEAForOwner(UniversalAccount memory _id) external view returns (address uea, bool isDeployed) {
+        // Generate salt from the UniversalAccount struct
+        bytes32 salt = generateSalt(_id);
+        
         // Check if we already have a mapping
-        uea = UOA_to_UEA[_id.ownerKey];
+        uea = UOA_to_UEA[salt];
 
         if (uea != address(0)) {
             // We have a mapping, but check if it's actually deployed

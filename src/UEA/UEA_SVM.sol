@@ -7,7 +7,6 @@ import {ECDSA} from "@openzeppelin/contracts/utils/cryptography/ECDSA.sol";
 import {Initializable} from "@openzeppelin/contracts/proxy/utils/Initializable.sol";
 import {ReentrancyGuard} from "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
 import {
-    VM_TYPE,
     UniversalAccount,
     CrossChainPayload,
     DOMAIN_SEPARATOR_TYPEHASH,
@@ -85,7 +84,7 @@ contract UEA_SVM is Initializable, ReentrancyGuard, ISmartAccount {
      */
     function _verifySignatureSVM(bytes32 message, bytes memory signature) internal view returns (bool) {
         (bool success, bytes memory result) = VERIFIER_PRECOMPILE.staticcall(
-            abi.encodeWithSignature("verifyEd25519(bytes,bytes32,bytes)", id.ownerKey, message, signature)
+            abi.encodeWithSignature("verifyEd25519(bytes,bytes32,bytes)", id.owner, message, signature)
         );
         if (!success) {
             revert Errors.PrecompileCallFailed();
@@ -123,7 +122,7 @@ contract UEA_SVM is Initializable, ReentrancyGuard, ISmartAccount {
             }
         }
 
-        emit PayloadExecuted(id.ownerKey, payload.to, payload.data);
+        emit PayloadExecuted(id.owner, payload.to, payload.data);
     }
 
     function getTransactionHash(CrossChainPayload calldata payload) public view returns (bytes32) {
@@ -139,9 +138,8 @@ contract UEA_SVM is Initializable, ReentrancyGuard, ISmartAccount {
                 payload.to,
                 payload.value,
                 keccak256(payload.data),
-                payload.gasLimit,
+                payload.gasLimit,   
                 payload.maxFeePerGas,
-                payload.maxPriorityFeePerGas,
                 nonce,
                 payload.deadline
             )

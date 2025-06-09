@@ -7,7 +7,6 @@ import {ECDSA} from "@openzeppelin/contracts/utils/cryptography/ECDSA.sol";
 import {Initializable} from "@openzeppelin/contracts/proxy/utils/Initializable.sol";
 import {ReentrancyGuard} from "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
 import {
-    VM_TYPE,
     UniversalAccount,
     CrossChainPayload,
     DOMAIN_SEPARATOR_TYPEHASH,
@@ -84,7 +83,7 @@ contract UEA_EVM is Initializable, ReentrancyGuard, ISmartAccount {
      */
     function _verifySignatureEVM(bytes32 messageHash, bytes memory signature) internal view returns (bool) {
         address recoveredSigner = messageHash.recover(signature);
-        return recoveredSigner == address(bytes20(id.ownerKey));
+        return recoveredSigner == address(bytes20(id.owner));
     }
 
     /**
@@ -116,7 +115,7 @@ contract UEA_EVM is Initializable, ReentrancyGuard, ISmartAccount {
             }
         }
 
-        emit PayloadExecuted(id.ownerKey, payload.to, payload.data);
+        emit PayloadExecuted(id.owner, payload.to, payload.data);
     }
 
     function getTransactionHash(CrossChainPayload calldata payload) public view returns (bytes32) {
@@ -134,7 +133,6 @@ contract UEA_EVM is Initializable, ReentrancyGuard, ISmartAccount {
                 keccak256(payload.data),
                 payload.gasLimit,
                 payload.maxFeePerGas,
-                payload.maxPriorityFeePerGas,
                 nonce,
                 payload.deadline
             )
