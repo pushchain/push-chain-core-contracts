@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: MIT
-pragma solidity ^0.8.20;
+pragma solidity 0.8.26;
 
 import {Errors} from "../libraries/Errors.sol";
-import {ISmartAccount} from "../Interfaces/ISmartAccount.sol";
+import {IUEA} from "../Interfaces/IUEA.sol";
 import {ECDSA} from "@openzeppelin/contracts/utils/cryptography/ECDSA.sol";
 import {Initializable} from "@openzeppelin/contracts/proxy/utils/Initializable.sol";
 import {ReentrancyGuard} from "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
@@ -14,16 +14,16 @@ import {
 } from "../libraries/Types.sol";
 
 /**
- * @title UEA_EVM (Universal External Account)
- * @dev UEA is a smart contract that represents an external user's account(UOA) on Push Chain.
- *      UEA_EVM is specifically designed for EVM-based UOAs.
- *      It allows for the execution of payloads based on EVM signatures by the UOA (univrsal owner address ) of this account.
- * @notice Use this contract as implementation logic of a user's UEA.
+ * @title UEA_EVM (Universal Executor Account for EVM)
+ * @dev Implementation of the IUEA interface for EVM-based external accounts.
+ *      This contract handles verification and execution of cross-chain payloads
+ *      using ECDSA signatures from Ethereum-compatible accounts.
+ * @notice Use this contract as implementation logic for EVM-based UEAs.
  */
-contract UEA_EVM is Initializable, ReentrancyGuard, ISmartAccount {
+contract UEA_EVM is Initializable, ReentrancyGuard, IUEA {
     using ECDSA for bytes32;
 
-    UniversalAccount id;
+    UniversalAccount internal id;
     uint256 public nonce;
     string public constant VERSION = "0.1.0";
 
@@ -49,27 +49,21 @@ contract UEA_EVM is Initializable, ReentrancyGuard, ISmartAccount {
     }
 
     /**
-     * @dev Initializes the contract with the given parameters.
-     * @param _UniversalAccount the UniversalAccount struct
+     * @inheritdoc IUEA
      */
-    function initialize(UniversalAccount memory _UniversalAccount) external initializer {
-        id = _UniversalAccount;
+    function initialize(UniversalAccount memory universalAccount) external initializer {
+        id = universalAccount;
     }
 
     /**
-     * @notice Must be implemented by all Smart Accounts to return the account identifier.
-     * @dev Returns the account ID.
-     * @return UniversalAccount The account ID.
+     * @inheritdoc IUEA
      */
     function universalAccount() public view returns (UniversalAccount memory) {
         return id;
     }
 
     /**
-     * @dev Verifies the payload signature.
-     * @param messageHash The hash of the message to verify.
-     * @param signature The signature to verify.
-     * @return bool indicating whether the signature is valid.
+     * @inheritdoc IUEA
      */
     function verifyPayloadSignature(bytes32 messageHash, bytes memory signature) public view returns (bool) {
         return _verifySignatureEVM(messageHash, signature);
@@ -87,9 +81,7 @@ contract UEA_EVM is Initializable, ReentrancyGuard, ISmartAccount {
     }
 
     /**
-     * @dev Executes a payload on the target(to) address with the given data and signature.
-     * @param payload The target(to) address to execute the payload on.
-     * @param signature The signature to verify the execution.
+     * @inheritdoc IUEA
      */
     function executePayload(CrossChainPayload calldata payload, bytes calldata signature) external nonReentrant {
         bytes32 txHash = getTransactionHash(payload);
@@ -118,6 +110,11 @@ contract UEA_EVM is Initializable, ReentrancyGuard, ISmartAccount {
         emit PayloadExecuted(id.owner, payload.to, payload.data);
     }
 
+    /**
+     * @dev Calculates the transaction hash for a given payload.
+     * @param payload The payload to calculate the hash for.
+     * @return bytes32 The transaction hash.
+     */
     function getTransactionHash(CrossChainPayload calldata payload) public view returns (bytes32) {
         if (payload.deadline > 0) {
             if (block.timestamp > payload.deadline) {
@@ -144,6 +141,8 @@ contract UEA_EVM is Initializable, ReentrancyGuard, ISmartAccount {
         return keccak256(abi.encodePacked("\x19\x01", _domainSeparator, structHash));
     }
 
-    // @dev Fallback function to receive ether.
+    /**
+     * @dev Fallback function to receive ether.
+     */
     receive() external payable {}
 }

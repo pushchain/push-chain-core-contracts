@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 pragma solidity 0.8.26;
 
-import {ISmartAccount} from "./Interfaces/ISmartAccount.sol";
+import {IUEA} from "./Interfaces/IUEA.sol";
 import {Clones} from "@openzeppelin/contracts/proxy/Clones.sol";
 
 import {Errors} from "./libraries/Errors.sol";
@@ -170,7 +170,7 @@ contract UEAFactoryV1 is Ownable, IUEAFactory {
         address payable _UEA = payable(_ueaImplementation.cloneDeterministic(salt));
         UOA_to_UEA[salt] = _UEA;
         UEA_to_UOA[_UEA] = _id.owner; // Store the inverse mapping
-        ISmartAccount(_UEA).initialize(_id);
+        IUEA(_UEA).initialize(_id);
 
         emit UEADeployed(_UEA, _id.owner, chainHash);
         return _UEA;
