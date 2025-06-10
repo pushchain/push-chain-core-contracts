@@ -38,7 +38,7 @@ contract UEAFactoryV1 is Ownable, IUEAFactory {
     /// @notice Maps VM type hashes to their corresponding UEA implementation addresses
     mapping(bytes32 => address) public UEA_VM;
 
-    /// @notice Maps salt (hash of UniversalAccount) to their deployed UEA contract addresses
+    /// @notice Maps UniversalAccount(hash) to their deployed UEA contract addresses
     mapping(bytes32 => address) public UOA_to_UEA;
 
     /// @notice Maps UEA addresses to their owner keys
@@ -46,15 +46,6 @@ contract UEAFactoryV1 is Ownable, IUEAFactory {
 
     /// @notice Maps chain identifiers to their registered VM type hashes
     mapping(bytes32 => bytes32) public CHAIN_to_VM;
-
-    /// @notice Emitted when a new chain is registered with its VM type
-    event ChainRegistered(bytes32 indexed chainHash, bytes32 vmHash);
-
-    /// @notice Emitted when a new UEA is deployed for an external chain owner
-    event UEADeployed(address indexed UEA, bytes owner, bytes32 chainHash);
-
-    /// @notice Emitted when a UEA implementation is registered for a specific VM type
-    event UEARegistered(bytes32 indexed chainHash, address UEA_Logic, bytes32 vmHash);
 
     constructor() Ownable(msg.sender) {}
 
@@ -93,7 +84,7 @@ contract UEAFactoryV1 is Ownable, IUEAFactory {
         if (isRegistered) {
             revert Errors.InvalidInputArgs();
         }
-        // Register the chain with the specified VM type
+
         CHAIN_to_VM[_chainHash] = _vmHash;
         emit ChainRegistered(_chainHash, _vmHash);
     }

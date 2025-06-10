@@ -8,6 +8,17 @@ import {UniversalAccount} from "../libraries/Types.sol";
  * @dev Interface for the Universal Executor Account Factory
  */
 interface IUEAFactory {
+    //*** Events ***//
+    /// @notice Emitted when a new chain is registered with its VM type
+    event ChainRegistered(bytes32 indexed chainHash, bytes32 vmHash);
+
+    /// @notice Emitted when a new UEA is deployed for an external chain owner
+    event UEADeployed(address indexed UEA, bytes owner, bytes32 chainHash);
+
+    /// @notice Emitted when a UEA implementation is registered for a specific VM type
+    event UEARegistered(bytes32 indexed chainHash, address UEA_Logic, bytes32 vmHash);
+
+    //*** Functions ***//
     /**
      * @dev Registers a new chain with its VM type hash
      * @param _chainHash The hash of the chain name to register
