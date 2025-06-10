@@ -9,7 +9,7 @@ import {UEAFactoryV1} from "../src/UEAFactoryV1.sol";
 import {ECDSA} from "@openzeppelin/contracts/utils/cryptography/ECDSA.sol";
 import {UEA_EVM} from "../src/UEA/UEA_EVM.sol";
 import {Errors} from "../src/libraries/Errors.sol";
-import {ISmartAccount} from "../src/Interfaces/ISmartAccount.sol";
+import {IUEA} from "../src/Interfaces/IUEA.sol";
 import {UniversalAccount, CrossChainPayload, PUSH_CROSS_CHAIN_PAYLOAD_TYPEHASH} from "../src/libraries/Types.sol";
 
 contract UEA_EVMTest is Test {
@@ -137,7 +137,7 @@ contract UEA_EVMTest is Test {
         bytes memory signature = abi.encodePacked(r, s, v);
 
         vm.expectEmit(true, true, true, true);
-        emit ISmartAccount.PayloadExecuted(ownerBytes, payload.to, payload.data);
+        emit IUEA.PayloadExecuted(ownerBytes, payload.to, payload.data);
 
         // Execute the payload
         evmSmartAccountInstance.executePayload(payload, signature);

@@ -4,14 +4,17 @@ pragma solidity 0.8.26;
 import "forge-std/Test.sol";
 import "forge-std/console.sol";
 
+import {Target} from "../src/mocks/Target.sol";
 import {UEAFactoryV1} from "../src/UEAFactoryV1.sol";
 import {UEA_EVM} from "../src/UEA/UEA_EVM.sol";
 import {UEA_SVM} from "../src/UEA/UEA_SVM.sol";
 import {Errors} from "../src/libraries/Errors.sol";
+import {IUEA} from "../src/Interfaces/IUEA.sol";
 import {UniversalAccount} from "../src/libraries/Types.sol";
 import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
 
 contract UEAFactoryTest is Test {
+    Target target;
     UEAFactoryV1 factory;
     UEA_EVM ueaEVMImpl;
     UEA_SVM ueaSVMImpl;
@@ -38,7 +41,12 @@ contract UEAFactoryTest is Test {
     string solanaChainId;
     string solanaAddress;
 
+    // Chain hashes
+    bytes32 ethereumChainHash;
+    bytes32 solanaChainHash;
+
     function setUp() public {
+        target = new Target();
         deployer = address(this);
         nonOwner = makeAddr("nonOwner");
 
@@ -60,16 +68,259 @@ contract UEAFactoryTest is Test {
         solanaChainId = "5eykt4UsFv8P8NJdTREpY1vzqKqZKvdp";
         solanaAddress = "HGyAQb8SeAE6X6RfhgMpGWZQuVYU8kgA5tKitaTrUHfh";
 
-        // Register chains
-        bytes32 evmChainHash = keccak256(abi.encode("ETHEREUM"));
-        factory.registerNewChain(evmChainHash, EVM_HASH);
+        // Store chain hashes for reuse
+        ethereumChainHash = keccak256(abi.encode("ETHEREUM"));
+        solanaChainHash = keccak256(abi.encode("SOLANA"));
 
-        bytes32 svmChainHash = keccak256(abi.encode("SOLANA"));
-        factory.registerNewChain(svmChainHash, SVM_HASH);
+        // Register chains
+        factory.registerNewChain(ethereumChainHash, EVM_HASH);
+        factory.registerNewChain(solanaChainHash, SVM_HASH);
 
         // Register implementations
-        factory.registerUEA(evmChainHash, EVM_HASH, address(ueaEVMImpl));
-        factory.registerUEA(svmChainHash, SVM_HASH, address(ueaSVMImpl));
+        factory.registerUEA(ethereumChainHash, EVM_HASH, address(ueaEVMImpl));
+        factory.registerUEA(solanaChainHash, SVM_HASH, address(ueaSVMImpl));
+    }
+
+    function testRegisterNewChain() public {
+        bytes32 chainHash = keccak256(abi.encode("KOVAN"));
+        factory.registerNewChain(chainHash, EVM_HASH);
+        
+        // Verify the chain was registered
+        (bytes32 vmHash, bool isRegistered) = factory.getVMType(chainHash);
+        assertEq(vmHash, EVM_HASH);
+        assertTrue(isRegistered);
+    }
+
+    function testRegisterUEA() public {
+        bytes32 chainHash = keccak256(abi.encode("KOVAN"));
+        factory.registerNewChain(chainHash, EVM_HASH);
+        factory.registerUEA(chainHash, EVM_HASH, address(ueaEVMImpl));
+        
+        // Check that the UEA implementation is registered
+        assertEq(factory.getUEA(chainHash), address(ueaEVMImpl));
+    }
+
+    function testRegisterMultipleUEA() public {
+        bytes32[] memory chainHashes = new bytes32[](2);
+        bytes32[] memory vmHashes = new bytes32[](2);
+        address[] memory implementations = new address[](2);
+        
+        // Use different chains than those in setUp
+        chainHashes[0] = keccak256(abi.encode("KOVAN"));
+        chainHashes[1] = keccak256(abi.encode("METIS"));
+        
+        vmHashes[0] = EVM_HASH;
+        vmHashes[1] = EVM_HASH;
+        
+        implementations[0] = address(ueaEVMImpl);
+        implementations[1] = address(ueaEVMImpl);
+        
+        // Register chains first
+        factory.registerNewChain(chainHashes[0], vmHashes[0]);
+        factory.registerNewChain(chainHashes[1], vmHashes[1]);
+        
+        // Register UEAs in batch
+        factory.registerMultipleUEA(chainHashes, vmHashes, implementations);
+        
+        // Verify registrations
+        assertEq(factory.getUEA(chainHashes[0]), implementations[0]);
+        assertEq(factory.getUEA(chainHashes[1]), implementations[1]);
+    }
+
+    function testRevertWhenRegisteringSameChainTwice() public {
+        bytes32 chainHash = keccak256(abi.encode("KOVAN"));
+        factory.registerNewChain(chainHash, EVM_HASH);
+        
+        // Try to register the same chain again
+        vm.expectRevert(Errors.InvalidInputArgs.selector);
+        factory.registerNewChain(chainHash, EVM_HASH);
+    }
+    
+    function testRevertWhenRegisteringZeroAddressUEA() public {
+        bytes32 chainHash = keccak256(abi.encode("KOVAN"));
+        factory.registerNewChain(chainHash, EVM_HASH);
+        
+        // Try to register zero address as UEA
+        vm.expectRevert(Errors.InvalidInputArgs.selector);
+        factory.registerUEA(chainHash, EVM_HASH, address(0));
+    }
+    
+    function testRevertWhenRegisteringUEAWithWrongVMHash() public {
+        bytes32 chainHash = keccak256(abi.encode("KOVAN"));
+        factory.registerNewChain(chainHash, EVM_HASH);
+        
+        // Try to register UEA with wrong VM hash
+        vm.expectRevert(Errors.InvalidInputArgs.selector);
+        factory.registerUEA(chainHash, SVM_HASH, address(ueaEVMImpl));
+    }
+    
+    function testRevertWhenRegisteringUEAWithUnregisteredChain() public {
+        bytes32 chainHash = keccak256(abi.encode("UNREGISTERED"));
+        
+        // Try to register UEA for unregistered chain
+        vm.expectRevert(Errors.InvalidInputArgs.selector);
+        factory.registerUEA(chainHash, EVM_HASH, address(ueaEVMImpl));
+    }
+    
+    function testRevertWhenRegisteringMultipleUEAWithMismatchedArrays() public {
+        bytes32[] memory chainHashes = new bytes32[](2);
+        bytes32[] memory vmHashes = new bytes32[](2);
+        address[] memory implementations = new address[](1); // Mismatched length
+        
+        // Register chains first (use different chains than in setUp)
+        chainHashes[0] = keccak256(abi.encode("KOVAN"));
+        chainHashes[1] = keccak256(abi.encode("METIS"));
+        
+        factory.registerNewChain(chainHashes[0], EVM_HASH);
+        factory.registerNewChain(chainHashes[1], EVM_HASH);
+        
+        // Try to register with mismatched array lengths
+        vm.expectRevert(Errors.InvalidInputArgs.selector);
+        factory.registerMultipleUEA(chainHashes, vmHashes, implementations);
+    }
+
+    function testDeployUEA() public {
+        // Use ETHEREUM chain which is already registered in setUp
+        bytes memory ownerBytes = abi.encodePacked(makeAddr("newowner"));
+        UniversalAccount memory _id = UniversalAccount({CHAIN: "ETHEREUM", owner: ownerBytes});
+        
+        address ueaAddress = factory.deployUEA(_id);
+        assertTrue(factory.hasCode(ueaAddress));
+        
+        // Check the owner
+        assertEq(factory.getOwnerForUEA(ueaAddress), ownerBytes);
+    }
+    
+    function testRevertWhenDeployingUEAForUnregisteredChain() public {
+        bytes memory ownerBytes = abi.encodePacked(makeAddr("owner"));
+        UniversalAccount memory _id = UniversalAccount({CHAIN: "UNREGISTERED", owner: ownerBytes});
+        
+        // Try to deploy UEA for unregistered chain
+        vm.expectRevert(Errors.InvalidInputArgs.selector);
+        factory.deployUEA(_id);
+    }
+    
+    function testRevertWhenDeployingUEAWithNoImplementation() public {
+        // Register chain but no implementation
+        bytes32 chainHash = keccak256(abi.encode("NEW_CHAIN"));
+        factory.registerNewChain(chainHash, MOVE_VM_HASH);
+        
+        bytes memory ownerBytes = abi.encodePacked(makeAddr("owner"));
+        UniversalAccount memory _id = UniversalAccount({CHAIN: "NEW_CHAIN", owner: ownerBytes});
+        
+        // Try to deploy UEA with no implementation
+        vm.expectRevert(Errors.InvalidInputArgs.selector);
+        factory.deployUEA(_id);
+    }
+    
+    function testRevertWhenDeployingSameUEATwice() public {
+        // Use a new owner with ETHEREUM chain
+        bytes memory ownerBytes = abi.encodePacked(makeAddr("uniqueowner"));
+        UniversalAccount memory _id = UniversalAccount({CHAIN: "ETHEREUM", owner: ownerBytes});
+        
+        factory.deployUEA(_id);
+        
+        // Try to deploy the same UEA again
+        vm.expectRevert(Errors.AccountAlreadyExists.selector);
+        factory.deployUEA(_id);
+    }
+
+    function testComputeUEA() public {
+        // Use ETHEREUM chain which is already registered in setUp
+        bytes memory ownerBytes = abi.encodePacked(makeAddr("uniquecomputeowner"));
+        UniversalAccount memory _id = UniversalAccount({CHAIN: "ETHEREUM", owner: ownerBytes});
+        
+        address computedAddress = factory.computeUEA(_id);
+        assertTrue(computedAddress != address(0));
+        
+        // Deploy UEA and check if it matches the computed address
+        address deployedAddress = factory.deployUEA(_id);
+        assertEq(deployedAddress, computedAddress);
+    }
+    
+    function testGetUEAForOwner() public {
+        // Use ETHEREUM chain which is already registered in setUp
+        bytes memory ownerBytes = abi.encodePacked(makeAddr("uniquegetowner"));
+        UniversalAccount memory _id = UniversalAccount({CHAIN: "ETHEREUM", owner: ownerBytes});
+        
+        // Test for non-deployed UEA
+        (address uea, bool isDeployed) = factory.getUEAForOwner(_id);
+        assertTrue(uea != address(0));
+        assertFalse(isDeployed);
+        
+        // Deploy UEA
+        address deployedAddress = factory.deployUEA(_id);
+        
+        // Test for deployed UEA
+        (address uea2, bool isDeployed2) = factory.getUEAForOwner(_id);
+        assertEq(uea2, deployedAddress);
+        assertTrue(isDeployed2);
+    }
+    
+    function testSwapImplementation() public {
+        // Use ETHEREUM chain which is already registered in setUp
+        address initialImpl = factory.getUEA(ethereumChainHash);
+        
+        // Deploy a new implementation
+        UEA_EVM newImpl = new UEA_EVM();
+        factory.registerUEA(ethereumChainHash, EVM_HASH, address(newImpl));
+        
+        // Check that the implementation was updated
+        assertNotEq(factory.getUEA(ethereumChainHash), initialImpl);
+        assertEq(factory.getUEA(ethereumChainHash), address(newImpl));
+    }
+    
+    function testMultipleOwners() public {
+        // Create two different owners for ETHEREUM chain
+        (address owner1, uint256 owner1PK) = makeAddrAndKey("owner1");
+        (address owner2, uint256 owner2PK) = makeAddrAndKey("owner2");
+        
+        bytes memory ownerBytes1 = abi.encodePacked(owner1);
+        bytes memory ownerBytes2 = abi.encodePacked(owner2);
+        
+        UniversalAccount memory account1 = UniversalAccount({CHAIN: "ETHEREUM", owner: ownerBytes1});
+        UniversalAccount memory account2 = UniversalAccount({CHAIN: "ETHEREUM", owner: ownerBytes2});
+        
+        // Compute UEA addresses
+        address computedUEA1 = factory.computeUEA(account1);
+        address computedUEA2 = factory.computeUEA(account2);
+        
+        // Make sure they're different
+        assertNotEq(computedUEA1, computedUEA2);
+    }
+    
+    function testMultipleDeployments() public {
+        // Deploy 10 UEAs for ETHEREUM chain
+        for (uint256 i = 0; i < 10; i++) {
+            (address testOwner, uint256 testOwnerPK) = makeAddrAndKey(string(abi.encodePacked("testOwner", i)));
+            bytes memory ownerBytes = abi.encodePacked(testOwner);
+            UniversalAccount memory _id = UniversalAccount({CHAIN: "ETHEREUM", owner: ownerBytes});
+            
+            address ueaAddress = factory.deployUEA(_id);
+            assertTrue(factory.hasCode(ueaAddress));
+            assertEq(factory.getOwnerForUEA(ueaAddress), ownerBytes);
+        }
+    }
+    
+    function testUEAOwnerChange() public {
+        // Deploy UEA for original owner on ETHEREUM chain
+        bytes memory ownerBytes = abi.encodePacked(makeAddr("originalOwner"));
+        UniversalAccount memory _id = UniversalAccount({CHAIN: "ETHEREUM", owner: ownerBytes});
+        
+        address ueaAddress = factory.deployUEA(_id);
+        
+        // Create a new owner
+        (address newOwner, uint256 newOwnerPK) = makeAddrAndKey("newOwner");
+        bytes memory newOwnerBytes = abi.encodePacked(newOwner);
+        UniversalAccount memory newAccount = UniversalAccount({CHAIN: "ETHEREUM", owner: newOwnerBytes});
+        
+        // The owner mapping can't be changed - a new UEA would need to be deployed
+        assertEq(factory.getOwnerForUEA(ueaAddress), ownerBytes);
+        
+        // Deploy UEA for new owner - this should be a different address
+        address newUEAAddress = factory.deployUEA(newAccount);
+        assertNotEq(ueaAddress, newUEAAddress);
+        assertEq(factory.getOwnerForUEA(newUEAAddress), newOwnerBytes);
     }
 
     function testOwnershipFunctions() public {
@@ -90,37 +341,6 @@ contract UEAFactoryTest is Test {
         assertEq(address(factory.getUEA(chainHash)), address(newImpl));
     }
 
-    function testRegisterMultipleUEA() public {
-        // Create new implementations
-        UEA_EVM impl1 = new UEA_EVM();
-        UEA_SVM impl2 = new UEA_SVM();
-
-        // Create arrays for registration
-        bytes32[] memory chainHashes = new bytes32[](2);
-        chainHashes[0] = keccak256(abi.encode("NEAR"));
-        chainHashes[1] = keccak256(abi.encode("STARKNET"));
-
-        // Register chains
-        factory.registerNewChain(chainHashes[0], WASM_VM_HASH);
-        factory.registerNewChain(chainHashes[1], CAIRO_VM_HASH);
-
-        bytes32[] memory vmHashes = new bytes32[](2);
-        vmHashes[0] = WASM_VM_HASH;
-        vmHashes[1] = CAIRO_VM_HASH;
-
-        address[] memory implementations = new address[](2);
-        implementations[0] = address(impl1);
-        implementations[1] = address(impl2);
-
-        // Register multiple implementations
-        factory.registerMultipleUEA(chainHashes, vmHashes, implementations);
-
-        // Verify implementations were registered
-        assertEq(address(factory.getUEA(chainHashes[0])), address(impl1));
-        assertEq(address(factory.getUEA(chainHashes[1])), address(impl2));
-    }
-
-    // Test deployment of smart account
     function testDeploymentCreate2() public {
         UniversalAccount memory _id = UniversalAccount({CHAIN: "ETHEREUM", owner: ownerBytes});
 
@@ -130,7 +350,6 @@ contract UEAFactoryTest is Test {
         assertEq(ueaAddress, address(factory.computeUEA(_id)));
     }
 
-    // Test that the same account cannot be deployed twice
     function testDeploymentTwice() public {
         UniversalAccount memory _id = UniversalAccount({CHAIN: "ETHEREUM", owner: ownerBytes});
 
@@ -140,7 +359,6 @@ contract UEAFactoryTest is Test {
         factory.deployUEA(_id);
     }
 
-    // Test that the computed address matches the deployed address
     function testComputeUEAAddress() public {
         UniversalAccount memory _id = UniversalAccount({CHAIN: "ETHEREUM", owner: ownerBytes});
 
@@ -153,7 +371,6 @@ contract UEAFactoryTest is Test {
         assertEq(ueaAddress, computedAddress);
     }
 
-    // Test deployment of smart account with NON-EVM
     function testDeploymentCreate2NonEVM() public {
         UniversalAccount memory _id = UniversalAccount({CHAIN: "SOLANA", owner: ownerNonEVM});
 
@@ -163,7 +380,6 @@ contract UEAFactoryTest is Test {
         assertEq(ueaAddress, address(factory.computeUEA(_id)));
     }
 
-    // Test that the same account cannot be deployed twice with NON-EVM
     function testDeploymentTwiceNonEVM() public {
         UniversalAccount memory _id = UniversalAccount({CHAIN: "SOLANA", owner: ownerNonEVM});
 
@@ -173,7 +389,6 @@ contract UEAFactoryTest is Test {
         factory.deployUEA(_id);
     }
 
-    // Test that the computed address matches the deployed address with NON-EVM
     function testComputeUEAAddressNonEVM() public {
         UniversalAccount memory _id = UniversalAccount({CHAIN: "SOLANA", owner: ownerNonEVM});
 
@@ -186,7 +401,6 @@ contract UEAFactoryTest is Test {
         assertEq(ueaAddress, computedAddress);
     }
 
-    // Test missing implementation for a VM type
     function testMissingImplementation() public {
         bytes32 moveChainHash = keccak256(abi.encode("APTOS"));
         factory.registerNewChain(moveChainHash, MOVE_VM_HASH);
@@ -199,7 +413,6 @@ contract UEAFactoryTest is Test {
         factory.deployUEA(_id);
     }
 
-    // Test Multiple Chain Types with Same VM
     function testMultipleChainsSameVM() public {
         // Register two different chains with the same VM type (EVM)
         bytes32 ethereumChainHash = keccak256(abi.encode("ETHEREUM"));
@@ -238,7 +451,6 @@ contract UEAFactoryTest is Test {
         assertTrue(ethUEA != polyUEA);
     }
 
-    // Test Ownership Transfer
     function testOwnershipTransfer() public {
         address newOwner = makeAddr("newOwner");
 
@@ -263,7 +475,6 @@ contract UEAFactoryTest is Test {
         assertTrue(isRegistered);
     }
 
-    // Test Factory Lifecycle
     function testFactoryLifecycle() public {
         // Create multiple owners
         address[] memory owners = new address[](5);
@@ -313,7 +524,6 @@ contract UEAFactoryTest is Test {
         }
     }
 
-    // Test Chain Configuration Changes
     function testChainConfigChanges() public {
         // Create a new chain and register it
         bytes32 chainHash = keccak256(abi.encode("KOVAN"));
@@ -352,7 +562,6 @@ contract UEAFactoryTest is Test {
         assertTrue(factory.hasCode(initialUEA));
     }
 
-    // Test Address Prediction Accuracy
     function testAddressPredictionAccuracy() public {
         // Create a range of different keys
         for (uint256 i = 1; i <= 5; i++) {
@@ -372,7 +581,6 @@ contract UEAFactoryTest is Test {
         }
     }
 
-    // Test Mapping Consistency
     function testMappingConsistency() public {
         // Deploy a UEA
         UniversalAccount memory account = UniversalAccount({CHAIN: "ETHEREUM", owner: ownerBytes});
@@ -408,7 +616,6 @@ contract UEAFactoryTest is Test {
         assertFalse(isNewDeployed);
     }
 
-    // Test Factory State Verification
     function testFactoryStateVerification() public {
         // Register a new chain and implementation
         bytes32 chainHash = keccak256(abi.encode("KOVAN"));
@@ -443,7 +650,6 @@ contract UEAFactoryTest is Test {
         assertTrue(salt1 != otherSalt);
     }
 
-    // Test non-zero address has code detection
     function testHasCode() public {
         // Contract address should have code
         assertTrue(factory.hasCode(address(factory)));
@@ -458,7 +664,6 @@ contract UEAFactoryTest is Test {
         assertTrue(factory.hasCode(ueaAddress));
     }
 
-    // Test registering UEA with mismatched vmHash
     function testRegisterUEAWithMismatchedVMHash() public {
         // Create a new chain with EVM_HASH
         bytes32 chainHash = keccak256(abi.encode("ARBITRUM"));
@@ -469,16 +674,6 @@ contract UEAFactoryTest is Test {
         factory.registerUEA(chainHash, SVM_HASH, address(ueaEVMImpl));
     }
 
-    // Test trying to register the same chain twice
-    function testRegisterSameChainTwice() public {
-        // Try to register Ethereum chain again (already registered in setUp)
-        bytes32 chainHash = keccak256(abi.encode("ETHEREUM"));
-
-        vm.expectRevert(Errors.InvalidInputArgs.selector);
-        factory.registerNewChain(chainHash, EVM_HASH);
-    }
-
-    // Test handling different owner keys with the same chain
     function testDifferentOwnerKeysSameChain() public {
         // Create two different owner keys
         bytes memory owner1Key = abi.encodePacked(makeAddr("owner1"));
@@ -500,7 +695,6 @@ contract UEAFactoryTest is Test {
         assertEq(keccak256(factory.getOwnerForUEA(uea2)), keccak256(owner2Key));
     }
 
-    // Test using an unregistered VM hash with registerUEA
     function testUnregisteredVMHashInRegisterUEA() public {
         // Create a fake VM hash that doesn't exist
         bytes32 fakeVMHash = keccak256("FAKE_VM");
@@ -514,7 +708,6 @@ contract UEAFactoryTest is Test {
         factory.registerUEA(chainHash, fakeVMHash, address(ueaEVMImpl));
     }
 
-    // Test registering implementation for unregistered chain
     function testRegisterImplForUnregisteredChain() public {
         // Chain hash for unregistered chain
         bytes32 chainHash = keccak256(abi.encode("UNREGISTERED_CHAIN"));
@@ -524,7 +717,6 @@ contract UEAFactoryTest is Test {
         factory.registerUEA(chainHash, EVM_HASH, address(ueaEVMImpl));
     }
 
-    // Test re-registering an implementation for a VM type
     function testReRegisterImplementation() public {
         // Create new implementation
         UEA_EVM newImpl = new UEA_EVM();
