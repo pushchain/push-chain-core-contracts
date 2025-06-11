@@ -23,9 +23,9 @@ import {UniversalAccount} from "./libraries/Types.sol";
  *        each VM type hash is mapped to a corresponding UEA implementation contract address.
  *        This allows the factory to deploy the correct UEA implementation for different
  *        blockchain environments.
- *      - Chain identifiers: Simple chain names like "ETHEREUM", "POLYGON", or "SOLANA"
- *        (not chain IDs like "eip155:1") that are used to identify which blockchain
- *        an account belongs to. These chain names are hashed to produce chainHash values.
+ *      - Chain identifiers: These follow the CAIP-2 standard (e.g., "eip155:1" for Ethereum mainnet). 
+ *        These standardized chain IDs are used to identify which blockchain an account belongs to. 
+ *        The full identifier is hashed to produce a chainHash value for internal usage.
  *
  *      The contract uses OZ's Clones library to create deterministic addresses (CREATE2) for UEA instances.
  *      It keeps track of deployed UEAs and their corresponding user keys from external chains.
@@ -51,7 +51,7 @@ contract UEAFactoryV1 is Ownable, IUEAFactory {
 
     /**
      * @dev Returns the UEA implementation address for a given chain
-     * @param _chainHash The hash of the chain name
+     * @param _chainHash The hash of the chain identifier (e.g., keccak256(abi.encode("eip155:1")))
      * @return The UEA implementation address for the chain's VM type
      */
     function getUEA(bytes32 _chainHash) external view returns (address) {
@@ -61,7 +61,7 @@ contract UEAFactoryV1 is Ownable, IUEAFactory {
 
     /**
      * @dev Returns the VM type hash for a given chain hash and whether it's registered
-     * @param _chainHash The hash of the chain name
+     * @param _chainHash The hash of the chain identifier (e.g., keccak256(abi.encode("eip155:1")))
      * @return vmHash The VM type hash
      * @return isRegistered True if the chain is registered, false otherwise
      */
@@ -73,7 +73,7 @@ contract UEAFactoryV1 is Ownable, IUEAFactory {
 
     /**
      * @dev Registers a new chain with its VM type hash
-     * @param _chainHash The hash of the chain name to register (e.g., keccak256(abi.encode("ETHEREUM")))
+     * @param _chainHash The hash of the chain identifier to register (e.g., keccak256(abi.encode("eip155:1")))
      * @param _vmHash The VM type hash for this chain
      * @notice Can only be called by the contract owner
      * @notice Will revert if the chain is already registered or if VM type is invalid
@@ -112,7 +112,7 @@ contract UEAFactoryV1 is Ownable, IUEAFactory {
 
     /**
      * @dev Registers a UEA implementation for a specific VM type hash
-     * @param _chainHash The hash of the chain name (e.g., keccak256(abi.encode("ETHEREUM")))
+     * @param _chainHash The hash of the chain identifier (e.g., keccak256(abi.encode("eip155:1")))
      * @param _vmHash The VM type hash for this chain
      * @param _UEA The UEA implementation address
      * @notice Can only be called by the contract owner
@@ -169,7 +169,7 @@ contract UEAFactoryV1 is Ownable, IUEAFactory {
 
     /**
      * @dev Computes the address of a UEA before it is deployed
-     * @param _id The Universal Account information containing chain (e.g., "ETHEREUM") and owner key
+     * @param _id The Universal Account information containing chain identifier (e.g., "eip155:1") and owner key
      * @return The computed address of the UEA
      * @notice Will revert if the chain is not registered or if no UEA implementation
      *         is available for the chain's VM type

@@ -4,8 +4,8 @@ pragma solidity 0.8.26;
 
 // User Struct
 struct UniversalAccount {
-    string chain;
-    bytes owner;
+    string chain; // Chain identifier of the owner account (e.g., "eip155:1")
+    bytes owner; // Owner's public key or address in bytes format
 }
 
 // Signature verification types
