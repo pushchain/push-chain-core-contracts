@@ -70,7 +70,7 @@ interface IUEAFactory {
      * @param _uea The UEA address
      * @return The owner key associated with this UEA
      */
-    function getOwnerForUEA(address _uea) external view returns (bytes memory);
+    function getOriginForUEA(address _uea) external view returns (bytes memory);
 
     /**
      * @dev Returns the computed UEA address for a given Universal Account ID and deployment status
@@ -78,5 +78,5 @@ interface IUEAFactory {
      * @return uea The address of the UEA (computed deterministically)
      * @return isDeployed True if the UEA has already been deployed
      */
-    function getUEAForOwner(UniversalAccount memory _id) external view returns (address uea, bool isDeployed);
+    function getUEAForOrigin(UniversalAccount memory _id) external view returns (address uea, bool isDeployed);
 }

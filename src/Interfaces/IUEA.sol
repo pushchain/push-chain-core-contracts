@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 pragma solidity 0.8.26;
 
-import "../libraries/Types.sol";
+import {UniversalAccount, UniversalPayload} from "../libraries/Types.sol";
 
 /**
  * @title IUEA (Interface for Universal Executor Account)
@@ -26,7 +26,7 @@ interface IUEA {
     /**
      * @dev Initializes the UEA with the Universal Account information.
      * @param universalAccount The UniversalAccount struct containing:
-     *        - CHAIN: The name of the external chain (e.g., "ETHEREUM", "SOLANA")
+     *        - chain: The name of the external chain (e.g., "ETHEREUM", "SOLANA")
      *        - owner: The owner's address/public key from the external chain
      *
      * @notice This function can only be called once during deployment.
@@ -61,7 +61,7 @@ interface IUEA {
 
     /**
      * @dev Executes a cross-chain payload with the provided signature.
-     * @param payload The CrossChainPayload struct containing execution parameters:
+     * @param payload The UniversalPayload struct containing execution parameters:
      *        - to: Target contract address to call
      *        - value: Native token amount to send
      *        - data: Calldata for the function execution
@@ -84,5 +84,5 @@ interface IUEA {
      * If the deadline has passed, it reverts with ExpiredDeadline.
      * If the target contract execution fails, it reverts with ExecutionFailed or forwards the error message.
      */
-    function executePayload(CrossChainPayload calldata payload, bytes calldata signature) external;
+    function executePayload(UniversalPayload calldata payload, bytes calldata signature) external;
 }

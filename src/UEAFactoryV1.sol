@@ -5,9 +5,9 @@ import {IUEA} from "./Interfaces/IUEA.sol";
 import {Clones} from "@openzeppelin/contracts/proxy/Clones.sol";
 
 import {Errors} from "./libraries/Errors.sol";
-import {UniversalAccount} from "./libraries/Types.sol";
 import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
 import {IUEAFactory} from "./Interfaces/IUEAFactory.sol";
+import {UniversalAccount} from "./libraries/Types.sol";
 
 /**
  * @title UEAFactoryV1
@@ -147,7 +147,7 @@ contract UEAFactoryV1 is Ownable, IUEAFactory {
         }
 
         // Get the appropriate UEA Implementation based on VM type
-        bytes32 chainHash = keccak256(abi.encode(_id.CHAIN));
+        bytes32 chainHash = keccak256(abi.encode(_id.chain));
         (bytes32 vmHash, bool isRegistered) = getVMType(chainHash);
         if (!isRegistered) {
             revert Errors.InvalidInputArgs();
@@ -175,7 +175,7 @@ contract UEAFactoryV1 is Ownable, IUEAFactory {
      *         is available for the chain's VM type
      */
     function computeUEA(UniversalAccount memory _id) public view returns (address) {
-        bytes32 chainHash = keccak256(abi.encode(_id.CHAIN));
+        bytes32 chainHash = keccak256(abi.encode(_id.chain));
         (bytes32 vmHash, bool isRegistered) = getVMType(chainHash);
         if (!isRegistered) {
             revert Errors.InvalidInputArgs();
@@ -208,7 +208,7 @@ contract UEAFactoryV1 is Ownable, IUEAFactory {
      * @param _uea The UEA address
      * @return The owner key (UOA) associated with this UEA
      */
-    function getOwnerForUEA(address _uea) external view returns (bytes memory) {
+    function getOriginForUEA(address _uea) external view returns (bytes memory) {
         return UEA_to_UOA[_uea];
     }
 
@@ -218,7 +218,7 @@ contract UEAFactoryV1 is Ownable, IUEAFactory {
      * @return uea The address of the UEA (computed deterministically)
      * @return isDeployed True if the UEA has already been deployed
      */
-    function getUEAForOwner(UniversalAccount memory _id) external view returns (address uea, bool isDeployed) {
+    function getUEAForOrigin(UniversalAccount memory _id) external view returns (address uea, bool isDeployed) {
         // Generate salt from the UniversalAccount struct
         bytes32 salt = generateSalt(_id);
 

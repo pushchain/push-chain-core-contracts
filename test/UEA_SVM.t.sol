@@ -4,12 +4,12 @@ pragma solidity 0.8.26;
 import "forge-std/Test.sol";
 import "forge-std/console.sol";
 
+import "../src/libraries/Types.sol";
 import {Target} from "../src/mocks/Target.sol";
 import {UEAFactoryV1} from "../src/UEAFactoryV1.sol";
 import {UEA_SVM} from "../src/UEA/UEA_SVM.sol";
 import {Errors} from "../src/libraries/Errors.sol";
 import {IUEA} from "../src/Interfaces/IUEA.sol";
-import {UniversalAccount, CrossChainPayload, PUSH_CROSS_CHAIN_PAYLOAD_TYPEHASH} from "../src/libraries/Types.sol";
 
 contract UEA_SVMTest is Test {
     Target target;
@@ -40,7 +40,7 @@ contract UEA_SVMTest is Test {
     }
 
     modifier deploySvmSmartAccount() {
-        UniversalAccount memory _owner = UniversalAccount({CHAIN: "SOLANA", owner: ownerBytes});
+        UniversalAccount memory _owner = UniversalAccount({chain: "SOLANA", owner: ownerBytes});
 
         address smartAccountAddress = factory.deployUEA(_owner);
         svmSmartAccountInstance = UEA_SVM(payable(smartAccountAddress));
@@ -60,7 +60,7 @@ contract UEA_SVMTest is Test {
 
     function testUniversalAccount() public deploySvmSmartAccount {
         UniversalAccount memory account = svmSmartAccountInstance.universalAccount();
-        assertEq(account.CHAIN, "SOLANA");
+        assertEq(account.chain, "SOLANA");
         assertEq(account.owner, ownerBytes);
     }
 
@@ -115,14 +115,16 @@ contract UEA_SVMTest is Test {
     function testExecutionBasic() public deploySvmSmartAccount {
         uint256 previousNonce = svmSmartAccountInstance.nonce();
 
-        CrossChainPayload memory payload = CrossChainPayload({
+        UniversalPayload memory payload = UniversalPayload({
             to: address(target),
             value: 0,
             data: abi.encodeWithSignature("setMagicNumber(uint256)", 786),
             gasLimit: 1000000,
             maxFeePerGas: 0,
             nonce: 0,
-            deadline: block.timestamp + 1000
+            deadline: block.timestamp + 1000,
+            maxPriorityFeePerGas: 0,
+            sigType: SignatureType.signedVerification
         });
 
         bytes32 txHash = getCrosschainTxhash(svmSmartAccountInstance, payload);
@@ -148,22 +150,24 @@ contract UEA_SVMTest is Test {
         assertEq(previousNonce + 1, svmSmartAccountInstance.nonce(), "Nonce should have incremented");
     }
 
-    // Helper function for CrossChainPayload hash
-    function getCrosschainTxhash(UEA_SVM _smartAccountInstance, CrossChainPayload memory payload)
+    // Helper function for UniversalPayload hash
+    function getCrosschainTxhash(UEA_SVM _smartAccountInstance, UniversalPayload memory payload)
         internal
         view
         returns (bytes32)
     {
         bytes32 structHash = keccak256(
             abi.encode(
-                PUSH_CROSS_CHAIN_PAYLOAD_TYPEHASH,
+                UNIVERSAL_PAYLOAD_TYPEHASH,
                 payload.to,
                 payload.value,
                 keccak256(payload.data),
                 payload.gasLimit,
                 payload.maxFeePerGas,
+                payload.maxPriorityFeePerGas,
                 _smartAccountInstance.nonce(),
-                payload.deadline
+                payload.deadline,
+                uint8(payload.sigType)
             )
         );
 

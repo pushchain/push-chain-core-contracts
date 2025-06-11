@@ -7,11 +7,10 @@ import {Initializable} from "@openzeppelin/contracts/proxy/utils/Initializable.s
 import {ReentrancyGuard} from "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
 import {
     UniversalAccount,
-    CrossChainPayload,
+    UniversalPayload,
     DOMAIN_SEPARATOR_TYPEHASH,
-    PUSH_CROSS_CHAIN_PAYLOAD_TYPEHASH
+    UNIVERSAL_PAYLOAD_TYPEHASH
 } from "../libraries/Types.sol";
-
 /**
  * @title UEA_SVM (Universal Executor Account for SVM)
  * @dev Implementation of the IUEA interface for SVM-based external accounts.
@@ -87,7 +86,7 @@ contract UEA_SVM is Initializable, ReentrancyGuard, IUEA {
     /**
      * @inheritdoc IUEA
      */
-    function executePayload(CrossChainPayload calldata payload, bytes calldata signature) external nonReentrant {
+    function executePayload(UniversalPayload calldata payload, bytes calldata signature) external nonReentrant {
         bytes32 txHash = getTransactionHash(payload);
 
         if (!verifyPayloadSignature(txHash, signature)) {
@@ -119,7 +118,7 @@ contract UEA_SVM is Initializable, ReentrancyGuard, IUEA {
      * @param payload The payload to calculate the hash for.
      * @return bytes32 The transaction hash.
      */
-    function getTransactionHash(CrossChainPayload calldata payload) public view returns (bytes32) {
+    function getTransactionHash(UniversalPayload calldata payload) public view returns (bytes32) {
         if (payload.deadline > 0) {
             if (block.timestamp > payload.deadline) {
                 revert Errors.ExpiredDeadline();
@@ -128,14 +127,16 @@ contract UEA_SVM is Initializable, ReentrancyGuard, IUEA {
         // Calculate the hash of the payload using EIP-712
         bytes32 structHash = keccak256(
             abi.encode(
-                PUSH_CROSS_CHAIN_PAYLOAD_TYPEHASH,
+                UNIVERSAL_PAYLOAD_TYPEHASH,
                 payload.to,
                 payload.value,
                 keccak256(payload.data),
                 payload.gasLimit,
                 payload.maxFeePerGas,
+                payload.maxPriorityFeePerGas,
                 nonce,
-                payload.deadline
+                payload.deadline,
+                uint8(payload.sigType)
             )
         );
 

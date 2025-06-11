@@ -4,13 +4,13 @@ pragma solidity 0.8.26;
 import "forge-std/Test.sol";
 import "forge-std/console.sol";
 
+import "../src/libraries/Types.sol";
 import {Target} from "../src/mocks/Target.sol";
 import {UEAFactoryV1} from "../src/UEAFactoryV1.sol";
 import {ECDSA} from "@openzeppelin/contracts/utils/cryptography/ECDSA.sol";
 import {UEA_EVM} from "../src/UEA/UEA_EVM.sol";
 import {Errors} from "../src/libraries/Errors.sol";
 import {IUEA} from "../src/Interfaces/IUEA.sol";
-import {UniversalAccount, CrossChainPayload, PUSH_CROSS_CHAIN_PAYLOAD_TYPEHASH} from "../src/libraries/Types.sol";
 
 contract UEA_EVMTest is Test {
     Target target;
@@ -43,7 +43,7 @@ contract UEA_EVMTest is Test {
     }
 
     modifier deployEvmSmartAccount() {
-        UniversalAccount memory _owner = UniversalAccount({CHAIN: "ETHEREUM", owner: ownerBytes});
+        UniversalAccount memory _owner = UniversalAccount({chain: "ETHEREUM", owner: ownerBytes});
 
         address smartAccountAddress = factory.deployUEA(_owner);
         evmSmartAccountInstance = UEA_EVM(payable(smartAccountAddress));
@@ -57,12 +57,12 @@ contract UEA_EVMTest is Test {
 
     function testUniversalAccount() public deployEvmSmartAccount {
         UniversalAccount memory account = evmSmartAccountInstance.universalAccount();
-        assertEq(account.CHAIN, "ETHEREUM");
+        assertEq(account.chain, "ETHEREUM");
         assertEq(account.owner, ownerBytes);
     }
 
     function testDeploymentCreate2() public deployEvmSmartAccount {
-        UniversalAccount memory _owner = UniversalAccount({CHAIN: "ETHEREUM", owner: ownerBytes});
+        UniversalAccount memory _owner = UniversalAccount({chain: "ETHEREUM", owner: ownerBytes});
         bytes32 salt = factory.generateSalt(_owner);
         assertEq(address(evmSmartAccountInstance), address(factory.UOA_to_UEA(salt)));
         assertEq(address(evmSmartAccountInstance), address(factory.computeUEA(_owner)));
@@ -72,14 +72,16 @@ contract UEA_EVMTest is Test {
         // Prepare calldata for target contract
         uint256 previousNonce = evmSmartAccountInstance.nonce();
 
-        CrossChainPayload memory payload = CrossChainPayload({
+        UniversalPayload memory payload = UniversalPayload({
             to: address(target),
             value: 0,
             data: abi.encodeWithSignature("setMagicNumber(uint256)", 786),
             gasLimit: 1000000,
             maxFeePerGas: 0,
             nonce: 100, // Incorrect nonce
-            deadline: block.timestamp + 1000
+            deadline: block.timestamp + 1000,
+            maxPriorityFeePerGas: 0,
+            sigType: SignatureType.signedVerification
         });
 
         // Create a signature - Note: The nonce in the payload and the nonce used in getTransactionHash need to match
@@ -90,14 +92,16 @@ contract UEA_EVMTest is Test {
                 evmSmartAccountInstance.domainSeparator(),
                 keccak256(
                     abi.encode(
-                        PUSH_CROSS_CHAIN_PAYLOAD_TYPEHASH,
+                        UNIVERSAL_PAYLOAD_TYPEHASH,
                         payload.to,
                         payload.value,
                         keccak256(payload.data),
                         payload.gasLimit,
                         payload.maxFeePerGas,
+                        payload.maxPriorityFeePerGas,
                         payload.nonce, // Using payload nonce, not account nonce
-                        payload.deadline
+                        payload.deadline,
+                        uint8(payload.sigType)
                     )
                 )
             )
@@ -120,14 +124,16 @@ contract UEA_EVMTest is Test {
         // Prepare calldata for target contract
         uint256 previousNonce = evmSmartAccountInstance.nonce();
 
-        CrossChainPayload memory payload = CrossChainPayload({
+        UniversalPayload memory payload = UniversalPayload({
             to: address(target),
             value: 0,
             data: abi.encodeWithSignature("setMagicNumber(uint256)", 786),
             gasLimit: 1000000,
             maxFeePerGas: 0,
             nonce: 0,
-            deadline: block.timestamp + 1000
+            deadline: block.timestamp + 1000,
+            maxPriorityFeePerGas: 0,
+            sigType: SignatureType.signedVerification
         });
 
         bytes32 txHash = getCrosschainTxhash(evmSmartAccountInstance, payload);
@@ -150,14 +156,16 @@ contract UEA_EVMTest is Test {
 
     function testRevertWhenSameNonceUsed() public deployEvmSmartAccount {
         // First execution
-        CrossChainPayload memory payload = CrossChainPayload({
+        UniversalPayload memory payload = UniversalPayload({
             to: address(target),
             value: 0,
             data: abi.encodeWithSignature("setMagicNumber(uint256)", 786),
             gasLimit: 1000000,
             maxFeePerGas: 0,
             nonce: 0,
-            deadline: block.timestamp + 1000
+            deadline: block.timestamp + 1000,
+            maxPriorityFeePerGas: 0,
+            sigType: SignatureType.signedVerification
         });
 
         bytes32 txHash = getCrosschainTxhash(evmSmartAccountInstance, payload);
@@ -181,14 +189,16 @@ contract UEA_EVMTest is Test {
         // Increase timestamp to 100th block
         vm.warp(block.timestamp + 100);
 
-        CrossChainPayload memory payload = CrossChainPayload({
+        UniversalPayload memory payload = UniversalPayload({
             to: address(target),
             value: 0,
             data: abi.encodeWithSignature("setMagicNumber(uint256)", 786),
             gasLimit: 1000000,
             maxFeePerGas: 0,
             nonce: 0,
-            deadline: block.timestamp - 1 // Expired deadline
+            deadline: block.timestamp - 1, // Expired deadline
+            maxPriorityFeePerGas: 0,
+            sigType: SignatureType.signedVerification
         });
 
         bytes32 txHash = getCrosschainTxhash(evmSmartAccountInstance, payload);
@@ -200,14 +210,16 @@ contract UEA_EVMTest is Test {
     }
 
     function testRevertWhenInvalidSignature() public deployEvmSmartAccount {
-        CrossChainPayload memory payload = CrossChainPayload({
+        UniversalPayload memory payload = UniversalPayload({
             to: address(target),
             value: 0,
             data: abi.encodeWithSignature("setMagicNumber(uint256)", 786),
             gasLimit: 1000000,
             maxFeePerGas: 0,
             nonce: 0,
-            deadline: block.timestamp + 1000
+            deadline: block.timestamp + 1000,
+            maxPriorityFeePerGas: 0,
+            sigType: SignatureType.signedVerification
         });
 
         // Create an invalid signature
@@ -221,14 +233,16 @@ contract UEA_EVMTest is Test {
         // Fund the smart account
         vm.deal(address(evmSmartAccountInstance), 1 ether);
 
-        CrossChainPayload memory payload = CrossChainPayload({
+        UniversalPayload memory payload = UniversalPayload({
             to: address(target),
             value: 0.1 ether,
             data: abi.encodeWithSignature("setMagicNumberWithFee(uint256)", 999),
             gasLimit: 1000000,
             maxFeePerGas: 0,
             nonce: 0,
-            deadline: block.timestamp + 1000
+            deadline: block.timestamp + 1000,
+            maxPriorityFeePerGas: 0,
+            sigType: SignatureType.signedVerification
         });
 
         bytes32 txHash = getCrosschainTxhash(evmSmartAccountInstance, payload);
@@ -244,22 +258,24 @@ contract UEA_EVMTest is Test {
         assertEq(address(target).balance, 0.1 ether, "Target contract should have received 0.1 ETH");
     }
 
-    // Helper function for CrossChainPayload hash
-    function getCrosschainTxhash(UEA_EVM _smartAccountInstance, CrossChainPayload memory payload)
+    // Helper function for UniversalPayload hash
+    function getCrosschainTxhash(UEA_EVM _smartAccountInstance, UniversalPayload memory payload)
         internal
         view
         returns (bytes32)
     {
         bytes32 structHash = keccak256(
             abi.encode(
-                PUSH_CROSS_CHAIN_PAYLOAD_TYPEHASH,
+                UNIVERSAL_PAYLOAD_TYPEHASH,
                 payload.to,
                 payload.value,
                 keccak256(payload.data),
                 payload.gasLimit,
                 payload.maxFeePerGas,
+                payload.maxPriorityFeePerGas,
                 _smartAccountInstance.nonce(),
-                payload.deadline
+                payload.deadline,
+                uint8(payload.sigType)
             )
         );
 
