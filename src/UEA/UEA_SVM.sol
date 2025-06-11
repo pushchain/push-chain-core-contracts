@@ -22,7 +22,7 @@ contract UEA_SVM is Initializable, ReentrancyGuard, IUEA {
     UniversalAccount internal id;
     uint256 public nonce;
     string public constant VERSION = "0.1.0";
-    address public constant VERIFIER_PRECOMPILE = 0x0000000000000000000000000000000000000901;
+    address public constant VERIFIER_PRECOMPILE = 0x00000000000000000000000000000000000000ca;
 
     /// @custom:oz-upgrades-unsafe-allow constructor
     constructor() {
