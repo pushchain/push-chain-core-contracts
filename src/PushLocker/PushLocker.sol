@@ -25,7 +25,7 @@ contract PushLocker is
     event FundsAdded(
         address indexed user,
         bytes32 indexed transactionHash,
-        AmountInUSD indexed AmountInUSD
+        AmountInUSD AmountInUSD
     );
     event TokenRecovered(address indexed admin, uint256 indexed amount);
 

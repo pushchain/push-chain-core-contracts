@@ -39,7 +39,7 @@ contract DeploySmartAccountScript is Script {
         // 3. Deploy SmartAccount for EVM OWNER
         string memory caip = CAIP10.createCAIP10("eip155", "1", bob);
         bytes32 salt = keccak256(abi.encode(caip));
-        address verifierPrecompile = address(0);
+        address verifierPrecompile = 0x00000000000000000000000000000000000000ca;
 
         // Deploy SmartAccount via factory
         address smartAccountAddr = factory.deploySmartAccount(
