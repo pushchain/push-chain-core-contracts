@@ -5,7 +5,8 @@ import {IUEA} from "./Interfaces/IUEA.sol";
 import {Clones} from "@openzeppelin/contracts/proxy/Clones.sol";
 
 import {Errors} from "./libraries/Errors.sol";
-import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
+import {Initializable} from "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol";
+import {OwnableUpgradeable} from "@openzeppelin/contracts-upgradeable/access/OwnableUpgradeable.sol";
 import {IUEAFactory} from "./Interfaces/IUEAFactory.sol";
 import {UniversalAccount} from "./libraries/Types.sol";
 
@@ -32,7 +33,7 @@ import {UniversalAccount} from "./libraries/Types.sol";
  *
  * @notice Use this contract to deploy new UEA instances and compute their addresses deterministically.
  */
-contract UEAFactoryV1 is Ownable, IUEAFactory {
+contract UEAFactoryV1 is Initializable, OwnableUpgradeable, IUEAFactory {
     using Clones for address;
 
     /// @notice Maps VM type hashes to their corresponding UEA implementation addresses
@@ -47,7 +48,18 @@ contract UEAFactoryV1 is Ownable, IUEAFactory {
     /// @notice Maps chain identifiers to their registered VM type hashes
     mapping(bytes32 => bytes32) public CHAIN_to_VM;
 
-    constructor() Ownable(msg.sender) {}
+    /// @custom:oz-upgrades-unsafe-allow constructor
+    constructor() {
+        _disableInitializers();
+    }
+
+    /**
+     * @dev Initializes the contract setting the provided address as the initial owner.
+     * @param initialOwner The initial owner of the contract
+     */
+    function initialize(address initialOwner) public initializer {
+        __Ownable_init(initialOwner);
+    }
 
     /**
      * @dev Returns the UEA implementation address for a given chain

@@ -10,6 +10,7 @@ import {UEAFactoryV1} from "../src/UEAFactoryV1.sol";
 import {UEA_SVM} from "../src/UEA/UEA_SVM.sol";
 import {Errors} from "../src/libraries/Errors.sol";
 import {IUEA} from "../src/Interfaces/IUEA.sol";
+import {ERC1967Proxy} from "@openzeppelin/contracts/proxy/ERC1967/ERC1967Proxy.sol";
 
 contract UEA_SVMTest is Test {
     Target target;
@@ -22,13 +23,18 @@ contract UEA_SVMTest is Test {
 
     // Set up the test environment - SVM
     bytes ownerBytes = hex"e48f4e93ca594d3c5e09c3ad39c599bbd6e6a2937869f3456905f5aeb7c78a60"; // Placeholder Solana public key
-    address constant VERIFIER_PRECOMPILE = 0x0000000000000000000000000000000000000901;
+    address constant VERIFIER_PRECOMPILE = 0x00000000000000000000000000000000000000ca;
 
     function setUp() public {
         target = new Target();
 
-        // Deploy factory
-        factory = new UEAFactoryV1();
+        // Deploy the factory implementation
+        UEAFactoryV1 factoryImpl = new UEAFactoryV1();
+        
+        // Deploy and initialize the proxy
+        bytes memory initData = abi.encodeWithSelector(UEAFactoryV1.initialize.selector, address(this));
+        ERC1967Proxy proxy = new ERC1967Proxy(address(factoryImpl), initData);
+        factory = UEAFactoryV1(address(proxy));
 
         // Deploy SVM implementation
         svmSmartAccountImpl = new UEA_SVM();

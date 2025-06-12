@@ -11,6 +11,7 @@ import {ECDSA} from "@openzeppelin/contracts/utils/cryptography/ECDSA.sol";
 import {UEA_EVM} from "../src/UEA/UEA_EVM.sol";
 import {Errors} from "../src/libraries/Errors.sol";
 import {IUEA} from "../src/Interfaces/IUEA.sol";
+import {ERC1967Proxy} from "@openzeppelin/contracts/proxy/ERC1967/ERC1967Proxy.sol";
 
 contract UEA_EVMTest is Test {
     Target target;
@@ -30,8 +31,13 @@ contract UEA_EVMTest is Test {
         target = new Target();
         ueaEVMImpl = new UEA_EVM();
 
-        // Deploy factory
-        factory = new UEAFactoryV1();
+        // Deploy the factory implementation
+        UEAFactoryV1 factoryImpl = new UEAFactoryV1();
+        
+        // Deploy and initialize the proxy
+        bytes memory initData = abi.encodeWithSelector(UEAFactoryV1.initialize.selector, address(this));
+        ERC1967Proxy proxy = new ERC1967Proxy(address(factoryImpl), initData);
+        factory = UEAFactoryV1(address(proxy));
 
         (owner, ownerPK) = makeAddrAndKey("owner");
         ownerBytes = abi.encodePacked(owner);

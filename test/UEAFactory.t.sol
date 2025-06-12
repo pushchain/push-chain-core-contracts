@@ -11,7 +11,8 @@ import {UEA_EVM} from "../src/UEA/UEA_EVM.sol";
 import {UEA_SVM} from "../src/UEA/UEA_SVM.sol";
 import {Errors} from "../src/libraries/Errors.sol";
 import {IUEA} from "../src/Interfaces/IUEA.sol";
-import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
+import {OwnableUpgradeable} from "@openzeppelin/contracts-upgradeable/access/OwnableUpgradeable.sol";
+import {ERC1967Proxy} from "@openzeppelin/contracts/proxy/ERC1967/ERC1967Proxy.sol";
 
 contract UEAFactoryTest is Test {
     Target target;
@@ -54,8 +55,13 @@ contract UEAFactoryTest is Test {
         ueaEVMImpl = new UEA_EVM();
         ueaSVMImpl = new UEA_SVM();
 
-        // Deploy factory
-        factory = new UEAFactoryV1();
+        // Deploy the factory implementation
+        UEAFactoryV1 factoryImpl = new UEAFactoryV1();
+        
+        // Deploy and initialize the proxy
+        bytes memory initData = abi.encodeWithSelector(UEAFactoryV1.initialize.selector, deployer);
+        ERC1967Proxy proxy = new ERC1967Proxy(address(factoryImpl), initData);
+        factory = UEAFactoryV1(address(proxy));
 
         // Set up user and keys
         (owner, ownerPK) = makeAddrAndKey("owner");
@@ -326,7 +332,7 @@ contract UEAFactoryTest is Test {
     function testOwnershipFunctions() public {
         // Test that only owner can register implementations
         vm.prank(nonOwner);
-        vm.expectRevert(abi.encodeWithSelector(Ownable.OwnableUnauthorizedAccount.selector, nonOwner));
+        vm.expectRevert(abi.encodeWithSelector(OwnableUpgradeable.OwnableUnauthorizedAccount.selector, nonOwner));
 
         bytes32 chainHash = keccak256(abi.encode("APTOS"));
         factory.registerNewChain(chainHash, MOVE_VM_HASH);
@@ -423,7 +429,7 @@ contract UEAFactoryTest is Test {
 
         // Try to register a chain with old owner, should fail
         bytes32 chainHash = keccak256(abi.encode("TestChain"));
-        vm.expectRevert(abi.encodeWithSelector(Ownable.OwnableUnauthorizedAccount.selector, address(this)));
+        vm.expectRevert(abi.encodeWithSelector(OwnableUpgradeable.OwnableUnauthorizedAccount.selector, address(this)));
         factory.registerNewChain(chainHash, MOVE_VM_HASH);
 
         // New owner should be able to register a chain
