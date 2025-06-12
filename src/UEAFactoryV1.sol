@@ -158,7 +158,7 @@ contract UEAFactoryV1 is Ownable, IUEAFactory {
             revert Errors.InvalidInputArgs();
         }
 
-        address payable _UEA = payable(_ueaImplementation.cloneDeterministic(salt));
+        address _UEA = _ueaImplementation.cloneDeterministic(salt);
         UOA_to_UEA[salt] = _UEA;
         UEA_to_UOA[_UEA] = _id.owner; // Store the inverse mapping
         IUEA(_UEA).initialize(_id);

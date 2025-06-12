@@ -3,7 +3,6 @@ pragma solidity 0.8.26;
 
 import {Errors} from "../libraries/Errors.sol";
 import {IUEA} from "../Interfaces/IUEA.sol";
-import {Initializable} from "@openzeppelin/contracts/proxy/utils/Initializable.sol";
 import {ReentrancyGuard} from "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
 import {
     UniversalAccount,
@@ -18,16 +17,17 @@ import {
  *      using Ed25519 signatures from Solana accounts.
  * @notice Use this contract as implementation logic for SVM-based UEAs.
  */
-contract UEA_SVM is Initializable, ReentrancyGuard, IUEA {
+contract UEA_SVM is ReentrancyGuard, IUEA {
+    // @notice The Universal Account information    
     UniversalAccount internal id;
+    // @notice Flag to track initialization status
+    bool private initialized;
+    // @notice The nonce for the UEA
     uint256 public nonce;
+    // @notice The version of the UEA
     string public constant VERSION = "0.1.0";
+    // @notice The verifier precompile address
     address public constant VERIFIER_PRECOMPILE = 0x00000000000000000000000000000000000000ca;
-
-    /// @custom:oz-upgrades-unsafe-allow constructor
-    constructor() {
-        _disableInitializers();
-    }
 
     /**
      * @dev Returns the domain separator for EIP-712 signing.
@@ -48,8 +48,13 @@ contract UEA_SVM is Initializable, ReentrancyGuard, IUEA {
     /**
      * @inheritdoc IUEA
      */
-    function initialize(UniversalAccount memory universalAccount) external initializer {
-        id = universalAccount;
+    function initialize(UniversalAccount memory _id) external {        
+        if (initialized) {
+            revert Errors.AlreadyInitialized();
+        }
+                initialized = true;
+        
+        id = _id;
     }
 
     /**

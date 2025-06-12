@@ -23,13 +23,15 @@ interface IUEA {
     event PayloadExecuted(bytes caller, address target, bytes data);
 
     //*** Functions ***//
+
+
     /**
      * @dev Initializes the UEA with the Universal Account information.
      * @param universalAccount The UniversalAccount struct containing:
-     *        - chain: The name of the external chain (e.g., "ETHEREUM", "SOLANA")
+     *        - chain: The name of the external chain (e.g., "eip155:1", "eip155:900")
      *        - owner: The owner's address/public key from the external chain
      *
-     * @notice This function can only be called once during deployment.
+     * @notice This function can only be called once during deployment via Factory.
      * The format of the owner field depends on the UEA type:
      * - For EVM-based UEAs: An Ethereum address (20 bytes)
      * - For SVM-based UEAs: A Solana public key (32 bytes)

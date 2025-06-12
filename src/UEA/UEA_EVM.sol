@@ -5,7 +5,6 @@ import "../libraries/Types.sol";
 import {Errors} from "../libraries/Errors.sol";
 import {IUEA} from "../Interfaces/IUEA.sol";
 import {ECDSA} from "@openzeppelin/contracts/utils/cryptography/ECDSA.sol";
-import {Initializable} from "@openzeppelin/contracts/proxy/utils/Initializable.sol";
 import {ReentrancyGuard} from "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
 import {
     UniversalAccount,
@@ -20,16 +19,28 @@ import {
  *      using ECDSA signatures from Ethereum-compatible accounts.
  * @notice Use this contract as implementation logic for EVM-based UEAs.
  */
-contract UEA_EVM is Initializable, ReentrancyGuard, IUEA {
+contract UEA_EVM is ReentrancyGuard, IUEA {
     using ECDSA for bytes32;
 
+    // @notice The Universal Account information
     UniversalAccount internal id;
+    // @notice Flag to track initialization status
+    bool private initialized;
+    // @notice The nonce for the UEA
     uint256 public nonce;
+    // @notice The version of the UEA
     string public constant VERSION = "0.1.0";
 
-    /// @custom:oz-upgrades-unsafe-allow constructor
-    constructor() {
-        _disableInitializers();
+    /**
+     * @inheritdoc IUEA
+     */
+    function initialize(UniversalAccount memory _id) external {        
+        if (initialized) {
+            revert Errors.AlreadyInitialized();
+        }
+                initialized = true;
+        
+        id = _id;
     }
 
     /**
@@ -46,13 +57,6 @@ contract UEA_EVM is Initializable, ReentrancyGuard, IUEA {
         /* solhint-enable no-inline-assembly */
 
         return keccak256(abi.encode(DOMAIN_SEPARATOR_TYPEHASH, keccak256(bytes(VERSION)), chainId, address(this)));
-    }
-
-    /**
-     * @inheritdoc IUEA
-     */
-    function initialize(UniversalAccount memory universalAccount) external initializer {
-        id = universalAccount;
     }
 
     /**
