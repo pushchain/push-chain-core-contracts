@@ -3,7 +3,7 @@ pragma solidity 0.8.26;
 
 /**
  * @title Errors
- * @dev Library for custom errors used across the smart account contracts
+ * @dev Library for custom errors used across the UEAFactoryV1 contract and its dependencies
  */
 library Errors {
     // Precompile related errors
@@ -28,4 +28,7 @@ library Errors {
 
     // Input validation errors
     error InvalidInputArgs();
+    
+    // Initialization errors
+    error AlreadyInitialized();
 }

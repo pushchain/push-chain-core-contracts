@@ -4,94 +4,120 @@ pragma solidity 0.8.26;
 import "forge-std/Test.sol";
 import "forge-std/console.sol";
 
+import "../src/libraries/Types.sol";
 import {Target} from "../src/mocks/Target.sol";
-import {FactoryV1} from "../src/FactoryV1.sol";
+import {UEAFactoryV1} from "../src/UEAFactoryV1.sol";
 import {ECDSA} from "@openzeppelin/contracts/utils/cryptography/ECDSA.sol";
-import {SmartAccountEVM} from "../src/smartAccounts/SmartAccountEVM.sol";
+import {UEA_EVM} from "../src/UEA/UEA_EVM.sol";
 import {Errors} from "../src/libraries/Errors.sol";
-import {ISmartAccount} from "../src/Interfaces/ISmartAccount.sol";
-import {AccountId, VM_TYPE, CrossChainPayload, PUSH_CROSS_CHAIN_PAYLOAD_TYPEHASH} from "../src/libraries/Types.sol";
+import {IUEA} from "../src/Interfaces/IUEA.sol";
+import {ERC1967Proxy} from "@openzeppelin/contracts/proxy/ERC1967/ERC1967Proxy.sol";
 
-contract SmartAccountEVMTest is Test {
+contract UEA_EVMTest is Test {
     Target target;
-    FactoryV1 factory;
-    SmartAccountEVM smartAccountEVMImpl;
-    SmartAccountEVM evmSmartAccountInstance;
+    UEAFactoryV1 factory;
+    UEA_EVM ueaEVMImpl;
+    UEA_EVM evmSmartAccountInstance;
+
+    // VM Hash constants
+    bytes32 constant EVM_HASH = keccak256("EVM");
 
     // Set up the test environment - EVM
     address owner;
     uint256 ownerPK;
-    bytes ownerKey;
-    VM_TYPE vmType = VM_TYPE.EVM;
+    bytes ownerBytes;
 
     function setUp() public {
         target = new Target();
-        smartAccountEVMImpl = new SmartAccountEVM();
+        ueaEVMImpl = new UEA_EVM();
 
-        // Create arrays for constructor
-        address[] memory implementations = new address[](1);
-        implementations[0] = address(smartAccountEVMImpl);
-
-        uint256[] memory vmTypes = new uint256[](1);
-        vmTypes[0] = uint256(VM_TYPE.EVM);
-
-        // Deploy factory with EVM implementation
-        factory = new FactoryV1(implementations, vmTypes);
+        // Deploy the factory implementation
+        UEAFactoryV1 factoryImpl = new UEAFactoryV1();
+        
+        // Deploy and initialize the proxy
+        bytes memory initData = abi.encodeWithSelector(UEAFactoryV1.initialize.selector, address(this));
+        ERC1967Proxy proxy = new ERC1967Proxy(address(factoryImpl), initData);
+        factory = UEAFactoryV1(address(proxy));
 
         (owner, ownerPK) = makeAddrAndKey("owner");
-        ownerKey = abi.encodePacked(owner);
+        ownerBytes = abi.encodePacked(owner);
+
+        // Register EVM chain and implementation
+        bytes32 evmChainHash = keccak256(abi.encode("ETHEREUM"));
+        factory.registerNewChain(evmChainHash, EVM_HASH);
+        factory.registerUEA(evmChainHash, EVM_HASH, address(ueaEVMImpl));
     }
 
     modifier deployEvmSmartAccount() {
-        AccountId memory _owner = AccountId({namespace: "eip155", chainId: "1", ownerKey: ownerKey, vmType: vmType});
+        UniversalAccount memory _owner = UniversalAccount({chain: "ETHEREUM", owner: ownerBytes});
 
-        address smartAccountAddress = factory.deploySmartAccount(_owner);
-        evmSmartAccountInstance = SmartAccountEVM(payable(smartAccountAddress));
+        address smartAccountAddress = factory.deployUEA(_owner);
+        evmSmartAccountInstance = UEA_EVM(payable(smartAccountAddress));
         _;
     }
 
-    function testImplementationAddress() public view {
-        assertEq(address(factory.getImplementation(VM_TYPE.EVM)), address(smartAccountEVMImpl));
+    function testUEAImplementation() public view {
+        bytes32 evmChainHash = keccak256(abi.encode("ETHEREUM"));
+        assertEq(address(factory.getUEA(evmChainHash)), address(ueaEVMImpl));
     }
 
-    function testAccountId() public deployEvmSmartAccount {
-        AccountId memory accountId = evmSmartAccountInstance.accountId();
-        assertEq(accountId.namespace, "eip155");
-        assertEq(accountId.chainId, "1");
-        assertEq(accountId.ownerKey, ownerKey);
-        assertEq(uint256(accountId.vmType), uint256(VM_TYPE.EVM));
+    function testUniversalAccount() public deployEvmSmartAccount {
+        UniversalAccount memory account = evmSmartAccountInstance.universalAccount();
+        assertEq(account.chain, "ETHEREUM");
+        assertEq(account.owner, ownerBytes);
     }
 
     function testDeploymentCreate2() public deployEvmSmartAccount {
-        AccountId memory _owner = AccountId({namespace: "eip155", chainId: "1", ownerKey: ownerKey, vmType: vmType});
-
-        assertEq(address(evmSmartAccountInstance), address(factory.userAccounts(ownerKey)));
-
-        assertEq(address(evmSmartAccountInstance), address(factory.computeSmartAccountAddress(_owner)));
+        UniversalAccount memory _owner = UniversalAccount({chain: "ETHEREUM", owner: ownerBytes});
+        bytes32 salt = factory.generateSalt(_owner);
+        assertEq(address(evmSmartAccountInstance), address(factory.UOA_to_UEA(salt)));
+        assertEq(address(evmSmartAccountInstance), address(factory.computeUEA(_owner)));
     }
 
-    function testRevert_WhenIncorrectNonce() public deployEvmSmartAccount {
+    function testRevertWhenIncorrectNonce() public deployEvmSmartAccount {
         // Prepare calldata for target contract
         uint256 previousNonce = evmSmartAccountInstance.nonce();
 
-        CrossChainPayload memory payload = CrossChainPayload({
-            target: address(target),
+        UniversalPayload memory payload = UniversalPayload({
+            to: address(target),
             value: 0,
             data: abi.encodeWithSignature("setMagicNumber(uint256)", 786),
             gasLimit: 1000000,
             maxFeePerGas: 0,
-            maxPriorityFeePerGas: 0,
             nonce: 100, // Incorrect nonce
-            deadline: block.timestamp + 1000
+            deadline: block.timestamp + 1000,
+            maxPriorityFeePerGas: 0,
+            sigType: SignatureType.signedVerification
         });
 
-        bytes32 txHash = getCrosschainTxhash(evmSmartAccountInstance, payload);
+        // Create a signature - Note: The nonce in the payload and the nonce used in getTransactionHash need to match
+        // for the test to work properly. We're getting the transaction hash with payload.nonce, not with the account's nonce
+        bytes32 txHash = keccak256(
+            abi.encodePacked(
+                "\x19\x01",
+                evmSmartAccountInstance.domainSeparator(),
+                keccak256(
+                    abi.encode(
+                        UNIVERSAL_PAYLOAD_TYPEHASH,
+                        payload.to,
+                        payload.value,
+                        keccak256(payload.data),
+                        payload.gasLimit,
+                        payload.maxFeePerGas,
+                        payload.maxPriorityFeePerGas,
+                        payload.nonce, // Using payload nonce, not account nonce
+                        payload.deadline,
+                        uint8(payload.sigType)
+                    )
+                )
+            )
+        );
 
-        // Sign the payload
         (uint8 v, bytes32 r, bytes32 s) = vm.sign(ownerPK, txHash);
         bytes memory signature = abi.encodePacked(r, s, v);
 
-        vm.expectRevert(abi.encodeWithSelector(Errors.InvalidEVMSignature.selector));
+        // The execution should fail because the account expects nonce to be 0, not 100
+        vm.expectRevert(Errors.InvalidEVMSignature.selector);
         evmSmartAccountInstance.executePayload(payload, signature);
 
         // Verify state hasn't changed
@@ -104,15 +130,16 @@ contract SmartAccountEVMTest is Test {
         // Prepare calldata for target contract
         uint256 previousNonce = evmSmartAccountInstance.nonce();
 
-        CrossChainPayload memory payload = CrossChainPayload({
-            target: address(target),
+        UniversalPayload memory payload = UniversalPayload({
+            to: address(target),
             value: 0,
             data: abi.encodeWithSignature("setMagicNumber(uint256)", 786),
             gasLimit: 1000000,
             maxFeePerGas: 0,
-            maxPriorityFeePerGas: 0,
             nonce: 0,
-            deadline: block.timestamp + 1000
+            deadline: block.timestamp + 1000,
+            maxPriorityFeePerGas: 0,
+            sigType: SignatureType.signedVerification
         });
 
         bytes32 txHash = getCrosschainTxhash(evmSmartAccountInstance, payload);
@@ -122,7 +149,7 @@ contract SmartAccountEVMTest is Test {
         bytes memory signature = abi.encodePacked(r, s, v);
 
         vm.expectEmit(true, true, true, true);
-        emit ISmartAccount.PayloadExecuted(ownerKey, payload.target, payload.data);
+        emit IUEA.PayloadExecuted(ownerBytes, payload.to, payload.data);
 
         // Execute the payload
         evmSmartAccountInstance.executePayload(payload, signature);
@@ -133,17 +160,18 @@ contract SmartAccountEVMTest is Test {
         assertEq(previousNonce + 1, evmSmartAccountInstance.nonce(), "Nonce should have incremented");
     }
 
-    function testRevert_WhenSameNonceUsed() public deployEvmSmartAccount {
+    function testRevertWhenSameNonceUsed() public deployEvmSmartAccount {
         // First execution
-        CrossChainPayload memory payload = CrossChainPayload({
-            target: address(target),
+        UniversalPayload memory payload = UniversalPayload({
+            to: address(target),
             value: 0,
             data: abi.encodeWithSignature("setMagicNumber(uint256)", 786),
             gasLimit: 1000000,
             maxFeePerGas: 0,
-            maxPriorityFeePerGas: 0,
             nonce: 0,
-            deadline: block.timestamp + 1000
+            deadline: block.timestamp + 1000,
+            maxPriorityFeePerGas: 0,
+            sigType: SignatureType.signedVerification
         });
 
         bytes32 txHash = getCrosschainTxhash(evmSmartAccountInstance, payload);
@@ -163,19 +191,20 @@ contract SmartAccountEVMTest is Test {
         assertEq(previousNonce, evmSmartAccountInstance.nonce(), "Nonce should not have changed");
     }
 
-    function testRevert_WhenExpiredDeadline() public deployEvmSmartAccount {
+    function testRevertWhenExpiredDeadline() public deployEvmSmartAccount {
         // Increase timestamp to 100th block
         vm.warp(block.timestamp + 100);
 
-        CrossChainPayload memory payload = CrossChainPayload({
-            target: address(target),
+        UniversalPayload memory payload = UniversalPayload({
+            to: address(target),
             value: 0,
             data: abi.encodeWithSignature("setMagicNumber(uint256)", 786),
             gasLimit: 1000000,
             maxFeePerGas: 0,
-            maxPriorityFeePerGas: 0,
             nonce: 0,
-            deadline: block.timestamp - 1 // Expired deadline
+            deadline: block.timestamp - 1, // Expired deadline
+            maxPriorityFeePerGas: 0,
+            sigType: SignatureType.signedVerification
         });
 
         bytes32 txHash = getCrosschainTxhash(evmSmartAccountInstance, payload);
@@ -186,16 +215,17 @@ contract SmartAccountEVMTest is Test {
         evmSmartAccountInstance.executePayload(payload, signature);
     }
 
-    function testRevert_WhenInvalidSignature() public deployEvmSmartAccount {
-        CrossChainPayload memory payload = CrossChainPayload({
-            target: address(target),
+    function testRevertWhenInvalidSignature() public deployEvmSmartAccount {
+        UniversalPayload memory payload = UniversalPayload({
+            to: address(target),
             value: 0,
             data: abi.encodeWithSignature("setMagicNumber(uint256)", 786),
             gasLimit: 1000000,
             maxFeePerGas: 0,
-            maxPriorityFeePerGas: 0,
             nonce: 0,
-            deadline: block.timestamp + 1000
+            deadline: block.timestamp + 1000,
+            maxPriorityFeePerGas: 0,
+            sigType: SignatureType.signedVerification
         });
 
         // Create an invalid signature
@@ -209,15 +239,16 @@ contract SmartAccountEVMTest is Test {
         // Fund the smart account
         vm.deal(address(evmSmartAccountInstance), 1 ether);
 
-        CrossChainPayload memory payload = CrossChainPayload({
-            target: address(target),
+        UniversalPayload memory payload = UniversalPayload({
+            to: address(target),
             value: 0.1 ether,
             data: abi.encodeWithSignature("setMagicNumberWithFee(uint256)", 999),
             gasLimit: 1000000,
             maxFeePerGas: 0,
-            maxPriorityFeePerGas: 0,
             nonce: 0,
-            deadline: block.timestamp + 1000
+            deadline: block.timestamp + 1000,
+            maxPriorityFeePerGas: 0,
+            sigType: SignatureType.signedVerification
         });
 
         bytes32 txHash = getCrosschainTxhash(evmSmartAccountInstance, payload);
@@ -233,26 +264,30 @@ contract SmartAccountEVMTest is Test {
         assertEq(address(target).balance, 0.1 ether, "Target contract should have received 0.1 ETH");
     }
 
-    // Helper function for CrossChainPayload hash
-    function getCrosschainTxhash(SmartAccountEVM _smartAccountInstance, CrossChainPayload memory payload)
+    // Helper function for UniversalPayload hash
+    function getCrosschainTxhash(UEA_EVM _smartAccountInstance, UniversalPayload memory payload)
         internal
         view
         returns (bytes32)
     {
         bytes32 structHash = keccak256(
             abi.encode(
-                PUSH_CROSS_CHAIN_PAYLOAD_TYPEHASH,
-                payload.target,
+                UNIVERSAL_PAYLOAD_TYPEHASH,
+                payload.to,
                 payload.value,
                 keccak256(payload.data),
                 payload.gasLimit,
                 payload.maxFeePerGas,
                 payload.maxPriorityFeePerGas,
-                payload.nonce,
-                payload.deadline
+                _smartAccountInstance.nonce(),
+                payload.deadline,
+                uint8(payload.sigType)
             )
         );
 
-        return keccak256(abi.encodePacked("\x19\x01", _smartAccountInstance.domainSeparator(), structHash));
+        // Calculate the domain separator using EIP-712
+        bytes32 _domainSeparator = _smartAccountInstance.domainSeparator();
+
+        return keccak256(abi.encodePacked("\x19\x01", _domainSeparator, structHash));
     }
 }
