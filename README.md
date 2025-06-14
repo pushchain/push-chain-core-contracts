@@ -1,4 +1,4 @@
-# Push Smart Account V1
+# Push Chain Contracts
 This repository contains the implementation of the SmartAccount architecture for PushChain's Fee Abstraction feature.
 
 The main objective is to enable users from external chains (EVM or NON-EVM) to:
