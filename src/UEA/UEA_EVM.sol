@@ -19,6 +19,7 @@ import {
  *      using ECDSA signatures from Ethereum-compatible accounts.
  * @notice Use this contract as implementation logic for EVM-based UEAs.
  */
+
 contract UEA_EVM is ReentrancyGuard, IUEA {
     using ECDSA for bytes32;
 
@@ -34,12 +35,12 @@ contract UEA_EVM is ReentrancyGuard, IUEA {
     /**
      * @inheritdoc IUEA
      */
-    function initialize(UniversalAccount memory _id) external {        
+    function initialize(UniversalAccount memory _id) external {
         if (initialized) {
             revert Errors.AlreadyInitialized();
         }
-                initialized = true;
-        
+        initialized = true;
+
         id = _id;
     }
 

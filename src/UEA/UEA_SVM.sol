@@ -17,8 +17,9 @@ import {
  *      using Ed25519 signatures from Solana accounts.
  * @notice Use this contract as implementation logic for SVM-based UEAs.
  */
+
 contract UEA_SVM is ReentrancyGuard, IUEA {
-    // @notice The Universal Account information    
+    // @notice The Universal Account information
     UniversalAccount internal id;
     // @notice Flag to track initialization status
     bool private initialized;
@@ -48,12 +49,12 @@ contract UEA_SVM is ReentrancyGuard, IUEA {
     /**
      * @inheritdoc IUEA
      */
-    function initialize(UniversalAccount memory _id) external {        
+    function initialize(UniversalAccount memory _id) external {
         if (initialized) {
             revert Errors.AlreadyInitialized();
         }
-                initialized = true;
-        
+        initialized = true;
+
         id = _id;
     }
 
