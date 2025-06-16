@@ -1,7 +1,6 @@
 // SPDX-License-Identifier: MIT
 pragma solidity 0.8.26;
 
-
 // User Struct
 struct UniversalAccount {
     string chain; // Chain identifier of the owner account (e.g., "eip155:1")

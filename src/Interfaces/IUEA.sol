@@ -24,7 +24,6 @@ interface IUEA {
 
     //*** Functions ***//
 
-
     /**
      * @dev Initializes the UEA with the Universal Account information.
      * @param universalAccount The UniversalAccount struct containing:

@@ -24,8 +24,8 @@ import {UniversalAccount} from "./libraries/Types.sol";
  *        each VM type hash is mapped to a corresponding UEA implementation contract address.
  *        This allows the factory to deploy the correct UEA implementation for different
  *        blockchain environments.
- *      - Chain identifiers: These follow the CAIP-2 standard (e.g., "eip155:1" for Ethereum mainnet). 
- *        These standardized chain IDs are used to identify which blockchain an account belongs to. 
+ *      - Chain identifiers: These follow the CAIP-2 standard (e.g., "eip155:1" for Ethereum mainnet).
+ *        These standardized chain IDs are used to identify which blockchain an account belongs to.
  *        The full identifier is hashed to produce a chainHash value for internal usage.
  *
  *      The contract uses OZ's Clones library to create deterministic addresses (CREATE2) for UEA instances.
