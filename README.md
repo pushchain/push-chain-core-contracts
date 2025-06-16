@@ -1,59 +1,48 @@
-# Push Chain Contracts
-This repository contains the implementation of the SmartAccount architecture for PushChain's Fee Abstraction feature.
+# Push Chain Universal Contracts
 
-The main objective is to enable users from external chains (EVM or NON-EVM) to:
+The Universal Gateway contracts are the main entry point to Push Chain from any external blockchain. These contracts are designed to be deployed on multiple EVM (Ethereum Virtual Machine), SVM (Solana Virtual Machine), and other blockchain platforms, serving as the core entry point for users of those chains to initiate transactions, lock funds, and interact with the Push ecosystem.
 
-* Interact with smart contracts on PushChain.
-* Have a dedicated Smart Account deterministically created for them
-* Verify their payload execution using signatures (EVM or NON-EVM signing mechanisms).
-* Re-use the same Smart Account across future interactions.
+## Overview
 
-The repo has two main contracts
+This repository acts as a modular repository that includes all gateway contracts for different blockchain ecosystems. The Universal Gateway contracts enable cross-chain interoperability by:
 
-## SmartAccountV1.sol
-A lightweight smart contract acting as the user's Smart Account on PushChain.
+1. Accepting native tokens (e.g., ETH, SOL) or other tokens from users
+2. Converting them to stablecoins when necessary
+3. Recording transaction details with USD value for cross-chain verification
+4. Providing admin functionality for token recovery and contract upgrades
 
-Core Features:
-* OwnerKey	Stored key of user (bytes) — EVM address or Non-EVM pubkey
-
-* VerifierPrecompile	Verifier address to validate NON-EVM signatures
-
-* `executePayload()`	Verify signature, then call target contract
-Signature Verification Flow:
-
-
-## FactoryV1.sol
-The contract responsible for deploying and managing Smart Accounts.
-
-Core Features:
-* create2 with Clones - Deterministic smart account deployment using userKey as salt.
-* tracks the deployed smart accounts for each user
-* `computeSmartAccountAddress()` - Returns predicted smart account address before deployment.
-
-> The Factory uses [EIP1167](https://eips.ethereum.org/EIPS/eip-1167) to create proxyies which significantly reduces deployment costs.
-
-### Architectural Flow
-Here’s how the system works:
+## Repository Structure
 
 ```
-
-            +-------------------------------------+
-            | SmartAccountImplementation (Logic) |
-            +-------------------------------------+
-                           ^
-                           | (delegatecall)
-                           |
--------------------------------------------------------
-| Proxy1 (Alice) | Proxy2 (Bob) | Proxy3 (Carol) |
-| Storage:       | Storage:     | Storage:       |
-| ownerKey=...   | ownerKey=... | ownerKey=...   |
-| VM_TYPE=...  | VM_TYPE=...| VM_TYPE=...  |
--------------------------------------------------------
+push-chain-universal-contracts/
+├── contracts/                    # Smart contracts for different blockchains
+│   ├── evm-gateway/              # Ethereum and EVM-compatible chain contracts
+│   └── svm-gateway/              # Solana and SVM-compatible chain contracts
+├── lib/                          # External libraries and dependencies
+└── tools/                        # Development and deployment tools
 ```
 
-### Deployment Flow:
-1. Factory contract is deployed with SmartAccountV1 as implementation.
-2. New SmartAccount is deployed per user using Minimal Proxy Contracts ( clones ) for each user.
-3. While the logic of SmartAccountV1 is used, the storage of Proxy is used for every specific user.
+## EVM Gateway
 
----
+The EVM Gateway contract is an upgradeable smart contract that handles ETH to USDT conversion using Uniswap and Chainlink price feeds. It's designed for Ethereum and EVM-compatible chains like Polygon, Arbitrum, Optimism, etc.
+
+Key features:
+- ETH to USDT conversion
+- Price oracle integration
+- Upgradeable architecture
+- Access control
+- Reentrancy protection
+
+For more details on EVM-Gateway, see the [EVM Gateway README](contracts/evm-gateway/README.md).
+
+## SVM Gateway
+
+The SVM Gateway contracts handle transactions on Solana and other SVM-compatible chains.
+
+## Development
+
+Each gateway implementation has its own development setup and requirements. Please refer to the specific README files in each directory for detailed instructions on setup, testing, and deployment.
+
+## License
+
+MIT
