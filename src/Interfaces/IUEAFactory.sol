@@ -68,9 +68,10 @@ interface IUEAFactory {
     /**
      * @dev Returns the owner key (UOA) for a given UEA address
      * @param _uea The UEA address
-     * @return The owner key associated with this UEA
+     * @return account The Universal Account information associated with this UEA
+     * @return isNative True if the address is a native EOA, false if it's a UEA
      */
-    function getOriginForUEA(address _uea) external view returns (bytes memory);
+    function getOriginForUEA(address _uea) external view returns (UniversalAccount memory account, bool isNative);
 
     /**
      * @dev Returns the computed UEA address for a given Universal Account ID and deployment status

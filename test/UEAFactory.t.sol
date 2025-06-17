@@ -194,7 +194,10 @@ contract UEAFactoryTest is Test {
         assertTrue(factory.hasCode(ueaAddress));
 
         // Check the owner
-        assertEq(factory.getOriginForUEA(ueaAddress), ownerBytes);
+        (UniversalAccount memory retrievedAccount, bool isNative) = factory.getOriginForUEA(ueaAddress);
+        assertEq(keccak256(abi.encode(retrievedAccount.chain)), keccak256(abi.encode(_id.chain)));
+        assertEq(keccak256(retrievedAccount.owner), keccak256(_id.owner));
+        assertFalse(isNative);
     }
 
     function testRevertWhenDeployingUEAForUnregisteredChain() public {
@@ -304,7 +307,10 @@ contract UEAFactoryTest is Test {
 
             address ueaAddress = factory.deployUEA(_id);
             assertTrue(factory.hasCode(ueaAddress));
-            assertEq(factory.getOriginForUEA(ueaAddress), ownerBytes);
+            
+            (UniversalAccount memory retrievedAccount, bool isNative) = factory.getOriginForUEA(ueaAddress);
+            assertEq(keccak256(retrievedAccount.owner), keccak256(ownerBytes));
+            assertFalse(isNative);
         }
     }
 
@@ -321,12 +327,18 @@ contract UEAFactoryTest is Test {
         UniversalAccount memory newAccount = UniversalAccount({chain: "ETHEREUM", owner: newOwnerBytes});
 
         // The owner mapping can't be changed - a new UEA would need to be deployed
-        assertEq(factory.getOriginForUEA(ueaAddress), ownerBytes);
+        (UniversalAccount memory retrievedAccount, bool isNative) = factory.getOriginForUEA(ueaAddress);
+        assertEq(keccak256(retrievedAccount.owner), keccak256(ownerBytes));
+        assertEq(keccak256(abi.encode(retrievedAccount.chain)), keccak256(abi.encode(_id.chain)));
+        assertFalse(isNative);
 
         // Deploy UEA for new owner - this should be a different address
         address newUEAAddress = factory.deployUEA(newAccount);
         assertNotEq(ueaAddress, newUEAAddress);
-        assertEq(factory.getOriginForUEA(newUEAAddress), newOwnerBytes);
+        (UniversalAccount memory newRetrievedAccount, bool isNewNative) = factory.getOriginForUEA(newUEAAddress);
+        assertEq(keccak256(newRetrievedAccount.owner), keccak256(newOwnerBytes));
+        assertEq(keccak256(abi.encode(newRetrievedAccount.chain)), keccak256(abi.encode(newAccount.chain)));
+        assertFalse(isNewNative);
     }
 
     function testOwnershipFunctions() public {
@@ -480,7 +492,10 @@ contract UEAFactoryTest is Test {
 
             // Verify mappings are consistent
             assertEq(factory.UOA_to_UEA(salt), deployedUEAs[i]);
-            assertEq(factory.getOriginForUEA(deployedUEAs[i]), ownerValues[i]);
+            (UniversalAccount memory retrievedAccount, bool isNative) = factory.getOriginForUEA(deployedUEAs[i]);
+            assertEq(keccak256(retrievedAccount.owner), keccak256(ownerValues[i]));
+            assertEq(keccak256(abi.encode(retrievedAccount.chain)), keccak256(abi.encode(chain)));
+            assertFalse(isNative);
         }
 
         // Verify all deployed accounts are retrievable
@@ -536,8 +551,10 @@ contract UEAFactoryTest is Test {
         address ueaAddress = factory.deployUEA(account);
 
         // Test getOriginForUEA
-        bytes memory retrievedOwner = factory.getOriginForUEA(ueaAddress);
-        assertEq(keccak256(retrievedOwner), keccak256(ownerBytes));
+        (UniversalAccount memory retrievedAccount, bool isNative) = factory.getOriginForUEA(ueaAddress);
+        assertEq(keccak256(retrievedAccount.owner), keccak256(ownerBytes));
+        assertEq(keccak256(abi.encode(retrievedAccount.chain)), keccak256(abi.encode(account.chain)));
+        assertFalse(isNative);
 
         // Test getUEAForOrigin
         (address retrievedUEA, bool isDeployed) = factory.getUEAForOrigin(account);
@@ -546,8 +563,10 @@ contract UEAFactoryTest is Test {
 
         // Test with non-existent UEA
         address randomAddr = makeAddr("random");
-        bytes memory emptyOwner = factory.getOriginForUEA(randomAddr);
-        assertEq(emptyOwner.length, 0);
+        (UniversalAccount memory randomAccount, bool isRandomNative) = factory.getOriginForUEA(randomAddr);
+        assertTrue(isRandomNative);
+        assertEq(randomAccount.owner.length, 0);
+        assertEq(bytes(randomAccount.chain).length, 0);
 
         // Test with non-existent owner key but predictable address
         (address newOwner, uint256 newOwnerPK) = makeAddrAndKey("newOwner");
@@ -595,7 +614,51 @@ contract UEAFactoryTest is Test {
         assertTrue(uea1 != uea2);
 
         // Verify the owner keys are mapped correctly
-        assertEq(keccak256(factory.getOriginForUEA(uea1)), keccak256(owner1Key));
-        assertEq(keccak256(factory.getOriginForUEA(uea2)), keccak256(owner2Key));
+        (UniversalAccount memory retrievedAccount1, bool isNative1) = factory.getOriginForUEA(uea1);
+        (UniversalAccount memory retrievedAccount2, bool isNative2) = factory.getOriginForUEA(uea2);
+        
+        assertEq(keccak256(retrievedAccount1.owner), keccak256(owner1Key));
+        assertEq(keccak256(retrievedAccount2.owner), keccak256(owner2Key));
+        assertFalse(isNative1);
+        assertFalse(isNative2);
+    }
+
+    // Test for native account detection with empty owner and chain
+    function testNativeAccountDetection() public {
+        // Create a random address that is not a UEA
+        address randomAddr = makeAddr("randomNative");
+        
+        // Check if it's correctly identified as a native account
+        (UniversalAccount memory account, bool isNative) = factory.getOriginForUEA(randomAddr);
+        
+        assertTrue(isNative);
+        // For native accounts, both owner and chain should be empty
+        assertEq(account.owner.length, 0);
+        assertEq(bytes(account.chain).length, 0);
+    }
+    
+    // Test for comparing native and UEA accounts
+    function testCompareNativeAndUEAAccounts() public {
+        // Create and deploy a UEA
+        bytes memory ownerBytes = abi.encodePacked(makeAddr("uea_owner"));
+        UniversalAccount memory uea_id = UniversalAccount({chain: "ETHEREUM", owner: ownerBytes});
+        address ueaAddress = factory.deployUEA(uea_id);
+        
+        // Create a random native address
+        address nativeAddr = makeAddr("native_user");
+        
+        // Get account info for both
+        (UniversalAccount memory ueaAccount, bool isUeaNative) = factory.getOriginForUEA(ueaAddress);
+        (UniversalAccount memory nativeAccount, bool isNative) = factory.getOriginForUEA(nativeAddr);
+        
+        // UEA should have proper data and not be native
+        assertFalse(isUeaNative);
+        assertEq(keccak256(ueaAccount.owner), keccak256(ownerBytes));
+        assertEq(keccak256(abi.encode(ueaAccount.chain)), keccak256(abi.encode("ETHEREUM")));
+        
+        // Native account should be marked as native and have empty data
+        assertTrue(isNative);
+        assertEq(nativeAccount.owner.length, 0);
+        assertEq(bytes(nativeAccount.chain).length, 0);
     }
 }
