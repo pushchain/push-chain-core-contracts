@@ -224,9 +224,6 @@ contract UEAFactoryV1 is Initializable, OwnableUpgradeable, IUEAFactory {
         if (account.owner.length == 0) {
             isNative = true;
             // We don't need to set any values for native accounts
-        } else {
-            // This is a UEA with a valid Universal Account
-            isNative = false;
         }
         
         return (account, isNative);
