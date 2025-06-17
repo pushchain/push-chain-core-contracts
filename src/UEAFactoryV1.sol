@@ -216,8 +216,8 @@ contract UEAFactoryV1 is Initializable, OwnableUpgradeable, IUEAFactory {
     }
 
     /// @inheritdoc IUEAFactory
-    function getOriginForUEA(address _uea) external view returns (UniversalAccount memory account, bool isNative) {
-        account = UEA_to_UOA[_uea];
+    function getOriginForUEA(address addr) external view returns (UniversalAccount memory account, bool isNative) {
+        account = UEA_to_UOA[addr];
         
         // If the address has no associated Universal Account (owner.length == 0), 
         // then it's likely a native EOA account on PUSH Chain
