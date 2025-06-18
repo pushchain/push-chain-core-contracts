@@ -67,10 +67,11 @@ interface IUEAFactory {
 
     /**
      * @dev Returns the owner key (UOA) for a given UEA address
-     * @param _uea The UEA address
-     * @return The owner key associated with this UEA
+     * @param addr Any given address ( msg.sender ) on push chain
+     * @return account The Universal Account information associated with this UEA
+     * @return isUEA True if the address addr is a UEA contract. Else it is a native EOA of PUSH chain (i.e., isUEA = false)
      */
-    function getOriginForUEA(address _uea) external view returns (bytes memory);
+    function getOriginForUEA(address addr) external view returns (UniversalAccount memory account, bool isUEA);
 
     /**
      * @dev Returns the computed UEA address for a given Universal Account ID and deployment status

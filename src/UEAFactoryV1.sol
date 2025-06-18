@@ -42,8 +42,8 @@ contract UEAFactoryV1 is Initializable, OwnableUpgradeable, IUEAFactory {
     /// @notice Maps UniversalAccount(hash) to their deployed UEA contract addresses
     mapping(bytes32 => address) public UOA_to_UEA;
 
-    /// @notice Maps UEA addresses to their owner keys
-    mapping(address => bytes) private UEA_to_UOA;
+    /// @notice Maps UEA addresses to their Universal Account information
+    mapping(address => UniversalAccount) private UEA_to_UOA;
 
     /// @notice Maps chain identifiers to their registered VM type hashes
     mapping(bytes32 => bytes32) public CHAIN_to_VM;
@@ -172,7 +172,7 @@ contract UEAFactoryV1 is Initializable, OwnableUpgradeable, IUEAFactory {
 
         address _UEA = _ueaImplementation.cloneDeterministic(salt);
         UOA_to_UEA[salt] = _UEA;
-        UEA_to_UOA[_UEA] = _id.owner; // Store the inverse mapping
+        UEA_to_UOA[_UEA] = _id; // Store the inverse mapping
         IUEA(_UEA).initialize(_id);
 
         emit UEADeployed(_UEA, _id.owner, chainHash);
@@ -215,21 +215,21 @@ contract UEAFactoryV1 is Initializable, OwnableUpgradeable, IUEAFactory {
         return size > 0;
     }
 
-    /**
-     * @dev Returns the UOA (owner key) for a given UEA address
-     * @param _uea The UEA address
-     * @return The owner key (UOA) associated with this UEA
-     */
-    function getOriginForUEA(address _uea) external view returns (bytes memory) {
-        return UEA_to_UOA[_uea];
+    /// @inheritdoc IUEAFactory
+    function getOriginForUEA(address addr) external view returns (UniversalAccount memory account, bool isUEA) {
+        account = UEA_to_UOA[addr];
+
+        // If the address has no associated Universal Account (owner.length == 0),
+        // then it's likely a native EOA account on PUSH Chain
+        // else it is a UEA contract
+        if (account.owner.length > 0) {
+            isUEA = true;
+        }
+
+        return (account, isUEA);
     }
 
-    /**
-     * @dev Returns the computed UEA address for a given Universal Account ID and deployment status
-     * @param _id The Universal Account information
-     * @return uea The address of the UEA (computed deterministically)
-     * @return isDeployed True if the UEA has already been deployed
-     */
+    /// @inheritdoc IUEAFactory
     function getUEAForOrigin(UniversalAccount memory _id) external view returns (address uea, bool isDeployed) {
         // Generate salt from the UniversalAccount struct
         bytes32 salt = generateSalt(_id);
