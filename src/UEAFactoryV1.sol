@@ -216,17 +216,17 @@ contract UEAFactoryV1 is Initializable, OwnableUpgradeable, IUEAFactory {
     }
 
     /// @inheritdoc IUEAFactory
-    function getOriginForUEA(address addr) external view returns (UniversalAccount memory account, bool isNative) {
+    function getOriginForUEA(address addr) external view returns (UniversalAccount memory account, bool isUEA) {
         account = UEA_to_UOA[addr];
 
         // If the address has no associated Universal Account (owner.length == 0),
         // then it's likely a native EOA account on PUSH Chain
         if (account.owner.length == 0) {
-            isNative = true;
+            isUEA = true;
             // We don't need to set any values for native accounts
         }
 
-        return (account, isNative);
+        return (account, isUEA);
     }
 
     /// @inheritdoc IUEAFactory
