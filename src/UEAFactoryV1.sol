@@ -221,7 +221,7 @@ contract UEAFactoryV1 is Initializable, OwnableUpgradeable, IUEAFactory {
 
         // If the address has no associated Universal Account (owner.length == 0),
         // then it's likely a native EOA account on PUSH Chain
-        if (account.owner.length == 0) {
+        if (account.owner.length > 0) {
             isUEA = true;
             // We don't need to set any values for native accounts
         }
