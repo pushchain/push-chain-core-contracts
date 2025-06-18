@@ -2,44 +2,47 @@
 pragma solidity ^0.8.20;
 
 import "forge-std/Script.sol";
-import {FactoryV1} from "../src/FactoryV1.sol";
-import {SmartAccountEVM} from "../src/smartAccounts/SmartAccountEVM.sol";
-import {SmartAccountSVM} from "../src/smartAccounts/SmartAccountSVM.sol";
-import {CAIP10} from "../test/utils/caip.sol";
-import {
-    VM_TYPE,
-    AccountId,
-    CrossChainPayload,
-    DOMAIN_SEPARATOR_TYPEHASH,
-    PUSH_CROSS_CHAIN_PAYLOAD_TYPEHASH
-} from "../src/libraries/Types.sol";
+import {UEAFactoryV1} from "../src/UEAFactoryV1.sol";
+import {UEA_EVM} from "../src/UEA/UEA_EVM.sol";
+import {UEA_SVM} from "../src/UEA/UEA_SVM.sol";
 
 contract DeploySmartAccountScript is Script {
     function run() external {
         vm.startBroadcast();
 
-        // 1. Deploy SmartAccountEVM implementation
-        SmartAccountEVM smartAccountEVMImpl = new SmartAccountEVM();
-        console.log("SmartAccountEVM deployed at:", address(smartAccountEVMImpl));
+        address owner = 0x778D3206374f8AC265728E18E3fE2Ae6b93E4ce4;
+        bytes32 evmHash = keccak256(abi.encode("EVM"));
+        bytes32 svmHash = keccak256(abi.encode("SVM"));
+        bytes32 evmSepoliaHash = keccak256(abi.encode("eip155:11155111"));
+        bytes32 solanaDevnetHash = keccak256(abi.encode("solana:EtWTRABZaYq6iMfeYKouRu166VU2xqa1"));
 
-        // 2. Deploy SmartAccountSVM implementation
-        SmartAccountSVM smartAccountSVMImpl = new SmartAccountSVM();
-        console.log("SmartAccountSVM deployed at:", address(smartAccountSVMImpl));
-
-        address[] memory implementations = new address[](2);
-        implementations[0] = address(smartAccountEVMImpl);
-        implementations[1] = address(smartAccountSVMImpl);
-
-        uint256[] memory vmTypes = new uint256[](2);
-        vmTypes[0] = uint256(VM_TYPE.EVM);
-        vmTypes[1] = uint256(VM_TYPE.SVM);
-
-        // 2. Deploy Factory with implementation
-        FactoryV1 factory = new FactoryV1(
-            implementations,
-            vmTypes
+        // Initialize the factory with the initial owner
+        UEAFactoryV1 factory = UEAFactoryV1(0x00000000000000000000000000000000000000eA);
+        // factory.registerMultipleImplementations(vmTypes, implementations);
+        address(factory).call(
+            abi.encodeWithSignature(
+                "initialize(address)",
+                owner
+            )
         );
-        console.log("FactoryV1 deployed at:", address(factory));
+
+        // Register the EVM and SVM implementations
+        factory.registerNewChain(evmSepoliaHash, evmHash);
+        factory.registerNewChain(solanaDevnetHash, svmHash);
+        console.log("EVM and SVM VMs registered in factory");
+
+        // 1. Deploy UEA_EVM implementation
+        UEA_EVM ueaEVMImpl = new UEA_EVM();
+        console.log("UEA_EVM deployed at:", address(ueaEVMImpl));
+
+        // // 2. Deploy UEA_SVM implementation
+        UEA_SVM ueaSVMImpl = new UEA_SVM();
+        console.log("UEA_SVM deployed at:", address(ueaSVMImpl));
+
+        // Register UEA implementations
+        factory.registerUEA(evmSepoliaHash, evmHash, address(ueaEVMImpl));
+        factory.registerUEA(solanaDevnetHash, svmHash, address(ueaSVMImpl));
+        console.log("UEA_EVM and UEA_SVM implementations registered in factory");
 
         vm.stopBroadcast();
     }
