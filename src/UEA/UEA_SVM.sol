@@ -142,7 +142,7 @@ contract UEA_SVM is ReentrancyGuard, IUEA {
                 payload.maxPriorityFeePerGas,
                 nonce,
                 payload.deadline,
-                uint8(payload.sigType)
+                uint8(payload.vType)
             )
         );
 
