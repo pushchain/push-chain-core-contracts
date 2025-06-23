@@ -5,7 +5,7 @@ import {Errors} from "../libraries/Errors.sol";
 import {IUEA} from "../Interfaces/IUEA.sol";
 import {ReentrancyGuard} from "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
 import {
-    UniversalAccount,
+    UniversalAccountId,
     UniversalPayload,
     DOMAIN_SEPARATOR_TYPEHASH,
     UNIVERSAL_PAYLOAD_TYPEHASH
@@ -20,7 +20,7 @@ import {
 
 contract UEA_SVM is ReentrancyGuard, IUEA {
     // @notice The Universal Account information
-    UniversalAccount internal id;
+    UniversalAccountId internal id;
     // @notice Flag to track initialization status
     bool private initialized;
     // @notice The nonce for the UEA
@@ -35,13 +35,7 @@ contract UEA_SVM is ReentrancyGuard, IUEA {
      * @return bytes32 The domain separator.
      */
     function domainSeparator() public view returns (bytes32) {
-        uint256 chainId;
-        /* solhint-disable no-inline-assembly */
-        /// @solidity memory-safe-assembly
-        assembly {
-            chainId := chainid()
-        }
-        /* solhint-enable no-inline-assembly */
+        uint256 chainId = id.chainId;
 
         return keccak256(abi.encode(DOMAIN_SEPARATOR_TYPEHASH, keccak256(bytes(VERSION)), chainId, address(this)));
     }
@@ -49,7 +43,7 @@ contract UEA_SVM is ReentrancyGuard, IUEA {
     /**
      * @inheritdoc IUEA
      */
-    function initialize(UniversalAccount memory _id) external {
+    function initialize(UniversalAccountId memory _id) external {
         if (initialized) {
             revert Errors.AlreadyInitialized();
         }
@@ -61,7 +55,7 @@ contract UEA_SVM is ReentrancyGuard, IUEA {
     /**
      * @inheritdoc IUEA
      */
-    function universalAccount() public view returns (UniversalAccount memory) {
+    function universalAccount() public view returns (UniversalAccountId memory) {
         return id;
     }
 

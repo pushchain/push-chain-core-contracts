@@ -8,25 +8,23 @@ import {Errors} from "./libraries/Errors.sol";
 import {Initializable} from "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol";
 import {OwnableUpgradeable} from "@openzeppelin/contracts-upgradeable/access/OwnableUpgradeable.sol";
 import {IUEAFactory} from "./Interfaces/IUEAFactory.sol";
-import {UniversalAccount} from "./libraries/Types.sol";
+import {UniversalAccountId} from "./libraries/Types.sol";
 
 /**
  * @title UEAFactoryV1
  * @dev A factory contract for deploying and managing Universal Executor Accounts (UEA) instances.
  *
- *      Key Terms:
- *      - UEA (Universal Executor Account): Smart contract deployed for external chain users
- *        to interact with PUSH chain. Each UEA acts as a proxy for its owner.
- *      - UOA (Universal Owner Address): The address of the external chain owner who
- *        owns a particular UEA. This key is used for signature verification in UEAs.
- *      - VM Types: Different virtual machine environments (EVM, SVM, etc.) that require
- *        specific implementation logic. Each chain is registered with its VM type hash, and
- *        each VM type hash is mapped to a corresponding UEA implementation contract address.
- *        This allows the factory to deploy the correct UEA implementation for different
- *        blockchain environments.
- *      - Chain identifiers: These follow the CAIP-2 standard (e.g., "eip155:1" for Ethereum mainnet).
- *        These standardized chain IDs are used to identify which blockchain an account belongs to.
- *        The full identifier is hashed to produce a chainHash value for internal usage.
+ *      - UEA (Universal Executor Account) : Smart contract deployed for external chain users to interact with PUSH chain.
+ *                                           Each UEA acts as a proxy for its owner.
+ *      - UOA (Universal Owner Address)   : The address of the external chain owner who owns a particular UEA.
+ *                                          This key is used for signature verification in UEAs.
+ *      - VM Types                        : Different virtual machine environments (EVM, SVM, etc.) require specific implementation logic. 
+ *                                          Each chain is registered with a VM_TYPE_HASH, and each VM_TYPE_HASH is mapped to a corresponding UEA.
+ *                                          This allows the factory to deploy the correct UEA implementation for different blockchain environments.
+ *      - Chain identifiers               : These follow the CAIP-2 standard (e.g., "eip155:1" for Ethereum mainnet).
+ *                                          The UniversalAccountId struct uses the chainNamespace and chainId for chain identification.
+ *                                          The full identifier is hashed to produce a chainHash value for internal usage.
+ *                                          Note: chainHash = keccak256(abi.encode(_id.chainNamespace, _id.chainId))
  *
  *      The contract uses OZ's Clones library to create deterministic addresses (CREATE2) for UEA instances.
  *      It keeps track of deployed UEAs and their corresponding user keys from external chains.
@@ -39,11 +37,11 @@ contract UEAFactoryV1 is Initializable, OwnableUpgradeable, IUEAFactory {
     /// @notice Maps VM type hashes to their corresponding UEA implementation addresses
     mapping(bytes32 => address) public UEA_VM;
 
-    /// @notice Maps UniversalAccount(hash) to their deployed UEA contract addresses
+    /// @notice Maps UniversalAccountId(hash) to their deployed UEA contract addresses
     mapping(bytes32 => address) public UOA_to_UEA;
 
     /// @notice Maps UEA addresses to their Universal Account information
-    mapping(address => UniversalAccount) private UEA_to_UOA;
+    mapping(address => UniversalAccountId) private UEA_to_UOA;
 
     /// @notice Maps chain identifiers to their registered VM type hashes
     mapping(bytes32 => bytes32) public CHAIN_to_VM;
@@ -152,14 +150,14 @@ contract UEAFactoryV1 is Initializable, OwnableUpgradeable, IUEAFactory {
      * @notice Will revert if the account already exists, the chain is not registered,
      *         or if no UEA implementation is available for the chain's VM type
      */
-    function deployUEA(UniversalAccount memory _id) external returns (address) {
+    function deployUEA(UniversalAccountId memory _id) external returns (address) {
         bytes32 salt = generateSalt(_id);
         if (UOA_to_UEA[salt] != address(0)) {
             revert Errors.AccountAlreadyExists();
         }
 
         // Get the appropriate UEA Implementation based on VM type
-        bytes32 chainHash = keccak256(abi.encode(_id.chain));
+        bytes32 chainHash = keccak256(abi.encode(_id.chainNamespace, _id.chainId));
         (bytes32 vmHash, bool isRegistered) = getVMType(chainHash);
         if (!isRegistered) {
             revert Errors.InvalidInputArgs();
@@ -175,7 +173,7 @@ contract UEAFactoryV1 is Initializable, OwnableUpgradeable, IUEAFactory {
         UEA_to_UOA[_UEA] = _id; // Store the inverse mapping
         IUEA(_UEA).initialize(_id);
 
-        emit UEADeployed(_UEA, _id.owner, chainHash);
+        emit UEADeployed(_UEA, _id.owner, _id.chainId, chainHash);
         return _UEA;
     }
 
@@ -186,8 +184,8 @@ contract UEAFactoryV1 is Initializable, OwnableUpgradeable, IUEAFactory {
      * @notice Will revert if the chain is not registered or if no UEA implementation
      *         is available for the chain's VM type
      */
-    function computeUEA(UniversalAccount memory _id) public view returns (address) {
-        bytes32 chainHash = keccak256(abi.encode(_id.chain));
+    function computeUEA(UniversalAccountId memory _id) public view returns (address) {
+        bytes32 chainHash = keccak256(abi.encode(_id.chainNamespace, _id.chainId));
         (bytes32 vmHash, bool isRegistered) = getVMType(chainHash);
         if (!isRegistered) {
             revert Errors.InvalidInputArgs();
@@ -216,7 +214,7 @@ contract UEAFactoryV1 is Initializable, OwnableUpgradeable, IUEAFactory {
     }
 
     /// @inheritdoc IUEAFactory
-    function getOriginForUEA(address addr) external view returns (UniversalAccount memory account, bool isUEA) {
+    function getOriginForUEA(address addr) external view returns (UniversalAccountId memory account, bool isUEA) {
         account = UEA_to_UOA[addr];
 
         // If the address has no associated Universal Account (owner.length == 0),
@@ -230,8 +228,8 @@ contract UEAFactoryV1 is Initializable, OwnableUpgradeable, IUEAFactory {
     }
 
     /// @inheritdoc IUEAFactory
-    function getUEAForOrigin(UniversalAccount memory _id) external view returns (address uea, bool isDeployed) {
-        // Generate salt from the UniversalAccount struct
+    function getUEAForOrigin(UniversalAccountId memory _id) external view returns (address uea, bool isDeployed) {
+        // Generate salt from the UniversalAccountId struct
         bytes32 salt = generateSalt(_id);
 
         // Check if we already have a mapping
@@ -255,7 +253,7 @@ contract UEAFactoryV1 is Initializable, OwnableUpgradeable, IUEAFactory {
      * @param _id The Universal Account information
      * @return A unique salt derived from the account information
      */
-    function generateSalt(UniversalAccount memory _id) public pure returns (bytes32) {
+    function generateSalt(UniversalAccountId memory _id) public pure returns (bytes32) {
         return keccak256(abi.encode(_id));
     }
 }

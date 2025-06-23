@@ -43,13 +43,13 @@ contract UEA_EVMTest is Test {
         ownerBytes = abi.encodePacked(owner);
 
         // Register EVM chain and implementation
-        bytes32 evmChainHash = keccak256(abi.encode("ETHEREUM"));
+        bytes32 evmChainHash = keccak256(abi.encode("eip155", 1));
         factory.registerNewChain(evmChainHash, EVM_HASH);
         factory.registerUEA(evmChainHash, EVM_HASH, address(ueaEVMImpl));
     }
 
     modifier deployEvmSmartAccount() {
-        UniversalAccount memory _owner = UniversalAccount({chain: "ETHEREUM", owner: ownerBytes});
+        UniversalAccountId memory _owner = UniversalAccountId({chainNamespace: "eip155", chainId: 1, owner: ownerBytes});
 
         address smartAccountAddress = factory.deployUEA(_owner);
         evmSmartAccountInstance = UEA_EVM(payable(smartAccountAddress));
@@ -57,18 +57,18 @@ contract UEA_EVMTest is Test {
     }
 
     function testUEAImplementation() public view {
-        bytes32 evmChainHash = keccak256(abi.encode("ETHEREUM"));
+        bytes32 evmChainHash = keccak256(abi.encode("eip155", 1));
         assertEq(address(factory.getUEA(evmChainHash)), address(ueaEVMImpl));
     }
 
     function testUniversalAccount() public deployEvmSmartAccount {
-        UniversalAccount memory account = evmSmartAccountInstance.universalAccount();
-        assertEq(account.chain, "ETHEREUM");
+        UniversalAccountId memory account = evmSmartAccountInstance.universalAccount();
+        assertEq(account.chainNamespace, "eip155");
         assertEq(account.owner, ownerBytes);
     }
 
     function testDeploymentCreate2() public deployEvmSmartAccount {
-        UniversalAccount memory _owner = UniversalAccount({chain: "ETHEREUM", owner: ownerBytes});
+        UniversalAccountId memory _owner = UniversalAccountId({chainNamespace: "eip155", chainId: 1, owner: ownerBytes});
         bytes32 salt = factory.generateSalt(_owner);
         assertEq(address(evmSmartAccountInstance), address(factory.UOA_to_UEA(salt)));
         assertEq(address(evmSmartAccountInstance), address(factory.computeUEA(_owner)));
