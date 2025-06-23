@@ -46,7 +46,8 @@ contract UEA_SVMTest is Test {
     }
 
     modifier deploySvmSmartAccount() {
-        UniversalAccountId memory _owner = UniversalAccountId({chainNamespace: "solana", chainId: 101, owner: ownerBytes});
+        UniversalAccountId memory _owner =
+            UniversalAccountId({chainNamespace: "solana", chainId: 101, owner: ownerBytes});
 
         address smartAccountAddress = factory.deployUEA(_owner);
         svmSmartAccountInstance = UEA_SVM(payable(smartAccountAddress));
