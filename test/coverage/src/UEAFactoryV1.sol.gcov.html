@@ -79,7 +79,7 @@
 <span id="L8"><span class="lineNum">       8</span>                 :             : import {Initializable} from &quot;@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol&quot;;</span>
 <span id="L9"><span class="lineNum">       9</span>                 :             : import {OwnableUpgradeable} from &quot;@openzeppelin/contracts-upgradeable/access/OwnableUpgradeable.sol&quot;;</span>
 <span id="L10"><span class="lineNum">      10</span>                 :             : import {IUEAFactory} from &quot;./Interfaces/IUEAFactory.sol&quot;;</span>
-<span id="L11"><span class="lineNum">      11</span>                 :             : import {UniversalAccountInfo} from &quot;./libraries/Types.sol&quot;;</span>
+<span id="L11"><span class="lineNum">      11</span>                 :             : import {UniversalAccountId} from &quot;./libraries/Types.sol&quot;;</span>
 <span id="L12"><span class="lineNum">      12</span>                 :             : </span>
 <span id="L13"><span class="lineNum">      13</span>                 :             : /**</span>
 <span id="L14"><span class="lineNum">      14</span>                 :             :  * @title UEAFactoryV1</span>
@@ -110,11 +110,11 @@
 <span id="L39"><span class="lineNum">      39</span>                 :             :     /// @notice Maps VM type hashes to their corresponding UEA implementation addresses</span>
 <span id="L40"><span class="lineNum">      40</span>                 :             :     mapping(bytes32 =&gt; address) public UEA_VM;</span>
 <span id="L41"><span class="lineNum">      41</span>                 :             : </span>
-<span id="L42"><span class="lineNum">      42</span>                 :             :     /// @notice Maps UniversalAccountInfo(hash) to their deployed UEA contract addresses</span>
+<span id="L42"><span class="lineNum">      42</span>                 :             :     /// @notice Maps UniversalAccountId(hash) to their deployed UEA contract addresses</span>
 <span id="L43"><span class="lineNum">      43</span>                 :             :     mapping(bytes32 =&gt; address) public UOA_to_UEA;</span>
 <span id="L44"><span class="lineNum">      44</span>                 :             : </span>
 <span id="L45"><span class="lineNum">      45</span>                 :             :     /// @notice Maps UEA addresses to their Universal Account information</span>
-<span id="L46"><span class="lineNum">      46</span>                 :             :     mapping(address =&gt; UniversalAccountInfo) private UEA_to_UOA;</span>
+<span id="L46"><span class="lineNum">      46</span>                 :             :     mapping(address =&gt; UniversalAccountId) private UEA_to_UOA;</span>
 <span id="L47"><span class="lineNum">      47</span>                 :             : </span>
 <span id="L48"><span class="lineNum">      48</span>                 :             :     /// @notice Maps chain identifiers to their registered VM type hashes</span>
 <span id="L49"><span class="lineNum">      49</span>                 :             :     mapping(bytes32 =&gt; bytes32) public CHAIN_to_VM;</span>
@@ -223,7 +223,7 @@
 <span id="L152"><span class="lineNum">     152</span>                 :             :      * @notice Will revert if the account already exists, the chain is not registered,</span>
 <span id="L153"><span class="lineNum">     153</span>                 :             :      *         or if no UEA implementation is available for the chain's VM type</span>
 <span id="L154"><span class="lineNum">     154</span>                 :             :      */</span>
-<span id="L155"><span class="lineNum">     155</span>                 :<span class="tlaGNC">          49 :     function deployUEA(UniversalAccountInfo memory _id) external returns (address) {</span></span>
+<span id="L155"><span class="lineNum">     155</span>                 :<span class="tlaGNC">          49 :     function deployUEA(UniversalAccountId memory _id) external returns (address) {</span></span>
 <span id="L156"><span class="lineNum">     156</span>                 :<span class="tlaGNC">          49 :         bytes32 salt = generateSalt(_id);</span></span>
 <span id="L157"><span class="lineNum">     157</span>            [<span class="tlaGBC" title="Branch 0 was taken 1 time"> + </span>]:<span class="tlaGNC">          49 :         if (UOA_to_UEA[salt] != address(0)) {</span></span>
 <span id="L158"><span class="lineNum">     158</span>                 :<span class="tlaGNC">           1 :             revert Errors.AccountAlreadyExists();</span></span>
@@ -257,7 +257,7 @@
 <span id="L186"><span class="lineNum">     186</span>                 :             :      * @notice Will revert if the chain is not registered or if no UEA implementation</span>
 <span id="L187"><span class="lineNum">     187</span>                 :             :      *         is available for the chain's VM type</span>
 <span id="L188"><span class="lineNum">     188</span>                 :             :      */</span>
-<span id="L189"><span class="lineNum">     189</span>                 :<span class="tlaGNC">           8 :     function computeUEA(UniversalAccountInfo memory _id) public view returns (address) {</span></span>
+<span id="L189"><span class="lineNum">     189</span>                 :<span class="tlaGNC">           8 :     function computeUEA(UniversalAccountId memory _id) public view returns (address) {</span></span>
 <span id="L190"><span class="lineNum">     190</span>                 :<span class="tlaGNC">          10 :         bytes32 chainHash = keccak256(abi.encode(_id.chain));</span></span>
 <span id="L191"><span class="lineNum">     191</span>                 :<span class="tlaGNC">          10 :         (bytes32 vmHash, bool isRegistered) = getVMType(chainHash);</span></span>
 <span id="L192"><span class="lineNum">     192</span>            [<span class="tlaUNC" title="Branch 0 was not executed"> # </span>]:<span class="tlaGNC">          10 :         if (!isRegistered) {</span></span>
@@ -287,7 +287,7 @@
 <span id="L216"><span class="lineNum">     216</span>                 :             :     }</span>
 <span id="L217"><span class="lineNum">     217</span>                 :             : </span>
 <span id="L218"><span class="lineNum">     218</span>                 :             :     /// @inheritdoc IUEAFactory</span>
-<span id="L219"><span class="lineNum">     219</span>                 :<span class="tlaGNC">          28 :     function getOriginForUEA(address addr) external view returns (UniversalAccountInfo memory account, bool isUEA) {</span></span>
+<span id="L219"><span class="lineNum">     219</span>                 :<span class="tlaGNC">          28 :     function getOriginForUEA(address addr) external view returns (UniversalAccountId memory account, bool isUEA) {</span></span>
 <span id="L220"><span class="lineNum">     220</span>                 :<span class="tlaGNC">          28 :         account = UEA_to_UOA[addr];</span></span>
 <span id="L221"><span class="lineNum">     221</span>                 :             : </span>
 <span id="L222"><span class="lineNum">     222</span>                 :             :         // If the address has no associated Universal Account (owner.length == 0),</span>
@@ -301,8 +301,8 @@
 <span id="L230"><span class="lineNum">     230</span>                 :             :     }</span>
 <span id="L231"><span class="lineNum">     231</span>                 :             : </span>
 <span id="L232"><span class="lineNum">     232</span>                 :             :     /// @inheritdoc IUEAFactory</span>
-<span id="L233"><span class="lineNum">     233</span>                 :<span class="tlaGNC">           4 :     function getUEAForOrigin(UniversalAccountInfo memory _id) external view returns (address uea, bool isDeployed) {</span></span>
-<span id="L234"><span class="lineNum">     234</span>                 :             :         // Generate salt from the UniversalAccountInfo struct</span>
+<span id="L233"><span class="lineNum">     233</span>                 :<span class="tlaGNC">           4 :     function getUEAForOrigin(UniversalAccountId memory _id) external view returns (address uea, bool isDeployed) {</span></span>
+<span id="L234"><span class="lineNum">     234</span>                 :             :         // Generate salt from the UniversalAccountId struct</span>
 <span id="L235"><span class="lineNum">     235</span>                 :<span class="tlaGNC">           4 :         bytes32 salt = generateSalt(_id);</span></span>
 <span id="L236"><span class="lineNum">     236</span>                 :             : </span>
 <span id="L237"><span class="lineNum">     237</span>                 :             :         // Check if we already have a mapping</span>
@@ -326,7 +326,7 @@
 <span id="L255"><span class="lineNum">     255</span>                 :             :      * @param _id The Universal Account information</span>
 <span id="L256"><span class="lineNum">     256</span>                 :             :      * @return A unique salt derived from the account information</span>
 <span id="L257"><span class="lineNum">     257</span>                 :             :      */</span>
-<span id="L258"><span class="lineNum">     258</span>                 :<span class="tlaGNC">          12 :     function generateSalt(UniversalAccountInfo memory _id) public pure returns (bytes32) {</span></span>
+<span id="L258"><span class="lineNum">     258</span>                 :<span class="tlaGNC">          12 :     function generateSalt(UniversalAccountId memory _id) public pure returns (bytes32) {</span></span>
 <span id="L259"><span class="lineNum">     259</span>                 :<span class="tlaGNC">          75 :         return keccak256(abi.encode(_id));</span></span>
 <span id="L260"><span class="lineNum">     260</span>                 :             :     }</span>
 <span id="L261"><span class="lineNum">     261</span>                 :             : }</span>

@@ -2,8 +2,8 @@
 pragma solidity 0.8.26;
 
 // User Struct
-struct UniversalAccountInfo {
-    string chain; // Chain identifier of the owner account (e.g., "eip155" or "solana")
+struct UniversalAccountId {
+    string chainNamespace; // Chain namespace identifier of the owner account (e.g., "eip155" or "solana")
     uint256 chainId; // Chain ID of the source chain of the owner of this UEA.
     bytes owner; // Owner's public key or address in bytes format
 }

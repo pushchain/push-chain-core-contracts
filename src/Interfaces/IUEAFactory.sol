@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 pragma solidity 0.8.26;
 
-import {UniversalAccountInfo} from "../libraries/Types.sol";
+import {UniversalAccountId} from "../libraries/Types.sol";
 
 /**
  * @title IUEAFactory
@@ -48,7 +48,7 @@ interface IUEAFactory {
      * @param _id The Universal Account information containing chain and owner key
      * @return The address of the deployed UEA
      */
-    function deployUEA(UniversalAccountInfo memory _id) external returns (address);
+    function deployUEA(UniversalAccountId memory _id) external returns (address);
 
     /**
      * @dev Returns the UEA implementation address for a given chain
@@ -71,7 +71,7 @@ interface IUEAFactory {
      * @return account The Universal Account information associated with this UEA
      * @return isUEA True if the address addr is a UEA contract. Else it is a native EOA of PUSH chain (i.e., isUEA = false)
      */
-    function getOriginForUEA(address addr) external view returns (UniversalAccountInfo memory account, bool isUEA);
+    function getOriginForUEA(address addr) external view returns (UniversalAccountId memory account, bool isUEA);
 
     /**
      * @dev Returns the computed UEA address for a given Universal Account ID and deployment status
@@ -79,5 +79,5 @@ interface IUEAFactory {
      * @return uea The address of the UEA (computed deterministically)
      * @return isDeployed True if the UEA has already been deployed
      */
-    function getUEAForOrigin(UniversalAccountInfo memory _id) external view returns (address uea, bool isDeployed);
+    function getUEAForOrigin(UniversalAccountId memory _id) external view returns (address uea, bool isDeployed);
 }

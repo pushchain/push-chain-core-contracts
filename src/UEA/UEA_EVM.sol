@@ -7,7 +7,7 @@ import {IUEA} from "../Interfaces/IUEA.sol";
 import {ECDSA} from "@openzeppelin/contracts/utils/cryptography/ECDSA.sol";
 import {ReentrancyGuard} from "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
 import {
-    UniversalAccountInfo,
+    UniversalAccountId,
     UniversalPayload,
     DOMAIN_SEPARATOR_TYPEHASH,
     UNIVERSAL_PAYLOAD_TYPEHASH
@@ -24,7 +24,7 @@ contract UEA_EVM is ReentrancyGuard, IUEA {
     using ECDSA for bytes32;
 
     // @notice The Universal Account information
-    UniversalAccountInfo internal id;
+    UniversalAccountId internal id;
     // @notice Flag to track initialization status
     bool private initialized;
     // @notice The nonce for the UEA
@@ -35,7 +35,7 @@ contract UEA_EVM is ReentrancyGuard, IUEA {
     /**
      * @inheritdoc IUEA
      */
-    function initialize(UniversalAccountInfo memory _id) external {
+    function initialize(UniversalAccountId memory _id) external {
         if (initialized) {
             revert Errors.AlreadyInitialized();
         }
@@ -57,7 +57,7 @@ contract UEA_EVM is ReentrancyGuard, IUEA {
     /**
      * @inheritdoc IUEA
      */
-    function universalAccount() public view returns (UniversalAccountInfo memory) {
+    function universalAccount() public view returns (UniversalAccountId memory) {
         return id;
     }
 
