@@ -40,9 +40,9 @@ The UEAFactoryV1 is the central contract responsible for deploying and managing 
 
 - `registerNewChain(bytes32 _chainHash, bytes32 _vmHash)`: Register a new chain with its VM type
 - `registerUEA(bytes32 _chainHash, bytes32 _vmHash, address _UEA)`: Register a UEA implementation for a VM type
-- `deployUEA(UniversalAccount memory _id)`: Deploy a new UEA for an external chain user
-- `computeUEA(UniversalAccount memory _id)`: Compute the address of a UEA before deployment
-- `getUEAForOrigin(UniversalAccount memory _id)`: Get the UEA address for a given external chain user
+- `deployUEA(UniversalAccountInfo memory _id)`: Deploy a new UEA for an external chain user
+- `computeUEA(UniversalAccountInfo memory _id)`: Compute the address of a UEA before deployment
+- `getUEAForOrigin(UniversalAccountInfo memory _id)`: Get the UEA address for a given external chain user
 
 ## UEA Implementations
 

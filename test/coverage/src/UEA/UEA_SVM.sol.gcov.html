@@ -76,7 +76,7 @@
 <span id="L5"><span class="lineNum">       5</span>                 :             : import {IUEA} from &quot;../Interfaces/IUEA.sol&quot;;</span>
 <span id="L6"><span class="lineNum">       6</span>                 :             : import {ReentrancyGuard} from &quot;@openzeppelin/contracts/utils/ReentrancyGuard.sol&quot;;</span>
 <span id="L7"><span class="lineNum">       7</span>                 :             : import {</span>
-<span id="L8"><span class="lineNum">       8</span>                 :             :     UniversalAccount,</span>
+<span id="L8"><span class="lineNum">       8</span>                 :             :     UniversalAccountInfo,</span>
 <span id="L9"><span class="lineNum">       9</span>                 :             :     UniversalPayload,</span>
 <span id="L10"><span class="lineNum">      10</span>                 :             :     DOMAIN_SEPARATOR_TYPEHASH,</span>
 <span id="L11"><span class="lineNum">      11</span>                 :             :     UNIVERSAL_PAYLOAD_TYPEHASH</span>
@@ -91,7 +91,7 @@
 <span id="L20"><span class="lineNum">      20</span>                 :             : </span>
 <span id="L21"><span class="lineNum">      21</span>                 :             : contract UEA_SVM is ReentrancyGuard, IUEA {</span>
 <span id="L22"><span class="lineNum">      22</span>                 :             :     // @notice The Universal Account information</span>
-<span id="L23"><span class="lineNum">      23</span>                 :             :     UniversalAccount internal id;</span>
+<span id="L23"><span class="lineNum">      23</span>                 :             :     UniversalAccountInfo internal id;</span>
 <span id="L24"><span class="lineNum">      24</span>                 :             :     // @notice Flag to track initialization status</span>
 <span id="L25"><span class="lineNum">      25</span>                 :             :     bool private initialized;</span>
 <span id="L26"><span class="lineNum">      26</span>                 :             :     // @notice The nonce for the UEA</span>
@@ -120,7 +120,7 @@
 <span id="L49"><span class="lineNum">      49</span>                 :             :     /**</span>
 <span id="L50"><span class="lineNum">      50</span>                 :             :      * @inheritdoc IUEA</span>
 <span id="L51"><span class="lineNum">      51</span>                 :             :      */</span>
-<span id="L52"><span class="lineNum">      52</span>                 :<span class="tlaGNC">           7 :     function initialize(UniversalAccount memory _id) external {</span></span>
+<span id="L52"><span class="lineNum">      52</span>                 :<span class="tlaGNC">           7 :     function initialize(UniversalAccountInfo memory _id) external {</span></span>
 <span id="L53"><span class="lineNum">      53</span>            [<span class="tlaUNC" title="Branch 0 was not executed"> # </span>]:<span class="tlaUNC">           0 :         if (initialized) {</span></span>
 <span id="L54"><span class="lineNum">      54</span>                 :<span class="tlaUNC">           0 :             revert Errors.AlreadyInitialized();</span></span>
 <span id="L55"><span class="lineNum">      55</span>                 :             :         }</span>
@@ -132,7 +132,7 @@
 <span id="L61"><span class="lineNum">      61</span>                 :             :     /**</span>
 <span id="L62"><span class="lineNum">      62</span>                 :             :      * @inheritdoc IUEA</span>
 <span id="L63"><span class="lineNum">      63</span>                 :             :      */</span>
-<span id="L64"><span class="lineNum">      64</span>                 :<span class="tlaGNC">           1 :     function universalAccount() public view returns (UniversalAccount memory) {</span></span>
+<span id="L64"><span class="lineNum">      64</span>                 :<span class="tlaGNC">           1 :     function universalAccount() public view returns (UniversalAccountInfo memory) {</span></span>
 <span id="L65"><span class="lineNum">      65</span>                 :<span class="tlaGNC">           1 :         return id;</span></span>
 <span id="L66"><span class="lineNum">      66</span>                 :             :     }</span>
 <span id="L67"><span class="lineNum">      67</span>                 :             : </span>

@@ -8,7 +8,7 @@ import {Errors} from "./libraries/Errors.sol";
 import {Initializable} from "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol";
 import {OwnableUpgradeable} from "@openzeppelin/contracts-upgradeable/access/OwnableUpgradeable.sol";
 import {IUEAFactory} from "./Interfaces/IUEAFactory.sol";
-import {UniversalAccount} from "./libraries/Types.sol";
+import {UniversalAccountInfo} from "./libraries/Types.sol";
 
 /**
  * @title UEAFactoryV1
@@ -39,11 +39,11 @@ contract UEAFactoryV1 is Initializable, OwnableUpgradeable, IUEAFactory {
     /// @notice Maps VM type hashes to their corresponding UEA implementation addresses
     mapping(bytes32 => address) public UEA_VM;
 
-    /// @notice Maps UniversalAccount(hash) to their deployed UEA contract addresses
+    /// @notice Maps UniversalAccountInfo(hash) to their deployed UEA contract addresses
     mapping(bytes32 => address) public UOA_to_UEA;
 
     /// @notice Maps UEA addresses to their Universal Account information
-    mapping(address => UniversalAccount) private UEA_to_UOA;
+    mapping(address => UniversalAccountInfo) private UEA_to_UOA;
 
     /// @notice Maps chain identifiers to their registered VM type hashes
     mapping(bytes32 => bytes32) public CHAIN_to_VM;
@@ -152,7 +152,7 @@ contract UEAFactoryV1 is Initializable, OwnableUpgradeable, IUEAFactory {
      * @notice Will revert if the account already exists, the chain is not registered,
      *         or if no UEA implementation is available for the chain's VM type
      */
-    function deployUEA(UniversalAccount memory _id) external returns (address) {
+    function deployUEA(UniversalAccountInfo memory _id) external returns (address) {
         bytes32 salt = generateSalt(_id);
         if (UOA_to_UEA[salt] != address(0)) {
             revert Errors.AccountAlreadyExists();
@@ -175,7 +175,7 @@ contract UEAFactoryV1 is Initializable, OwnableUpgradeable, IUEAFactory {
         UEA_to_UOA[_UEA] = _id; // Store the inverse mapping
         IUEA(_UEA).initialize(_id);
 
-        emit UEADeployed(_UEA, _id.owner, chainHash);
+        emit UEADeployed(_UEA, _id.owner, _id.chainId, chainHash);
         return _UEA;
     }
 
@@ -186,7 +186,7 @@ contract UEAFactoryV1 is Initializable, OwnableUpgradeable, IUEAFactory {
      * @notice Will revert if the chain is not registered or if no UEA implementation
      *         is available for the chain's VM type
      */
-    function computeUEA(UniversalAccount memory _id) public view returns (address) {
+    function computeUEA(UniversalAccountInfo memory _id) public view returns (address) {
         bytes32 chainHash = keccak256(abi.encode(_id.chain));
         (bytes32 vmHash, bool isRegistered) = getVMType(chainHash);
         if (!isRegistered) {
@@ -216,7 +216,7 @@ contract UEAFactoryV1 is Initializable, OwnableUpgradeable, IUEAFactory {
     }
 
     /// @inheritdoc IUEAFactory
-    function getOriginForUEA(address addr) external view returns (UniversalAccount memory account, bool isUEA) {
+    function getOriginForUEA(address addr) external view returns (UniversalAccountInfo memory account, bool isUEA) {
         account = UEA_to_UOA[addr];
 
         // If the address has no associated Universal Account (owner.length == 0),
@@ -230,8 +230,8 @@ contract UEAFactoryV1 is Initializable, OwnableUpgradeable, IUEAFactory {
     }
 
     /// @inheritdoc IUEAFactory
-    function getUEAForOrigin(UniversalAccount memory _id) external view returns (address uea, bool isDeployed) {
-        // Generate salt from the UniversalAccount struct
+    function getUEAForOrigin(UniversalAccountInfo memory _id) external view returns (address uea, bool isDeployed) {
+        // Generate salt from the UniversalAccountInfo struct
         bytes32 salt = generateSalt(_id);
 
         // Check if we already have a mapping
@@ -255,7 +255,7 @@ contract UEAFactoryV1 is Initializable, OwnableUpgradeable, IUEAFactory {
      * @param _id The Universal Account information
      * @return A unique salt derived from the account information
      */
-    function generateSalt(UniversalAccount memory _id) public pure returns (bytes32) {
+    function generateSalt(UniversalAccountInfo memory _id) public pure returns (bytes32) {
         return keccak256(abi.encode(_id));
     }
 }

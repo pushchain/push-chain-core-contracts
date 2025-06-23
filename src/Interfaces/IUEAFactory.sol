@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 pragma solidity 0.8.26;
 
-import {UniversalAccount} from "../libraries/Types.sol";
+import {UniversalAccountInfo} from "../libraries/Types.sol";
 
 /**
  * @title IUEAFactory
@@ -13,7 +13,7 @@ interface IUEAFactory {
     event ChainRegistered(bytes32 indexed chainHash, bytes32 vmHash);
 
     /// @notice Emitted when a new UEA is deployed for an external chain owner
-    event UEADeployed(address indexed UEA, bytes owner, bytes32 chainHash);
+    event UEADeployed(address indexed UEA, bytes owner, uint256 sourceChainId, bytes32 chainHash);
 
     /// @notice Emitted when a UEA implementation is registered for a specific VM type
     event UEARegistered(bytes32 indexed chainHash, address UEA_Logic, bytes32 vmHash);
@@ -48,7 +48,7 @@ interface IUEAFactory {
      * @param _id The Universal Account information containing chain and owner key
      * @return The address of the deployed UEA
      */
-    function deployUEA(UniversalAccount memory _id) external returns (address);
+    function deployUEA(UniversalAccountInfo memory _id) external returns (address);
 
     /**
      * @dev Returns the UEA implementation address for a given chain
@@ -71,7 +71,7 @@ interface IUEAFactory {
      * @return account The Universal Account information associated with this UEA
      * @return isUEA True if the address addr is a UEA contract. Else it is a native EOA of PUSH chain (i.e., isUEA = false)
      */
-    function getOriginForUEA(address addr) external view returns (UniversalAccount memory account, bool isUEA);
+    function getOriginForUEA(address addr) external view returns (UniversalAccountInfo memory account, bool isUEA);
 
     /**
      * @dev Returns the computed UEA address for a given Universal Account ID and deployment status
@@ -79,5 +79,5 @@ interface IUEAFactory {
      * @return uea The address of the UEA (computed deterministically)
      * @return isDeployed True if the UEA has already been deployed
      */
-    function getUEAForOrigin(UniversalAccount memory _id) external view returns (address uea, bool isDeployed);
+    function getUEAForOrigin(UniversalAccountInfo memory _id) external view returns (address uea, bool isDeployed);
 }

@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 pragma solidity 0.8.26;
 
-import {UniversalAccount, UniversalPayload} from "../libraries/Types.sol";
+import {UniversalAccountInfo, UniversalPayload} from "../libraries/Types.sol";
 
 /**
  * @title IUEA (Interface for Universal Executor Account)
@@ -26,7 +26,7 @@ interface IUEA {
 
     /**
      * @dev Initializes the UEA with the Universal Account information.
-     * @param universalAccount The UniversalAccount struct containing:
+     * @param universalAccount The UniversalAccountInfo struct containing:
      *        - chain: The name of the external chain (e.g., "eip155:1", "eip155:900")
      *        - owner: The owner's address/public key from the external chain
      *
@@ -35,13 +35,13 @@ interface IUEA {
      * - For EVM-based UEAs: An Ethereum address (20 bytes)
      * - For SVM-based UEAs: A Solana public key (32 bytes)
      */
-    function initialize(UniversalAccount memory universalAccount) external;
+    function initialize(UniversalAccountInfo memory universalAccount) external;
 
     /**
      * @dev Returns the Universal Account information for this UEA.
-     * @return The UniversalAccount struct containing the chain name and owner key.
+     * @return The UniversalAccountInfo struct containing the chain name and owner key.
      */
-    function universalAccount() external view returns (UniversalAccount memory);
+    function universalAccount() external view returns (UniversalAccountInfo memory);
 
     /**
      * @dev Verifies if a signature is valid for a given message hash.
@@ -51,11 +51,11 @@ interface IUEA {
      *
      * @notice Implementation behavior varies by UEA type:
      * - For EVM-based UEAs: Uses ECDSA recovery to verify that the signature was created by the
-     *   address stored in the UniversalAccount.owner field. The owner is expected to be an
+     *   address stored in the UniversalAccountInfo.owner field. The owner is expected to be an
      *   Ethereum address represented as bytes.
      *
      * - For SVM-based UEAs: Uses a precompiled contract to verify Ed25519 signatures, where the
-     *   UniversalAccount.owner field contains a Solana public key. The verification is done through
+     *   UniversalAccountInfo.owner field contains a Solana public key. The verification is done through
      *   a call to the VERIFIER_PRECOMPILE address.
      */
     function verifyPayloadSignature(bytes32 messageHash, bytes memory signature) external view returns (bool);

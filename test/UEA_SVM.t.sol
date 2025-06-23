@@ -40,13 +40,13 @@ contract UEA_SVMTest is Test {
         svmSmartAccountImpl = new UEA_SVM();
 
         // Register SVM chain and implementation
-        bytes32 svmChainHash = keccak256(abi.encode("SOLANA"));
+        bytes32 svmChainHash = keccak256(abi.encode("solana"));
         factory.registerNewChain(svmChainHash, SVM_HASH);
         factory.registerUEA(svmChainHash, SVM_HASH, address(svmSmartAccountImpl));
     }
 
     modifier deploySvmSmartAccount() {
-        UniversalAccount memory _owner = UniversalAccount({chain: "SOLANA", owner: ownerBytes});
+        UniversalAccountInfo memory _owner = UniversalAccountInfo({chain: "solana", chainId: 101, owner: ownerBytes});
 
         address smartAccountAddress = factory.deployUEA(_owner);
         svmSmartAccountInstance = UEA_SVM(payable(smartAccountAddress));
@@ -54,7 +54,7 @@ contract UEA_SVMTest is Test {
     }
 
     function testRegisterChain() public view {
-        bytes32 svmChainHash = keccak256(abi.encode("SOLANA"));
+        bytes32 svmChainHash = keccak256(abi.encode("solana"));
         (bytes32 vmHash, bool isRegistered) = factory.getVMType(svmChainHash);
         assertEq(vmHash, SVM_HASH);
         assertTrue(isRegistered);
@@ -65,8 +65,8 @@ contract UEA_SVMTest is Test {
     }
 
     function testUniversalAccount() public deploySvmSmartAccount {
-        UniversalAccount memory account = svmSmartAccountInstance.universalAccount();
-        assertEq(account.chain, "SOLANA");
+        UniversalAccountInfo memory account = svmSmartAccountInstance.universalAccount();
+        assertEq(account.chain, "solana");
         assertEq(account.owner, ownerBytes);
     }
 
