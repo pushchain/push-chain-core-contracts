@@ -130,7 +130,7 @@ contract UEA_SVMTest is Test {
             nonce: 0,
             deadline: block.timestamp + 1000,
             maxPriorityFeePerGas: 0,
-            sigType: SignatureType.signedVerification
+            vType: VerificationType.signedVerification
         });
 
         bytes32 txHash = getCrosschainTxhash(svmSmartAccountInstance, payload);
@@ -173,7 +173,7 @@ contract UEA_SVMTest is Test {
                 payload.maxPriorityFeePerGas,
                 _smartAccountInstance.nonce(),
                 payload.deadline,
-                uint8(payload.sigType)
+                uint8(payload.vType)
             )
         );
 
