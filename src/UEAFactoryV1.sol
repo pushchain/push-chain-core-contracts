@@ -14,19 +14,17 @@ import {UniversalAccountId} from "./libraries/Types.sol";
  * @title UEAFactoryV1
  * @dev A factory contract for deploying and managing Universal Executor Accounts (UEA) instances.
  *
- *      Key Terms:
- *      - UEA (Universal Executor Account): Smart contract deployed for external chain users
- *        to interact with PUSH chain. Each UEA acts as a proxy for its owner.
- *      - UOA (Universal Owner Address): The address of the external chain owner who
- *        owns a particular UEA. This key is used for signature verification in UEAs.
- *      - VM Types: Different virtual machine environments (EVM, SVM, etc.) that require
- *        specific implementation logic. Each chain is registered with its VM type hash, and
- *        each VM type hash is mapped to a corresponding UEA implementation contract address.
- *        This allows the factory to deploy the correct UEA implementation for different
- *        blockchain environments.
- *      - Chain identifiers: These follow the CAIP-2 standard (e.g., "eip155:1" for Ethereum mainnet).
- *        These standardized chain IDs are used to identify which blockchain an account belongs to.
- *        The full identifier is hashed to produce a chainHash value for internal usage.
+ *      - UEA (Universal Executor Account) : Smart contract deployed for external chain users to interact with PUSH chain.
+ *                                           Each UEA acts as a proxy for its owner.
+ *      - UOA (Universal Owner Address)   : The address of the external chain owner who owns a particular UEA.
+ *                                          This key is used for signature verification in UEAs.
+ *      - VM Types                        : Different virtual machine environments (EVM, SVM, etc.) require specific implementation logic. 
+ *                                          Each chain is registered with a VM_TYPE_HASH, and each VM_TYPE_HASH is mapped to a corresponding UEA.
+ *                                          This allows the factory to deploy the correct UEA implementation for different blockchain environments.
+ *      - Chain identifiers               : These follow the CAIP-2 standard (e.g., "eip155:1" for Ethereum mainnet).
+ *                                          The UniversalAccountId struct uses the chainNamespace and chainId for chain identification.
+ *                                          The full identifier is hashed to produce a chainHash value for internal usage.
+ *                                          Note: chainHash = keccak256(abi.encode(_id.chainNamespace, _id.chainId))
  *
  *      The contract uses OZ's Clones library to create deterministic addresses (CREATE2) for UEA instances.
  *      It keeps track of deployed UEAs and their corresponding user keys from external chains.
@@ -159,7 +157,7 @@ contract UEAFactoryV1 is Initializable, OwnableUpgradeable, IUEAFactory {
         }
 
         // Get the appropriate UEA Implementation based on VM type
-        bytes32 chainHash = keccak256(abi.encode(_id.chainNamespace));
+        bytes32 chainHash = keccak256(abi.encode(_id.chainNamespace, _id.chainId));
         (bytes32 vmHash, bool isRegistered) = getVMType(chainHash);
         if (!isRegistered) {
             revert Errors.InvalidInputArgs();
@@ -187,7 +185,7 @@ contract UEAFactoryV1 is Initializable, OwnableUpgradeable, IUEAFactory {
      *         is available for the chain's VM type
      */
     function computeUEA(UniversalAccountId memory _id) public view returns (address) {
-        bytes32 chainHash = keccak256(abi.encode(_id.chainNamespace));
+        bytes32 chainHash = keccak256(abi.encode(_id.chainNamespace, _id.chainId));
         (bytes32 vmHash, bool isRegistered) = getVMType(chainHash);
         if (!isRegistered) {
             revert Errors.InvalidInputArgs();

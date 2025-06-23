@@ -40,7 +40,7 @@ contract UEA_SVMTest is Test {
         svmSmartAccountImpl = new UEA_SVM();
 
         // Register SVM chain and implementation
-        bytes32 svmChainHash = keccak256(abi.encode("solana"));
+        bytes32 svmChainHash = keccak256(abi.encode("solana", 101));
         factory.registerNewChain(svmChainHash, SVM_HASH);
         factory.registerUEA(svmChainHash, SVM_HASH, address(svmSmartAccountImpl));
     }
@@ -55,7 +55,7 @@ contract UEA_SVMTest is Test {
     }
 
     function testRegisterChain() public view {
-        bytes32 svmChainHash = keccak256(abi.encode("solana"));
+        bytes32 svmChainHash = keccak256(abi.encode("solana", 101));
         (bytes32 vmHash, bool isRegistered) = factory.getVMType(svmChainHash);
         assertEq(vmHash, SVM_HASH);
         assertTrue(isRegistered);

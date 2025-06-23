@@ -74,9 +74,9 @@ contract UEAFactoryTest is Test {
         solanaChainId = "5eykt4UsFv8P8NJdTREpY1vzqKqZKvdp";
         solanaAddress = "HGyAQb8SeAE6X6RfhgMpGWZQuVYU8kgA5tKitaTrUHfh";
 
-        // Store chain hashes for reuse
-        ethereumChainHash = keccak256(abi.encode("eip155"));
-        solanaChainHash = keccak256(abi.encode("solana"));
+        // Store chain hashes for reuse - now includes both chainNamespace and chainId
+        ethereumChainHash = keccak256(abi.encode("eip155", 1));
+        solanaChainHash = keccak256(abi.encode("solana", 101));
 
         // Register chains
         factory.registerNewChain(ethereumChainHash, EVM_HASH);
@@ -88,7 +88,7 @@ contract UEAFactoryTest is Test {
     }
 
     function testRegisterNewChain() public {
-        bytes32 chainHash = keccak256(abi.encode("KOVAN"));
+        bytes32 chainHash = keccak256(abi.encode("KOVAN", 42));
         factory.registerNewChain(chainHash, EVM_HASH);
 
         // Verify the chain was registered
@@ -98,7 +98,7 @@ contract UEAFactoryTest is Test {
     }
 
     function testRegisterUEA() public {
-        bytes32 chainHash = keccak256(abi.encode("KOVAN"));
+        bytes32 chainHash = keccak256(abi.encode("KOVAN", 42));
         factory.registerNewChain(chainHash, EVM_HASH);
         factory.registerUEA(chainHash, EVM_HASH, address(ueaEVMImpl));
 
@@ -112,8 +112,8 @@ contract UEAFactoryTest is Test {
         address[] memory implementations = new address[](2);
 
         // Use different chains than those in setUp
-        chainHashes[0] = keccak256(abi.encode("KOVAN"));
-        chainHashes[1] = keccak256(abi.encode("METIS"));
+        chainHashes[0] = keccak256(abi.encode("KOVAN", 42));
+        chainHashes[1] = keccak256(abi.encode("METIS", 1088));
 
         vmHashes[0] = EVM_HASH;
         vmHashes[1] = EVM_HASH;
@@ -134,7 +134,7 @@ contract UEAFactoryTest is Test {
     }
 
     function testRevertWhenRegisteringSameChainTwice() public {
-        bytes32 chainHash = keccak256(abi.encode("KOVAN"));
+        bytes32 chainHash = keccak256(abi.encode("KOVAN", 42));
         factory.registerNewChain(chainHash, EVM_HASH);
 
         // Try to register the same chain again
@@ -143,7 +143,7 @@ contract UEAFactoryTest is Test {
     }
 
     function testRevertWhenRegisteringZeroAddressUEA() public {
-        bytes32 chainHash = keccak256(abi.encode("KOVAN"));
+        bytes32 chainHash = keccak256(abi.encode("KOVAN", 42));
         factory.registerNewChain(chainHash, EVM_HASH);
 
         // Try to register zero address as UEA
@@ -152,7 +152,7 @@ contract UEAFactoryTest is Test {
     }
 
     function testRevertWhenRegisteringUEAWithWrongVMHash() public {
-        bytes32 chainHash = keccak256(abi.encode("KOVAN"));
+        bytes32 chainHash = keccak256(abi.encode("KOVAN", 42));
         factory.registerNewChain(chainHash, EVM_HASH);
 
         // Try to register UEA with wrong VM hash
@@ -161,7 +161,7 @@ contract UEAFactoryTest is Test {
     }
 
     function testRevertWhenRegisteringUEAWithUnregisteredChain() public {
-        bytes32 chainHash = keccak256(abi.encode("UNREGISTERED"));
+        bytes32 chainHash = keccak256(abi.encode("UNREGISTERED", 999));
 
         // Try to register UEA for unregistered chain
         vm.expectRevert(Errors.InvalidInputArgs.selector);
@@ -174,8 +174,8 @@ contract UEAFactoryTest is Test {
         address[] memory implementations = new address[](1); // Mismatched length
 
         // Register chains first (use different chains than in setUp)
-        chainHashes[0] = keccak256(abi.encode("KOVAN"));
-        chainHashes[1] = keccak256(abi.encode("METIS"));
+        chainHashes[0] = keccak256(abi.encode("KOVAN", 42));
+        chainHashes[1] = keccak256(abi.encode("METIS", 1088));
 
         factory.registerNewChain(chainHashes[0], EVM_HASH);
         factory.registerNewChain(chainHashes[1], EVM_HASH);
@@ -212,7 +212,7 @@ contract UEAFactoryTest is Test {
 
     function testRevertWhenDeployingUEAWithNoImplementation() public {
         // Register chain but no implementation
-        bytes32 chainHash = keccak256(abi.encode("NEW_CHAIN"));
+        bytes32 chainHash = keccak256(abi.encode("NEW_CHAIN", 888));
         factory.registerNewChain(chainHash, MOVE_VM_HASH);
 
         bytes memory testOwnerBytes = abi.encodePacked(makeAddr("owner"));
@@ -358,7 +358,7 @@ contract UEAFactoryTest is Test {
         vm.prank(nonOwner);
         vm.expectRevert(abi.encodeWithSelector(OwnableUpgradeable.OwnableUnauthorizedAccount.selector, nonOwner));
 
-        bytes32 chainHash = keccak256(abi.encode("APTOS"));
+        bytes32 chainHash = keccak256(abi.encode("APTOS", 1));
         factory.registerNewChain(chainHash, MOVE_VM_HASH);
 
         // Test that owner can register implementations
@@ -393,7 +393,7 @@ contract UEAFactoryTest is Test {
     }
 
     function testMissingImplementation() public {
-        bytes32 moveChainHash = keccak256(abi.encode("APTOS"));
+        bytes32 moveChainHash = keccak256(abi.encode("APTOS", 1));
         factory.registerNewChain(moveChainHash, MOVE_VM_HASH);
 
         // Create an UniversalAccountId with VM type that has no implementation
@@ -406,8 +406,8 @@ contract UEAFactoryTest is Test {
 
     function testMultipleChainsSameVM() public {
         // Register two different chains with the same VM type (EVM)
-        bytes32 ethereumChainHashLocal = keccak256(abi.encode("eip155"));
-        bytes32 polygonChainHash = keccak256(abi.encode("POLYGON"));
+        bytes32 ethereumChainHashLocal = keccak256(abi.encode("eip155", 1));
+        bytes32 polygonChainHash = keccak256(abi.encode("POLYGON", 137));
 
         // Polygon is not registered yet
         factory.registerNewChain(polygonChainHash, EVM_HASH);
@@ -454,7 +454,7 @@ contract UEAFactoryTest is Test {
         assertEq(factory.owner(), newOwner);
 
         // Try to register a chain with old owner, should fail
-        bytes32 chainHash = keccak256(abi.encode("TestChain"));
+        bytes32 chainHash = keccak256(abi.encode("TestChain", 123));
         vm.expectRevert(abi.encodeWithSelector(OwnableUpgradeable.OwnableUnauthorizedAccount.selector, address(this)));
         factory.registerNewChain(chainHash, MOVE_VM_HASH);
 
@@ -486,7 +486,7 @@ contract UEAFactoryTest is Test {
 
         // Register chains that aren't already registered
         for (uint256 i = 1; i < 3; i++) {
-            bytes32 chainHash = keccak256(abi.encode(chains[i]));
+            bytes32 chainHash = keccak256(abi.encode(chains[i], i == 1 ? 137 : 56)); // Polygon (137) and BSC (56)
             // Check if chain is already registered
             (, bool isRegistered) = factory.getVMType(chainHash);
             if (!isRegistered) {
@@ -527,7 +527,7 @@ contract UEAFactoryTest is Test {
 
     function testChainConfigChanges() public {
         // Create a new chain and register it
-        bytes32 chainHash = keccak256(abi.encode("KOVAN"));
+        bytes32 chainHash = keccak256(abi.encode("KOVAN", 42));
         factory.registerNewChain(chainHash, EVM_HASH);
 
         // Deploy an account with the initial implementation
@@ -544,7 +544,7 @@ contract UEAFactoryTest is Test {
         UEA_EVM newImpl = new UEA_EVM();
 
         // Change implementation for EVM type
-        bytes32 evmChainHash = keccak256(abi.encode("eip155"));
+        bytes32 evmChainHash = keccak256(abi.encode("eip155", 1));
         factory.registerUEA(evmChainHash, EVM_HASH, address(newImpl));
 
         // Verify implementation has changed
