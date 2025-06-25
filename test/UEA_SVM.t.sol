@@ -12,7 +12,7 @@ import {Errors} from "../src/libraries/Errors.sol";
 import {IUEA} from "../src/Interfaces/IUEA.sol";
 import {ERC1967Proxy} from "@openzeppelin/contracts/proxy/ERC1967/ERC1967Proxy.sol";
 
-contract UEA_SVMTest is Test {
+contract UEASVMTest is Test {
     Target target;
     UEAFactoryV1 factory;
     UEA_SVM svmSmartAccountImpl;
@@ -40,14 +40,14 @@ contract UEA_SVMTest is Test {
         svmSmartAccountImpl = new UEA_SVM();
 
         // Register SVM chain and implementation
-        bytes32 svmChainHash = keccak256(abi.encode("solana", 101));
+        bytes32 svmChainHash = keccak256(abi.encode("solana", "101"));
         factory.registerNewChain(svmChainHash, SVM_HASH);
         factory.registerUEA(svmChainHash, SVM_HASH, address(svmSmartAccountImpl));
     }
 
     modifier deploySvmSmartAccount() {
         UniversalAccountId memory _owner =
-            UniversalAccountId({chainNamespace: "solana", chainId: 101, owner: ownerBytes});
+            UniversalAccountId({chainNamespace: "solana", chainId: "101", owner: ownerBytes});
 
         address smartAccountAddress = factory.deployUEA(_owner);
         svmSmartAccountInstance = UEA_SVM(payable(smartAccountAddress));
@@ -55,7 +55,7 @@ contract UEA_SVMTest is Test {
     }
 
     function testRegisterChain() public view {
-        bytes32 svmChainHash = keccak256(abi.encode("solana", 101));
+        bytes32 svmChainHash = keccak256(abi.encode("solana", "101"));
         (bytes32 vmHash, bool isRegistered) = factory.getVMType(svmChainHash);
         assertEq(vmHash, SVM_HASH);
         assertTrue(isRegistered);

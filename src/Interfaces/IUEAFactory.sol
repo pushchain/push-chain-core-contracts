@@ -13,7 +13,7 @@ interface IUEAFactory {
     event ChainRegistered(bytes32 indexed chainHash, bytes32 vmHash);
 
     /// @notice Emitted when a new UEA is deployed for an external chain owner
-    event UEADeployed(address indexed UEA, bytes owner, uint256 sourceChainId, bytes32 chainHash);
+    event UEADeployed(address indexed UEA, bytes owner, string sourceChainId, bytes32 chainHash);
 
     /// @notice Emitted when a UEA implementation is registered for a specific VM type
     event UEARegistered(bytes32 indexed chainHash, address UEA_Logic, bytes32 vmHash);
