@@ -26,4 +26,4 @@ library StringUtils {
             result = result * 10 + (c - 48);
         }
     }
-} 
+}

@@ -49,11 +49,8 @@ contract UEA_EVMTest is Test {
     }
 
     modifier deployEvmSmartAccount() {
-        UniversalAccountId memory _owner = UniversalAccountId({
-            chainNamespace: "eip155",
-            chainId: "1",
-            owner: ownerBytes
-        });
+        UniversalAccountId memory _owner =
+            UniversalAccountId({chainNamespace: "eip155", chainId: "1", owner: ownerBytes});
 
         address smartAccountAddress = factory.deployUEA(_owner);
         evmSmartAccountInstance = UEA_EVM(payable(smartAccountAddress));
@@ -72,11 +69,8 @@ contract UEA_EVMTest is Test {
     }
 
     function testDeploymentCreate2() public deployEvmSmartAccount {
-        UniversalAccountId memory _owner = UniversalAccountId({
-            chainNamespace: "eip155",
-            chainId: "1",
-            owner: ownerBytes
-        });
+        UniversalAccountId memory _owner =
+            UniversalAccountId({chainNamespace: "eip155", chainId: "1", owner: ownerBytes});
         bytes32 salt = factory.generateSalt(_owner);
         assertEq(address(evmSmartAccountInstance), address(factory.UOA_to_UEA(salt)));
         assertEq(address(evmSmartAccountInstance), address(factory.computeUEA(_owner)));

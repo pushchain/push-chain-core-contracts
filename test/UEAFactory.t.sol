@@ -188,7 +188,8 @@ contract UEAFactoryTest is Test {
     function testDeployUEA() public {
         // Use eip155 chain which is already registered in setUp
         bytes memory newOwnerBytes = abi.encodePacked(makeAddr("newowner"));
-        UniversalAccountId memory _id = UniversalAccountId({chainNamespace: "eip155", chainId: "1", owner: newOwnerBytes});
+        UniversalAccountId memory _id =
+            UniversalAccountId({chainNamespace: "eip155", chainId: "1", owner: newOwnerBytes});
 
         address ueaAddress = factory.deployUEA(_id);
         assertTrue(factory.hasCode(ueaAddress));
@@ -381,7 +382,8 @@ contract UEAFactoryTest is Test {
     }
 
     function testComputeUEAAddressNonEVM() public {
-        UniversalAccountId memory _id = UniversalAccountId({chainNamespace: "solana", chainId: "101", owner: ownerNonEVM});
+        UniversalAccountId memory _id =
+            UniversalAccountId({chainNamespace: "solana", chainId: "101", owner: ownerNonEVM});
 
         address ueaAddress = factory.deployUEA(_id);
         address computedAddress = factory.computeUEA(_id);

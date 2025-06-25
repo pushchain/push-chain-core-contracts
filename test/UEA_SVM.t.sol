@@ -73,7 +73,8 @@ contract UEASVMTest is Test {
 
     function testMockVerifySignature() public deploySvmSmartAccount {
         bytes32 messageHash = keccak256("test message");
-        bytes memory signature = hex"16d760987b403d7a27fd095375f2a1275c0734701ad248c3bf9bc8f69456d626c37b9ee1c13da511c71d9ed0f90789327f2c40f3e59e360f7c832b6b0d818d03";
+        bytes memory signature =
+            hex"16d760987b403d7a27fd095375f2a1275c0734701ad248c3bf9bc8f69456d626c37b9ee1c13da511c71d9ed0f90789327f2c40f3e59e360f7c832b6b0d818d03";
 
         // Mock the verifier precompile to return true for this signature
         vm.mockCall(
@@ -88,7 +89,8 @@ contract UEASVMTest is Test {
 
     function testVerifySignatureFalse() public deploySvmSmartAccount {
         bytes32 messageHash = keccak256("test message");
-        bytes memory signature = hex"16d760987b403d7a27fd095375f2a1275c0734701ad248c3bf9bc8f69456d626c37b9ee1c13da511c71d9ed0f90789327f2c40f3e59e360f7c832b6b0d818d03";
+        bytes memory signature =
+            hex"16d760987b403d7a27fd095375f2a1275c0734701ad248c3bf9bc8f69456d626c37b9ee1c13da511c71d9ed0f90789327f2c40f3e59e360f7c832b6b0d818d03";
 
         // Mock the verifier precompile to return false for this signature
         vm.mockCall(
@@ -103,7 +105,8 @@ contract UEASVMTest is Test {
 
     function testVerifySignatureRevert() public deploySvmSmartAccount {
         bytes32 messageHash = keccak256("test message");
-        bytes memory signature = hex"16d760987b403d7a27fd095375f2a1275c0734701ad248c3bf9bc8f69456d626c37b9ee1c13da511c71d9ed0f90789327f2c40f3e59e360f7c832b6b0d818d03";
+        bytes memory signature =
+            hex"16d760987b403d7a27fd095375f2a1275c0734701ad248c3bf9bc8f69456d626c37b9ee1c13da511c71d9ed0f90789327f2c40f3e59e360f7c832b6b0d818d03";
 
         // Mock the verifier precompile to revert
         vm.mockCallRevert(
@@ -132,7 +135,8 @@ contract UEASVMTest is Test {
         });
 
         bytes32 txHash = getCrosschainTxhash(svmSmartAccountInstance, payload);
-        bytes memory signature = hex"16d760987b403d7a27fd095375f2a1275c0734701ad248c3bf9bc8f69456d626c37b9ee1c13da511c71d9ed0f90789327f2c40f3e59e360f7c832b6b0d818d03";
+        bytes memory signature =
+            hex"16d760987b403d7a27fd095375f2a1275c0734701ad248c3bf9bc8f69456d626c37b9ee1c13da511c71d9ed0f90789327f2c40f3e59e360f7c832b6b0d818d03";
 
         // Mock the verification for this specific hash
         vm.mockCall(

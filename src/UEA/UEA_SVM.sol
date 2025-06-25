@@ -5,11 +5,7 @@ import {Errors} from "../libraries/Errors.sol";
 import {IUEA} from "../Interfaces/IUEA.sol";
 import {ReentrancyGuard} from "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
 import {StringUtils} from "../libraries/Utils.sol";
-import {
-    UniversalAccountId,
-    UniversalPayload,
-    UNIVERSAL_PAYLOAD_TYPEHASH
-} from "../libraries/Types.sol";
+import {UniversalAccountId, UniversalPayload, UNIVERSAL_PAYLOAD_TYPEHASH} from "../libraries/Types.sol";
 /**
  * @title UEA_SVM (Universal Executor Account for SVM)
  * @dev Implementation of the IUEA interface for SVM-based external accounts.
@@ -37,7 +33,8 @@ contract UEA_SVM is ReentrancyGuard, IUEA {
      * @return bytes32 The domain separator.
      */
     function domainSeparator() public view returns (bytes32) {
-        return keccak256(abi.encode(DOMAIN_SEPARATOR_TYPEHASH_SVM, keccak256(bytes(VERSION)), id.chainId, address(this)));
+        return
+            keccak256(abi.encode(DOMAIN_SEPARATOR_TYPEHASH_SVM, keccak256(bytes(VERSION)), id.chainId, address(this)));
     }
 
     /**

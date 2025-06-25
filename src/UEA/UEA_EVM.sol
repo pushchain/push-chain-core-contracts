@@ -7,11 +7,7 @@ import {IUEA} from "../Interfaces/IUEA.sol";
 import {ECDSA} from "@openzeppelin/contracts/utils/cryptography/ECDSA.sol";
 import {ReentrancyGuard} from "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
 import {StringUtils} from "../libraries/Utils.sol";
-import {
-    UniversalAccountId,
-    UniversalPayload,
-    UNIVERSAL_PAYLOAD_TYPEHASH
-} from "../libraries/Types.sol";
+import {UniversalAccountId, UniversalPayload, UNIVERSAL_PAYLOAD_TYPEHASH} from "../libraries/Types.sol";
 /**
  * @title UEA_EVM (Universal Executor Account for EVM)
  * @dev Implementation of the IUEA interface for EVM-based external accounts.

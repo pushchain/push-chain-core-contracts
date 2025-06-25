@@ -18,7 +18,7 @@ import {UniversalAccountId} from "./libraries/Types.sol";
  *                                           Each UEA acts as a proxy for its owner.
  *      - UOA (Universal Owner Address)   : The address of the external chain owner who owns a particular UEA.
  *                                          This key is used for signature verification in UEAs.
- *      - VM Types                        : Different virtual machine environments (EVM, SVM, etc.) require specific implementation logic. 
+ *      - VM Types                        : Different virtual machine environments (EVM, SVM, etc.) require specific implementation logic.
  *                                          Each chain is registered with a VM_TYPE_HASH, and each VM_TYPE_HASH is mapped to a corresponding UEA.
  *                                          This allows the factory to deploy the correct UEA implementation for different blockchain environments.
  *      - Chain identifiers               : These follow the CAIP-2 standard (e.g., "eip155:1" for Ethereum mainnet).
