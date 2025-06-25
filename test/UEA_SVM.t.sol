@@ -12,7 +12,7 @@ import {Errors} from "../src/libraries/Errors.sol";
 import {IUEA} from "../src/Interfaces/IUEA.sol";
 import {ERC1967Proxy} from "@openzeppelin/contracts/proxy/ERC1967/ERC1967Proxy.sol";
 
-contract UEA_SVMTest is Test {
+contract UEASVMTest is Test {
     Target target;
     UEAFactoryV1 factory;
     UEA_SVM svmSmartAccountImpl;
@@ -40,14 +40,14 @@ contract UEA_SVMTest is Test {
         svmSmartAccountImpl = new UEA_SVM();
 
         // Register SVM chain and implementation
-        bytes32 svmChainHash = keccak256(abi.encode("solana", 101));
+        bytes32 svmChainHash = keccak256(abi.encode("solana", "101"));
         factory.registerNewChain(svmChainHash, SVM_HASH);
         factory.registerUEA(svmChainHash, SVM_HASH, address(svmSmartAccountImpl));
     }
 
     modifier deploySvmSmartAccount() {
         UniversalAccountId memory _owner =
-            UniversalAccountId({chainNamespace: "solana", chainId: 101, owner: ownerBytes});
+            UniversalAccountId({chainNamespace: "solana", chainId: "101", owner: ownerBytes});
 
         address smartAccountAddress = factory.deployUEA(_owner);
         svmSmartAccountInstance = UEA_SVM(payable(smartAccountAddress));
@@ -55,7 +55,7 @@ contract UEA_SVMTest is Test {
     }
 
     function testRegisterChain() public view {
-        bytes32 svmChainHash = keccak256(abi.encode("solana", 101));
+        bytes32 svmChainHash = keccak256(abi.encode("solana", "101"));
         (bytes32 vmHash, bool isRegistered) = factory.getVMType(svmChainHash);
         assertEq(vmHash, SVM_HASH);
         assertTrue(isRegistered);
@@ -73,8 +73,7 @@ contract UEA_SVMTest is Test {
 
     function testMockVerifySignature() public deploySvmSmartAccount {
         bytes32 messageHash = keccak256("test message");
-        bytes memory signature =
-            hex"16d760987b403d7a27fd095375f2a1275c0734701ad248c3bf9bc8f69456d626c37b9ee1c13da511c71d9ed0f90789327f2c40f3e59e360f7c832b6b0d818d03";
+        bytes memory signature = hex"16d760987b403d7a27fd095375f2a1275c0734701ad248c3bf9bc8f69456d626c37b9ee1c13da511c71d9ed0f90789327f2c40f3e59e360f7c832b6b0d818d03";
 
         // Mock the verifier precompile to return true for this signature
         vm.mockCall(
@@ -89,8 +88,7 @@ contract UEA_SVMTest is Test {
 
     function testVerifySignatureFalse() public deploySvmSmartAccount {
         bytes32 messageHash = keccak256("test message");
-        bytes memory signature =
-            hex"16d760987b403d7a27fd095375f2a1275c0734701ad248c3bf9bc8f69456d626c37b9ee1c13da511c71d9ed0f90789327f2c40f3e59e360f7c832b6b0d818d03";
+        bytes memory signature = hex"16d760987b403d7a27fd095375f2a1275c0734701ad248c3bf9bc8f69456d626c37b9ee1c13da511c71d9ed0f90789327f2c40f3e59e360f7c832b6b0d818d03";
 
         // Mock the verifier precompile to return false for this signature
         vm.mockCall(
@@ -105,8 +103,7 @@ contract UEA_SVMTest is Test {
 
     function testVerifySignatureRevert() public deploySvmSmartAccount {
         bytes32 messageHash = keccak256("test message");
-        bytes memory signature =
-            hex"16d760987b403d7a27fd095375f2a1275c0734701ad248c3bf9bc8f69456d626c37b9ee1c13da511c71d9ed0f90789327f2c40f3e59e360f7c832b6b0d818d03";
+        bytes memory signature = hex"16d760987b403d7a27fd095375f2a1275c0734701ad248c3bf9bc8f69456d626c37b9ee1c13da511c71d9ed0f90789327f2c40f3e59e360f7c832b6b0d818d03";
 
         // Mock the verifier precompile to revert
         vm.mockCallRevert(
@@ -135,8 +132,7 @@ contract UEA_SVMTest is Test {
         });
 
         bytes32 txHash = getCrosschainTxhash(svmSmartAccountInstance, payload);
-        bytes memory signature =
-            hex"16d760987b403d7a27fd095375f2a1275c0734701ad248c3bf9bc8f69456d626c37b9ee1c13da511c71d9ed0f90789327f2c40f3e59e360f7c832b6b0d818d03";
+        bytes memory signature = hex"16d760987b403d7a27fd095375f2a1275c0734701ad248c3bf9bc8f69456d626c37b9ee1c13da511c71d9ed0f90789327f2c40f3e59e360f7c832b6b0d818d03";
 
         // Mock the verification for this specific hash
         vm.mockCall(

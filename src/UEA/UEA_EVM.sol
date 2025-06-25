@@ -6,10 +6,10 @@ import {Errors} from "../libraries/Errors.sol";
 import {IUEA} from "../Interfaces/IUEA.sol";
 import {ECDSA} from "@openzeppelin/contracts/utils/cryptography/ECDSA.sol";
 import {ReentrancyGuard} from "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
+import {StringUtils} from "../libraries/Utils.sol";
 import {
     UniversalAccountId,
     UniversalPayload,
-    DOMAIN_SEPARATOR_TYPEHASH,
     UNIVERSAL_PAYLOAD_TYPEHASH
 } from "../libraries/Types.sol";
 /**
@@ -31,6 +31,8 @@ contract UEA_EVM is ReentrancyGuard, IUEA {
     uint256 public nonce;
     // @notice The version of the UEA
     string public constant VERSION = "0.1.0";
+    // @notice Hash of keccak256("EIP712Domain(string version,uint256 chainId,address verifyingContract)")
+    bytes32 constant DOMAIN_SEPARATOR_TYPEHASH = 0x2aef22f9d7df5f9d21c56d14029233f3fdaa91917727e1eb68e504d27072d6cd;
 
     /**
      * @inheritdoc IUEA
@@ -49,7 +51,7 @@ contract UEA_EVM is ReentrancyGuard, IUEA {
      * @return bytes32 The domain separator.
      */
     function domainSeparator() public view returns (bytes32) {
-        uint256 chainId = id.chainId;
+        uint256 chainId = StringUtils.stringToExactUInt256(id.chainId);
 
         return keccak256(abi.encode(DOMAIN_SEPARATOR_TYPEHASH, keccak256(bytes(VERSION)), chainId, address(this)));
     }

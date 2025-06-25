@@ -4,10 +4,10 @@ pragma solidity 0.8.26;
 import {Errors} from "../libraries/Errors.sol";
 import {IUEA} from "../Interfaces/IUEA.sol";
 import {ReentrancyGuard} from "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
+import {StringUtils} from "../libraries/Utils.sol";
 import {
     UniversalAccountId,
     UniversalPayload,
-    DOMAIN_SEPARATOR_TYPEHASH,
     UNIVERSAL_PAYLOAD_TYPEHASH
 } from "../libraries/Types.sol";
 /**
@@ -29,15 +29,15 @@ contract UEA_SVM is ReentrancyGuard, IUEA {
     string public constant VERSION = "0.1.0";
     // @notice The verifier precompile address
     address public constant VERIFIER_PRECOMPILE = 0x00000000000000000000000000000000000000ca;
+    // @notice Hash of keccak256("EIP712Domain_SVM(string version,string chainId,address verifyingContract)")
+    bytes32 constant DOMAIN_SEPARATOR_TYPEHASH_SVM = 0x3aefc31558906b9b2c54de94f82a9b2455c24b4ba2b642ebb545ea2cc64a1e4b;
 
     /**
      * @dev Returns the domain separator for EIP-712 signing.
      * @return bytes32 The domain separator.
      */
     function domainSeparator() public view returns (bytes32) {
-        uint256 chainId = id.chainId;
-
-        return keccak256(abi.encode(DOMAIN_SEPARATOR_TYPEHASH, keccak256(bytes(VERSION)), chainId, address(this)));
+        return keccak256(abi.encode(DOMAIN_SEPARATOR_TYPEHASH_SVM, keccak256(bytes(VERSION)), id.chainId, address(this)));
     }
 
     /**

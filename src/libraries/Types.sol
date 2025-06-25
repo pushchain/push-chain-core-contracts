@@ -4,7 +4,7 @@ pragma solidity 0.8.26;
 // User Struct
 struct UniversalAccountId {
     string chainNamespace; // Chain namespace identifier of the owner account (e.g., "eip155" or "solana")
-    uint256 chainId; // Chain ID of the source chain of the owner of this UEA.
+    string chainId; // Chain ID of the source chain of the owner of this UEA.
     bytes owner; // Owner's public key or address in bytes format
 }
 
@@ -27,7 +27,5 @@ struct UniversalPayload {
     VerificationType vType; // Type of verification to use before execution (signedVerification or universalTxVerification)
 }
 
-// Hash of keccak256("EIP712Domain(string version,uint256 chainId,address verifyingContract)")
-bytes32 constant DOMAIN_SEPARATOR_TYPEHASH = 0x2aef22f9d7df5f9d21c56d14029233f3fdaa91917727e1eb68e504d27072d6cd;
 // Hash of keccak256("UniversalPayload(address to,uint256 value,bytes data,uint256 gasLimit,uint256 maxFeePerGas,uint256 maxPriorityFeePerGas,uint256 nonce,uint256 deadline,uint8 vType)")
 bytes32 constant UNIVERSAL_PAYLOAD_TYPEHASH = 0x8e2c7c0ddb1f970f2c6b69166432ca39be783b8de42c559025062fa1575e420c;
