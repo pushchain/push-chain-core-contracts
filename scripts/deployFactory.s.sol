@@ -13,8 +13,8 @@ contract DeploySmartAccountScript is Script {
         address owner = 0x778D3206374f8AC265728E18E3fE2Ae6b93E4ce4;
         bytes32 evmHash = keccak256(abi.encode("EVM"));
         bytes32 svmHash = keccak256(abi.encode("SVM"));
-        bytes32 evmSepoliaHash = keccak256(abi.encode("eip155:11155111"));
-        bytes32 solanaDevnetHash = keccak256(abi.encode("solana:EtWTRABZaYq6iMfeYKouRu166VU2xqa1"));
+        bytes32 evmSepoliaHash = keccak256(abi.encode("eip155",'11155111'));
+        bytes32 solanaDevnetHash = keccak256(abi.encode("solana","EtWTRABZaYq6iMfeYKouRu166VU2xqa1"));
 
         // Initialize the factory with the initial owner
         UEAFactoryV1 factory = UEAFactoryV1(0x00000000000000000000000000000000000000eA);

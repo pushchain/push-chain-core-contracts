@@ -28,4 +28,4 @@ struct UniversalPayload {
 }
 
 // Hash of keccak256("UniversalPayload(address to,uint256 value,bytes data,uint256 gasLimit,uint256 maxFeePerGas,uint256 maxPriorityFeePerGas,uint256 nonce,uint256 deadline,uint8 vType)")
-bytes32 constant UNIVERSAL_PAYLOAD_TYPEHASH = 0x8e2c7c0ddb1f970f2c6b69166432ca39be783b8de42c559025062fa1575e420c;
+bytes32 constant UNIVERSAL_PAYLOAD_TYPEHASH = 0x1d8b43e5066bd20bfdacf7b8f4790c0309403b18434e3699ce3c5e57502ed8c4;
