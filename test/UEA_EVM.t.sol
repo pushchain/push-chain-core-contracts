@@ -71,41 +71,39 @@ contract UEA_EVMTest is Test {
     function testInitializeFunction() public {
         // Deploy a new implementation without using the factory
         UEA_EVM newUEA = new UEA_EVM();
-        
+
         // Create account ID
-        UniversalAccountId memory _id =
-            UniversalAccountId({chainNamespace: "eip155", chainId: "1", owner: ownerBytes});
-            
+        UniversalAccountId memory _id = UniversalAccountId({chainNamespace: "eip155", chainId: "1", owner: ownerBytes});
+
         // Initialize the account
         newUEA.initialize(_id);
-        
+
         // Verify account details were set correctly
         UniversalAccountId memory storedId = newUEA.universalAccount();
         assertEq(storedId.chainNamespace, _id.chainNamespace);
         assertEq(storedId.chainId, _id.chainId);
         assertEq(keccak256(storedId.owner), keccak256(_id.owner));
     }
-    
+
     function testRevertWhenInitializingTwice() public {
         // Deploy a new implementation without using the factory
         UEA_EVM newUEA = new UEA_EVM();
-        
+
         // Create account ID
-        UniversalAccountId memory _id =
-            UniversalAccountId({chainNamespace: "eip155", chainId: "1", owner: ownerBytes});
-            
+        UniversalAccountId memory _id = UniversalAccountId({chainNamespace: "eip155", chainId: "1", owner: ownerBytes});
+
         // Initialize the account
         newUEA.initialize(_id);
-        
+
         // Try to initialize again with the same ID
         vm.expectRevert(Errors.AccountAlreadyExists.selector);
         newUEA.initialize(_id);
-        
+
         // Try to initialize again with a different ID
         bytes memory differentOwnerBytes = abi.encodePacked(makeAddr("differentowner"));
         UniversalAccountId memory differentId =
             UniversalAccountId({chainNamespace: "eip155", chainId: "1", owner: differentOwnerBytes});
-            
+
         vm.expectRevert(Errors.AccountAlreadyExists.selector);
         newUEA.initialize(differentId);
     }
@@ -126,7 +124,7 @@ contract UEA_EVMTest is Test {
     function testVersionConstant() public {
         // Deploy a new implementation
         UEA_EVM newUEA = new UEA_EVM();
-        
+
         // Check the version constant
         assertEq(newUEA.VERSION(), "0.1.0", "VERSION constant should be 0.1.0");
     }
@@ -197,7 +195,7 @@ contract UEA_EVMTest is Test {
         assertEq(magicValueAfter, 999, "Magic value was not set correctly");
         assertEq(address(target).balance, 0.1 ether, "Target contract should have received 0.1 ETH");
     }
-    
+
     function testExecutionWithZeroDeadline() public deployEvmSmartAccount {
         // Prepare calldata with zero deadline
         UniversalPayload memory payload = UniversalPayload({
@@ -459,19 +457,18 @@ contract UEA_EVMTest is Test {
     function testReceiveFunction() public {
         // Deploy a new implementation
         UEA_EVM newUEA = new UEA_EVM();
-        
+
         // Initialize it
-        UniversalAccountId memory _id =
-            UniversalAccountId({chainNamespace: "eip155", chainId: "1", owner: ownerBytes});
+        UniversalAccountId memory _id = UniversalAccountId({chainNamespace: "eip155", chainId: "1", owner: ownerBytes});
         newUEA.initialize(_id);
-        
+
         // Check initial balance
         assertEq(address(newUEA).balance, 0, "Initial balance should be 0");
-        
+
         // Send ETH to the contract
         vm.deal(address(this), 1 ether);
         (bool success,) = address(newUEA).call{value: 0.5 ether}("");
-        
+
         // Verify ETH was received
         assertTrue(success, "ETH transfer should succeed");
         assertEq(address(newUEA).balance, 0.5 ether, "Contract should have received 0.5 ETH");
@@ -490,44 +487,46 @@ contract UEA_EVMTest is Test {
     function testDomainSeparatorTypeHash() public deployEvmSmartAccount {
         // This test verifies that the DOMAIN_SEPARATOR_TYPEHASH constant matches the expected hash
         // If the EIP712Domain struct definition changes, this test will fail
-        
+
         bytes32 expectedHash = keccak256("EIP712Domain(string version,uint256 chainId,address verifyingContract)");
-        
+
         // Access the constant from the deployed instance
         bytes32 actualHash = evmSmartAccountInstance.DOMAIN_SEPARATOR_TYPEHASH();
-        
+
         assertEq(expectedHash, actualHash, "DOMAIN_SEPARATOR_TYPEHASH does not match expected value");
     }
 
     function testUniversalPayloadTypeHash() public pure {
         // This test verifies that the UNIVERSAL_PAYLOAD_TYPEHASH constant matches the expected hash
         // If the UniversalPayload struct definition changes, this test will fail
-        
-        bytes32 expectedHash = keccak256("UniversalPayload(address to,uint256 value,bytes data,uint256 gasLimit,uint256 maxFeePerGas,uint256 maxPriorityFeePerGas,uint256 nonce,uint256 deadline,uint8 vType)");
-        
+
+        bytes32 expectedHash = keccak256(
+            "UniversalPayload(address to,uint256 value,bytes data,uint256 gasLimit,uint256 maxFeePerGas,uint256 maxPriorityFeePerGas,uint256 nonce,uint256 deadline,uint8 vType)"
+        );
+
         // Access the actual hash from the imported constant
         bytes32 actualHash = UNIVERSAL_PAYLOAD_TYPEHASH;
-        
+
         assertEq(expectedHash, actualHash, "UNIVERSAL_PAYLOAD_TYPEHASH does not match expected value");
     }
 
     function testVerifyPayloadSignature() public deployEvmSmartAccount {
         // Create a message hash
         bytes32 messageHash = keccak256(abi.encodePacked("test message"));
-        
+
         // Sign the message with the owner's private key
         (uint8 v, bytes32 r, bytes32 s) = vm.sign(ownerPK, messageHash);
         bytes memory signature = abi.encodePacked(r, s, v);
-        
+
         // Verify the signature is valid
         bool isValid = evmSmartAccountInstance.verifyPayloadSignature(messageHash, signature);
         assertTrue(isValid, "Signature should be valid for the owner");
-        
+
         // Test with wrong signer
-        (/*address wrongSigner*/, uint256 wrongPK) = makeAddrAndKey("wrongSigner");
+        ( /*address wrongSigner*/ , uint256 wrongPK) = makeAddrAndKey("wrongSigner");
         (v, r, s) = vm.sign(wrongPK, messageHash);
         bytes memory wrongSignature = abi.encodePacked(r, s, v);
-        
+
         bool isInvalid = evmSmartAccountInstance.verifyPayloadSignature(messageHash, wrongSignature);
         assertFalse(isInvalid, "Signature should be invalid for wrong signer");
     }
@@ -545,10 +544,10 @@ contract UEA_EVMTest is Test {
             maxPriorityFeePerGas: 0,
             vType: VerificationType.signedVerification
         });
-        
+
         // Get the transaction hash directly
         bytes32 directHash = evmSmartAccountInstance.getTransactionHash(payload);
-        
+
         // Calculate the hash manually
         bytes32 structHash = keccak256(
             abi.encode(
@@ -564,10 +563,10 @@ contract UEA_EVMTest is Test {
                 uint8(payload.vType)
             )
         );
-        
+
         bytes32 domainSep = evmSmartAccountInstance.domainSeparator();
         bytes32 manualHash = keccak256(abi.encodePacked("\x19\x01", domainSep, structHash));
-        
+
         // Compare the hashes
         assertEq(directHash, manualHash, "Transaction hash calculation should match");
     }
@@ -585,10 +584,10 @@ contract UEA_EVMTest is Test {
             maxPriorityFeePerGas: 0,
             vType: VerificationType.signedVerification
         });
-        
+
         // Warp far into the future (should not matter with deadline=0)
         vm.warp(block.timestamp + 1000000);
-        
+
         // Should not revert
         bytes32 hash = evmSmartAccountInstance.getTransactionHash(payload);
         assertTrue(hash != bytes32(0), "Should return a valid hash");
@@ -608,10 +607,10 @@ contract UEA_EVMTest is Test {
             maxPriorityFeePerGas: 0,
             vType: VerificationType.signedVerification
         });
-        
+
         // Warp to after the deadline
         vm.warp(deadline + 1);
-        
+
         // Should revert when trying to get transaction hash with expired deadline
         vm.expectRevert(Errors.ExpiredDeadline.selector);
         evmSmartAccountInstance.getTransactionHash(payload);

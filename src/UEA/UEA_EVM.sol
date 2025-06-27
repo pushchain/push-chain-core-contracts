@@ -28,7 +28,8 @@ contract UEA_EVM is ReentrancyGuard, IUEA {
     // @notice The version of the UEA
     string public constant VERSION = "0.1.0";
     // @notice Hash of keccak256("EIP712Domain(string version,uint256 chainId,address verifyingContract)")
-    bytes32 public constant DOMAIN_SEPARATOR_TYPEHASH = 0x2aef22f9d7df5f9d21c56d14029233f3fdaa91917727e1eb68e504d27072d6cd;
+    bytes32 public constant DOMAIN_SEPARATOR_TYPEHASH =
+        0x2aef22f9d7df5f9d21c56d14029233f3fdaa91917727e1eb68e504d27072d6cd;
 
     /**
      * @inheritdoc IUEA
@@ -69,6 +70,7 @@ contract UEA_EVM is ReentrancyGuard, IUEA {
     /**
      * @inheritdoc IUEA
      */
+
     function executePayload(UniversalPayload calldata payload, bytes calldata signature) external nonReentrant {
         bytes32 txHash = getTransactionHash(payload);
 

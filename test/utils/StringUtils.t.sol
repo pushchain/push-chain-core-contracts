@@ -36,8 +36,8 @@ contract StringUtilsTest is Test {
 
     function testConvertVeryLargeNumber() public pure {
         assertEq(
-            stringToUint("115792089237316195423570985008687907853269984665640564039457584007913129639935"), 
-            115792089237316195423570985008687907853269984665640564039457584007913129639935, 
+            stringToUint("115792089237316195423570985008687907853269984665640564039457584007913129639935"),
+            115792089237316195423570985008687907853269984665640564039457584007913129639935,
             "Failed to convert max uint256 value"
         );
     }
@@ -63,7 +63,7 @@ contract StringUtilsTest is Test {
     function testRevertOnNonDigitCharacters() public {
         // Test that calling with non-digit characters reverts
         bool success = false;
-        
+
         // Test "123a"
         try this.stringToUint("123a") {
             success = true;
@@ -71,7 +71,7 @@ contract StringUtilsTest is Test {
             // This is expected to fail
         }
         assertFalse(success, "String with letters should revert");
-        
+
         // Test "a123"
         success = false;
         try this.stringToUint("a123") {
@@ -80,7 +80,7 @@ contract StringUtilsTest is Test {
             // This is expected to fail
         }
         assertFalse(success, "String with letters should revert");
-        
+
         // Test "12.34"
         success = false;
         try this.stringToUint("12.34") {
@@ -94,7 +94,7 @@ contract StringUtilsTest is Test {
     function testRevertOnSpecialCharacters() public {
         // Test that calling with special characters reverts
         bool success = false;
-        
+
         // Test "123$"
         try this.stringToUint("123$") {
             success = true;
@@ -102,7 +102,7 @@ contract StringUtilsTest is Test {
             // This is expected to fail
         }
         assertFalse(success, "String with special characters should revert");
-        
+
         // Test "#123"
         success = false;
         try this.stringToUint("#123") {
@@ -111,7 +111,7 @@ contract StringUtilsTest is Test {
             // This is expected to fail
         }
         assertFalse(success, "String with special characters should revert");
-        
+
         // Test "1,234"
         success = false;
         try this.stringToUint("1,234") {
@@ -125,10 +125,10 @@ contract StringUtilsTest is Test {
     function testFuzzValidDigits(uint8 digit) public pure {
         // Ensure digit is between 0-9
         vm.assume(digit <= 9);
-        
+
         // Convert digit to string
         string memory digitStr = vm.toString(digit);
-        
+
         // Test conversion
         assertEq(stringToUint(digitStr), digit, "Failed to convert fuzzed digit");
     }
@@ -136,8 +136,8 @@ contract StringUtilsTest is Test {
     function testFuzzValidNumbers(uint256 number) public pure {
         // Convert number to string
         string memory numberStr = vm.toString(number);
-        
+
         // Test conversion
         assertEq(stringToUint(numberStr), number, "Failed to convert fuzzed number");
     }
-} 
+}

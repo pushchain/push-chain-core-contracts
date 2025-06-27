@@ -61,41 +61,41 @@ contract UEASVMTest is Test {
     function testInitializeFunction() public {
         // Deploy a new implementation without using the factory
         UEA_SVM newUEA = new UEA_SVM();
-        
+
         // Create account ID
         UniversalAccountId memory _id =
             UniversalAccountId({chainNamespace: "solana", chainId: "101", owner: ownerBytes});
-            
+
         // Initialize the account
         newUEA.initialize(_id);
-        
+
         // Verify account details were set correctly
         UniversalAccountId memory storedId = newUEA.universalAccount();
         assertEq(storedId.chainNamespace, _id.chainNamespace);
         assertEq(storedId.chainId, _id.chainId);
         assertEq(keccak256(storedId.owner), keccak256(_id.owner));
     }
-    
+
     function testRevertWhenInitializingTwice() public {
         // Deploy a new implementation without using the factory
         UEA_SVM newUEA = new UEA_SVM();
-        
+
         // Create account ID
         UniversalAccountId memory _id =
             UniversalAccountId({chainNamespace: "solana", chainId: "101", owner: ownerBytes});
-            
+
         // Initialize the account
         newUEA.initialize(_id);
-        
+
         // Try to initialize again with the same ID
         vm.expectRevert(Errors.AccountAlreadyExists.selector);
         newUEA.initialize(_id);
-        
+
         // Try to initialize again with a different ID
         bytes memory differentOwnerBytes = hex"a48f4e93ca594d3c5e09c3ad39c599bbd6e6a2937869f3456905f5aeb7c78a61";
         UniversalAccountId memory differentId =
             UniversalAccountId({chainNamespace: "solana", chainId: "101", owner: differentOwnerBytes});
-            
+
         vm.expectRevert(Errors.AccountAlreadyExists.selector);
         newUEA.initialize(differentId);
     }
@@ -114,7 +114,7 @@ contract UEASVMTest is Test {
     function testVersionConstant() public {
         // Deploy a new implementation
         UEA_SVM newUEA = new UEA_SVM();
-        
+
         // Check the version constant
         assertEq(newUEA.VERSION(), "0.1.0", "VERSION constant should be 0.1.0");
     }
@@ -122,10 +122,13 @@ contract UEASVMTest is Test {
     function testVerifierPrecompileConstant() public {
         // Deploy a new implementation
         UEA_SVM newUEA = new UEA_SVM();
-        
+
         // Check the VERIFIER_PRECOMPILE constant
-        assertEq(newUEA.VERIFIER_PRECOMPILE(), 0x00000000000000000000000000000000000000ca, 
-            "VERIFIER_PRECOMPILE constant should be 0x00000000000000000000000000000000000000ca");
+        assertEq(
+            newUEA.VERIFIER_PRECOMPILE(),
+            0x00000000000000000000000000000000000000ca,
+            "VERIFIER_PRECOMPILE constant should be 0x00000000000000000000000000000000000000ca"
+        );
     }
 
     // =========================================================================
@@ -293,7 +296,7 @@ contract UEASVMTest is Test {
         // Create payload with deadline in the past
         vm.warp(block.timestamp + 1000); // Warp forward first
         uint256 deadline = block.timestamp - 100; // Now set deadline in the past
-        
+
         UniversalPayload memory payload = UniversalPayload({
             to: address(target),
             value: 0,
@@ -351,19 +354,19 @@ contract UEASVMTest is Test {
     function testReceiveFunction() public {
         // Deploy a new implementation
         UEA_SVM newUEA = new UEA_SVM();
-        
+
         // Initialize it
         UniversalAccountId memory _id =
             UniversalAccountId({chainNamespace: "solana", chainId: "101", owner: ownerBytes});
         newUEA.initialize(_id);
-        
+
         // Check initial balance
         assertEq(address(newUEA).balance, 0, "Initial balance should be 0");
-        
+
         // Send ETH to the contract
         vm.deal(address(this), 1 ether);
         (bool success,) = address(newUEA).call{value: 0.5 ether}("");
-        
+
         // Verify ETH was received
         assertTrue(success, "ETH transfer should succeed");
         assertEq(address(newUEA).balance, 0.5 ether, "Contract should have received 0.5 ETH");
@@ -375,7 +378,7 @@ contract UEASVMTest is Test {
 
     function testDomainSeparator() public deploySvmSmartAccount {
         bytes32 domainSep = svmSmartAccountInstance.domainSeparator();
-        
+
         // Calculate expected domain separator
         bytes32 expectedDomainSep = keccak256(
             abi.encode(
@@ -385,19 +388,19 @@ contract UEASVMTest is Test {
                 address(svmSmartAccountInstance)
             )
         );
-        
+
         assertEq(domainSep, expectedDomainSep, "Domain separator calculation should match");
     }
 
     function testDomainSeparatorTypeSVMHash() public deploySvmSmartAccount {
         // This test verifies that the DOMAIN_SEPARATOR_TYPEHASH_SVM constant matches the expected hash
         // If the EIP712Domain_SVM struct definition changes, this test will fail
-        
+
         bytes32 expectedHash = keccak256("EIP712Domain_SVM(string version,string chainId,address verifyingContract)");
-        
+
         // Access the constant from the deployed instance
         bytes32 actualHash = svmSmartAccountInstance.DOMAIN_SEPARATOR_TYPEHASH_SVM();
-        
+
         assertEq(expectedHash, actualHash, "DOMAIN_SEPARATOR_TYPEHASH_SVM does not match expected value");
     }
 
@@ -414,10 +417,10 @@ contract UEASVMTest is Test {
             maxPriorityFeePerGas: 0,
             vType: VerificationType.signedVerification
         });
-        
+
         // Get the transaction hash directly
         bytes32 directHash = svmSmartAccountInstance.getTransactionHash(payload);
-        
+
         // Calculate the hash manually
         bytes32 structHash = keccak256(
             abi.encode(
@@ -433,10 +436,10 @@ contract UEASVMTest is Test {
                 uint8(payload.vType)
             )
         );
-        
+
         bytes32 domainSep = svmSmartAccountInstance.domainSeparator();
         bytes32 manualHash = keccak256(abi.encodePacked("\x19\x01", domainSep, structHash));
-        
+
         // Compare the hashes
         assertEq(directHash, manualHash, "Transaction hash calculation should match");
     }
@@ -455,10 +458,10 @@ contract UEASVMTest is Test {
             maxPriorityFeePerGas: 0,
             vType: VerificationType.signedVerification
         });
-        
+
         // Warp to after the deadline
         vm.warp(deadline + 1);
-        
+
         // Should revert when trying to get transaction hash with expired deadline
         vm.expectRevert(Errors.ExpiredDeadline.selector);
         svmSmartAccountInstance.getTransactionHash(payload);
@@ -467,12 +470,14 @@ contract UEASVMTest is Test {
     function testUniversalPayloadTypeHash() public pure {
         // This test verifies that the UNIVERSAL_PAYLOAD_TYPEHASH constant matches the expected hash
         // If the UniversalPayload struct definition changes, this test will fail
-        
-        bytes32 expectedHash = keccak256("UniversalPayload(address to,uint256 value,bytes data,uint256 gasLimit,uint256 maxFeePerGas,uint256 maxPriorityFeePerGas,uint256 nonce,uint256 deadline,uint8 vType)");
-        
+
+        bytes32 expectedHash = keccak256(
+            "UniversalPayload(address to,uint256 value,bytes data,uint256 gasLimit,uint256 maxFeePerGas,uint256 maxPriorityFeePerGas,uint256 nonce,uint256 deadline,uint8 vType)"
+        );
+
         // Access the actual hash from the imported constant
         bytes32 actualHash = UNIVERSAL_PAYLOAD_TYPEHASH;
-        
+
         assertEq(expectedHash, actualHash, "UNIVERSAL_PAYLOAD_TYPEHASH does not match expected value");
     }
 
@@ -511,7 +516,7 @@ contract UEASVMTest is Test {
     function testExecutionFailureWithRevertReason() public deploySvmSmartAccount {
         // Deploy a contract that will revert with a reason
         RevertingTarget revertTarget = new RevertingTarget();
-        
+
         UniversalPayload memory payload = UniversalPayload({
             to: address(revertTarget),
             value: 0,
@@ -544,7 +549,7 @@ contract UEASVMTest is Test {
     function testExecutionFailureWithoutRevertReason() public deploySvmSmartAccount {
         // Deploy a contract that will revert without a reason
         SilentRevertingTarget silentRevertTarget = new SilentRevertingTarget();
-        
+
         UniversalPayload memory payload = UniversalPayload({
             to: address(silentRevertTarget),
             value: 0,
@@ -579,7 +584,7 @@ contract UEASVMTest is Test {
         UniversalPayload memory payload = UniversalPayload({
             to: address(target),
             value: 0,
-            data: "",  // Empty calldata
+            data: "", // Empty calldata
             gasLimit: 1000000,
             maxFeePerGas: 0,
             nonce: 0,
