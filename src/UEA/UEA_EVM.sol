@@ -28,14 +28,14 @@ contract UEA_EVM is ReentrancyGuard, IUEA {
     // @notice The version of the UEA
     string public constant VERSION = "0.1.0";
     // @notice Hash of keccak256("EIP712Domain(string version,uint256 chainId,address verifyingContract)")
-    bytes32 constant DOMAIN_SEPARATOR_TYPEHASH = 0x2aef22f9d7df5f9d21c56d14029233f3fdaa91917727e1eb68e504d27072d6cd;
+    bytes32 public constant DOMAIN_SEPARATOR_TYPEHASH = 0x2aef22f9d7df5f9d21c56d14029233f3fdaa91917727e1eb68e504d27072d6cd;
 
     /**
      * @inheritdoc IUEA
      */
     function initialize(UniversalAccountId memory _id) external {
         if (initialized) {
-            revert Errors.AlreadyInitialized();
+            revert Errors.AccountAlreadyExists();
         }
         initialized = true;
 
@@ -63,20 +63,9 @@ contract UEA_EVM is ReentrancyGuard, IUEA {
      * @inheritdoc IUEA
      */
     function verifyPayloadSignature(bytes32 messageHash, bytes memory signature) public view returns (bool) {
-        return _verifySignatureEVM(messageHash, signature);
-    }
-
-    /**
-     * @dev Verifies the EVM signature using the ECDSA library.
-     * @param messageHash The hash of the message to verify.
-     * @param signature The signature to verify.
-     * @return bool indicating whether the signature is valid.
-     */
-    function _verifySignatureEVM(bytes32 messageHash, bytes memory signature) internal view returns (bool) {
         address recoveredSigner = messageHash.recover(signature);
         return recoveredSigner == address(bytes20(id.owner));
     }
-
     /**
      * @inheritdoc IUEA
      */

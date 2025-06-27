@@ -26,7 +26,15 @@ contract UEA_SVM is ReentrancyGuard, IUEA {
     // @notice The verifier precompile address
     address public constant VERIFIER_PRECOMPILE = 0x00000000000000000000000000000000000000ca;
     // @notice Hash of keccak256("EIP712Domain_SVM(string version,string chainId,address verifyingContract)")
-    bytes32 constant DOMAIN_SEPARATOR_TYPEHASH_SVM = 0x3aefc31558906b9b2c54de94f82a9b2455c24b4ba2b642ebb545ea2cc64a1e4b;
+    bytes32 public constant DOMAIN_SEPARATOR_TYPEHASH_SVM = 0x3aefc31558906b9b2c54de94f82a9b2455c24b4ba2b642ebb545ea2cc64a1e4b;
+
+    /**
+     * @dev Returns the DOMAIN_SEPARATOR_TYPEHASH_SVM constant for testing purposes.
+     * @return bytes32 The DOMAIN_SEPARATOR_TYPEHASH_SVM constant.
+     */
+    function getDomainSeparatorTypeSVMHash() public pure returns (bytes32) {
+        return DOMAIN_SEPARATOR_TYPEHASH_SVM;
+    }
 
     /**
      * @dev Returns the domain separator for EIP-712 signing.
@@ -42,7 +50,7 @@ contract UEA_SVM is ReentrancyGuard, IUEA {
      */
     function initialize(UniversalAccountId memory _id) external {
         if (initialized) {
-            revert Errors.AlreadyInitialized();
+            revert Errors.AccountAlreadyExists();
         }
         initialized = true;
 

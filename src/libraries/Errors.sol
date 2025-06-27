@@ -28,7 +28,4 @@ library Errors {
 
     // Input validation errors
     error InvalidInputArgs();
-
-    // Initialization errors
-    error AlreadyInitialized();
 }

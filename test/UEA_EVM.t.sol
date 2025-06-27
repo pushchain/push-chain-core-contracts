@@ -266,6 +266,30 @@ contract UEA_EVMTest is Test {
         assertEq(address(target).balance, 0.1 ether, "Target contract should have received 0.1 ETH");
     }
 
+    function testDomainSeparatorTypeHash() public deployEvmSmartAccount {
+        // This test verifies that the DOMAIN_SEPARATOR_TYPEHASH constant matches the expected hash
+        // If the EIP712Domain struct definition changes, this test will fail
+        
+        bytes32 expectedHash = keccak256("EIP712Domain(string version,uint256 chainId,address verifyingContract)");
+        
+        // Access the constant from the deployed instance
+        bytes32 actualHash = evmSmartAccountInstance.DOMAIN_SEPARATOR_TYPEHASH();
+        
+        assertEq(expectedHash, actualHash, "DOMAIN_SEPARATOR_TYPEHASH does not match expected value");
+    }
+    
+    function testUniversalPayloadTypeHash() public pure {
+        // This test verifies that the UNIVERSAL_PAYLOAD_TYPEHASH constant matches the expected hash
+        // If the UniversalPayload struct definition changes, this test will fail
+        
+        bytes32 expectedHash = keccak256("UniversalPayload(address to,uint256 value,bytes data,uint256 gasLimit,uint256 maxFeePerGas,uint256 maxPriorityFeePerGas,uint256 nonce,uint256 deadline,uint8 vType)");
+        
+        // Access the actual hash from the imported constant
+        bytes32 actualHash = UNIVERSAL_PAYLOAD_TYPEHASH;
+        
+        assertEq(expectedHash, actualHash, "UNIVERSAL_PAYLOAD_TYPEHASH does not match expected value");
+    }
+
     // Helper function for UniversalPayload hash
     function getCrosschainTxhash(UEA_EVM _smartAccountInstance, UniversalPayload memory payload)
         internal

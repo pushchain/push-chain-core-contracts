@@ -183,4 +183,28 @@ contract UEASVMTest is Test {
 
         return keccak256(abi.encodePacked("\x19\x01", _domainSeparator, structHash));
     }
+    
+    function testDomainSeparatorTypeSVMHash() public deploySvmSmartAccount {
+        // This test verifies that the DOMAIN_SEPARATOR_TYPEHASH_SVM constant matches the expected hash
+        // If the EIP712Domain_SVM struct definition changes, this test will fail
+        
+        bytes32 expectedHash = keccak256("EIP712Domain_SVM(string version,string chainId,address verifyingContract)");
+        
+        // Access the constant from the deployed instance
+        bytes32 actualHash = svmSmartAccountInstance.DOMAIN_SEPARATOR_TYPEHASH_SVM();
+        
+        assertEq(expectedHash, actualHash, "DOMAIN_SEPARATOR_TYPEHASH_SVM does not match expected value");
+    }
+    
+    function testUniversalPayloadTypeHash() public pure {
+        // This test verifies that the UNIVERSAL_PAYLOAD_TYPEHASH constant matches the expected hash
+        // If the UniversalPayload struct definition changes, this test will fail
+        
+        bytes32 expectedHash = keccak256("UniversalPayload(address to,uint256 value,bytes data,uint256 gasLimit,uint256 maxFeePerGas,uint256 maxPriorityFeePerGas,uint256 nonce,uint256 deadline,uint8 vType)");
+        
+        // Access the actual hash from the imported constant
+        bytes32 actualHash = UNIVERSAL_PAYLOAD_TYPEHASH;
+        
+        assertEq(expectedHash, actualHash, "UNIVERSAL_PAYLOAD_TYPEHASH does not match expected value");
+    }
 }
