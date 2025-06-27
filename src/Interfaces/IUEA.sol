@@ -85,5 +85,5 @@ interface IUEA {
      * If the deadline has passed, it reverts with ExpiredDeadline.
      * If the target contract execution fails, it reverts with ExecutionFailed or forwards the error message.
      */
-    function executePayload(UniversalPayload calldata payload, bytes calldata signature) external;
+    function executePayload(UniversalPayload calldata payload, bytes calldata signature, bytes calldata payloadTxHash) external;
 }

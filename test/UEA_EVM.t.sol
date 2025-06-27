@@ -120,7 +120,7 @@ contract UEA_EVMTest is Test {
 
         // The execution should fail because the account expects nonce to be 0, not 100
         vm.expectRevert(Errors.InvalidEVMSignature.selector);
-        evmSmartAccountInstance.executePayload(payload, signature);
+        evmSmartAccountInstance.executePayload(payload, signature, "");
 
         // Verify state hasn't changed
         uint256 magicValueAfter = target.getMagicNumber();
@@ -154,7 +154,7 @@ contract UEA_EVMTest is Test {
         emit IUEA.PayloadExecuted(ownerBytes, payload.to, payload.data);
 
         // Execute the payload
-        evmSmartAccountInstance.executePayload(payload, signature);
+        evmSmartAccountInstance.executePayload(payload, signature, "");
 
         // Verify state changes
         uint256 magicValueAfter = target.getMagicNumber();
@@ -181,13 +181,13 @@ contract UEA_EVMTest is Test {
         bytes memory signature = abi.encodePacked(r, s, v);
 
         // First execution should succeed
-        evmSmartAccountInstance.executePayload(payload, signature);
+        evmSmartAccountInstance.executePayload(payload, signature, "");
 
         uint256 previousNonce = evmSmartAccountInstance.nonce();
 
         // Try to execute with same nonce again
         vm.expectRevert(Errors.InvalidEVMSignature.selector);
-        evmSmartAccountInstance.executePayload(payload, signature);
+        evmSmartAccountInstance.executePayload(payload, signature, "");
 
         // Verify state hasn't changed
         assertEq(previousNonce, evmSmartAccountInstance.nonce(), "Nonce should not have changed");
@@ -214,7 +214,7 @@ contract UEA_EVMTest is Test {
         bytes memory signature = abi.encodePacked(r, s, v);
 
         vm.expectRevert(Errors.ExpiredDeadline.selector);
-        evmSmartAccountInstance.executePayload(payload, signature);
+        evmSmartAccountInstance.executePayload(payload, signature, "");
     }
 
     function testRevertWhenInvalidSignature() public deployEvmSmartAccount {
@@ -234,7 +234,7 @@ contract UEA_EVMTest is Test {
         bytes memory invalidSignature = abi.encodePacked(bytes32(0), bytes32(0), uint8(0));
 
         vm.expectRevert(abi.encodeWithSelector(ECDSA.ECDSAInvalidSignature.selector));
-        evmSmartAccountInstance.executePayload(payload, invalidSignature);
+        evmSmartAccountInstance.executePayload(payload, invalidSignature, "");
     }
 
     function testExecutionWithValue() public deployEvmSmartAccount {
@@ -258,7 +258,7 @@ contract UEA_EVMTest is Test {
         bytes memory signature = abi.encodePacked(r, s, v);
 
         // Execute the payload
-        evmSmartAccountInstance.executePayload(payload, signature);
+        evmSmartAccountInstance.executePayload(payload, signature, "");
 
         // Verify state changes
         uint256 magicValueAfter = target.getMagicNumber();

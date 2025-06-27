@@ -12,6 +12,7 @@ library Errors {
     // Signature related errors
     error InvalidEVMSignature();
     error InvalidSVMSignature();
+    error InvalidTxHash();
 
     // Execution related errors
     error ExecutionFailed();

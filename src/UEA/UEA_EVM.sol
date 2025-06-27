@@ -7,7 +7,7 @@ import {IUEA} from "../Interfaces/IUEA.sol";
 import {ECDSA} from "@openzeppelin/contracts/utils/cryptography/ECDSA.sol";
 import {ReentrancyGuard} from "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
 import {StringUtils} from "../libraries/Utils.sol";
-import {UniversalAccountId, UniversalPayload, UNIVERSAL_PAYLOAD_TYPEHASH} from "../libraries/Types.sol";
+import {UniversalAccountId, UniversalPayload, VerificationType, UNIVERSAL_PAYLOAD_TYPEHASH} from "../libraries/Types.sol";
 /**
  * @title UEA_EVM (Universal Executor Account for EVM)
  * @dev Implementation of the IUEA interface for EVM-based external accounts.
@@ -27,6 +27,8 @@ contract UEA_EVM is ReentrancyGuard, IUEA {
     uint256 public nonce;
     // @notice The version of the UEA
     string public constant VERSION = "0.1.0";
+    // @notice Precompile address for TxHash Based Verification
+    address public constant TX_BASED_VERIFIER = 0x0000000000000000000000000000000000000901;
     // @notice Hash of keccak256("EIP712Domain(string version,uint256 chainId,address verifyingContract)")
     bytes32 constant DOMAIN_SEPARATOR_TYPEHASH = 0x2aef22f9d7df5f9d21c56d14029233f3fdaa91917727e1eb68e504d27072d6cd;
 
@@ -66,6 +68,17 @@ contract UEA_EVM is ReentrancyGuard, IUEA {
         return _verifySignatureEVM(messageHash, signature);
     }
 
+    function verifyPayloadTxHash(UniversalPayload calldata payload, bytes calldata txHash) public view returns (bool) {
+        (bool success, bytes memory result) = TX_BASED_VERIFIER.staticcall(
+            abi.encodeWithSignature("verifyTxHash(UniversalPayload,bytes)", payload, txHash)
+        );
+        if (!success) {
+            revert Errors.PrecompileCallFailed();
+        }
+
+        return abi.decode(result, (bool));
+    }
+
     /**
      * @dev Verifies the EVM signature using the ECDSA library.
      * @param messageHash The hash of the message to verify.
@@ -80,11 +93,18 @@ contract UEA_EVM is ReentrancyGuard, IUEA {
     /**
      * @inheritdoc IUEA
      */
-    function executePayload(UniversalPayload calldata payload, bytes calldata signature) external nonReentrant {
-        bytes32 txHash = getTransactionHash(payload);
+    function executePayload(UniversalPayload calldata payload, bytes calldata signature, bytes calldata payloadTxHash) external nonReentrant {
 
-        if (!verifyPayloadSignature(txHash, signature)) {
-            revert Errors.InvalidEVMSignature();
+        if (payload.vType == VerificationType.universalTxVerification) {
+            if (payloadTxHash.length == 0 || !verifyPayloadTxHash(payload, payloadTxHash)) {
+                revert Errors.InvalidTxHash();
+            }
+        } else {
+            bytes32 txHash = getTransactionHash(payload);
+            
+            if (!verifyPayloadSignature(txHash, signature)) {
+                revert Errors.InvalidEVMSignature();
+            }
         }
 
         unchecked {
