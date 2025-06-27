@@ -29,14 +29,6 @@ contract UEA_SVM is ReentrancyGuard, IUEA {
     bytes32 public constant DOMAIN_SEPARATOR_TYPEHASH_SVM = 0x3aefc31558906b9b2c54de94f82a9b2455c24b4ba2b642ebb545ea2cc64a1e4b;
 
     /**
-     * @dev Returns the DOMAIN_SEPARATOR_TYPEHASH_SVM constant for testing purposes.
-     * @return bytes32 The DOMAIN_SEPARATOR_TYPEHASH_SVM constant.
-     */
-    function getDomainSeparatorTypeSVMHash() public pure returns (bytes32) {
-        return DOMAIN_SEPARATOR_TYPEHASH_SVM;
-    }
-
-    /**
      * @dev Returns the domain separator for EIP-712 signing.
      * @return bytes32 The domain separator.
      */
