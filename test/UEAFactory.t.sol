@@ -708,4 +708,105 @@ contract UEAFactoryTest is Test {
             assertEq(bytes(account.chainNamespace).length, 0);
         }
     }
+
+    // Error Cases
+    function testRevertComputeUEAWithUnregisteredChain() public {
+        // Create an account with unregistered chain
+        bytes memory testOwnerBytes = abi.encodePacked(makeAddr("testowner"));
+        UniversalAccountId memory _id =
+            UniversalAccountId({chainNamespace: "UNREGISTERED", chainId: "999", owner: testOwnerBytes});
+        
+        // Should revert with InvalidInputArgs
+        vm.expectRevert(Errors.InvalidInputArgs.selector);
+        factory.computeUEA(_id);
+    }
+    
+    function testRevertComputeUEAWithNoImplementation() public {
+        // Register a chain but don't register an implementation
+        bytes32 chainHash = keccak256(abi.encode("TEST_CHAIN", "42"));
+        factory.registerNewChain(chainHash, WASM_VM_HASH);
+        
+        // Create an account with the registered chain but no implementation
+        bytes memory testOwnerBytes = abi.encodePacked(makeAddr("testowner"));
+        UniversalAccountId memory _id =
+            UniversalAccountId({chainNamespace: "TEST_CHAIN", chainId: "42", owner: testOwnerBytes});
+        
+        // Should revert with InvalidInputArgs
+        vm.expectRevert(Errors.InvalidInputArgs.selector);
+        factory.computeUEA(_id);
+    }
+    
+    // Salt Generation Consistency
+    function testSaltGenerationConsistency() public {
+        // Create two identical accounts
+        bytes memory testOwnerBytes = abi.encodePacked(makeAddr("saltowner"));
+        UniversalAccountId memory id1 =
+            UniversalAccountId({chainNamespace: "eip155", chainId: "1", owner: testOwnerBytes});
+        UniversalAccountId memory id2 =
+            UniversalAccountId({chainNamespace: "eip155", chainId: "1", owner: testOwnerBytes});
+        
+        // Generate salts
+        bytes32 salt1 = factory.generateSalt(id1);
+        bytes32 salt2 = factory.generateSalt(id2);
+        
+        // Salts should be identical for identical inputs
+        assertEq(salt1, salt2);
+        
+        // Create an account with different data
+        UniversalAccountId memory id3 =
+            UniversalAccountId({chainNamespace: "eip155", chainId: "5", owner: testOwnerBytes});
+        bytes32 salt3 = factory.generateSalt(id3);
+        
+        // Salt should be different
+        assertTrue(salt1 != salt3);
+    }
+    
+    // Deterministic Address Verification
+    function testDeterministicAddressVerification() public {
+        // Create an account
+        bytes memory testOwnerBytes = abi.encodePacked(makeAddr("deterministicowner"));
+        UniversalAccountId memory _id =
+            UniversalAccountId({chainNamespace: "eip155", chainId: "1", owner: testOwnerBytes});
+        
+        // Compute the address
+        address computedAddress = factory.computeUEA(_id);
+        
+        // Get the salt and implementation
+        bytes32 salt = factory.generateSalt(_id);
+        bytes32 chainHash = keccak256(abi.encode(_id.chainNamespace, _id.chainId));
+        (bytes32 vmHash, ) = factory.getVMType(chainHash);
+        address implementation = factory.UEA_VM(vmHash);
+        
+        // Manually compute the address using CREATE2 formula
+        address manuallyComputedAddress = address(uint160(uint256(keccak256(abi.encodePacked(
+            bytes1(0xff),
+            address(factory),
+            salt,
+            keccak256(abi.encodePacked(
+                hex"3d602d80600a3d3981f3363d3d373d3d3d363d73",
+                implementation,
+                hex"5af43d82803e903d91602b57fd5bf3"
+            ))
+        )))));
+        
+        // Addresses should match
+        assertEq(computedAddress, manuallyComputedAddress);
+    }
+    
+    // Boundary Tests
+    function testComputeUEAWithEmptyOwner() public {
+        // Create an account with empty owner bytes
+        bytes memory emptyOwnerBytes = new bytes(0);
+        UniversalAccountId memory _id =
+            UniversalAccountId({chainNamespace: "eip155", chainId: "1", owner: emptyOwnerBytes});
+        
+        // Should compute a valid address (not revert)
+        address computedAddress = factory.computeUEA(_id);
+        assertTrue(computedAddress != address(0));
+        
+        // Deploy and verify
+        address deployedAddress = factory.deployUEA(_id);
+        assertEq(deployedAddress, computedAddress);
+    }
+
 }
