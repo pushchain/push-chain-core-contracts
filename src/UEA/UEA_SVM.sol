@@ -61,19 +61,19 @@ contract UEA_SVM is ReentrancyGuard, IUEA {
     /**
      * @inheritdoc IUEA
      */
-    function verifyPayloadSignature(bytes32 messageHash, bytes memory signature) public view returns (bool) {
-        return _verifySignatureSVM(messageHash, signature);
+    function verifyPayloadSignature(bytes32 payloadHash, bytes memory signature) public view returns (bool) {
+        return _verifySignatureSVM(payloadHash, signature);
     }
 
     /**
      * @dev Verifies the SVM signature using the verifier precompile.
-     * @param message The message to verify.
+     * @param payloadHash The payload hash to verify.
      * @param signature The signature to verify.
      * @return bool indicating whether the signature is valid.
      */
-    function _verifySignatureSVM(bytes32 message, bytes memory signature) internal view returns (bool) {
+    function _verifySignatureSVM(bytes32 payloadHash, bytes memory signature) internal view returns (bool) {
         (bool success, bytes memory result) = VERIFIER_PRECOMPILE.staticcall(
-            abi.encodeWithSignature("verifyEd25519(bytes,bytes32,bytes)", id.owner, message, signature)
+            abi.encodeWithSignature("verifyEd25519(bytes,bytes32,bytes)", id.owner, payloadHash, signature)
         );
         if (!success) {
             revert Errors.PrecompileCallFailed();
@@ -82,17 +82,15 @@ contract UEA_SVM is ReentrancyGuard, IUEA {
         return abi.decode(result, (bool));
     }
 
-    /**
-     * @dev Verifies the SVM signature using the verifier precompile.
-     *      This function is used to verify the signature of the payload using the verifier precompile.
-     *      It is used when the payload is verified using the txHash.
-     * @param payload The payload to verify.
-     * @param txHash The transaction hash to verify.
-     * @return bool indicating whether the signature is valid.
-     */
-    function verifyPayloadTxHash(UniversalPayload calldata payload, bytes calldata txHash) public view returns (bool) {
+    function verifyPayloadTxHash(bytes32 payloadHash, bytes calldata txHash) public view returns (bool) {
         (bool success, bytes memory result) = TX_BASED_VERIFIER.staticcall(
-            abi.encodeWithSignature("verifyTxHash(UniversalPayload,bytes)", payload, txHash)
+            abi.encodeWithSignature("verifyTxHash(string,string,bytes,bytes32,bytes)",
+                id.chainNamespace,
+                id.chainId,
+                id.owner,
+                payloadHash,
+                txHash
+            )
         );
         if (!success) {
             revert Errors.PrecompileCallFailed();
@@ -104,15 +102,15 @@ contract UEA_SVM is ReentrancyGuard, IUEA {
     /**
      * @inheritdoc IUEA
      */
-    function executePayload(UniversalPayload calldata payload, bytes calldata signature, bytes calldata payloadTxHash) external nonReentrant {
-        bytes32 txHash = getTransactionHash(payload);
+    function executePayload(UniversalPayload calldata payload, bytes calldata payloadVerifier) external nonReentrant {
+        bytes32 payloadHash = getPayloadHash(payload);
 
         if (payload.vType == VerificationType.universalTxVerification) {
-            if (payloadTxHash.length == 0 || !verifyPayloadTxHash(payload, payloadTxHash)) {
+            if (payloadVerifier.length == 0 || !verifyPayloadTxHash(payloadHash, payloadVerifier)) {
                 revert Errors.InvalidTxHash();
             }
         } else {
-            if (!verifyPayloadSignature(txHash, signature)) {
+            if (!verifyPayloadSignature(payloadHash, payloadVerifier)) {
                 revert Errors.InvalidSVMSignature();
             }
         }
@@ -142,7 +140,7 @@ contract UEA_SVM is ReentrancyGuard, IUEA {
      * @param payload The payload to calculate the hash for.
      * @return bytes32 The transaction hash.
      */
-    function getTransactionHash(UniversalPayload calldata payload) public view returns (bytes32) {
+    function getPayloadHash(UniversalPayload calldata payload) public view returns (bytes32) {
         if (payload.deadline > 0) {
             if (block.timestamp > payload.deadline) {
                 revert Errors.ExpiredDeadline();

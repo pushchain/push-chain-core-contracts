@@ -46,8 +46,8 @@ DA:108,0
 DA:111,0
 DA:115,3
 DA:123,0
-FN:123,UEA_EVM.getTransactionHash
-FNDA:0,UEA_EVM.getTransactionHash
+FN:123,UEA_EVM.getPayloadHash
+FNDA:0,UEA_EVM.getPayloadHash
 DA:124,7
 BRDA:124,4,0,7
 DA:125,7
@@ -114,8 +114,8 @@ DA:112,0
 DA:115,0
 DA:119,1
 DA:127,0
-FN:127,UEA_SVM.getTransactionHash
-FNDA:0,UEA_SVM.getTransactionHash
+FN:127,UEA_SVM.getPayloadHash
+FNDA:0,UEA_SVM.getPayloadHash
 DA:128,1
 BRDA:128,5,0,1
 DA:129,1

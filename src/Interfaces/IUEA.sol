@@ -45,7 +45,7 @@ interface IUEA {
 
     /**
      * @dev Verifies if a signature is valid for a given message hash.
-     * @param messageHash The hash of the message that was signed.
+     * @param payloadHash The hash of the payload that was signed.
      * @param signature The signature to verify.
      * @return A boolean indicating whether the signature is valid.
      *
@@ -58,10 +58,10 @@ interface IUEA {
      *   UniversalAccountId.owner field contains a Solana public key. The verification is done through
      *   a call to the VERIFIER_PRECOMPILE address.
      */
-    function verifyPayloadSignature(bytes32 messageHash, bytes memory signature) external view returns (bool);
+    function verifyPayloadSignature(bytes32 payloadHash, bytes memory signature) external view returns (bool);
 
     /**
-     * @dev Executes a cross-chain payload with the provided signature.
+     * @notice Executes a cross-chain payload with the provided signature.
      * @param payload The UniversalPayload struct containing execution parameters:
      *        - to: Target contract address to call
      *        - value: Native token amount to send
@@ -70,20 +70,28 @@ interface IUEA {
      *        - maxFeePerGas: Maximum fee per gas unit
      *        - nonce: Used to prevent replay attacks
      *        - deadline: Timestamp after which the payload is invalid
-     * @param signature The signature verifying the payload. The signature format depends on the UEA type:
-     *        - For EVM-based UEAs: ECDSA signature (r, s, v)
-     *        - For SVM-based UEAs: Ed25519 signature
+     * @param payloadVerifier The payloadVerifier is the bytes passed as verifier data for the given payload.
+     *        The payloadVerifier can be of 2 different types:
+     *        - a. For Signature-based verification: ECDSA signature (r, s, v)
+     *        - b. For TxHash-based verification: TxHash of the payload
+     *        Additionally, the sig-type payloadVerifier for UEA_EVM vs UEA_SVM differs:
+     *        - For UEA_EVM: The payloadVerifier is the ECDSA signature (r, s, v)
+     *        - For UEA_SVM: The payloadVerifier is the Ed25519 signature
      *
-     * @notice This function performs the following steps:
-     * 1. Generates a transaction hash from the payload
-     * 2. Verifies the signature against the hash
-     * 3. Increments the nonce to prevent replay attacks
-     * 4. Executes the call to the target contract
+     * @dev This function performs the following steps:
+     * 1. Generates a payload hash from the given payload
+     * 2. Checks if verification type is Signature-based or TxHash-based
+     * 3. If Signature-based, verifies the signature against the payload hash
+     * 4. If TxHash-based, verifies the TxHash against the payload hash
+     * 5. Increments the nonce to prevent replay attacks
+     * 6. Executes the call to the target contract
      * 5. Handles any errors during execution
      *
-     * If signature verification fails, it reverts with InvalidEVMSignature or InvalidSVMSignature.
-     * If the deadline has passed, it reverts with ExpiredDeadline.
-     * If the target contract execution fails, it reverts with ExecutionFailed or forwards the error message.
+     * @dev The function has following reverts:
+     * - If signature verification fails, it reverts with InvalidEVMSignature or InvalidSVMSignature.
+     * - If TxHash verification fails, it reverts with InvalidTxHash.
+     * - If the deadline has passed, it reverts with ExpiredDeadline.
+     * - If the target contract execution fails, it reverts with ExecutionFailed or forwards the error message.
      */
-    function executePayload(UniversalPayload calldata payload, bytes calldata signature, bytes calldata payloadTxHash) external;
+    function executePayload(UniversalPayload calldata payload, bytes calldata payloadVerifier) external;
 }

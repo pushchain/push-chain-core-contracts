@@ -149,7 +149,7 @@ contract UEASVMTest is Test {
         emit IUEA.PayloadExecuted(ownerBytes, payload.to, payload.data);
 
         // Execute the payload
-        svmSmartAccountInstance.executePayload(payload, signature, "");
+        svmSmartAccountInstance.executePayload(payload, signature);
 
         // Verify state changes
         uint256 magicValueAfter = target.getMagicNumber();

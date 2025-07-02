@@ -62,15 +62,26 @@ contract UEA_EVM is ReentrancyGuard, IUEA {
     }
 
     /**
-     * @inheritdoc IUEA
+     * @dev Verifies the EVM signature using the ECDSA library.
+     * @param payloadHash The hash of the message to verify.
+     * @param signature The signature to verify.
+     * @return bool indicating whether the signature is valid.
      */
-    function verifyPayloadSignature(bytes32 messageHash, bytes memory signature) public view returns (bool) {
-        return _verifySignatureEVM(messageHash, signature);
+    function verifyPayloadSignature(bytes32 payloadHash, bytes memory signature) public view returns (bool) {
+        address recoveredSigner = payloadHash.recover(signature);
+        return recoveredSigner == address(bytes20(id.owner));
     }
 
-    function verifyPayloadTxHash(UniversalPayload calldata payload, bytes calldata txHash) public view returns (bool) {
+    function verifyPayloadTxHash(bytes32 payloadHash, bytes calldata txHash) public view returns (bool) {
         (bool success, bytes memory result) = TX_BASED_VERIFIER.staticcall(
-            abi.encodeWithSignature("verifyTxHash(UniversalPayload,bytes)", payload, txHash)
+            abi.encodeWithSignature(
+                "verifyTxHash(string,string,bytes,bytes32,bytes)",
+                id.chainNamespace,
+                id.chainId,
+                id.owner,
+                payloadHash,
+                txHash
+            )
         );
         if (!success) {
             revert Errors.PrecompileCallFailed();
@@ -80,29 +91,17 @@ contract UEA_EVM is ReentrancyGuard, IUEA {
     }
 
     /**
-     * @dev Verifies the EVM signature using the ECDSA library.
-     * @param messageHash The hash of the message to verify.
-     * @param signature The signature to verify.
-     * @return bool indicating whether the signature is valid.
-     */
-    function _verifySignatureEVM(bytes32 messageHash, bytes memory signature) internal view returns (bool) {
-        address recoveredSigner = messageHash.recover(signature);
-        return recoveredSigner == address(bytes20(id.owner));
-    }
-
-    /**
      * @inheritdoc IUEA
      */
-    function executePayload(UniversalPayload calldata payload, bytes calldata signature, bytes calldata payloadTxHash) external nonReentrant {
+    function executePayload(UniversalPayload calldata payload, bytes calldata payloadVerifier) external nonReentrant {
+        bytes32 payloadHash = getPayloadHash(payload);
 
         if (payload.vType == VerificationType.universalTxVerification) {
-            if (payloadTxHash.length == 0 || !verifyPayloadTxHash(payload, payloadTxHash)) {
+            if (payloadVerifier.length == 0 || !verifyPayloadTxHash(payloadHash, payloadVerifier)) {
                 revert Errors.InvalidTxHash();
             }
         } else {
-            bytes32 txHash = getTransactionHash(payload);
-            
-            if (!verifyPayloadSignature(txHash, signature)) {
+            if (!verifyPayloadSignature(payloadHash, payloadVerifier)) {
                 revert Errors.InvalidEVMSignature();
             }
         }
@@ -132,7 +131,7 @@ contract UEA_EVM is ReentrancyGuard, IUEA {
      * @param payload The payload to calculate the hash for.
      * @return bytes32 The transaction hash.
      */
-    function getTransactionHash(UniversalPayload calldata payload) public view returns (bytes32) {
+    function getPayloadHash(UniversalPayload calldata payload) public view returns (bytes32) {
         if (payload.deadline > 0) {
             if (block.timestamp > payload.deadline) {
                 revert Errors.ExpiredDeadline();
