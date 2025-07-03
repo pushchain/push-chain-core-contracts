@@ -93,15 +93,15 @@ contract UEA_EVM is ReentrancyGuard, IUEA {
     /**
      * @inheritdoc IUEA
      */
-    function executePayload(UniversalPayload calldata payload, bytes calldata payloadVerifier) external nonReentrant {
+    function executePayload(UniversalPayload calldata payload, bytes calldata verificationData) external nonReentrant {
         bytes32 payloadHash = getPayloadHash(payload);
 
         if (payload.vType == VerificationType.universalTxVerification) {
-            if (payloadVerifier.length == 0 || !verifyPayloadTxHash(payloadHash, payloadVerifier)) {
+            if (verificationData.length == 0 || !verifyPayloadTxHash(payloadHash, verificationData)) {
                 revert Errors.InvalidTxHash();
             }
         } else {
-            if (!verifyPayloadSignature(payloadHash, payloadVerifier)) {
+            if (!verifyPayloadSignature(payloadHash, verificationData)) {
                 revert Errors.InvalidEVMSignature();
             }
         }

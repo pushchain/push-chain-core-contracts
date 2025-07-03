@@ -70,13 +70,13 @@ interface IUEA {
      *        - maxFeePerGas: Maximum fee per gas unit
      *        - nonce: Used to prevent replay attacks
      *        - deadline: Timestamp after which the payload is invalid
-     * @param payloadVerifier The payloadVerifier is the bytes passed as verifier data for the given payload.
-     *        The payloadVerifier can be of 2 different types:
+     * @param verificationData The verificationData is the bytes passed as verifier data for the given payload.
+     *        The verificationData can be of 2 different types:
      *        - a. For Signature-based verification: ECDSA signature (r, s, v)
      *        - b. For TxHash-based verification: TxHash of the payload
-     *        Additionally, the sig-type payloadVerifier for UEA_EVM vs UEA_SVM differs:
-     *        - For UEA_EVM: The payloadVerifier is the ECDSA signature (r, s, v)
-     *        - For UEA_SVM: The payloadVerifier is the Ed25519 signature
+     *        Additionally, the sig-type verificationData for UEA_EVM vs UEA_SVM differs:
+     *        - For UEA_EVM: The verificationData is the ECDSA signature (r, s, v)
+     *        - For UEA_SVM: The verificationData is the Ed25519 signature
      *
      * @dev This function performs the following steps:
      * 1. Generates a payload hash from the given payload
@@ -93,5 +93,5 @@ interface IUEA {
      * - If the deadline has passed, it reverts with ExpiredDeadline.
      * - If the target contract execution fails, it reverts with ExecutionFailed or forwards the error message.
      */
-    function executePayload(UniversalPayload calldata payload, bytes calldata payloadVerifier) external;
+    function executePayload(UniversalPayload calldata payload, bytes calldata verificationData) external;
 }
