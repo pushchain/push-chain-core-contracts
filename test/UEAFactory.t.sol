@@ -818,4 +818,45 @@ contract UEAFactoryTest is Test {
         address deployedAddress = factory.deployUEA(_id);
         assertEq(deployedAddress, computedAddress);
     }
+
+    // Test for the case where we have a UEA address in the mapping but the code isn't deployed
+    function testGetUEAForOriginWithMappingButNoCode() public {
+        // Create an account
+        bytes memory testOwnerBytes = abi.encodePacked(makeAddr("testowner"));
+        UniversalAccountId memory _id =
+            UniversalAccountId({chainNamespace: "eip155", chainId: "1", owner: testOwnerBytes});
+        
+        // Generate salt
+        bytes32 salt = factory.generateSalt(_id);
+        
+        // Manually set the UOA_to_UEA mapping without actually deploying
+        // We need to do this with VM storage manipulation since there's no public setter
+        address mockUEAAddress = makeAddr("mockUEA");
+        vm.store(
+            address(factory),
+            keccak256(abi.encode(salt, uint256(1))), // slot for UOA_to_UEA[salt]
+            bytes32(uint256(uint160(mockUEAAddress)))
+        );
+        
+        // Now call getUEAForOrigin - should return our address but isDeployed = false
+        (address uea, bool isDeployed) = factory.getUEAForOrigin(_id);
+        assertEq(uea, mockUEAAddress);
+        assertFalse(isDeployed); // No code at this address
+    }
+
+    // Test for the case where getOriginForUEA is called with an address that has an owner
+    function testGetOriginForUEAWithOwner() public {
+        // Create and deploy a UEA
+        bytes memory ueaOwnerBytes = abi.encodePacked(makeAddr("uea_owner_with_length"));
+        UniversalAccountId memory ueaId =
+            UniversalAccountId({chainNamespace: "eip155", chainId: "1", owner: ueaOwnerBytes});
+        address ueaAddress = factory.deployUEA(ueaId);
+        
+        // Call getOriginForUEA
+        (UniversalAccountId memory account, bool isUEA) = factory.getOriginForUEA(ueaAddress);
+        
+        // Should return true for isUEA since owner.length > 0
+        assertTrue(isUEA);
+        assertTrue(account.owner.length > 0);
+    }
 }
