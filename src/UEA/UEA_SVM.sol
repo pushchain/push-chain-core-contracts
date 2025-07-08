@@ -5,7 +5,7 @@ import {Errors} from "../libraries/Errors.sol";
 import {IUEA} from "../Interfaces/IUEA.sol";
 import {ReentrancyGuard} from "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
 import {StringUtils} from "../libraries/Utils.sol";
-import {UniversalAccountId, UniversalPayload, UNIVERSAL_PAYLOAD_TYPEHASH} from "../libraries/Types.sol";
+import {UniversalAccountId, UniversalPayload, VerificationType, UNIVERSAL_PAYLOAD_TYPEHASH} from "../libraries/Types.sol";
 /**
  * @title UEA_SVM (Universal Executor Account for SVM)
  * @dev Implementation of the IUEA interface for SVM-based external accounts.
@@ -25,9 +25,10 @@ contract UEA_SVM is ReentrancyGuard, IUEA {
     string public constant VERSION = "0.1.0";
     // @notice The verifier precompile address
     address public constant VERIFIER_PRECOMPILE = 0x00000000000000000000000000000000000000ca;
+    // @notice Precompile address for TxHash Based Verification
+    address public constant TX_BASED_VERIFIER = 0x0000000000000000000000000000000000000901;
     // @notice Hash of keccak256("EIP712Domain_SVM(string version,string chainId,address verifyingContract)")
-    bytes32 public constant DOMAIN_SEPARATOR_TYPEHASH_SVM =
-        0x3aefc31558906b9b2c54de94f82a9b2455c24b4ba2b642ebb545ea2cc64a1e4b;
+    bytes32 public constant DOMAIN_SEPARATOR_TYPEHASH_SVM = 0x3aefc31558906b9b2c54de94f82a9b2455c24b4ba2b642ebb545ea2cc64a1e4b;
 
     /**
      * @dev Returns the domain separator for EIP-712 signing.
@@ -60,19 +61,36 @@ contract UEA_SVM is ReentrancyGuard, IUEA {
     /**
      * @inheritdoc IUEA
      */
-    function verifyPayloadSignature(bytes32 messageHash, bytes memory signature) public view returns (bool) {
-        return _verifySignatureSVM(messageHash, signature);
+    function verifyPayloadSignature(bytes32 payloadHash, bytes memory signature) public view returns (bool) {
+        return _verifySignatureSVM(payloadHash, signature);
     }
 
     /**
      * @dev Verifies the SVM signature using the verifier precompile.
-     * @param message The message to verify.
+     * @param payloadHash The payload hash to verify.
      * @param signature The signature to verify.
      * @return bool indicating whether the signature is valid.
      */
-    function _verifySignatureSVM(bytes32 message, bytes memory signature) internal view returns (bool) {
+    function _verifySignatureSVM(bytes32 payloadHash, bytes memory signature) internal view returns (bool) {
         (bool success, bytes memory result) = VERIFIER_PRECOMPILE.staticcall(
-            abi.encodeWithSignature("verifyEd25519(bytes,bytes32,bytes)", id.owner, message, signature)
+            abi.encodeWithSignature("verifyEd25519(bytes,bytes32,bytes)", id.owner, payloadHash, signature)
+        );
+        if (!success) {
+            revert Errors.PrecompileCallFailed();
+        }
+
+        return abi.decode(result, (bool));
+    }
+
+    function verifyPayloadTxHash(bytes32 payloadHash, bytes calldata txHash) public view returns (bool) {
+        (bool success, bytes memory result) = TX_BASED_VERIFIER.staticcall(
+            abi.encodeWithSignature("verifyTxHash(string,string,bytes,bytes32,bytes)",
+                id.chainNamespace,
+                id.chainId,
+                id.owner,
+                payloadHash,
+                txHash
+            )
         );
         if (!success) {
             revert Errors.PrecompileCallFailed();
@@ -84,11 +102,17 @@ contract UEA_SVM is ReentrancyGuard, IUEA {
     /**
      * @inheritdoc IUEA
      */
-    function executePayload(UniversalPayload calldata payload, bytes calldata signature) external nonReentrant {
-        bytes32 txHash = getTransactionHash(payload);
+    function executePayload(UniversalPayload calldata payload, bytes calldata verificationData) external nonReentrant {
+        bytes32 payloadHash = getPayloadHash(payload);
 
-        if (!verifyPayloadSignature(txHash, signature)) {
-            revert Errors.InvalidSVMSignature();
+        if (payload.vType == VerificationType.universalTxVerification) {
+            if (verificationData.length == 0 || !verifyPayloadTxHash(payloadHash, verificationData)) {
+                revert Errors.InvalidTxHash();
+            }
+        } else {
+            if (!verifyPayloadSignature(payloadHash, verificationData)) {
+                revert Errors.InvalidSVMSignature();
+            }
         }
 
         unchecked {
@@ -116,7 +140,7 @@ contract UEA_SVM is ReentrancyGuard, IUEA {
      * @param payload The payload to calculate the hash for.
      * @return bytes32 The transaction hash.
      */
-    function getTransactionHash(UniversalPayload calldata payload) public view returns (bytes32) {
+    function getPayloadHash(UniversalPayload calldata payload) public view returns (bytes32) {
         if (payload.deadline > 0) {
             if (block.timestamp > payload.deadline) {
                 revert Errors.ExpiredDeadline();
