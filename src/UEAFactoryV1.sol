@@ -226,8 +226,8 @@ contract UEAFactoryV1 is Initializable, OwnableUpgradeable, IUEAFactory {
 
         return (account, isUEA);
     }
-
     /// @inheritdoc IUEAFactory
+
     function getUEAForOrigin(UniversalAccountId memory _id) external view returns (address uea, bool isDeployed) {
         // Generate salt from the UniversalAccountId struct
         bytes32 salt = generateSalt(_id);
