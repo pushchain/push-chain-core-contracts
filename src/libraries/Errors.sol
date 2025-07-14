@@ -29,4 +29,7 @@ library Errors {
 
     // Input validation errors
     error InvalidInputArgs();
+
+    // Common Errors
+    error InvalidCall();
 }
