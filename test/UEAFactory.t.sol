@@ -5,7 +5,6 @@ import "forge-std/Test.sol";
 import "forge-std/console.sol";
 
 import "../src/libraries/Types.sol";
-import {Target} from "../src/mocks/Target.sol";
 import {UEAFactoryV1} from "../src/UEAFactoryV1.sol";
 import {UEA_EVM} from "../src/UEA/UEA_EVM.sol";
 import {UEA_SVM} from "../src/UEA/UEA_SVM.sol";
@@ -17,7 +16,6 @@ import {UEAProxy} from "../src/UEAProxy.sol";
 
 
 contract UEAFactoryTest is Test {
-    Target target;
     UEAFactoryV1 factory;
     UEA_EVM ueaEVMImpl;
     UEA_SVM ueaSVMImpl;
@@ -43,7 +41,6 @@ contract UEAFactoryTest is Test {
     bytes32 solanaChainHash;
 
     function setUp() public {
-        target = new Target();
         deployer = address(this);
         nonOwner = makeAddr("nonOwner");
 
