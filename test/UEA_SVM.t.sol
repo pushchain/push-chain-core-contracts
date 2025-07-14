@@ -11,12 +11,14 @@ import {UEA_SVM} from "../src/UEA/UEA_SVM.sol";
 import {Errors} from "../src/libraries/Errors.sol";
 import {IUEA} from "../src/Interfaces/IUEA.sol";
 import {ERC1967Proxy} from "@openzeppelin/contracts/proxy/ERC1967/ERC1967Proxy.sol";
+import {UEAProxy} from "../src/UEAProxy.sol";
 
 contract UEASVMTest is Test {
     Target target;
     UEAFactoryV1 factory;
     UEA_SVM svmSmartAccountImpl;
     UEA_SVM svmSmartAccountInstance;
+    UEAProxy ueaProxyImpl;
 
     // VM Hash constants
     bytes32 constant SVM_HASH = keccak256("SVM");
@@ -28,11 +30,18 @@ contract UEASVMTest is Test {
     function setUp() public {
         target = new Target();
 
+        // Deploy UEAProxy implementation
+        ueaProxyImpl = new UEAProxy();
+
         // Deploy the factory implementation
         UEAFactoryV1 factoryImpl = new UEAFactoryV1();
 
-        // Deploy and initialize the proxy
-        bytes memory initData = abi.encodeWithSelector(UEAFactoryV1.initialize.selector, address(this));
+        // Deploy and initialize the proxy with UEAProxy implementation
+        bytes memory initData = abi.encodeWithSelector(
+            UEAFactoryV1.initialize.selector, 
+            address(this),
+            address(ueaProxyImpl)
+        );
         ERC1967Proxy proxy = new ERC1967Proxy(address(factoryImpl), initData);
         factory = UEAFactoryV1(address(proxy));
 

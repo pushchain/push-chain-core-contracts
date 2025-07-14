@@ -12,12 +12,14 @@ import {UEA_EVM} from "../src/UEA/UEA_EVM.sol";
 import {Errors} from "../src/libraries/Errors.sol";
 import {IUEA} from "../src/Interfaces/IUEA.sol";
 import {ERC1967Proxy} from "@openzeppelin/contracts/proxy/ERC1967/ERC1967Proxy.sol";
+import {UEAProxy} from "../src/UEAProxy.sol";
 
 contract UEA_EVMTest is Test {
     Target target;
     UEAFactoryV1 factory;
     UEA_EVM ueaEVMImpl;
     UEA_EVM evmSmartAccountInstance;
+    UEAProxy ueaProxyImpl;
 
     // VM Hash constants
     bytes32 constant EVM_HASH = keccak256("EVM");
@@ -37,12 +39,19 @@ contract UEA_EVMTest is Test {
         revertingTarget = new RevertingTarget();
         silentRevertingTarget = new SilentRevertingTarget();
         ueaEVMImpl = new UEA_EVM();
+        
+        // Deploy UEAProxy implementation
+        ueaProxyImpl = new UEAProxy();
 
         // Deploy the factory implementation
         UEAFactoryV1 factoryImpl = new UEAFactoryV1();
 
-        // Deploy and initialize the proxy
-        bytes memory initData = abi.encodeWithSelector(UEAFactoryV1.initialize.selector, address(this));
+        // Deploy and initialize the proxy with UEAProxy implementation
+        bytes memory initData = abi.encodeWithSelector(
+            UEAFactoryV1.initialize.selector, 
+            address(this),
+            address(ueaProxyImpl)
+        );
         ERC1967Proxy proxy = new ERC1967Proxy(address(factoryImpl), initData);
         factory = UEAFactoryV1(address(proxy));
 
