@@ -37,11 +37,8 @@ contract UEASVMTest is Test {
         UEAFactoryV1 factoryImpl = new UEAFactoryV1();
 
         // Deploy and initialize the proxy with UEAProxy implementation
-        bytes memory initData = abi.encodeWithSelector(
-            UEAFactoryV1.initialize.selector, 
-            address(this),
-            address(ueaProxyImpl)
-        );
+        bytes memory initData =
+            abi.encodeWithSelector(UEAFactoryV1.initialize.selector, address(this), address(ueaProxyImpl));
         ERC1967Proxy proxy = new ERC1967Proxy(address(factoryImpl), initData);
         factory = UEAFactoryV1(address(proxy));
 
@@ -205,10 +202,10 @@ contract UEASVMTest is Test {
     function testVerifyPayloadTxHashSuccess() public deploySvmSmartAccount {
         // Create a message hash
         bytes32 payloadHash = keccak256(abi.encodePacked("test payload hash"));
-        
+
         // Mock txHash verification data
         bytes memory txHash = abi.encodePacked("mock_tx_hash_data");
-        
+
         // Mock the TX_BASED_VERIFIER precompile to return true
         vm.mockCall(
             svmSmartAccountInstance.TX_BASED_VERIFIER(),
@@ -222,20 +219,20 @@ contract UEASVMTest is Test {
             ),
             abi.encode(true)
         );
-        
+
         // Verify the txHash is valid
         bool isValid = svmSmartAccountInstance.verifyPayloadTxHash(payloadHash, txHash);
         assertTrue(isValid, "TxHash verification should succeed when precompile returns true");
     }
-    
+
     // Test for verifyPayloadTxHash with precompile failure
     function testVerifyPayloadTxHashPrecompileFailure() public deploySvmSmartAccount {
         // Create a message hash
         bytes32 payloadHash = keccak256(abi.encodePacked("test payload hash"));
-        
+
         // Mock txHash verification data
         bytes memory txHash = abi.encodePacked("mock_tx_hash_data");
-        
+
         // Mock the TX_BASED_VERIFIER precompile to revert
         vm.mockCallRevert(
             svmSmartAccountInstance.TX_BASED_VERIFIER(),
@@ -249,12 +246,12 @@ contract UEASVMTest is Test {
             ),
             "Precompile error"
         );
-        
+
         // Expect revert when precompile call fails
         vm.expectRevert(Errors.PrecompileCallFailed.selector);
         svmSmartAccountInstance.verifyPayloadTxHash(payloadHash, txHash);
     }
-    
+
     // Test executePayload with txBased verification success
     function testExecutionWithTxVerificationSuccess() public deploySvmSmartAccount {
         // Prepare calldata for target contract
@@ -273,10 +270,10 @@ contract UEASVMTest is Test {
         });
 
         bytes32 payloadHash = svmSmartAccountInstance.getPayloadHash(payload);
-        
+
         // Mock txHash verification data
         bytes memory mockTxHashData = abi.encodePacked("mock_tx_hash_data");
-        
+
         // Mock the TX_BASED_VERIFIER precompile to return true
         vm.mockCall(
             svmSmartAccountInstance.TX_BASED_VERIFIER(),
@@ -302,7 +299,7 @@ contract UEASVMTest is Test {
         assertEq(magicValueAfter, 786, "Magic value was not set correctly");
         assertEq(previousNonce + 1, svmSmartAccountInstance.nonce(), "Nonce should have incremented");
     }
-    
+
     // Test executePayload with txBased verification failure
     function testExecutionWithTxVerificationFailure() public deploySvmSmartAccount {
         // Prepare calldata for target contract
@@ -319,10 +316,10 @@ contract UEASVMTest is Test {
         });
 
         bytes32 payloadHash = svmSmartAccountInstance.getPayloadHash(payload);
-        
+
         // Mock txHash verification data
         bytes memory mockTxHashData = abi.encodePacked("mock_tx_hash_data");
-        
+
         // Mock the TX_BASED_VERIFIER precompile to return false
         vm.mockCall(
             svmSmartAccountInstance.TX_BASED_VERIFIER(),
@@ -341,7 +338,7 @@ contract UEASVMTest is Test {
         vm.expectRevert(Errors.InvalidTxHash.selector);
         svmSmartAccountInstance.executePayload(payload, mockTxHashData);
     }
-    
+
     // Test executePayload with txBased verification and empty txHash
     function testExecutionWithTxVerificationEmptyTxHash() public deploySvmSmartAccount {
         // Prepare calldata for target contract
@@ -359,7 +356,7 @@ contract UEASVMTest is Test {
 
         // Empty txHash data
         bytes memory emptyTxHashData = new bytes(0);
-        
+
         // Expect revert when txHash data is empty
         vm.expectRevert(Errors.InvalidTxHash.selector);
         svmSmartAccountInstance.executePayload(payload, emptyTxHashData);

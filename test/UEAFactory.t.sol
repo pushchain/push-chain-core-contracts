@@ -14,7 +14,6 @@ import {OwnableUpgradeable} from "@openzeppelin/contracts-upgradeable/access/Own
 import {ERC1967Proxy} from "@openzeppelin/contracts/proxy/ERC1967/ERC1967Proxy.sol";
 import {UEAProxy} from "../src/UEAProxy.sol";
 
-
 contract UEAFactoryTest is Test {
     UEAFactoryV1 factory;
     UEA_EVM ueaEVMImpl;
@@ -47,7 +46,7 @@ contract UEAFactoryTest is Test {
         // Deploy implementations for different VM types
         ueaEVMImpl = new UEA_EVM();
         ueaSVMImpl = new UEA_SVM();
-        
+
         // Deploy the UEAProxy implementation
         UEAProxy _ueaProxyImpl = new UEAProxy();
         ueaProxyImpl = address(_ueaProxyImpl);
@@ -56,16 +55,12 @@ contract UEAFactoryTest is Test {
         UEAFactoryV1 factoryImpl = new UEAFactoryV1();
 
         // Deploy and initialize the proxy with both initialOwner and UEAProxy implementation
-        bytes memory initData = abi.encodeWithSelector(
-            UEAFactoryV1.initialize.selector, 
-            deployer,
-            ueaProxyImpl
-        );
+        bytes memory initData = abi.encodeWithSelector(UEAFactoryV1.initialize.selector, deployer, ueaProxyImpl);
         ERC1967Proxy proxy = new ERC1967Proxy(address(factoryImpl), initData);
         factory = UEAFactoryV1(address(proxy));
 
         // Set up user and keys
-        (owner, ) = makeAddrAndKey("owner");
+        (owner,) = makeAddrAndKey("owner");
         ownerBytes = abi.encodePacked(owner);
 
         ownerNonEVM = hex"f1d234ab8473c0ab4f55ea1c7c3ea5feec4acb3b9498af9b63722c1b368b8e4c";
@@ -229,12 +224,12 @@ contract UEAFactoryTest is Test {
 
         // Deploy first time
         address deployedAddress = factory.deployUEA(_id);
-        
+
         // Verify the proxy was deployed
         assertTrue(factory.hasCode(deployedAddress));
-        
+
         // Try to deploy again with same salt - should fail with FailedDeployment
-        vm.expectRevert();  // Any revert is acceptable since it's a low-level CREATE2 failure
+        vm.expectRevert(); // Any revert is acceptable since it's a low-level CREATE2 failure
         factory.deployUEA(_id);
     }
 
@@ -740,7 +735,7 @@ contract UEAFactoryTest is Test {
         // it only checks if the chain is registered and UEA_PROXY_IMPLEMENTATION is set
         address computedAddress = factory.computeUEA(_id);
         assertTrue(computedAddress != address(0));
-        
+
         // However, attempting to deploy would fail because there's no implementation
         vm.expectRevert(Errors.InvalidInputArgs.selector);
         factory.deployUEA(_id);
@@ -833,13 +828,13 @@ contract UEAFactoryTest is Test {
         bytes memory testOwnerBytes = abi.encodePacked(makeAddr("testowner"));
         UniversalAccountId memory _id =
             UniversalAccountId({chainNamespace: "eip155", chainId: "1", owner: testOwnerBytes});
-        
+
         // Generate salt
         bytes32 salt = factory.generateSalt(_id);
-        
+
         // Compute what the address would be
         address computedAddress = factory.computeUEA(_id);
-        
+
         // Manually set the UOA_to_UEA mapping without actually deploying
         address mockUEAAddress = computedAddress;
         vm.store(
@@ -847,7 +842,7 @@ contract UEAFactoryTest is Test {
             keccak256(abi.encode(salt, uint256(1))), // slot for UOA_to_UEA[salt]
             bytes32(uint256(uint160(mockUEAAddress)))
         );
-        
+
         // Now call getUEAForOrigin - should return our address but isDeployed = false
         (address uea, bool isDeployed) = factory.getUEAForOrigin(_id);
         assertEq(uea, mockUEAAddress);
@@ -861,10 +856,10 @@ contract UEAFactoryTest is Test {
         UniversalAccountId memory ueaId =
             UniversalAccountId({chainNamespace: "eip155", chainId: "1", owner: ueaOwnerBytes});
         address ueaAddress = factory.deployUEA(ueaId);
-        
+
         // Call getOriginForUEA
         (UniversalAccountId memory account, bool isUEA) = factory.getOriginForUEA(ueaAddress);
-        
+
         // Should return true for isUEA since owner.length > 0
         assertTrue(isUEA);
         assertTrue(account.owner.length > 0);
