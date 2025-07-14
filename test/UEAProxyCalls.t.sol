@@ -266,6 +266,32 @@ contract ProxyCallTest is Test {
         vm.expectRevert(Errors.InvalidEVMSignature.selector);
         user1UEAInstance.executePayload(payload, signature);
     }
+    
+    // Test revert flow: User -> UEAProxy -> UEA_Implementation -> Target -> (revert) -> back to User
+    function testRevertFlowFromTargetContract() public {
+        vm.deal(user1UEA, 1 ether);
+        
+        // Create payload with incorrect fee amount (0.05 ETH instead of required 0.1 ETH)
+        UniversalPayload memory payload = UniversalPayload({
+            to: address(target),
+            value: 0.05 ether, // Incorrect fee amount, will cause Target to revert
+            data: abi.encodeWithSignature("setMagicNumberWithFee(uint256)", 123),
+            gasLimit: 1000000,
+            maxFeePerGas: 0,
+            nonce: 0,
+            deadline: block.timestamp + 1000,
+            maxPriorityFeePerGas: 0,
+            vType: VerificationType.signedVerification
+        });
+        
+        bytes32 txHash = getCrosschainTxhash(user1UEAInstance, payload);
+        (uint8 v, bytes32 r, bytes32 s) = vm.sign(user1PK, txHash);
+        bytes memory signature = abi.encodePacked(r, s, v);
+        
+        // Expect the specific error from Target to bubble up through the proxy chain
+        vm.expectRevert("Insufficient fee: 0.1 ETH required");
+        user1UEAInstance.executePayload(payload, signature);
+    }
 
     // Helper function for UniversalPayload hash
     function getCrosschainTxhash(UEA_EVM _smartAccountInstance, UniversalPayload memory payload)
