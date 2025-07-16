@@ -12,8 +12,6 @@ import {Errors} from "./libraries/Errors.sol";
  *      The proxy is designed to be deployed via CREATE2 using OpenZeppelin's Clones library.
  *      Any calls to the proxy will be forwarded to the implementation contract.
  * 
- * @notice This contract doesn't use a constructor since it's meant to be deployed as a minimal clone.
- *         Instead, it uses an initialize function to set the implementation address.
  */
 contract UEAProxy {
 
