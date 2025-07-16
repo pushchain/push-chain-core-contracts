@@ -58,15 +58,21 @@ contract UEAFactoryV1 is Initializable, OwnableUpgradeable, IUEAFactory {
     /**
      * @dev Initializes the contract setting the provided address as the initial owner.
      * @param initialOwner The initial owner of the contract
-     * @param _UEA_PROXY_IMPLEMENTATION The implementation of UEAProxy that will be cloned
      */
-    function initialize(address initialOwner, address _UEA_PROXY_IMPLEMENTATION) public initializer {
+    function initialize(address initialOwner) public initializer {
         __Ownable_init(initialOwner);
-        
+    }
+
+    /**
+     * @dev Sets the UEAProxy implementation address
+     * @param _UEA_PROXY_IMPLEMENTATION The new UEAProxy implementation address
+     * @notice Can only be called by the contract owner
+     * @notice Will revert if the address is zero
+     */
+    function setUEAProxyImplementation(address _UEA_PROXY_IMPLEMENTATION) external onlyOwner {
         if (_UEA_PROXY_IMPLEMENTATION == address(0)) {
             revert Errors.InvalidInputArgs();
         }
-        
         UEA_PROXY_IMPLEMENTATION = _UEA_PROXY_IMPLEMENTATION;
     }
 
