@@ -3,6 +3,7 @@ pragma solidity 0.8.26;
 
 
 import {Errors} from "./libraries/Errors.sol";
+import {Initializable} from "@openzeppelin/contracts/proxy/utils/Initializable.sol";
 
 /**
  * @title UEAProxy
@@ -11,12 +12,8 @@ import {Errors} from "./libraries/Errors.sol";
  *      The Implementation contract is stored in the UEA_LOGIC_SLOT, i.e., keccak256("uea.proxy.implementation") - 1.
  *      The proxy is designed to be deployed via CREATE2 using OpenZeppelin's Clones library.
  *      Any calls to the proxy will be forwarded to the implementation contract.
- * 
  */
-contract UEAProxy {
-
-    /// @notice flag for initialization
-    bool private initialized;
+contract UEAProxy is Initializable {
 
     /// @dev Storage slot with the address of the current implementation.
     /// This is the keccak-256 hash of "uea.proxy.implementation" subtracted by 1
@@ -26,12 +23,7 @@ contract UEAProxy {
      * Can only be called once.
      * @param _logic The address of the UEA implementation contract
      */
-    function initializeUEA(address _logic) external {
-        if (initialized) {
-            revert Errors.AccountAlreadyExists();
-        }
-        initialized = true;
-        
+    function initializeUEA(address _logic) external initializer {
         address currentImpl = getImplementation();
         if (currentImpl != address(0)) {
             revert Errors.InvalidCall();
