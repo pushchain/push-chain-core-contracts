@@ -67,17 +67,6 @@ contract UEAMigration {
     }
 
     /**
-     * @notice Returns the current implementation address.
-     * @return impl The address of the current implementation
-     */
-    function getImplementation() public view returns (address impl) {
-        bytes32 slot = UEA_LOGIC_SLOT;
-        assembly {
-            impl := sload(slot)
-        }
-    }
-
-    /**
      * @notice Migrate the UEAProxy to the new UEA_EVM implementation.
      * @dev This function can only be called via delegatecall from a UEAProxy.
      */
