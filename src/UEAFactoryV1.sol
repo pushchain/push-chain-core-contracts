@@ -215,7 +215,7 @@ contract UEAFactoryV1 is Initializable, OwnableUpgradeable, IUEAFactory {
         }
         
         bytes32 chainHash = keccak256(abi.encode(_id.chainNamespace, _id.chainId));
-        (bytes32 vmHash, bool isRegistered) = getVMType(chainHash);
+        (, bool isRegistered) = getVMType(chainHash);
         if (!isRegistered) {
             revert Errors.InvalidInputArgs();
         }
