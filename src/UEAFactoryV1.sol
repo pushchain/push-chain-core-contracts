@@ -98,19 +98,6 @@ contract UEAFactoryV1 is Initializable, OwnableUpgradeable, IUEAFactory {
     }
 
     /**
-     * @dev Sets the UEAProxy implementation address
-     * @param _UEA_PROXY_IMPLEMENTATION The new UEAProxy implementation address
-     * @notice Can only be called by the contract owner
-     * @notice Will revert if the address is zero
-     */
-    function updateUEA_PROXY_IMPLEMENTATION(address _UEA_PROXY_IMPLEMENTATION) external onlyOwner {
-        if (_UEA_PROXY_IMPLEMENTATION == address(0)) {
-            revert Errors.InvalidInputArgs();
-        }
-        UEA_PROXY_IMPLEMENTATION = _UEA_PROXY_IMPLEMENTATION;
-    }
-
-    /**
      * @dev Registers a new chain with its VM type hash
      * @param _chainHash The hash of the chain identifier to register (e.g., keccak256(abi.encode("eip155:1")))
      * @param _vmHash The VM type hash for this chain

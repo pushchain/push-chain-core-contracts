@@ -17,7 +17,7 @@ contract UEAProxy is Initializable {
 
     /// @dev Storage slot with the address of the current implementation.
     /// This is the keccak-256 hash of "uea.proxy.implementation" subtracted by 1
-    bytes32 private constant UEA_LOGIC_SLOT = 0x5f15d873c0e739ae79493cec2a0d5a18f20f9d7e4d1ddb3be2ba05f35764097e;
+    bytes32 private constant UEA_LOGIC_SLOT = 0x868a771a75a4aa6c2be13e9a9617cb8ea240ed84a3a90c8469537393ec3e115d;
     /**
      * @dev Initializes the proxy with an implementation address.
      * Can only be called once.
