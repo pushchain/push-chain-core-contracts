@@ -35,9 +35,6 @@ import {UEAProxy} from "./UEAProxy.sol";
 contract UEAFactoryV1 is Initializable, OwnableUpgradeable, IUEAFactory {
     using Clones for address;
 
-    /// @notice The implementation of UEAProxy that will be cloned for each user
-    address public UEA_PROXY_IMPLEMENTATION;
-
     /// @notice Maps VM type hashes to their corresponding UEA implementation addresses
     mapping(bytes32 => address) public UEA_VM;
 
@@ -49,6 +46,8 @@ contract UEAFactoryV1 is Initializable, OwnableUpgradeable, IUEAFactory {
 
     /// @notice Maps chain identifiers to their registered VM type hashes
     mapping(bytes32 => bytes32) public CHAIN_to_VM;
+    /// @notice The implementation of UEAProxy that will be cloned for each user
+    address public UEA_PROXY_IMPLEMENTATION;
 
     /// @custom:oz-upgrades-unsafe-allow constructor
     constructor() {
