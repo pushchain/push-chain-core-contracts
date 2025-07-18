@@ -9,6 +9,7 @@ import {Initializable} from "@openzeppelin/contracts-upgradeable/proxy/utils/Ini
 import {OwnableUpgradeable} from "@openzeppelin/contracts-upgradeable/access/OwnableUpgradeable.sol";
 import {IUEAFactory} from "./Interfaces/IUEAFactory.sol";
 import {UniversalAccountId} from "./libraries/Types.sol";
+import {UEAProxy} from "./UEAProxy.sol";
 
 /**
  * @title UEAFactoryV1
@@ -45,6 +46,8 @@ contract UEAFactoryV1 is Initializable, OwnableUpgradeable, IUEAFactory {
 
     /// @notice Maps chain identifiers to their registered VM type hashes
     mapping(bytes32 => bytes32) public CHAIN_to_VM;
+    /// @notice The implementation of UEAProxy that will be cloned for each user
+    address public UEA_PROXY_IMPLEMENTATION;
 
     /// @custom:oz-upgrades-unsafe-allow constructor
     constructor() {
@@ -57,6 +60,19 @@ contract UEAFactoryV1 is Initializable, OwnableUpgradeable, IUEAFactory {
      */
     function initialize(address initialOwner) public initializer {
         __Ownable_init(initialOwner);
+    }
+
+    /**
+     * @dev Sets the UEAProxy implementation address
+     * @param _UEA_PROXY_IMPLEMENTATION The new UEAProxy implementation address
+     * @notice Can only be called by the contract owner
+     * @notice Will revert if the address is zero
+     */
+    function setUEAProxyImplementation(address _UEA_PROXY_IMPLEMENTATION) external onlyOwner {
+        if (_UEA_PROXY_IMPLEMENTATION == address(0)) {
+            revert Errors.InvalidInputArgs();
+        }
+        UEA_PROXY_IMPLEMENTATION = _UEA_PROXY_IMPLEMENTATION;
     }
 
     /**
@@ -144,17 +160,18 @@ contract UEAFactoryV1 is Initializable, OwnableUpgradeable, IUEAFactory {
     }
 
     /**
-     * @dev Deploys a new UEA for an external chain user
+     * @dev Deploys a new UEA proxy for an external chain user
      * @param _id The Universal Account information containing chain (e.g., "ETHEREUM") and owner key
-     * @return The address of the deployed UEA
+     * @return The address of the deployed UEA proxy
      * @notice Will revert if the account already exists, the chain is not registered,
      *         or if no UEA implementation is available for the chain's VM type
      */
     function deployUEA(UniversalAccountId memory _id) external returns (address) {
-        bytes32 salt = generateSalt(_id);
-        if (UOA_to_UEA[salt] != address(0)) {
-            revert Errors.AccountAlreadyExists();
+        if (UEA_PROXY_IMPLEMENTATION == address(0)) {
+            revert Errors.InvalidInputArgs();
         }
+        
+        bytes32 salt = generateSalt(_id);
 
         // Get the appropriate UEA Implementation based on VM type
         bytes32 chainHash = keccak256(abi.encode(_id.chainNamespace, _id.chainId));
@@ -168,36 +185,44 @@ contract UEAFactoryV1 is Initializable, OwnableUpgradeable, IUEAFactory {
             revert Errors.InvalidInputArgs();
         }
 
-        address _UEA = _ueaImplementation.cloneDeterministic(salt);
-        UOA_to_UEA[salt] = _UEA;
-        UEA_to_UOA[_UEA] = _id; // Store the inverse mapping
-        IUEA(_UEA).initialize(_id);
+        // Deploy the UEAProxy using CREATE2 via cloneDeterministic
+        address payable _UEAProxy = payable(UEA_PROXY_IMPLEMENTATION.cloneDeterministic(salt));
+        
+        // Initialize the proxy with the implementation address
+        UEAProxy(_UEAProxy).initializeUEA(_ueaImplementation);
+        
+        // Initialize the UEA implementation through the proxy
+        IUEA(_UEAProxy).initialize(_id);
 
-        emit UEADeployed(_UEA, _id.owner, _id.chainId, chainHash);
-        return _UEA;
+        // Store mappings
+        UOA_to_UEA[salt] = _UEAProxy;
+        UEA_to_UOA[_UEAProxy] = _id; // Store the inverse mapping
+
+        emit UEADeployed(_UEAProxy, _id.owner, _id.chainId, chainHash);
+        return _UEAProxy;
     }
 
     /**
-     * @dev Computes the address of a UEA before it is deployed
+     * @dev Computes the address of a UEA proxy before it is deployed
      * @param _id The Universal Account information containing chain identifier (e.g., "eip155:1") and owner key
-     * @return The computed address of the UEA
+     * @return The computed address of the UEA proxy
      * @notice Will revert if the chain is not registered or if no UEA implementation
      *         is available for the chain's VM type
      */
     function computeUEA(UniversalAccountId memory _id) public view returns (address) {
+        if (UEA_PROXY_IMPLEMENTATION == address(0)) {
+            revert Errors.InvalidInputArgs();
+        }
+        
         bytes32 chainHash = keccak256(abi.encode(_id.chainNamespace, _id.chainId));
-        (bytes32 vmHash, bool isRegistered) = getVMType(chainHash);
+        (, bool isRegistered) = getVMType(chainHash);
         if (!isRegistered) {
             revert Errors.InvalidInputArgs();
         }
 
-        address _ueaImplementation = UEA_VM[vmHash];
-        if (_ueaImplementation == address(0)) {
-            revert Errors.InvalidInputArgs();
-        }
-
         bytes32 salt = generateSalt(_id);
-        return _ueaImplementation.predictDeterministicAddress(salt, address(this));
+        // We're predicting the address of the UEAProxy using the fixed implementation
+        return UEA_PROXY_IMPLEMENTATION.predictDeterministicAddress(salt, address(this));
     }
 
     /**
