@@ -73,12 +73,12 @@ contract UEAMigration {
     function migrateUEAEVM() external onlyDelegateCall {
         bytes32 slot = UEA_LOGIC_SLOT;
         address implementation = UEA_EVM_IMPLEMENTATION;
-        
+
         // Store implementation address directly in storage slot
         assembly {
             sstore(slot, implementation)
         }
-        
+
         emit ImplementationUpdated(implementation);
     }
 
@@ -89,12 +89,12 @@ contract UEAMigration {
     function migrateUEASVM() external onlyDelegateCall {
         bytes32 slot = UEA_LOGIC_SLOT;
         address implementation = UEA_SVM_IMPLEMENTATION;
-        
+
         // Store implementation address directly in storage slot
         assembly {
             sstore(slot, implementation)
         }
-        
+
         emit ImplementationUpdated(implementation);
     }
 
@@ -110,4 +110,4 @@ contract UEAMigration {
         }
         return size > 0;
     }
-} 
+}
