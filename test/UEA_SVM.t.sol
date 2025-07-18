@@ -37,11 +37,10 @@ contract UEASVMTest is Test {
         UEAFactoryV1 factoryImpl = new UEAFactoryV1();
 
         // Deploy and initialize the proxy with initialOwner
-        bytes memory initData =
-            abi.encodeWithSelector(UEAFactoryV1.initialize.selector, address(this));
+        bytes memory initData = abi.encodeWithSelector(UEAFactoryV1.initialize.selector, address(this));
         ERC1967Proxy proxy = new ERC1967Proxy(address(factoryImpl), initData);
         factory = UEAFactoryV1(address(proxy));
-        
+
         // Set UEAProxy implementation after initialization
         factory.setUEAProxyImplementation(address(ueaProxyImpl));
 

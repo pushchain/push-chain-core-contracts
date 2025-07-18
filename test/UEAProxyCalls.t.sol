@@ -60,7 +60,7 @@ contract ProxyCallTest is Test {
         bytes memory initData = abi.encodeWithSelector(UEAFactoryV1.initialize.selector, admin);
         ERC1967Proxy proxy = new ERC1967Proxy(address(factoryImpl), initData);
         factory = UEAFactoryV1(address(proxy));
-        
+
         // Set UEAProxy implementation after initialization
         factory.setUEAProxyImplementation(address(ueaProxyImpl));
 
@@ -269,11 +269,11 @@ contract ProxyCallTest is Test {
         vm.expectRevert(Errors.InvalidEVMSignature.selector);
         user1UEAInstance.executePayload(payload, signature);
     }
-    
+
     // Test revert flow: User -> UEAProxy -> UEA_Implementation -> Target -> (revert) -> back to User
     function testRevertFlowFromTargetContract() public {
         vm.deal(user1UEA, 1 ether);
-        
+
         // Create payload with incorrect fee amount (0.05 ETH instead of required 0.1 ETH)
         UniversalPayload memory payload = UniversalPayload({
             to: address(target),
@@ -286,11 +286,11 @@ contract ProxyCallTest is Test {
             maxPriorityFeePerGas: 0,
             vType: VerificationType.signedVerification
         });
-        
+
         bytes32 txHash = getCrosschainTxhash(user1UEAInstance, payload);
         (uint8 v, bytes32 r, bytes32 s) = vm.sign(user1PK, txHash);
         bytes memory signature = abi.encodePacked(r, s, v);
-        
+
         // Expect the specific error from Target to bubble up through the proxy chain
         vm.expectRevert("Insufficient fee: 0.1 ETH required");
         user1UEAInstance.executePayload(payload, signature);
