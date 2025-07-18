@@ -16,7 +16,7 @@ contract UEAMigration {
     /**
      * @notice Address of this migration contract singleton.
      */
-    address public immutable MIGRATION_SINGLETON;
+    address public immutable UEA_MIGRATION_IMPLEMENTATION;
 
     /**
      * @notice Address of the UEA_EVM implementation.
@@ -46,7 +46,7 @@ contract UEAMigration {
      * If the function is called via a regular `CALL`, it will revert.
      */
     modifier onlyDelegateCall() {
-        require(address(this) != MIGRATION_SINGLETON, "Migration should only be called via delegatecall");
+        require(address(this) != UEA_MIGRATION_IMPLEMENTATION, "Migration should only be called via delegatecall");
         _;
     }
 
@@ -56,7 +56,7 @@ contract UEAMigration {
      * @param _svmImplementation Address of the new UEA_SVM implementation.
      */
     constructor(address _evmImplementation, address _svmImplementation) {
-        MIGRATION_SINGLETON = address(this);
+        UEA_MIGRATION_IMPLEMENTATION = address(this);
 
         // Ensure implementations are deployed
         require(hasCode(_evmImplementation), "UEA_EVM implementation is not deployed");
