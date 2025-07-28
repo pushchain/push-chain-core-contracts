@@ -155,8 +155,9 @@ contract PRC20 is IPRC20, PRC20Errors {
     /**
      * @dev Withdraw function - calls burn internally
      */
-    function withdraw(uint256 _amount) external {
+    function withdraw(bytes memory _to, uint256 _amount) external {
         burn(_amount);
+        emit Withdraw(msg.sender, _to, _amount);
     }
 
     //TODO ADD GAS RELATED FUNCTIONS
