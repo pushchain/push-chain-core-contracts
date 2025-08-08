@@ -26,7 +26,7 @@ contract UEA_SVM is ReentrancyGuard, IUEA {
     // @notice The verifier precompile address
     address public constant VERIFIER_PRECOMPILE = 0x00000000000000000000000000000000000000ca;
     // @notice Precompile address for TxHash Based Verification
-    address public constant TX_BASED_VERIFIER = 0x0000000000000000000000000000000000000901;
+    address public constant TX_BASED_VERIFIER = 0x00000000000000000000000000000000000000CB;
     // @notice Hash of keccak256("EIP712Domain_SVM(string version,string chainId,address verifyingContract)")
     bytes32 public constant DOMAIN_SEPARATOR_TYPEHASH_SVM = 0x3aefc31558906b9b2c54de94f82a9b2455c24b4ba2b642ebb545ea2cc64a1e4b;
 
