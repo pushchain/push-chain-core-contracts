@@ -5,6 +5,8 @@ import "forge-std/Script.sol";
 import {UEAFactoryV1} from "../src/UEAFactoryV1.sol";
 import {UEA_EVM} from "../src/UEA/UEA_EVM.sol";
 import {UEA_SVM} from "../src/UEA/UEA_SVM.sol";
+import {UEAProxy} from "../src/UEAProxy.sol";
+import {UniversalAccountId} from "../src/libraries/Types.sol";
 
 contract DeploySmartAccountScript is Script {
     function run() external {
@@ -30,6 +32,12 @@ contract DeploySmartAccountScript is Script {
         factory.registerNewChain(evmSepoliaHash, evmHash);
         factory.registerNewChain(solanaDevnetHash, svmHash);
         console.log("EVM and SVM VMs registered in factory");
+
+        UEAProxy proxyImpl = new UEAProxy();
+        console.log("UEAProxy Implementation deployed at:", address(proxyImpl));
+
+        factory.setUEAProxyImplementation(address(proxyImpl));
+        console.log("UEAProxy impl set in the factory");
 
         // 1. Deploy UEA_EVM implementation
         UEA_EVM ueaEVMImpl = new UEA_EVM();
