@@ -5,7 +5,7 @@ pragma solidity 0.8.26;
  * @title Errors
  * @dev Library for custom errors used across the UEAFactoryV1 contract and its dependencies
  */
-library Errors {
+library UEAErrors {
     // Precompile related errors
     error PrecompileCallFailed();
 
@@ -33,3 +33,27 @@ library Errors {
     // Common Errors
     error InvalidCall();
 }
+
+library HandlerErrors {
+    error CallerIsNotFungibleModule();
+    error InvalidTarget();
+    error CantBeIdenticalAddresses();
+    error CantBeZeroAddress();
+    error ZeroAddress();
+    error PoolNotFound();
+    error TokenMismatch();
+    error SlippageExceeded();
+    error DeadlineExpired();
+}
+
+library PRC20Errors {
+    error CallerIsNotUniversalExecutor();
+    error InvalidSender();          // deposit() not from allowed caller
+    error GasFeeTransferFailed();
+    error ZerogasToken();
+    error ZeroGasPrice();
+    error LowAllowance();
+    error LowBalance();
+    error ZeroAddress();
+    error ZeroAmount();
+}   

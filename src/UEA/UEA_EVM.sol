@@ -2,7 +2,7 @@
 pragma solidity 0.8.26;
 
 import "../libraries/Types.sol";
-import {Errors} from "../libraries/Errors.sol";
+import {UEAErrors as Errors} from "../libraries/Errors.sol";
 import {IUEA} from "../Interfaces/IUEA.sol";
 import {ECDSA} from "@openzeppelin/contracts/utils/cryptography/ECDSA.sol";
 import {ReentrancyGuard} from "@openzeppelin/contracts/utils/ReentrancyGuard.sol";

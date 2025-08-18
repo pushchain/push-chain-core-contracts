@@ -4,7 +4,7 @@ pragma solidity 0.8.26;
 import {IUEA} from "../interfaces/IUEA.sol";
 import {Clones} from "@openzeppelin/contracts/proxy/Clones.sol";
 
-import {Errors} from "../libraries/Errors.sol";
+import {UEAErrors as Errors} from "../libraries/Errors.sol";
 import {Initializable} from "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol";
 import {OwnableUpgradeable} from "@openzeppelin/contracts-upgradeable/access/OwnableUpgradeable.sol";
 import {IUEAFactory} from "../interfaces/IUEAFactory.sol";

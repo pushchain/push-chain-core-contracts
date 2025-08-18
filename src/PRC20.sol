@@ -3,23 +3,12 @@ pragma solidity 0.8.26;
 
 import {IHandler} from "./interfaces/IHandler.sol";
 import {IPRC20} from "./interfaces/IPRC20.sol";
+import {PRC20Errors as Errors} from "./libraries/Errors.sol";
 
 /// @title  PRC20 — Push Chain Synthetic Token (ZRC20-inspired)
 /// @notice ERC-20 compatible synthetic token minted/burned by Push Chain protocol.
 /// @dev    All imperative functionality is handled by the Handler contract and Universal Executor Module.
 contract PRC20 is IPRC20 {
-
-    //*** ERRORS ***//
-
-    error CallerIsNotUniversalExecutor();
-    error InvalidSender();          // deposit() not from allowed caller
-    error GasFeeTransferFailed();
-    error ZerogasToken();
-    error ZeroGasPrice();
-    error LowAllowance();
-    error LowBalance();
-    error ZeroAddress();
-    error ZeroAmount();
   
      //*** STATES ***//
 
@@ -53,7 +42,7 @@ contract PRC20 is IPRC20 {
 
     /// @notice Restricts to the Universal Executor Module (protocol owner)
     modifier onlyUniversalExecutor() {
-        if (msg.sender != UNIVERSAL_EXECUTOR_MODULE) revert CallerIsNotUniversalExecutor();
+        if (msg.sender != UNIVERSAL_EXECUTOR_MODULE) revert Errors.CallerIsNotUniversalExecutor();
         _;
     }
 
@@ -79,7 +68,7 @@ contract PRC20 is IPRC20 {
         address universalExecutor_,
         address handler_
     ) {
-        if (universalExecutor_ == address(0) || handler_ == address(0)) revert ZeroAddress();
+        if (universalExecutor_ == address(0) || handler_ == address(0)) revert Errors.ZeroAddress();
 
         _name = name_;
         _symbol = symbol_;
@@ -125,7 +114,7 @@ contract PRC20 is IPRC20 {
 
     /// @notice Approve spender
     function approve(address spender, uint256 amount) external returns (bool) {
-        if (spender == address(0)) revert ZeroAddress();
+        if (spender == address(0)) revert Errors.ZeroAddress();
         _allowances[msg.sender][spender] = amount;
         emit Approval(msg.sender, spender, amount);
         return true;
@@ -136,7 +125,7 @@ contract PRC20 is IPRC20 {
         _transfer(sender, recipient, amount);
 
         uint256 currentAllowance = _allowances[sender][msg.sender];
-        if (currentAllowance < amount) revert LowAllowance();
+        if (currentAllowance < amount) revert Errors.LowAllowance();
         unchecked { _allowances[sender][msg.sender] = currentAllowance - amount; }
         emit Approval(sender, msg.sender, _allowances[sender][msg.sender]);
 
@@ -156,7 +145,7 @@ contract PRC20 is IPRC20 {
     /// @param to      Recipient on Push EVM
     /// @param amount  Amount to mint
     function deposit(address to, uint256 amount) external returns (bool) {
-        if (msg.sender != HANDLER_CONTRACT && msg.sender != UNIVERSAL_EXECUTOR_MODULE) revert InvalidSender();
+        if (msg.sender != HANDLER_CONTRACT && msg.sender != UNIVERSAL_EXECUTOR_MODULE) revert Errors.InvalidSender();
 
         _mint(to, amount);
         // Encode the Universal Executor Module as the logical "from" (parity with ZRC20 style)
@@ -173,7 +162,7 @@ contract PRC20 is IPRC20 {
         (address gasToken, uint256 gasFee) = withdrawGasFee();
 
         bool result = IPRC20(gasToken).transferFrom(msg.sender, UNIVERSAL_EXECUTOR_MODULE, gasFee);
-        if (!result) revert GasFeeTransferFailed();
+        if (!result) revert Errors.GasFeeTransferFailed();
          
          _burn(msg.sender, amount);
          emit Withdrawal(msg.sender, to, amount, gasFee, PC_PROTOCOL_FEE);
@@ -187,10 +176,10 @@ contract PRC20 is IPRC20 {
     /// @return gasFee   price * GAS_LIMIT + PC_PROTOCOL_FEE
     function withdrawGasFee() public view returns (address gasToken, uint256 gasFee) {
         gasToken = IHandler(HANDLER_CONTRACT).gasTokenPRC20ByChainId(SOURCE_CHAIN_ID);
-        if (gasToken == address(0)) revert ZerogasToken();
+        if (gasToken == address(0)) revert Errors.ZerogasToken();
 
         uint256 price = IHandler(HANDLER_CONTRACT).gasPriceByChainId(SOURCE_CHAIN_ID);
-        if (price == 0) revert ZeroGasPrice();
+        if (price == 0) revert Errors.ZeroGasPrice();
 
         gasFee = price * GAS_LIMIT + PC_PROTOCOL_FEE;
     }
@@ -201,10 +190,10 @@ contract PRC20 is IPRC20 {
     /// @return gasFee    price * gasLimit_ + PC_PROTOCOL_FEE
     function withdrawGasFeeWithGasLimit(uint256 gasLimit_) external view returns (address gasToken, uint256 gasFee) {
         gasToken = IHandler(HANDLER_CONTRACT).gasTokenPRC20ByChainId(SOURCE_CHAIN_ID);
-        if (gasToken == address(0)) revert ZerogasToken();
+        if (gasToken == address(0)) revert Errors.ZerogasToken();
 
         uint256 price = IHandler(HANDLER_CONTRACT).gasPriceByChainId(SOURCE_CHAIN_ID);
-        if (price == 0) revert ZeroGasPrice();
+        if (price == 0) revert Errors.ZeroGasPrice();
 
         gasFee = price * gasLimit_ + PC_PROTOCOL_FEE;
     }
@@ -214,7 +203,7 @@ contract PRC20 is IPRC20 {
     /// @notice Update Handler contract (gas coin & price oracle source)
     /// @dev only Universal Executor may update
     function updateHandlerContract(address addr) external onlyUniversalExecutor {
-        if (addr == address(0)) revert ZeroAddress();
+        if (addr == address(0)) revert Errors.ZeroAddress();
         HANDLER_CONTRACT = addr;
         emit UpdatedHandlerContract(addr);
     }
@@ -244,10 +233,10 @@ contract PRC20 is IPRC20 {
     //*** INTERNAL ERC-20 HELPERS ***//
 
     function _transfer(address sender, address recipient, uint256 amount) internal {
-        if (sender == address(0) || recipient == address(0)) revert ZeroAddress();
+        if (sender == address(0) || recipient == address(0)) revert Errors.ZeroAddress();
 
         uint256 senderBalance = _balances[sender];
-        if (senderBalance < amount) revert LowBalance();
+        if (senderBalance < amount) revert Errors.LowBalance();
 
         unchecked {
             _balances[sender] = senderBalance - amount;
@@ -258,8 +247,8 @@ contract PRC20 is IPRC20 {
     }
 
     function _mint(address account, uint256 amount) internal {
-        if (account == address(0)) revert ZeroAddress();
-        if (amount == 0) revert ZeroAmount();
+        if (account == address(0)) revert Errors.ZeroAddress();
+        if (amount == 0) revert Errors.ZeroAmount();
 
         unchecked {
             _totalSupply += amount;
@@ -269,11 +258,11 @@ contract PRC20 is IPRC20 {
     }
 
     function _burn(address account, uint256 amount) internal {
-        if (account == address(0)) revert ZeroAddress();
-        if (amount == 0) revert ZeroAmount();
+        if (account == address(0)) revert Errors.ZeroAddress();
+        if (amount == 0) revert Errors.ZeroAmount();
 
         uint256 bal = _balances[account];
-        if (bal < amount) revert LowBalance();
+        if (bal < amount) revert Errors.LowBalance();
 
         unchecked {
             _balances[account] = bal - amount;
