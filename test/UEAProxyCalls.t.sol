@@ -6,13 +6,13 @@ import "forge-std/console.sol";
 
 import "../src/libraries/Types.sol";
 import {Target} from "../src/mocks/Target.sol";
-import {UEAFactoryV1} from "../src/UEAFactoryV1.sol";
+import {UEAFactoryV1} from "../src/uea/UEAFactoryV1.sol";
 import {ECDSA} from "@openzeppelin/contracts/utils/cryptography/ECDSA.sol";
-import {UEA_EVM} from "../src/UEA/UEA_EVM.sol";
+import {UEA_EVM} from "../src/uea/UEA_EVM.sol";
 import {Errors} from "../src/libraries/Errors.sol";
-import {IUEA} from "../src/Interfaces/IUEA.sol";
+import {IUEA} from "../src/interfaces/IUEA.sol";
 import {ERC1967Proxy} from "@openzeppelin/contracts/proxy/ERC1967/ERC1967Proxy.sol";
-import {UEAProxy} from "../src/UEAProxy.sol";
+import {UEAProxy} from "../src/uea/UEAProxy.sol";
 import {
     UniversalAccountId,
     UniversalPayload,

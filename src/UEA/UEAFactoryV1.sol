@@ -1,14 +1,14 @@
 // SPDX-License-Identifier: MIT
 pragma solidity 0.8.26;
 
-import {IUEA} from "./Interfaces/IUEA.sol";
+import {IUEA} from "../interfaces/IUEA.sol";
 import {Clones} from "@openzeppelin/contracts/proxy/Clones.sol";
 
-import {Errors} from "./libraries/Errors.sol";
+import {Errors} from "../libraries/Errors.sol";
 import {Initializable} from "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol";
 import {OwnableUpgradeable} from "@openzeppelin/contracts-upgradeable/access/OwnableUpgradeable.sol";
-import {IUEAFactory} from "./Interfaces/IUEAFactory.sol";
-import {UniversalAccountId} from "./libraries/Types.sol";
+import {IUEAFactory} from "../interfaces/IUEAFactory.sol";
+import {UniversalAccountId} from "../libraries/Types.sol";
 import {UEAProxy} from "./UEAProxy.sol";
 
 /**
