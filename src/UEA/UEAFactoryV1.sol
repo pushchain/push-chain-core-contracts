@@ -170,7 +170,7 @@ contract UEAFactoryV1 is Initializable, OwnableUpgradeable, IUEAFactory {
         if (UEA_PROXY_IMPLEMENTATION == address(0)) {
             revert Errors.InvalidInputArgs();
         }
-        
+
         bytes32 salt = generateSalt(_id);
 
         // Get the appropriate UEA Implementation based on VM type
@@ -187,10 +187,10 @@ contract UEAFactoryV1 is Initializable, OwnableUpgradeable, IUEAFactory {
 
         // Deploy the UEAProxy using CREATE2 via cloneDeterministic
         address payable _UEAProxy = payable(UEA_PROXY_IMPLEMENTATION.cloneDeterministic(salt));
-        
+
         // Initialize the proxy with the implementation address
         UEAProxy(_UEAProxy).initializeUEA(_ueaImplementation);
-        
+
         // Initialize the UEA implementation through the proxy
         IUEA(_UEAProxy).initialize(_id);
 
@@ -213,7 +213,7 @@ contract UEAFactoryV1 is Initializable, OwnableUpgradeable, IUEAFactory {
         if (UEA_PROXY_IMPLEMENTATION == address(0)) {
             revert Errors.InvalidInputArgs();
         }
-        
+
         bytes32 chainHash = keccak256(abi.encode(_id.chainNamespace, _id.chainId));
         (, bool isRegistered) = getVMType(chainHash);
         if (!isRegistered) {

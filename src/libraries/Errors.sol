@@ -48,7 +48,7 @@ library HandlerErrors {
 
 library PRC20Errors {
     error CallerIsNotUniversalExecutor();
-    error InvalidSender();          // deposit() not from allowed caller
+    error InvalidSender(); // deposit() not from allowed caller
     error GasFeeTransferFailed();
     error ZerogasToken();
     error ZeroGasPrice();
@@ -56,4 +56,4 @@ library PRC20Errors {
     error LowBalance();
     error ZeroAddress();
     error ZeroAmount();
-}   
+}

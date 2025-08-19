@@ -12,12 +12,8 @@ interface IUniversalContract {
      * @param amount The amount of tokens received
      * @param message The message data
      */
-    function onCrossChainCall(
-        pContext calldata context,
-        address prc20,
-        uint256 amount,
-        bytes calldata message
-    ) external;
+    function onCrossChainCall(pContext calldata context, address prc20, uint256 amount, bytes calldata message)
+        external;
 }
 
 /**

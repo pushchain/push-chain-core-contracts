@@ -12,11 +12,7 @@ interface IUniswapV3Factory {
      * @param fee The fee tier
      * @return pool The address of the pool
      */
-    function getPool(
-        address tokenA,
-        address tokenB,
-        uint24 fee
-    ) external view returns (address pool);
+    function getPool(address tokenA, address tokenB, uint24 fee) external view returns (address pool);
 }
 
 /**
@@ -39,10 +35,7 @@ interface ISwapRouter {
      * @param params The parameters necessary for the swap
      * @return amountOut The amount of the received token
      */
-    function exactInputSingle(ExactInputSingleParams calldata params)
-        external
-        payable
-        returns (uint256 amountOut);
+    function exactInputSingle(ExactInputSingleParams calldata params) external payable returns (uint256 amountOut);
 }
 
 /**

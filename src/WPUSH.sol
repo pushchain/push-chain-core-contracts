@@ -57,5 +57,5 @@ contract WPUSH {
 
         emit Transfer(src, dst, wad);
         return true;
-        }
+    }
 }

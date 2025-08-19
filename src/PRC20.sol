@@ -9,8 +9,7 @@ import {PRC20Errors as Errors} from "./libraries/Errors.sol";
 /// @notice ERC-20 compatible synthetic token minted/burned by Push Chain protocol.
 /// @dev    All imperative functionality is handled by the Handler contract and Universal Executor Module.
 contract PRC20 is IPRC20 {
-  
-     //*** STATES ***//
+    //*** STATES ***//
 
     /// @notice The protocol's privileged executor module (auth & fee sink)
     address public immutable UNIVERSAL_EXECUTOR_MODULE;
@@ -32,7 +31,7 @@ contract PRC20 is IPRC20 {
 
     string private _name;
     string private _symbol;
-    uint8  private _decimals;
+    uint8 private _decimals;
 
     uint256 private _totalSupply;
     mapping(address => uint256) private _balances;
@@ -60,7 +59,7 @@ contract PRC20 is IPRC20 {
     constructor(
         string memory name_,
         string memory symbol_,
-        uint8   decimals_,
+        uint8 decimals_,
         uint256 sourceChainId_,
         TokenType tokenType_,
         uint256 gasLimit_,
@@ -85,19 +84,29 @@ contract PRC20 is IPRC20 {
     //*** VIEW FUNCTIONS ***//
 
     /// @notice Token name
-    function name() external view returns (string memory) { return _name; }
+    function name() external view returns (string memory) {
+        return _name;
+    }
 
     /// @notice Token symbol
-    function symbol() external view returns (string memory) { return _symbol; }
+    function symbol() external view returns (string memory) {
+        return _symbol;
+    }
 
     /// @notice Token decimals
-    function decimals() external view returns (uint8) { return _decimals; }
+    function decimals() external view returns (uint8) {
+        return _decimals;
+    }
 
     /// @notice Total supply
-    function totalSupply() external view returns (uint256) { return _totalSupply; }
+    function totalSupply() external view returns (uint256) {
+        return _totalSupply;
+    }
 
     /// @notice Balance of an account
-    function balanceOf(address account) external view returns (uint256) { return _balances[account]; }
+    function balanceOf(address account) external view returns (uint256) {
+        return _balances[account];
+    }
 
     /// @notice Allowance from owner to spender
     function allowance(address owner, address spender) external view returns (uint256) {
@@ -126,7 +135,9 @@ contract PRC20 is IPRC20 {
 
         uint256 currentAllowance = _allowances[sender][msg.sender];
         if (currentAllowance < amount) revert Errors.LowAllowance();
-        unchecked { _allowances[sender][msg.sender] = currentAllowance - amount; }
+        unchecked {
+            _allowances[sender][msg.sender] = currentAllowance - amount;
+        }
         emit Approval(sender, msg.sender, _allowances[sender][msg.sender]);
 
         return true;
@@ -163,11 +174,11 @@ contract PRC20 is IPRC20 {
 
         bool result = IPRC20(gasToken).transferFrom(msg.sender, UNIVERSAL_EXECUTOR_MODULE, gasFee);
         if (!result) revert Errors.GasFeeTransferFailed();
-         
-         _burn(msg.sender, amount);
-         emit Withdrawal(msg.sender, to, amount, gasFee, PC_PROTOCOL_FEE);
-         return true;
-      }
+
+        _burn(msg.sender, amount);
+        emit Withdrawal(msg.sender, to, amount, gasFee, PC_PROTOCOL_FEE);
+        return true;
+    }
 
     //*** GAS FEE QUOTING (VIEW) ***//
 

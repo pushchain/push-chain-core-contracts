@@ -8,39 +8,45 @@ import "./interfaces/IHandler.sol";
 import {HandlerErrors as Errors} from "./libraries/Errors.sol";
 import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
-import "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
+import "@openzeppelin/contracts-upgradeable/utils/ReentrancyGuardUpgradeable.sol";
+import "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol";
 
 /**
- * @dev The handler contract is called by the protocol to interact with the blockchain.
- * Also includes tools to make it easier to interact with Push Chain.
- * This is a Push Chain equivalent of ZetaChain's SystemContract.
+ * @title HandlerContract
+ * @notice The HanclerContract acts as the main HANDLER for all functionalities needed by the interoperability feature of Push Chain.
+ * @dev    The HandlerContract primarily handles the following functionalities:
+ *         - Generation of supported PRC20 tokens, and transfering it to accurate recipients.
+ *         - Setting up the gas tokens for each chain.
+ *         - Setting up the gas price for each chain.
+ *         - Maintaining a registry of uniswap v3 pools for each token pair.
+ * @dev    All imperative functionalities are handled by the Universal Executor Module.
  */
-contract HandlerContract is IHandler, ReentrancyGuard {
+contract HandlerContract is IHandler, Initializable, ReentrancyGuardUpgradeable {
     using SafeERC20 for IERC20;
 
     /// @notice Map to know the gas price of each chain given a chain id.
     mapping(uint256 => uint256) public gasPriceByChainId;
-    
+
     /// @notice Map to know the PRC20 address of a token given a chain id, ex pETH, pBNB etc.
     mapping(uint256 => address) public gasTokenPRC20ByChainId;
-    
+
     /// @notice Map to know Uniswap V3 pool of PC/PRC20 given a chain id.
     mapping(uint256 => address) public gasPCPoolByChainId;
 
     /// @notice Fungible address is always the same, it's on protocol level.
-    address public constant UNIVERSAL_EXECUTOR_MODULE = 0x735b14BB79463307AAcBED86DAf3322B1e6226aB;
-    
+    address public constant UNIVERSAL_EXECUTOR_MODULE = 0x14191Ea54B4c176fCf86f51b0FAc7CB1E71Df7d7;
+
     /// @notice Uniswap V3 addresses.
-    address public immutable uniswapV3FactoryAddress;
-    address public immutable uniswapV3SwapRouterAddress;
-    address public immutable uniswapV3QuoterAddress;
-    
+    address public uniswapV3FactoryAddress;
+    address public uniswapV3SwapRouterAddress;
+    address public uniswapV3QuoterAddress;
+
     /// @notice Address of the wrapped PC to interact with Uniswap V3.
     address public wPCContractAddress;
-    
+
     /// @notice Address of Push Chain Connector.
     address public pushConnectorEVMAddress;
-    
+
     /**
      * @dev Only fungible module can deploy a handler contract.
      * @param wpc_ Address of the wrapped PC token
@@ -48,22 +54,34 @@ contract HandlerContract is IHandler, ReentrancyGuard {
      * @param uniswapV3SwapRouter_ Address of the Uniswap V3 swap router
      * @param uniswapV3Quoter_ Address of the Uniswap V3 quoter
      */
-    constructor(
-        address wpc_,
-        address uniswapV3Factory_,
-        address uniswapV3SwapRouter_,
-        address uniswapV3Quoter_
-    ) {
+    /// @custom:oz-upgrades-unsafe-allow constructor
+    constructor() {
+        _disableInitializers();
+    }
+
+    /**
+     * @dev Initializer function for the upgradeable contract.
+     * @param wpc_ Address of the wrapped PC token
+     * @param uniswapV3Factory_ Address of the Uniswap V3 factory
+     * @param uniswapV3SwapRouter_ Address of the Uniswap V3 swap router
+     * @param uniswapV3Quoter_ Address of the Uniswap V3 quoter
+     */
+    function initialize(address wpc_, address uniswapV3Factory_, address uniswapV3SwapRouter_, address uniswapV3Quoter_)
+        public
+        initializer
+    {
+        __ReentrancyGuard_init();
+
         if (msg.sender != UNIVERSAL_EXECUTOR_MODULE) revert Errors.CallerIsNotFungibleModule();
-        
+
         wPCContractAddress = wpc_;
         uniswapV3FactoryAddress = uniswapV3Factory_;
         uniswapV3SwapRouterAddress = uniswapV3SwapRouter_;
         uniswapV3QuoterAddress = uniswapV3Quoter_;
-        
+
         emit SystemContractDeployed();
     }
-    
+
     /**
      * @dev Deposit foreign coins into PRC20 and call user specified contract on Push Chain.
      * @param context Context data for deposit
@@ -83,9 +101,9 @@ contract HandlerContract is IHandler, ReentrancyGuard {
         if (target == UNIVERSAL_EXECUTOR_MODULE || target == address(this)) revert Errors.InvalidTarget();
 
         IPRC20(prc20).deposit(target, amount);
-        IUniversalContract(target).onCrossChainCall(context, prc20, amount, message);
+        //IUniversalContract(target).onCrossChainCall(context, prc20, amount, message); - NOT NEEDED FOR NOW
     }
-    
+
     /**
      * @dev Set the gas PC pool for a chain
      * @param chainID Chain ID
@@ -107,7 +125,7 @@ contract HandlerContract is IHandler, ReentrancyGuard {
         gasPCPoolByChainId[chainID] = pool;
         emit SetGasPCPool(chainID, pool, fee);
     }
-    
+
     /**
      * @dev Fungible module updates the gas price oracle periodically.
      * @param chainID Chain ID
@@ -152,7 +170,7 @@ contract HandlerContract is IHandler, ReentrancyGuard {
         pushConnectorEVMAddress = addr;
         emit SetConnectorEVM(addr);
     }
-    
+
     /**
      * @dev Default route for funding withdrawal gas with the chain's gas coin PRC20
      * @param payloadId Unique identifier for the withdrawal payload
@@ -177,7 +195,7 @@ contract HandlerContract is IHandler, ReentrancyGuard {
 
         emit GasFundedWithGasToken(payloadId, dstChainId, gasToken, amount, from, to);
     }
-    
+
     /**
      * @dev Alternate route for funding withdrawal gas by swapping the token being withdrawn
      * @param payloadId Unique identifier for the withdrawal payload
@@ -233,7 +251,7 @@ contract HandlerContract is IHandler, ReentrancyGuard {
 
         emit GasFundedViaSwap(payloadId, dstChainId, tokenIn, amountIn, gasToken, out, fee, from, to);
     }
-    
+
     /**
      * @dev View helper to quote gas out for a single hop swap
      * @param tokenIn Input token address
@@ -242,18 +260,18 @@ contract HandlerContract is IHandler, ReentrancyGuard {
      * @param amountIn Amount of input token
      * @return amountOut Expected amount of output token
      */
-    function quoteGasOutSingleHop(
-        address tokenIn,
-        address tokenOut,
-        uint24 fee,
-        uint256 amountIn
-    ) external view returns (uint256 amountOut) {
-        return IQuoter(uniswapV3QuoterAddress).quoteExactInputSingle(
-            tokenIn,
-            tokenOut,
-            fee,
-            amountIn,
-            0
-        );
+    function quoteGasOutSingleHop(address tokenIn, address tokenOut, uint24 fee, uint256 amountIn)
+        external
+        view
+        returns (uint256 amountOut)
+    {
+        return IQuoter(uniswapV3QuoterAddress).quoteExactInputSingle(tokenIn, tokenOut, fee, amountIn, 0);
     }
+
+    /**
+     * @dev This empty reserved space is put in place to allow future versions to add new
+     * variables without shifting down storage in the inheritance chain.
+     * See https://docs.openzeppelin.com/contracts/4.x/upgradeable#storage_gaps
+     */
+    uint256[50] private __gap;
 }

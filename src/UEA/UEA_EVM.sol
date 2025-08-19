@@ -7,7 +7,9 @@ import {IUEA} from "../Interfaces/IUEA.sol";
 import {ECDSA} from "@openzeppelin/contracts/utils/cryptography/ECDSA.sol";
 import {ReentrancyGuard} from "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
 import {StringUtils} from "../libraries/Utils.sol";
-import {UniversalAccountId, UniversalPayload, VerificationType, UNIVERSAL_PAYLOAD_TYPEHASH} from "../libraries/Types.sol";
+import {
+    UniversalAccountId, UniversalPayload, VerificationType, UNIVERSAL_PAYLOAD_TYPEHASH
+} from "../libraries/Types.sol";
 /**
  * @title UEA_EVM (Universal Executor Account for EVM)
  * @dev Implementation of the IUEA interface for EVM-based external accounts.
@@ -30,7 +32,8 @@ contract UEA_EVM is ReentrancyGuard, IUEA {
     // @notice Precompile address for TxHash Based Verification
     address public constant TX_BASED_VERIFIER = 0x0000000000000000000000000000000000000901;
     // @notice Hash of keccak256("EIP712Domain(string version,uint256 chainId,address verifyingContract)")
-    bytes32 public constant DOMAIN_SEPARATOR_TYPEHASH = 0x2aef22f9d7df5f9d21c56d14029233f3fdaa91917727e1eb68e504d27072d6cd;
+    bytes32 public constant DOMAIN_SEPARATOR_TYPEHASH =
+        0x2aef22f9d7df5f9d21c56d14029233f3fdaa91917727e1eb68e504d27072d6cd;
 
     /**
      * @inheritdoc IUEA

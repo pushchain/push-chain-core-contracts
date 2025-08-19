@@ -4,13 +4,10 @@ pragma solidity 0.8.26;
 /**
  * @dev Interface for PRC20 tokens
  */
-
 interface IPRC20 {
-
     /**
      * @notice Standard ERC-20 events
      */
-
     event UpdatedHandlerContract(address handler);
     event UpdatedGasLimit(uint256 gasLimit);
     event UpdatedProtocolFlatFee(uint256 protocolFlatFee);
@@ -51,11 +48,11 @@ interface IPRC20 {
     function GAS_LIMIT() external view returns (uint256);
     function PC_PROTOCOL_FEE() external view returns (uint256);
 
-
     /// @notice Token classification for provenance
     enum TokenType {
-        PC,       // Push Chain native PC-origin asset
-        NATIVE,   // Native coin of the source chain (e.g., ETH on Ethereum)
-        ERC20     // ERC-20-origin asset on the source chain
+        PC, // Push Chain native PC-origin asset
+        NATIVE, // Native coin of the source chain (e.g., ETH on Ethereum)
+        ERC20 // ERC-20-origin asset on the source chain
+
     }
 }
