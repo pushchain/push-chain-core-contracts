@@ -17,7 +17,6 @@ interface IHandler {
 
     // State variables
     function wPCContractAddress() external view returns (address);
-    function pushConnectorEVMAddress() external view returns (address);
     function gasPriceByChainId(uint256 chainID) external view returns (uint256);
     function gasTokenPRC20ByChainId(uint256 chainID) external view returns (address);
     function gasPCPoolByChainId(uint256 chainID) external view returns (address);
@@ -28,7 +27,6 @@ interface IHandler {
     event SetGasToken(uint256 chainId, address prc20);
     event SetGasPCPool(uint256 chainId, address pool, uint24 fee);
     event SetWPC(address wpc);
-    event SetConnectorEVM(address connector);
     event GasFundedWithGasToken(
         bytes32 payloadId, uint256 dstChainId, address gasToken, uint256 amount, address from, address to
     );

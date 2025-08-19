@@ -44,9 +44,6 @@ contract HandlerContract is IHandler, Initializable, ReentrancyGuardUpgradeable 
     /// @notice Address of the wrapped PC to interact with Uniswap V3.
     address public wPCContractAddress;
 
-    /// @notice Address of Push Chain Connector.
-    address public pushConnectorEVMAddress;
-
     /**
      * @dev Only fungible module can deploy a handler contract.
      * @param wpc_ Address of the wrapped PC token
@@ -158,17 +155,6 @@ contract HandlerContract is IHandler, Initializable, ReentrancyGuardUpgradeable 
         if (addr == address(0)) revert Errors.ZeroAddress();
         wPCContractAddress = addr;
         emit SetWPC(addr);
-    }
-
-    /**
-     * @dev Setter for pushConnector EVM Address
-     * @param addr Push connector new address
-     */
-    function setConnectorEVMAddress(address addr) external {
-        if (msg.sender != UNIVERSAL_EXECUTOR_MODULE) revert Errors.CallerIsNotFungibleModule();
-        if (addr == address(0)) revert Errors.ZeroAddress();
-        pushConnectorEVMAddress = addr;
-        emit SetConnectorEVM(addr);
     }
 
     /**
