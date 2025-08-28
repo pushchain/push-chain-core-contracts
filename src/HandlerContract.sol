@@ -2,10 +2,9 @@
 pragma solidity 0.8.26;
 
 import "./interfaces/IPRC20.sol";
-import "./interfaces/IUniversalContract.sol";
 import "./interfaces/IUniswapV3.sol";
 import "./interfaces/IHandler.sol";
-import {HandlerErrors as Errors} from "./libraries/Errors.sol";
+import {HandlerErrors} from "./libraries/Errors.sol";
 import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import "@openzeppelin/contracts-upgradeable/utils/ReentrancyGuardUpgradeable.sol";
@@ -34,7 +33,7 @@ contract HandlerContract is IHandler, Initializable, ReentrancyGuardUpgradeable 
     mapping(uint256 => address) public gasPCPoolByChainId;
 
     /// @notice Fungible address is always the same, it's on protocol level.
-    address public constant UNIVERSAL_EXECUTOR_MODULE = 0x14191Ea54B4c176fCf86f51b0FAc7CB1E71Df7d7;
+    address public immutable UNIVERSAL_EXECUTOR_MODULE = 0x14191Ea54B4c176fCf86f51b0FAc7CB1E71Df7d7;
 
     /// @notice Uniswap V3 addresses.
     address public uniswapV3FactoryAddress;
@@ -65,11 +64,10 @@ contract HandlerContract is IHandler, Initializable, ReentrancyGuardUpgradeable 
      */
     function initialize(address wpc_, address uniswapV3Factory_, address uniswapV3SwapRouter_, address uniswapV3Quoter_)
         public
+        virtual
         initializer
     {
         __ReentrancyGuard_init();
-
-        if (msg.sender != UNIVERSAL_EXECUTOR_MODULE) revert Errors.CallerIsNotFungibleModule();
 
         wPCContractAddress = wpc_;
         uniswapV3FactoryAddress = uniswapV3Factory_;
@@ -80,25 +78,24 @@ contract HandlerContract is IHandler, Initializable, ReentrancyGuardUpgradeable 
     }
 
     /**
-     * @dev Deposit foreign coins into PRC20 and call user specified contract on Push Chain.
-     * @param context Context data for deposit
+     * @notice Deposits PRC20 tokens to the provided target address.
+     * @dev    Can only be called by the Universal Executor Module.
+     *         For any inbound transactions of moving supported tokens from external chains to Push Chain,
+     *         the Universal Executor Module uses this function to deposit the tokens to the target address.
+     *         The target address can be any address of the user's choice.
      * @param prc20 PRC20 address for deposit
      * @param amount Amount to deposit
-     * @param target Contract address to make a call after deposit
-     * @param message Calldata for a call
+     * @param target Address to deposit tokens to
      */
-    function depositAndCall(
-        pContext calldata context,
+    function depositPRC20Token(
         address prc20,
         uint256 amount,
-        address target,
-        bytes calldata message
+        address target
     ) external {
-        if (msg.sender != UNIVERSAL_EXECUTOR_MODULE) revert Errors.CallerIsNotFungibleModule();
-        if (target == UNIVERSAL_EXECUTOR_MODULE || target == address(this)) revert Errors.InvalidTarget();
+        if (msg.sender != UNIVERSAL_EXECUTOR_MODULE) revert HandlerErrors.CallerIsNotFungibleModule();
+        if (target == UNIVERSAL_EXECUTOR_MODULE || target == address(this)) revert HandlerErrors.InvalidTarget();
 
         IPRC20(prc20).deposit(target, amount);
-        //IUniversalContract(target).onCrossChainCall(context, prc20, amount, message); - NOT NEEDED FOR NOW
     }
 
     /**
@@ -108,16 +105,15 @@ contract HandlerContract is IHandler, Initializable, ReentrancyGuardUpgradeable 
      * @param fee Uniswap V3 fee tier
      */
     function setGasPCPool(uint256 chainID, address gasToken, uint24 fee) external {
-        if (msg.sender != UNIVERSAL_EXECUTOR_MODULE) revert Errors.CallerIsNotFungibleModule();
-        // gasToken must equal gasTokenPRC20ByChainId[chainID]
-        if (gasToken != gasTokenPRC20ByChainId[chainID]) revert Errors.TokenMismatch();
-
+        if (msg.sender != UNIVERSAL_EXECUTOR_MODULE) revert HandlerErrors.CallerIsNotFungibleModule();
+        if (gasToken == address(0)) revert HandlerErrors.ZeroAddress();
+        
         address pool = IUniswapV3Factory(uniswapV3FactoryAddress).getPool(
             wPCContractAddress < gasToken ? wPCContractAddress : gasToken,
             wPCContractAddress < gasToken ? gasToken : wPCContractAddress,
             fee
         );
-        if (pool == address(0)) revert Errors.PoolNotFound();
+        if (pool == address(0)) revert HandlerErrors.PoolNotFound();
 
         gasPCPoolByChainId[chainID] = pool;
         emit SetGasPCPool(chainID, pool, fee);
@@ -129,7 +125,7 @@ contract HandlerContract is IHandler, Initializable, ReentrancyGuardUpgradeable 
      * @param price New gas price
      */
     function setGasPrice(uint256 chainID, uint256 price) external {
-        if (msg.sender != UNIVERSAL_EXECUTOR_MODULE) revert Errors.CallerIsNotFungibleModule();
+        if (msg.sender != UNIVERSAL_EXECUTOR_MODULE) revert HandlerErrors.CallerIsNotFungibleModule();
         gasPriceByChainId[chainID] = price;
         emit SetGasPrice(chainID, price);
     }
@@ -140,8 +136,8 @@ contract HandlerContract is IHandler, Initializable, ReentrancyGuardUpgradeable 
      * @param prc20 PRC20 address
      */
     function setGasTokenPRC20(uint256 chainID, address prc20) external {
-        if (msg.sender != UNIVERSAL_EXECUTOR_MODULE) revert Errors.CallerIsNotFungibleModule();
-        if (prc20 == address(0)) revert Errors.ZeroAddress();
+        if (msg.sender != UNIVERSAL_EXECUTOR_MODULE) revert HandlerErrors.CallerIsNotFungibleModule();
+        if (prc20 == address(0)) revert HandlerErrors.ZeroAddress();
         gasTokenPRC20ByChainId[chainID] = prc20;
         emit SetGasToken(chainID, prc20);
     }
@@ -151,11 +147,15 @@ contract HandlerContract is IHandler, Initializable, ReentrancyGuardUpgradeable 
      * @param addr WPC new address
      */
     function setWPCContractAddress(address addr) external {
-        if (msg.sender != UNIVERSAL_EXECUTOR_MODULE) revert Errors.CallerIsNotFungibleModule();
-        if (addr == address(0)) revert Errors.ZeroAddress();
+        if (msg.sender != UNIVERSAL_EXECUTOR_MODULE) revert HandlerErrors.CallerIsNotFungibleModule();
+        if (addr == address(0)) revert HandlerErrors.ZeroAddress();
         wPCContractAddress = addr;
         emit SetWPC(addr);
     }
+
+    //---------------------------------
+    // EXPERIMENTAL: Withdrawal Gas Funding Functions with gasToken and alternate route via swap
+    //---------------------------------
 
     /**
      * @dev Default route for funding withdrawal gas with the chain's gas coin PRC20
@@ -172,9 +172,9 @@ contract HandlerContract is IHandler, Initializable, ReentrancyGuardUpgradeable 
         address to,
         uint256 amount
     ) external {
-        if (msg.sender != UNIVERSAL_EXECUTOR_MODULE) revert Errors.CallerIsNotFungibleModule();
+        if (msg.sender != UNIVERSAL_EXECUTOR_MODULE) revert HandlerErrors.CallerIsNotFungibleModule();
         address gasToken = gasTokenPRC20ByChainId[dstChainId];
-        if (gasToken == address(0)) revert Errors.ZeroAddress();
+        if (gasToken == address(0)) revert HandlerErrors.ZeroAddress();
 
         // Pull from 'from' and send to 'to'
         SafeERC20.safeTransferFrom(IERC20(gasToken), from, to, amount);
@@ -205,11 +205,11 @@ contract HandlerContract is IHandler, Initializable, ReentrancyGuardUpgradeable 
         address to,
         uint256 deadline
     ) external nonReentrant {
-        if (msg.sender != UNIVERSAL_EXECUTOR_MODULE) revert Errors.CallerIsNotFungibleModule();
-        if (block.timestamp > deadline) revert Errors.DeadlineExpired();
+        if (msg.sender != UNIVERSAL_EXECUTOR_MODULE) revert HandlerErrors.CallerIsNotFungibleModule();
+        if (block.timestamp > deadline) revert HandlerErrors.DeadlineExpired();
 
         address gasToken = gasTokenPRC20ByChainId[dstChainId];
-        if (gasToken == address(0)) revert Errors.ZeroAddress();
+        if (gasToken == address(0)) revert HandlerErrors.ZeroAddress();
 
         // Pull tokenIn
         SafeERC20.safeTransferFrom(IERC20(tokenIn), from, address(this), amountIn);
@@ -230,7 +230,7 @@ contract HandlerContract is IHandler, Initializable, ReentrancyGuardUpgradeable 
         });
 
         uint256 out = ISwapRouter(uniswapV3SwapRouterAddress).exactInputSingle(params);
-        if (out < minGasOut) revert Errors.SlippageExceeded();
+        if (out < minGasOut) revert HandlerErrors.SlippageExceeded();
 
         // Clear approval
         SafeERC20.forceApprove(IERC20(tokenIn), uniswapV3SwapRouterAddress, 0);

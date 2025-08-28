@@ -35,25 +35,48 @@ library UEAErrors {
 }
 
 library HandlerErrors {
+    // Authentication errors
     error CallerIsNotFungibleModule();
+    
+    // Target validation errors
     error InvalidTarget();
+    
+    // Address validation errors
     error CantBeIdenticalAddresses();
     error CantBeZeroAddress();
     error ZeroAddress();
+    
+    // Pool related errors
     error PoolNotFound();
     error TokenMismatch();
+    
+    // Swap related errors
     error SlippageExceeded();
     error DeadlineExpired();
 }
 
 library PRC20Errors {
+    // Authentication errors
     error CallerIsNotUniversalExecutor();
-    error InvalidSender(); // deposit() not from allowed caller
+    error InvalidSender();          // deposit() not from allowed caller
+    
+    // Transfer related errors
     error GasFeeTransferFailed();
-    error ZerogasToken();
-    error ZeroGasPrice();
     error LowAllowance();
     error LowBalance();
+    
+    // Gas related errors
+    error ZerogasToken();
+    error ZeroGasPrice();
+    
+    // Input validation errors
     error ZeroAddress();
     error ZeroAmount();
+}
+
+library CommonErrors {
+    // Common errors
+    error ZeroAddress();
+    error InvalidInput();
+    error Unauthorized();
 }
