@@ -36,7 +36,7 @@ library UEAErrors {
 
 library HandlerErrors {
     // Authentication errors
-    error CallerIsNotFungibleModule();
+    error CallerIsNotUEModule();
     
     // Target validation errors
     error InvalidTarget();

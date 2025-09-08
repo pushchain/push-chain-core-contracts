@@ -43,6 +43,11 @@ contract HandlerContract is IHandler, Initializable, ReentrancyGuardUpgradeable 
     /// @notice Address of the wrapped PC to interact with Uniswap V3.
     address public wPCContractAddress;
 
+    modifier onlyUEModule() {
+        if (msg.sender != UNIVERSAL_EXECUTOR_MODULE) revert HandlerErrors.CallerIsNotUEModule();
+        _;
+    }
+
     /**
      * @dev Only fungible module can deploy a handler contract.
      * @param wpc_ Address of the wrapped PC token
@@ -91,8 +96,7 @@ contract HandlerContract is IHandler, Initializable, ReentrancyGuardUpgradeable 
         address prc20,
         uint256 amount,
         address target
-    ) external {
-        if (msg.sender != UNIVERSAL_EXECUTOR_MODULE) revert HandlerErrors.CallerIsNotFungibleModule();
+    ) external onlyUEModule{
         if (target == UNIVERSAL_EXECUTOR_MODULE || target == address(this)) revert HandlerErrors.InvalidTarget();
 
         IPRC20(prc20).deposit(target, amount);
@@ -104,8 +108,7 @@ contract HandlerContract is IHandler, Initializable, ReentrancyGuardUpgradeable 
      * @param gasToken Gas coin address
      * @param fee Uniswap V3 fee tier
      */
-    function setGasPCPool(uint256 chainID, address gasToken, uint24 fee) external {
-        if (msg.sender != UNIVERSAL_EXECUTOR_MODULE) revert HandlerErrors.CallerIsNotFungibleModule();
+    function setGasPCPool(uint256 chainID, address gasToken, uint24 fee) external onlyUEModule {
         if (gasToken == address(0)) revert HandlerErrors.ZeroAddress();
         
         address pool = IUniswapV3Factory(uniswapV3FactoryAddress).getPool(
@@ -124,8 +127,7 @@ contract HandlerContract is IHandler, Initializable, ReentrancyGuardUpgradeable 
      * @param chainID Chain ID
      * @param price New gas price
      */
-    function setGasPrice(uint256 chainID, uint256 price) external {
-        if (msg.sender != UNIVERSAL_EXECUTOR_MODULE) revert HandlerErrors.CallerIsNotFungibleModule();
+    function setGasPrice(uint256 chainID, uint256 price) external onlyUEModule {
         gasPriceByChainId[chainID] = price;
         emit SetGasPrice(chainID, price);
     }
@@ -135,8 +137,7 @@ contract HandlerContract is IHandler, Initializable, ReentrancyGuardUpgradeable 
      * @param chainID Chain ID
      * @param prc20 PRC20 address
      */
-    function setGasTokenPRC20(uint256 chainID, address prc20) external {
-        if (msg.sender != UNIVERSAL_EXECUTOR_MODULE) revert HandlerErrors.CallerIsNotFungibleModule();
+    function setGasTokenPRC20(uint256 chainID, address prc20) external onlyUEModule {
         if (prc20 == address(0)) revert HandlerErrors.ZeroAddress();
         gasTokenPRC20ByChainId[chainID] = prc20;
         emit SetGasToken(chainID, prc20);
@@ -146,8 +147,7 @@ contract HandlerContract is IHandler, Initializable, ReentrancyGuardUpgradeable 
      * @dev Setter for wrapped PC address.
      * @param addr WPC new address
      */
-    function setWPCContractAddress(address addr) external {
-        if (msg.sender != UNIVERSAL_EXECUTOR_MODULE) revert HandlerErrors.CallerIsNotFungibleModule();
+    function setWPCContractAddress(address addr) external onlyUEModule {
         if (addr == address(0)) revert HandlerErrors.ZeroAddress();
         wPCContractAddress = addr;
         emit SetWPC(addr);
@@ -171,8 +171,7 @@ contract HandlerContract is IHandler, Initializable, ReentrancyGuardUpgradeable 
         address from,
         address to,
         uint256 amount
-    ) external {
-        if (msg.sender != UNIVERSAL_EXECUTOR_MODULE) revert HandlerErrors.CallerIsNotFungibleModule();
+    ) external onlyUEModule {
         address gasToken = gasTokenPRC20ByChainId[dstChainId];
         if (gasToken == address(0)) revert HandlerErrors.ZeroAddress();
 
@@ -204,8 +203,7 @@ contract HandlerContract is IHandler, Initializable, ReentrancyGuardUpgradeable 
         address from,
         address to,
         uint256 deadline
-    ) external nonReentrant {
-        if (msg.sender != UNIVERSAL_EXECUTOR_MODULE) revert HandlerErrors.CallerIsNotFungibleModule();
+    ) external nonReentrant onlyUEModule {
         if (block.timestamp > deadline) revert HandlerErrors.DeadlineExpired();
 
         address gasToken = gasTokenPRC20ByChainId[dstChainId];
