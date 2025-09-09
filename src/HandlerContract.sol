@@ -9,6 +9,7 @@ import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import "@openzeppelin/contracts-upgradeable/utils/ReentrancyGuardUpgradeable.sol";
 import "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol";
+import "@openzeppelin/contracts-upgradeable/access/AccessControlUpgradeable.sol";
 
 /**
  * @title HandlerContract
@@ -20,7 +21,7 @@ import "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol";
  *         - Maintaining a registry of uniswap v3 pools for each token pair.
  * @dev    All imperative functionalities are handled by the Universal Executor Module.
  */
-contract HandlerContract is IHandler, Initializable, ReentrancyGuardUpgradeable {
+contract HandlerContract is IHandler, Initializable, ReentrancyGuardUpgradeable, AccessControlUpgradeable {
     using SafeERC20 for IERC20;
 
     /// @notice Map to know the gas price of each chain given a chain id.
@@ -31,6 +32,9 @@ contract HandlerContract is IHandler, Initializable, ReentrancyGuardUpgradeable 
 
     /// @notice Map to know Uniswap V3 pool of PC/PRC20 given a chain id.
     mapping(uint256 => address) public gasPCPoolByChainId;
+
+    /// @notice Supproted token list for auto swap to PC using Uniswap V3.
+    mapping(address => bool) public isAutoSwapSupported;
 
     /// @notice Fungible address is always the same, it's on protocol level.
     address public immutable UNIVERSAL_EXECUTOR_MODULE = 0x14191Ea54B4c176fCf86f51b0FAc7CB1E71Df7d7;
@@ -45,6 +49,11 @@ contract HandlerContract is IHandler, Initializable, ReentrancyGuardUpgradeable 
 
     modifier onlyUEModule() {
         if (msg.sender != UNIVERSAL_EXECUTOR_MODULE) revert HandlerErrors.CallerIsNotUEModule();
+        _;
+    }
+
+    modifier onlyOwner() {
+        if (!hasRole(DEFAULT_ADMIN_ROLE, msg.sender)) revert HandlerErrors.CallerIsNotOwner();
         _;
     }
 
@@ -73,6 +82,10 @@ contract HandlerContract is IHandler, Initializable, ReentrancyGuardUpgradeable 
         initializer
     {
         __ReentrancyGuard_init();
+        __AccessControl_init();
+
+        // Grant the deployer the default admin role
+        _grantRole(DEFAULT_ADMIN_ROLE, msg.sender);
 
         wPCContractAddress = wpc_;
         uniswapV3FactoryAddress = uniswapV3Factory_;
@@ -100,6 +113,66 @@ contract HandlerContract is IHandler, Initializable, ReentrancyGuardUpgradeable 
         if (target == UNIVERSAL_EXECUTOR_MODULE || target == address(this)) revert HandlerErrors.InvalidTarget();
 
         IPRC20(prc20).deposit(target, amount);
+    }
+
+    /**
+     * @notice Deposits PRC20 tokens and automatically swaps them to native PC before sending to target.
+     * @dev    Can only be called by the Universal Executor Module.
+     *         Can only be called if the PRC20 token is in the auto-swap supported list.
+     *         If no pool exists, reverts with appropriate error. Although all auto-swap supported tokens are expected to have a pool.
+     * @param prc20 PRC20 address for deposit and swap
+     * @param amount Amount to deposit and swap
+     * @param target Address to receive the swapped native PC tokens
+     * @param fee Uniswap V3 fee tier for the pool
+     * @param minPCOut Minimum amount of native PC expected from the swap
+     * @param deadline Timestamp after which the transaction will revert
+     */
+    function depositPRC20WithAutoSwap(
+        address prc20,
+        uint256 amount,
+        address target,
+        uint24 fee,
+        uint256 minPCOut,
+        uint256 deadline
+    ) external onlyUEModule nonReentrant {
+        // Validate inputs
+        if (target == UNIVERSAL_EXECUTOR_MODULE || target == address(this)) revert HandlerErrors.InvalidTarget();
+        if (block.timestamp > deadline) revert HandlerErrors.DeadlineExpired();
+        if (prc20 == address(0)) revert HandlerErrors.ZeroAddress();
+        if (amount == 0) revert HandlerErrors.ZeroAmount();
+        
+        if (!isAutoSwapSupported[prc20]) revert HandlerErrors.AutoSwapNotSupported();
+
+        address pool = IUniswapV3Factory(uniswapV3FactoryAddress).getPool(
+            prc20 < wPCContractAddress ? prc20 : wPCContractAddress,
+            prc20 < wPCContractAddress ? wPCContractAddress : prc20,
+            fee
+        );
+        if (pool == address(0)) revert HandlerErrors.PoolNotFound();
+
+        IPRC20(prc20).deposit(address(this), amount);
+
+        IPRC20(prc20).approve(uniswapV3SwapRouterAddress, amount);
+
+        // Swap PRC20 -> native PC (wrapped PC) via ExactInputSingle
+        ISwapRouter.ExactInputSingleParams memory params = ISwapRouter.ExactInputSingleParams({
+            tokenIn: prc20,
+            tokenOut: wPCContractAddress,
+            fee: fee,
+            recipient: target,
+            deadline: deadline,
+            amountIn: amount,
+            amountOutMinimum: minPCOut,
+            sqrtPriceLimitX96: 0
+        });
+
+        uint256 pcOut = ISwapRouter(uniswapV3SwapRouterAddress).exactInputSingle(params);
+        if (pcOut < minPCOut) revert HandlerErrors.SlippageExceeded();
+
+        // Clear approval
+        SafeERC20.forceApprove(IERC20(prc20), uniswapV3SwapRouterAddress, 0);
+
+        emit DepositPRC20WithAutoSwap(prc20, amount, wPCContractAddress, pcOut, fee, target);
     }
 
     /**
@@ -143,113 +216,19 @@ contract HandlerContract is IHandler, Initializable, ReentrancyGuardUpgradeable 
         emit SetGasToken(chainID, prc20);
     }
 
+    function setAutoSwapSupported(address token, bool supported) external onlyOwner {
+        isAutoSwapSupported[token] = supported;
+        emit SetAutoSwapSupported(token, supported);
+    }
+
     /**
      * @dev Setter for wrapped PC address.
      * @param addr WPC new address
      */
-    function setWPCContractAddress(address addr) external onlyUEModule {
+    function setWPCContractAddress(address addr) external onlyOwner {
         if (addr == address(0)) revert HandlerErrors.ZeroAddress();
         wPCContractAddress = addr;
         emit SetWPC(addr);
-    }
-
-    //---------------------------------
-    // EXPERIMENTAL: Withdrawal Gas Funding Functions with gasToken and alternate route via swap
-    //---------------------------------
-
-    /**
-     * @dev Default route for funding withdrawal gas with the chain's gas coin PRC20
-     * @param payloadId Unique identifier for the withdrawal payload
-     * @param dstChainId Destination chain ID
-     * @param from Address to transfer tokens from
-     * @param to Address to transfer tokens to
-     * @param amount Amount of gas coin to transfer
-     */
-    function fundWithdrawGasWithgasToken(
-        bytes32 payloadId,
-        uint256 dstChainId,
-        address from,
-        address to,
-        uint256 amount
-    ) external onlyUEModule {
-        address gasToken = gasTokenPRC20ByChainId[dstChainId];
-        if (gasToken == address(0)) revert HandlerErrors.ZeroAddress();
-
-        // Pull from 'from' and send to 'to'
-        SafeERC20.safeTransferFrom(IERC20(gasToken), from, to, amount);
-
-        emit GasFundedWithGasToken(payloadId, dstChainId, gasToken, amount, from, to);
-    }
-
-    /**
-     * @dev Alternate route for funding withdrawal gas by swapping the token being withdrawn
-     * @param payloadId Unique identifier for the withdrawal payload
-     * @param dstChainId Destination chain ID
-     * @param tokenIn Token to swap from (e.g., the withdrawn asset)
-     * @param amountIn Amount of tokenIn to use for gas funding
-     * @param fee Uniswap V3 fee tier
-     * @param minGasOut Minimum amount of gas coin to receive
-     * @param from Address to transfer tokens from
-     * @param to Address to receive gas coin
-     * @param deadline Timestamp after which the transaction will revert
-     */
-    function fundWithdrawGasViaSwap(
-        bytes32 payloadId,
-        uint256 dstChainId,
-        address tokenIn,
-        uint256 amountIn,
-        uint24 fee,
-        uint256 minGasOut,
-        address from,
-        address to,
-        uint256 deadline
-    ) external nonReentrant onlyUEModule {
-        if (block.timestamp > deadline) revert HandlerErrors.DeadlineExpired();
-
-        address gasToken = gasTokenPRC20ByChainId[dstChainId];
-        if (gasToken == address(0)) revert HandlerErrors.ZeroAddress();
-
-        // Pull tokenIn
-        SafeERC20.safeTransferFrom(IERC20(tokenIn), from, address(this), amountIn);
-
-        // Approve router
-        SafeERC20.forceApprove(IERC20(tokenIn), uniswapV3SwapRouterAddress, amountIn);
-
-        // Swap tokenIn -> gasToken via ExactInputSingle (single hop)
-        ISwapRouter.ExactInputSingleParams memory params = ISwapRouter.ExactInputSingleParams({
-            tokenIn: tokenIn,
-            tokenOut: gasToken,
-            fee: fee,
-            recipient: to,
-            deadline: deadline,
-            amountIn: amountIn,
-            amountOutMinimum: minGasOut,
-            sqrtPriceLimitX96: 0
-        });
-
-        uint256 out = ISwapRouter(uniswapV3SwapRouterAddress).exactInputSingle(params);
-        if (out < minGasOut) revert HandlerErrors.SlippageExceeded();
-
-        // Clear approval
-        SafeERC20.forceApprove(IERC20(tokenIn), uniswapV3SwapRouterAddress, 0);
-
-        emit GasFundedViaSwap(payloadId, dstChainId, tokenIn, amountIn, gasToken, out, fee, from, to);
-    }
-
-    /**
-     * @dev View helper to quote gas out for a single hop swap
-     * @param tokenIn Input token address
-     * @param tokenOut Output token address
-     * @param fee Uniswap V3 fee tier
-     * @param amountIn Amount of input token
-     * @return amountOut Expected amount of output token
-     */
-    function quoteGasOutSingleHop(address tokenIn, address tokenOut, uint24 fee, uint256 amountIn)
-        external
-        view
-        returns (uint256 amountOut)
-    {
-        return IQuoter(uniswapV3QuoterAddress).quoteExactInputSingle(tokenIn, tokenOut, fee, amountIn, 0);
     }
 
     /**

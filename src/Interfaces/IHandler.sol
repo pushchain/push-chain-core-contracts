@@ -26,6 +26,15 @@ interface IHandler {
     event SetGasPCPool(uint256 chainId, address pool, uint24 fee);
     event SetWPC(address wpc);
     event SetConnectorEVM(address connector);
+    event SetAutoSwapSupported(address token, bool supported);
+    event DepositPRC20WithAutoSwap(
+        address prc20,
+        uint256 amountIn,
+        address pcToken,
+        uint256 amountOut,
+        uint24 fee,
+        address target
+    );
     event GasFundedWithGasToken(
         bytes32 payloadId, uint256 dstChainId, address gasToken, uint256 amount, address from, address to
     );

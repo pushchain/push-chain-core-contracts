@@ -37,14 +37,17 @@ library UEAErrors {
 library HandlerErrors {
     // Authentication errors
     error CallerIsNotUEModule();
+    error CallerIsNotOwner();
     
     // Target validation errors
     error InvalidTarget();
+    error AutoSwapNotSupported();
     
     // Address validation errors
     error CantBeIdenticalAddresses();
     error CantBeZeroAddress();
     error ZeroAddress();
+    error ZeroAmount();
     
     // Pool related errors
     error PoolNotFound();
