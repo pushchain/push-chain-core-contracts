@@ -150,8 +150,10 @@ contract HandlerContract is IHandler, Initializable, ReentrancyGuardUpgradeable,
         );
         if (pool == address(0)) revert HandlerErrors.PoolNotFound();
 
+        // Deposit PRC20 tokens to this contract
         IPRC20(prc20).deposit(address(this), amount);
 
+        // Approve Uniswap V3 router to spend PRC20 tokens
         IPRC20(prc20).approve(uniswapV3SwapRouterAddress, amount);
 
         // Swap PRC20 -> native PC (wrapped PC) via ExactInputSingle
@@ -170,7 +172,7 @@ contract HandlerContract is IHandler, Initializable, ReentrancyGuardUpgradeable,
         if (pcOut < minPCOut) revert HandlerErrors.SlippageExceeded();
 
         // Clear approval
-        SafeERC20.forceApprove(IERC20(prc20), uniswapV3SwapRouterAddress, 0);
+        IPRC20(prc20).approve(uniswapV3SwapRouterAddress, 0);
 
         emit DepositPRC20WithAutoSwap(prc20, amount, wPCContractAddress, pcOut, fee, target);
     }
