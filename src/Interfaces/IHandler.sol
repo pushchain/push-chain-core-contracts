@@ -27,6 +27,9 @@ interface IHandler {
     event SetWPC(address wpc);
     event SetConnectorEVM(address connector);
     event SetAutoSwapSupported(address token, bool supported);
+    event SetDefaultFeeTier(address indexed token, uint24 feeTier);
+    event SetSlippageTolerance(address indexed token, uint256 tolerance);
+    event SetDefaultDeadlineMins(uint256 minutesValue);
     event DepositPRC20WithAutoSwap(
         address prc20,
         uint256 amountIn,

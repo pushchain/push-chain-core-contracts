@@ -10,6 +10,7 @@ import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import "@openzeppelin/contracts-upgradeable/utils/ReentrancyGuardUpgradeable.sol";
 import "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol";
 import "@openzeppelin/contracts-upgradeable/access/AccessControlUpgradeable.sol";
+import "@openzeppelin/contracts-upgradeable/utils/PausableUpgradeable.sol";
 
 /**
  * @title HandlerContract
@@ -21,7 +22,7 @@ import "@openzeppelin/contracts-upgradeable/access/AccessControlUpgradeable.sol"
  *         - Maintaining a registry of uniswap v3 pools for each token pair.
  * @dev    All imperative functionalities are handled by the Universal Executor Module.
  */
-contract HandlerContract is IHandler, Initializable, ReentrancyGuardUpgradeable, AccessControlUpgradeable {
+contract HandlerContract is IHandler, Initializable, ReentrancyGuardUpgradeable, AccessControlUpgradeable, PausableUpgradeable {
     using SafeERC20 for IERC20;
 
     /// @notice Map to know the gas price of each chain given a chain id.
@@ -35,6 +36,15 @@ contract HandlerContract is IHandler, Initializable, ReentrancyGuardUpgradeable,
 
     /// @notice Supproted token list for auto swap to PC using Uniswap V3.
     mapping(address => bool) public isAutoSwapSupported;
+
+    /// @notice Default fee tier for each token (0 = not set)
+    mapping(address => uint24) public defaultFeeTier;
+
+    /// @notice Slippage tolerance for each token in basis points (e.g., 300 = 3%)
+    mapping(address => uint256) public slippageTolerance;
+
+    /// @notice Default deadline in minutes for swaps
+    uint256 public defaultDeadlineMins = 20;
 
     /// @notice Fungible address is always the same, it's on protocol level.
     address public immutable UNIVERSAL_EXECUTOR_MODULE = 0x14191Ea54B4c176fCf86f51b0FAc7CB1E71Df7d7;
@@ -109,46 +119,73 @@ contract HandlerContract is IHandler, Initializable, ReentrancyGuardUpgradeable,
         address prc20,
         uint256 amount,
         address target
-    ) external onlyUEModule{
+    ) external onlyUEModule whenNotPaused {
         if (target == UNIVERSAL_EXECUTOR_MODULE || target == address(this)) revert HandlerErrors.InvalidTarget();
-
+        if (prc20 == address(0)) revert HandlerErrors.ZeroAddress();
+        if (amount == 0) revert HandlerErrors.ZeroAmount();
+        
         IPRC20(prc20).deposit(target, amount);
     }
 
     /**
      * @notice Deposits PRC20 tokens and automatically swaps them to native PC before sending to target.
      * @dev    Can only be called by the Universal Executor Module.
-     *         Can only be called if the PRC20 token is in the auto-swap supported list.
+     *         Can only be called if the PRC20 token is in the auto-swap supported list. ( eg pETH, pSOL, pUSDC etc.)
      *         If no pool exists, reverts with appropriate error. Although all auto-swap supported tokens are expected to have a pool.
+     *         Default values are used when parameters are set to 0. ( fee = defaultFeeTier[prc20], minPCOut = calculateMinOutput(expectedOutput, prc20), deadline = block.timestamp + (defaultDeadlineMins * 1 minutes) )
+     *         target address always receive the swapped native PC tokens.
+     *         The function is called directly by the Universal Executor Module and is also gasless.
      * @param prc20 PRC20 address for deposit and swap
      * @param amount Amount to deposit and swap
      * @param target Address to receive the swapped native PC tokens
-     * @param fee Uniswap V3 fee tier for the pool
-     * @param minPCOut Minimum amount of native PC expected from the swap
-     * @param deadline Timestamp after which the transaction will revert
+     * @param fee Uniswap V3 fee tier for the pool (0 = use default)
+     * @param minPCOut Minimum amount of native PC expected from the swap (0 = calculate from slippage tolerance)
+     * @param deadline Timestamp after which the transaction will revert (0 = use default)
      */
     function depositPRC20WithAutoSwap(
         address prc20,
         uint256 amount,
         address target,
-        uint24 fee,
-        uint256 minPCOut,
-        uint256 deadline
-    ) external onlyUEModule nonReentrant {
+        uint24 fee,        // 0 = use default
+        uint256 minPCOut,  // 0 = calculate from slippage tolerance
+        uint256 deadline   // 0 = use default
+    ) external onlyUEModule whenNotPaused nonReentrant {
         // Validate inputs
         if (target == UNIVERSAL_EXECUTOR_MODULE || target == address(this)) revert HandlerErrors.InvalidTarget();
-        if (block.timestamp > deadline) revert HandlerErrors.DeadlineExpired();
         if (prc20 == address(0)) revert HandlerErrors.ZeroAddress();
         if (amount == 0) revert HandlerErrors.ZeroAmount();
         
         if (!isAutoSwapSupported[prc20]) revert HandlerErrors.AutoSwapNotSupported();
 
+        // Use default fee tier if not provided
+        if (fee == 0) {
+            fee = defaultFeeTier[prc20];
+            if (fee == 0) revert HandlerErrors.InvalidFeeTier();
+        }
+
+        // Use default deadline if not provided
+        if (deadline == 0) {
+            deadline = block.timestamp + (defaultDeadlineMins * 1 minutes);
+        }
+        
+        if (block.timestamp > deadline) revert HandlerErrors.DeadlineExpired();
+
+        // Check pool exists
         address pool = IUniswapV3Factory(uniswapV3FactoryAddress).getPool(
             prc20 < wPCContractAddress ? prc20 : wPCContractAddress,
             prc20 < wPCContractAddress ? wPCContractAddress : prc20,
             fee
         );
         if (pool == address(0)) revert HandlerErrors.PoolNotFound();
+
+        // Calculate minimum output if not provided
+        if (minPCOut == 0) { // ToDo: check for accuracy
+            // Get expected output from Uniswap V3 Quoter
+            uint256 expectedOutput = getSwapQuote(prc20, wPCContractAddress, fee, amount);
+            
+            // Calculate minimum output based on slippage tolerance
+            minPCOut = calculateMinOutput(expectedOutput, prc20);
+        }
 
         // Deposit PRC20 tokens to this contract
         IPRC20(prc20).deposit(address(this), amount);
@@ -171,7 +208,6 @@ contract HandlerContract is IHandler, Initializable, ReentrancyGuardUpgradeable,
         uint256 pcOut = ISwapRouter(uniswapV3SwapRouterAddress).exactInputSingle(params);
         if (pcOut < minPCOut) revert HandlerErrors.SlippageExceeded();
 
-        // Clear approval
         IPRC20(prc20).approve(uniswapV3SwapRouterAddress, 0);
 
         emit DepositPRC20WithAutoSwap(prc20, amount, wPCContractAddress, pcOut, fee, target);
@@ -231,6 +267,96 @@ contract HandlerContract is IHandler, Initializable, ReentrancyGuardUpgradeable,
         if (addr == address(0)) revert HandlerErrors.ZeroAddress();
         wPCContractAddress = addr;
         emit SetWPC(addr);
+    }
+
+    /**
+     * @notice Set default fee tier for a token
+     * @param token Token address
+     * @param feeTier Fee tier (500, 3000, 10000)
+     */
+    function setDefaultFeeTier(address token, uint24 feeTier) external onlyOwner {
+        if (token == address(0)) revert HandlerErrors.ZeroAddress();
+        if (feeTier != 500 && feeTier != 3000 && feeTier != 10000) {
+            revert HandlerErrors.InvalidFeeTier();
+        }
+        defaultFeeTier[token] = feeTier;
+        emit SetDefaultFeeTier(token, feeTier);
+    }
+
+    /**
+     * @notice Set slippage tolerance for a token
+     * @param token Token address
+     * @param tolerance Slippage tolerance in basis points (e.g., 300 = 3%)
+     */
+    function setSlippageTolerance(address token, uint256 tolerance) external onlyOwner {
+        if (token == address(0)) revert HandlerErrors.ZeroAddress();
+        if (tolerance > 5000) revert HandlerErrors.InvalidSlippageTolerance(); // Max 50%
+        slippageTolerance[token] = tolerance;
+        emit SetSlippageTolerance(token, tolerance);
+    }
+
+    /**
+     * @notice Set default deadline in minutes
+     * @param minutesValue Default deadline in minutes
+     */
+    function setDefaultDeadlineMins(uint256 minutesValue) external onlyOwner {
+        defaultDeadlineMins = minutesValue;
+        emit SetDefaultDeadlineMins(minutesValue);
+    }
+
+    /**
+     * @notice Pause the contract - stops all deposit functions
+     * @dev Can only be called by the owner
+     */
+    function pause() external onlyOwner {
+        _pause();
+    }
+
+    /**
+     * @notice Unpause the contract - resumes all deposit functions
+     * @dev Can only be called by the owner
+     */
+    function unpause() external onlyOwner {
+        _unpause();
+    }
+
+    /**
+     * @notice Gets quote for token swap using Uniswap V3 Quoter
+     * @param tokenIn Input token
+     * @param tokenOut Output token  
+     * @param fee Fee tier
+     * @param amountIn Input amount
+     * @return amountOut Expected output amount
+     */
+    function getSwapQuote(
+        address tokenIn,
+        address tokenOut,
+        uint24 fee,
+        uint256 amountIn
+    ) public view returns (uint256) {
+        return IQuoter(uniswapV3QuoterAddress).quoteExactInputSingle(
+            tokenIn,
+            tokenOut,
+            fee,
+            amountIn,
+            0 // sqrtPriceLimitX96 = 0 (no price limit)
+        );
+    }
+
+    /**
+     * @notice Calculates minimum output based on slippage tolerance
+     * @param expectedOutput Expected output amount from quote (in PC tokens)
+     * @param token Token address to get slippage tolerance for
+     * @return minAmountOut Minimum output amount (in PC tokens)
+     */
+    function calculateMinOutput(uint256 expectedOutput, address token) internal view returns (uint256) {
+        uint256 tolerance = slippageTolerance[token];
+        if (tolerance == 0) {
+            tolerance = 300; // Default 3% slippage tolerance
+        }
+        
+        // Calculate minimum output: expectedOutput * (10000 - tolerance) / 10000
+        return expectedOutput * (10000 - tolerance) / 10000;
     }
 
     /**

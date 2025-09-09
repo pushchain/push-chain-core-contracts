@@ -56,6 +56,10 @@ library HandlerErrors {
     // Swap related errors
     error SlippageExceeded();
     error DeadlineExpired();
+    
+    // Default value errors
+    error InvalidFeeTier();
+    error InvalidSlippageTolerance();
 }
 
 library PRC20Errors {
