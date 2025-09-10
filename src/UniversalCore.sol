@@ -4,7 +4,7 @@ pragma solidity 0.8.26;
 import "./interfaces/IPRC20.sol";
 import "./interfaces/IUniswapV3.sol";
 import "./interfaces/IHandler.sol";
-import {HandlerErrors} from "./libraries/Errors.sol";
+import {UniversalCoreErrors} from "./libraries/Errors.sol";
 import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import "@openzeppelin/contracts-upgradeable/utils/ReentrancyGuardUpgradeable.sol";
@@ -13,16 +13,16 @@ import "@openzeppelin/contracts-upgradeable/access/AccessControlUpgradeable.sol"
 import "@openzeppelin/contracts-upgradeable/utils/PausableUpgradeable.sol";
 
 /**
- * @title HandlerContract
- * @notice The HanclerContract acts as the main HANDLER for all functionalities needed by the interoperability feature of Push Chain.
- * @dev    The HandlerContract primarily handles the following functionalities:
+ * @title UniversalCore
+ * @notice The UniversalCore acts as the main HANDLER for all functionalities needed by the interoperability feature of Push Chain.
+ * @dev    The UniversalCore primarily handles the following functionalities:
  *         - Generation of supported PRC20 tokens, and transfering it to accurate recipients.
  *         - Setting up the gas tokens for each chain.
  *         - Setting up the gas price for each chain.
  *         - Maintaining a registry of uniswap v3 pools for each token pair.
  * @dev    All imperative functionalities are handled by the Universal Executor Module.
  */
-contract HandlerContract is IHandler, Initializable, ReentrancyGuardUpgradeable, AccessControlUpgradeable, PausableUpgradeable {
+contract UniversalCore is IHandler, Initializable, ReentrancyGuardUpgradeable, AccessControlUpgradeable, PausableUpgradeable {
     using SafeERC20 for IERC20;
 
     /// @notice Map to know the gas price of each chain given a chain id.
@@ -58,12 +58,12 @@ contract HandlerContract is IHandler, Initializable, ReentrancyGuardUpgradeable,
     address public wPCContractAddress;
 
     modifier onlyUEModule() {
-        if (msg.sender != UNIVERSAL_EXECUTOR_MODULE) revert HandlerErrors.CallerIsNotUEModule();
+        if (msg.sender != UNIVERSAL_EXECUTOR_MODULE) revert UniversalCoreErrors.CallerIsNotUEModule();
         _;
     }
 
     modifier onlyOwner() {
-        if (!hasRole(DEFAULT_ADMIN_ROLE, msg.sender)) revert HandlerErrors.CallerIsNotOwner();
+        if (!hasRole(DEFAULT_ADMIN_ROLE, msg.sender)) revert UniversalCoreErrors.CallerIsNotOwner();
         _;
     }
 
@@ -120,9 +120,9 @@ contract HandlerContract is IHandler, Initializable, ReentrancyGuardUpgradeable,
         uint256 amount,
         address target
     ) external onlyUEModule whenNotPaused {
-        if (target == UNIVERSAL_EXECUTOR_MODULE || target == address(this)) revert HandlerErrors.InvalidTarget();
-        if (prc20 == address(0)) revert HandlerErrors.ZeroAddress();
-        if (amount == 0) revert HandlerErrors.ZeroAmount();
+        if (target == UNIVERSAL_EXECUTOR_MODULE || target == address(this)) revert UniversalCoreErrors.InvalidTarget();
+        if (prc20 == address(0)) revert UniversalCoreErrors.ZeroAddress();
+        if (amount == 0) revert UniversalCoreErrors.ZeroAmount();
         
         IPRC20(prc20).deposit(target, amount);
     }
@@ -151,16 +151,16 @@ contract HandlerContract is IHandler, Initializable, ReentrancyGuardUpgradeable,
         uint256 deadline   // 0 = use default
     ) external onlyUEModule whenNotPaused nonReentrant {
         // Validate inputs
-        if (target == UNIVERSAL_EXECUTOR_MODULE || target == address(this)) revert HandlerErrors.InvalidTarget();
-        if (prc20 == address(0)) revert HandlerErrors.ZeroAddress();
-        if (amount == 0) revert HandlerErrors.ZeroAmount();
+        if (target == UNIVERSAL_EXECUTOR_MODULE || target == address(this)) revert UniversalCoreErrors.InvalidTarget();
+        if (prc20 == address(0)) revert UniversalCoreErrors.ZeroAddress();
+        if (amount == 0) revert UniversalCoreErrors.ZeroAmount();
         
-        if (!isAutoSwapSupported[prc20]) revert HandlerErrors.AutoSwapNotSupported();
+        if (!isAutoSwapSupported[prc20]) revert UniversalCoreErrors.AutoSwapNotSupported();
 
         // Use default fee tier if not provided
         if (fee == 0) {
             fee = defaultFeeTier[prc20];
-            if (fee == 0) revert HandlerErrors.InvalidFeeTier();
+            if (fee == 0) revert UniversalCoreErrors.InvalidFeeTier();
         }
 
         // Use default deadline if not provided
@@ -168,7 +168,7 @@ contract HandlerContract is IHandler, Initializable, ReentrancyGuardUpgradeable,
             deadline = block.timestamp + (defaultDeadlineMins * 1 minutes);
         }
         
-        if (block.timestamp > deadline) revert HandlerErrors.DeadlineExpired();
+        if (block.timestamp > deadline) revert UniversalCoreErrors.DeadlineExpired();
 
         // Check pool exists
         address pool = IUniswapV3Factory(uniswapV3FactoryAddress).getPool(
@@ -176,7 +176,7 @@ contract HandlerContract is IHandler, Initializable, ReentrancyGuardUpgradeable,
             prc20 < wPCContractAddress ? wPCContractAddress : prc20,
             fee
         );
-        if (pool == address(0)) revert HandlerErrors.PoolNotFound();
+        if (pool == address(0)) revert UniversalCoreErrors.PoolNotFound();
 
         // Calculate minimum output if not provided
         if (minPCOut == 0) { // ToDo: check for accuracy
@@ -206,7 +206,7 @@ contract HandlerContract is IHandler, Initializable, ReentrancyGuardUpgradeable,
         });
 
         uint256 pcOut = ISwapRouter(uniswapV3SwapRouterAddress).exactInputSingle(params);
-        if (pcOut < minPCOut) revert HandlerErrors.SlippageExceeded();
+        if (pcOut < minPCOut) revert UniversalCoreErrors.SlippageExceeded();
 
         IPRC20(prc20).approve(uniswapV3SwapRouterAddress, 0);
 
@@ -220,14 +220,14 @@ contract HandlerContract is IHandler, Initializable, ReentrancyGuardUpgradeable,
      * @param fee Uniswap V3 fee tier
      */
     function setGasPCPool(uint256 chainID, address gasToken, uint24 fee) external onlyUEModule {
-        if (gasToken == address(0)) revert HandlerErrors.ZeroAddress();
+        if (gasToken == address(0)) revert UniversalCoreErrors.ZeroAddress();
         
         address pool = IUniswapV3Factory(uniswapV3FactoryAddress).getPool(
             wPCContractAddress < gasToken ? wPCContractAddress : gasToken,
             wPCContractAddress < gasToken ? gasToken : wPCContractAddress,
             fee
         );
-        if (pool == address(0)) revert HandlerErrors.PoolNotFound();
+        if (pool == address(0)) revert UniversalCoreErrors.PoolNotFound();
 
         gasPCPoolByChainId[chainID] = pool;
         emit SetGasPCPool(chainID, pool, fee);
@@ -249,7 +249,7 @@ contract HandlerContract is IHandler, Initializable, ReentrancyGuardUpgradeable,
      * @param prc20 PRC20 address
      */
     function setGasTokenPRC20(uint256 chainID, address prc20) external onlyUEModule {
-        if (prc20 == address(0)) revert HandlerErrors.ZeroAddress();
+        if (prc20 == address(0)) revert UniversalCoreErrors.ZeroAddress();
         gasTokenPRC20ByChainId[chainID] = prc20;
         emit SetGasToken(chainID, prc20);
     }
@@ -264,7 +264,7 @@ contract HandlerContract is IHandler, Initializable, ReentrancyGuardUpgradeable,
      * @param addr WPC new address
      */
     function setWPCContractAddress(address addr) external onlyOwner {
-        if (addr == address(0)) revert HandlerErrors.ZeroAddress();
+        if (addr == address(0)) revert UniversalCoreErrors.ZeroAddress();
         wPCContractAddress = addr;
         emit SetWPC(addr);
     }
@@ -275,9 +275,9 @@ contract HandlerContract is IHandler, Initializable, ReentrancyGuardUpgradeable,
      * @param feeTier Fee tier (500, 3000, 10000)
      */
     function setDefaultFeeTier(address token, uint24 feeTier) external onlyOwner {
-        if (token == address(0)) revert HandlerErrors.ZeroAddress();
+        if (token == address(0)) revert UniversalCoreErrors.ZeroAddress();
         if (feeTier != 500 && feeTier != 3000 && feeTier != 10000) {
-            revert HandlerErrors.InvalidFeeTier();
+            revert UniversalCoreErrors.InvalidFeeTier();
         }
         defaultFeeTier[token] = feeTier;
         emit SetDefaultFeeTier(token, feeTier);
@@ -289,8 +289,8 @@ contract HandlerContract is IHandler, Initializable, ReentrancyGuardUpgradeable,
      * @param tolerance Slippage tolerance in basis points (e.g., 300 = 3%)
      */
     function setSlippageTolerance(address token, uint256 tolerance) external onlyOwner {
-        if (token == address(0)) revert HandlerErrors.ZeroAddress();
-        if (tolerance > 5000) revert HandlerErrors.InvalidSlippageTolerance(); // Max 50%
+        if (token == address(0)) revert UniversalCoreErrors.ZeroAddress();
+        if (tolerance > 5000) revert UniversalCoreErrors.InvalidSlippageTolerance(); // Max 50%
         slippageTolerance[token] = tolerance;
         emit SetSlippageTolerance(token, tolerance);
     }

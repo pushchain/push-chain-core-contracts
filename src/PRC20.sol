@@ -213,10 +213,10 @@ contract PRC20 is IPRC20 {
 
     /// @notice Update Handler contract (gas coin & price oracle source)
     /// @dev only Universal Executor may update
-    function updateHandlerContract(address addr) external onlyUniversalExecutor {
+    function updateUniversalCore(address addr) external onlyUniversalExecutor {
         if (addr == address(0)) revert PRC20Errors.ZeroAddress();
         HANDLER_CONTRACT = addr;
-        emit UpdatedHandlerContract(addr);
+        emit UpdatedUniversalCore(addr);
     }
 
     /// @notice Update protocol gas limit used in fee computation

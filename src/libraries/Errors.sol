@@ -34,7 +34,7 @@ library UEAErrors {
     error InvalidCall();
 }
 
-library HandlerErrors {
+library UniversalCoreErrors {
     // Authentication errors
     error CallerIsNotUEModule();
     error CallerIsNotOwner();

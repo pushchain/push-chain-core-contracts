@@ -2,7 +2,7 @@
 pragma solidity 0.8.26;
 
 import "forge-std/Test.sol";
-import "../src/HandlerContract.sol";
+import "../src/UniversalCore.sol";
 import "../src/PRC20.sol";
 import "../src/interfaces/IPRC20.sol";
 import "../src/interfaces/IHandler.sol";
@@ -18,8 +18,8 @@ import "../test/mocks/RevertingPRC20.sol";
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import "@openzeppelin/contracts-upgradeable/utils/PausableUpgradeable.sol";
 
-contract HandlerContractTest is Test, UpgradeableContractHelper {
-    HandlerContract public handler;
+contract UniversalCoreTest is Test, UpgradeableContractHelper {
+    UniversalCore public handler;
     PRC20 public prc20Token;
     MockUniswapV3Factory public mockFactory;
     MockUniswapV3Router public mockRouter;
@@ -82,12 +82,12 @@ contract HandlerContractTest is Test, UpgradeableContractHelper {
             makeAddr("sourceERC20")
         );
         
-        // Deploy HandlerContract implementation
-        HandlerContract implementation = new HandlerContract();
+        // Deploy UniversalCore implementation
+        UniversalCore implementation = new UniversalCore();
         
         // Deploy proxy and initialize
         bytes memory initData = abi.encodeWithSelector(
-            HandlerContract.initialize.selector,
+            UniversalCore.initialize.selector,
             address(mockWPC),
             address(mockFactory),
             address(mockRouter),
@@ -95,11 +95,11 @@ contract HandlerContractTest is Test, UpgradeableContractHelper {
         );
         
         address proxyAddress = deployUpgradeableContract(address(implementation), initData);
-        handler = HandlerContract(payable(proxyAddress));
+        handler = UniversalCore(payable(proxyAddress));
         
         // Update PRC20 handler contract
         vm.prank(UNIVERSAL_EXECUTOR_MODULE);
-        prc20Token.updateHandlerContract(address(handler));
+        prc20Token.updateUniversalCore(address(handler));
         
         // Setup mock pool
         address pool = makeAddr("mockPool");
@@ -111,7 +111,7 @@ contract HandlerContractTest is Test, UpgradeableContractHelper {
     // ========================================
 
     function test_Constructor_DisablesInitializers() public {
-        HandlerContract newHandler = new HandlerContract();
+        UniversalCore newHandler = new UniversalCore();
         // Should not be able to call initialize on implementation directly
         vm.expectRevert();
         newHandler.initialize(
@@ -127,9 +127,9 @@ contract HandlerContractTest is Test, UpgradeableContractHelper {
         address newDeployer = makeAddr("newDeployer");
         vm.startPrank(newDeployer);
         
-        HandlerContract newImplementation = new HandlerContract();
+        UniversalCore newImplementation = new UniversalCore();
         bytes memory initData = abi.encodeWithSelector(
-            HandlerContract.initialize.selector,
+            UniversalCore.initialize.selector,
             address(mockWPC),
             address(mockFactory),
             address(mockRouter),
@@ -137,7 +137,7 @@ contract HandlerContractTest is Test, UpgradeableContractHelper {
         );
         
         address newProxyAddress = deployUpgradeableContract(address(newImplementation), initData);
-        HandlerContract newHandler = HandlerContract(payable(newProxyAddress));
+        UniversalCore newHandler = UniversalCore(payable(newProxyAddress));
         
         // Check that deployer has admin role
         assertTrue(newHandler.hasRole(newHandler.DEFAULT_ADMIN_ROLE(), newDeployer));
@@ -156,9 +156,9 @@ contract HandlerContractTest is Test, UpgradeableContractHelper {
         address newDeployer = makeAddr("newDeployer");
         vm.startPrank(newDeployer);
         
-        HandlerContract newImplementation = new HandlerContract();
+        UniversalCore newImplementation = new UniversalCore();
         bytes memory initData = abi.encodeWithSelector(
-            HandlerContract.initialize.selector,
+            UniversalCore.initialize.selector,
             address(mockWPC),
             address(mockFactory),
             address(mockRouter),
@@ -203,7 +203,7 @@ contract HandlerContractTest is Test, UpgradeableContractHelper {
         
         // Non-owner should revert
         vm.prank(nonOwner);
-        vm.expectRevert(HandlerErrors.CallerIsNotOwner.selector);
+        vm.expectRevert(UniversalCoreErrors.CallerIsNotOwner.selector);
         handler.setAutoSwapSupported(token, true);
         
         // Deployer (who has admin role) should succeed
@@ -237,7 +237,7 @@ contract HandlerContractTest is Test, UpgradeableContractHelper {
         
         // Non-owner should revert
         vm.prank(nonOwner);
-        vm.expectRevert(HandlerErrors.CallerIsNotOwner.selector);
+        vm.expectRevert(UniversalCoreErrors.CallerIsNotOwner.selector);
         handler.setWPCContractAddress(newWPC);
         
         // Deployer (who has admin role) should succeed
@@ -257,7 +257,7 @@ contract HandlerContractTest is Test, UpgradeableContractHelper {
 
     function test_SetWPCContractAddress_ZeroAddressReverts() public {
         vm.prank(deployer);
-        vm.expectRevert(HandlerErrors.ZeroAddress.selector);
+        vm.expectRevert(UniversalCoreErrors.ZeroAddress.selector);
         handler.setWPCContractAddress(address(0));
     }
 
@@ -278,7 +278,7 @@ contract HandlerContractTest is Test, UpgradeableContractHelper {
         
         // Non-UEM should revert
         vm.prank(nonUEModule);
-        vm.expectRevert(HandlerErrors.CallerIsNotUEModule.selector);
+        vm.expectRevert(UniversalCoreErrors.CallerIsNotUEModule.selector);
         handler.setGasPCPool(CHAIN_ID, gasToken, FEE_TIER);
         
         // UEM should succeed
@@ -288,7 +288,7 @@ contract HandlerContractTest is Test, UpgradeableContractHelper {
 
     function test_SetGasPCPool_ZeroAddressReverts() public {
         vm.prank(UNIVERSAL_EXECUTOR_MODULE);
-        vm.expectRevert(HandlerErrors.ZeroAddress.selector);
+        vm.expectRevert(UniversalCoreErrors.ZeroAddress.selector);
         handler.setGasPCPool(CHAIN_ID, address(0), FEE_TIER);
     }
 
@@ -299,7 +299,7 @@ contract HandlerContractTest is Test, UpgradeableContractHelper {
         mockFactory.setPool(address(mockWPC), gasToken, FEE_TIER, address(0));
         
         vm.prank(UNIVERSAL_EXECUTOR_MODULE);
-        vm.expectRevert(HandlerErrors.PoolNotFound.selector);
+        vm.expectRevert(UniversalCoreErrors.PoolNotFound.selector);
         handler.setGasPCPool(CHAIN_ID, gasToken, FEE_TIER);
     }
 
@@ -364,7 +364,7 @@ contract HandlerContractTest is Test, UpgradeableContractHelper {
         
         // Non-UEM should revert
         vm.prank(nonUEModule);
-        vm.expectRevert(HandlerErrors.CallerIsNotUEModule.selector);
+        vm.expectRevert(UniversalCoreErrors.CallerIsNotUEModule.selector);
         handler.setGasPrice(CHAIN_ID, price);
         
         // UEM should succeed
@@ -394,7 +394,7 @@ contract HandlerContractTest is Test, UpgradeableContractHelper {
         
         // Non-UEM should revert
         vm.prank(nonUEModule);
-        vm.expectRevert(HandlerErrors.CallerIsNotUEModule.selector);
+        vm.expectRevert(UniversalCoreErrors.CallerIsNotUEModule.selector);
         handler.setGasTokenPRC20(CHAIN_ID, prc20);
         
         // UEM should succeed
@@ -405,7 +405,7 @@ contract HandlerContractTest is Test, UpgradeableContractHelper {
 
     function test_SetGasTokenPRC20_ZeroAddressReverts() public {
         vm.prank(UNIVERSAL_EXECUTOR_MODULE);
-        vm.expectRevert(HandlerErrors.ZeroAddress.selector);
+        vm.expectRevert(UniversalCoreErrors.ZeroAddress.selector);
         handler.setGasTokenPRC20(CHAIN_ID, address(0));
     }
 
@@ -425,7 +425,7 @@ contract HandlerContractTest is Test, UpgradeableContractHelper {
     function test_DepositPRC20Token_OnlyUEModule() public {
         // Non-UEM should revert
         vm.prank(nonUEModule);
-        vm.expectRevert(HandlerErrors.CallerIsNotUEModule.selector);
+        vm.expectRevert(UniversalCoreErrors.CallerIsNotUEModule.selector);
         handler.depositPRC20Token(address(prc20Token), 1000, makeAddr("target"));
         
         // UEM should succeed
@@ -436,12 +436,12 @@ contract HandlerContractTest is Test, UpgradeableContractHelper {
     function test_DepositPRC20Token_InvalidTargets() public {
         // Target cannot be UNIVERSAL_EXECUTOR_MODULE
         vm.prank(UNIVERSAL_EXECUTOR_MODULE);
-        vm.expectRevert(HandlerErrors.InvalidTarget.selector);
+        vm.expectRevert(UniversalCoreErrors.InvalidTarget.selector);
         handler.depositPRC20Token(address(prc20Token), 1000, UNIVERSAL_EXECUTOR_MODULE);
         
         // Target cannot be handler contract itself
         vm.prank(UNIVERSAL_EXECUTOR_MODULE);
-        vm.expectRevert(HandlerErrors.InvalidTarget.selector);
+        vm.expectRevert(UniversalCoreErrors.InvalidTarget.selector);
         handler.depositPRC20Token(address(prc20Token), 1000, address(handler));
     }
 
@@ -510,7 +510,7 @@ contract HandlerContractTest is Test, UpgradeableContractHelper {
 
     function test_Pause_OnlyOwner() public {
         vm.prank(nonOwner);
-        vm.expectRevert(abi.encodeWithSelector(HandlerErrors.CallerIsNotOwner.selector));
+        vm.expectRevert(abi.encodeWithSelector(UniversalCoreErrors.CallerIsNotOwner.selector));
         handler.pause();
     }
 
@@ -530,7 +530,7 @@ contract HandlerContractTest is Test, UpgradeableContractHelper {
         
         // Try to unpause as non-owner
         vm.prank(nonOwner);
-        vm.expectRevert(abi.encodeWithSelector(HandlerErrors.CallerIsNotOwner.selector));
+        vm.expectRevert(abi.encodeWithSelector(UniversalCoreErrors.CallerIsNotOwner.selector));
         handler.unpause();
     }
 

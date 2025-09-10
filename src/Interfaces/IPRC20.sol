@@ -8,7 +8,7 @@ interface IPRC20 {
     /**
      * @notice Standard ERC-20 events
      */
-    event UpdatedHandlerContract(address handler);
+    event UpdatedUniversalCore(address handler);
     event UpdatedGasLimit(uint256 gasLimit);
     event UpdatedProtocolFlatFee(uint256 protocolFlatFee);
     event Transfer(address indexed from, address indexed to, uint256 value);
