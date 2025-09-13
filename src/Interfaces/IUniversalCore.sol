@@ -1,10 +1,10 @@
 // SPDX-License-Identifier: MIT
 pragma solidity 0.8.26;
 
-/// @title IHandler
+/// @title IUniversalCore
 /// @notice Interface for the Handler contract.
 /// @dev Defines functions for handler contract callable by fungible module.
-interface IHandler {
+interface IUniversalCore {
     // Constants
     function UNIVERSAL_EXECUTOR_MODULE() external view returns (address);
 
