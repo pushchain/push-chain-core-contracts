@@ -1,13 +1,13 @@
 // SPDX-License-Identifier: MIT
 pragma solidity 0.8.26;
 
-import {IHandler} from "./interfaces/IHandler.sol";
+import {IUniversalCore} from "./interfaces/IUniversalCore.sol";
 import {IPRC20} from "./interfaces/IPRC20.sol";
 import {PRC20Errors} from "./libraries/Errors.sol";
 
 /// @title  PRC20 — Push Chain Synthetic Token (ZRC20-inspired)
 /// @notice ERC-20 compatible synthetic token minted/burned by Push Chain protocol.
-/// @dev    All imperative functionality is handled by the Handler contract and Universal Executor Module.
+/// @dev    All imperative functionality is handled by the UniversalCore contract and Universal Executor Module.
 contract PRC20 is IPRC20 {
 
     /// @notice The protocol's privileged executor module (auth & fee sink)
@@ -21,8 +21,8 @@ contract PRC20 is IPRC20 {
     /// @notice Classification of this synthetic
     TokenType public immutable TOKEN_TYPE;
 
-    /// @notice Handler contract providing gas oracles (gas coin token & gas price)
-    address public HANDLER_CONTRACT;
+    /// @notice UniversalCore contract providing gas oracles (gas coin token & gas price)
+    address public UNIVERSAL_CORE;
 
     /// @notice Gas limit used in fee computation; fee = price * GAS_LIMIT + PC_PROTOCOL_FEE
     uint256 public GAS_LIMIT;
@@ -55,7 +55,7 @@ contract PRC20 is IPRC20 {
     /// @param tokenType_         Token classification (PC, NATIVE, ERC20)
     /// @param gasLimit_          Protocol gas limit used in fee computation
     /// @param protocolFlatFee_   Absolute flat fee added to fee computation (units: gas coin PRC20)
-    /// @param handler_           Initial handler contract providing gas coin & gas price
+    /// @param universalCore_           Initial universalCore contract providing gas coin & gas price
     constructor(
         string memory name_,
         string memory symbol_,
@@ -64,10 +64,10 @@ contract PRC20 is IPRC20 {
         TokenType tokenType_,
         uint256 gasLimit_,
         uint256 protocolFlatFee_,
-        address handler_,
+        address universalCore_,
         address sourceERC20Address_
     ) {
-        if (handler_ == address(0) || sourceERC20Address_ == address(0)) revert PRC20Errors.ZeroAddress();
+        if (universalCore_ == address(0) || sourceERC20Address_ == address(0)) revert PRC20Errors.ZeroAddress();
 
         _name = name_;
         _symbol = symbol_;
@@ -77,7 +77,7 @@ contract PRC20 is IPRC20 {
         TOKEN_TYPE = tokenType_;
         GAS_LIMIT = gasLimit_;
         PC_PROTOCOL_FEE = protocolFlatFee_;
-        HANDLER_CONTRACT = handler_;
+        UNIVERSAL_CORE = universalCore_;
         SOURCE_ERC20_ADDRESS = sourceERC20Address_;
     }
 
@@ -152,11 +152,11 @@ contract PRC20 is IPRC20 {
     //*** BRIDGE ENTRYPOINTS ***//
 
     /// @notice Mint PRC20 on inbound bridge (lock on source)
-    /// @dev Only callable by HANDLER_CONTRACT or UNIVERSAL_EXECUTOR_MODULE
+    /// @dev Only callable by UNIVERSAL_CORE or UNIVERSAL_EXECUTOR_MODULE
     /// @param to      Recipient on Push EVM
     /// @param amount  Amount to mint
     function deposit(address to, uint256 amount) external returns (bool) {
-        if (msg.sender != HANDLER_CONTRACT && msg.sender != UNIVERSAL_EXECUTOR_MODULE) revert PRC20Errors.InvalidSender();
+        if (msg.sender != UNIVERSAL_CORE && msg.sender != UNIVERSAL_EXECUTOR_MODULE) revert PRC20Errors.InvalidSender();
 
         _mint(to, amount);
 
@@ -186,10 +186,10 @@ contract PRC20 is IPRC20 {
     /// @return gasToken  PRC20 token used as gas coin for SOURCE_CHAIN_ID
     /// @return gasFee   price * GAS_LIMIT + PC_PROTOCOL_FEE
     function withdrawGasFee() public view returns (address gasToken, uint256 gasFee) {
-        gasToken = IHandler(HANDLER_CONTRACT).gasTokenPRC20ByChainId(SOURCE_CHAIN_ID);
+        gasToken = IUniversalCore(UNIVERSAL_CORE).gasTokenPRC20ByChainId(SOURCE_CHAIN_ID);
         if (gasToken == address(0)) revert PRC20Errors.ZerogasToken();
 
-        uint256 price = IHandler(HANDLER_CONTRACT).gasPriceByChainId(SOURCE_CHAIN_ID);
+        uint256 price = IUniversalCore(UNIVERSAL_CORE).gasPriceByChainId(SOURCE_CHAIN_ID);
         if (price == 0) revert PRC20Errors.ZeroGasPrice();
 
         gasFee = price * GAS_LIMIT + PC_PROTOCOL_FEE;
@@ -200,10 +200,10 @@ contract PRC20 is IPRC20 {
     /// @return gasToken   PRC20 gas coin token
     /// @return gasFee    price * gasLimit_ + PC_PROTOCOL_FEE
     function withdrawGasFeeWithGasLimit(uint256 gasLimit_) external view returns (address gasToken, uint256 gasFee) {
-        gasToken = IHandler(HANDLER_CONTRACT).gasTokenPRC20ByChainId(SOURCE_CHAIN_ID);
+        gasToken = IUniversalCore(UNIVERSAL_CORE).gasTokenPRC20ByChainId(SOURCE_CHAIN_ID);
         if (gasToken == address(0)) revert PRC20Errors.ZerogasToken();
 
-        uint256 price = IHandler(HANDLER_CONTRACT).gasPriceByChainId(SOURCE_CHAIN_ID);
+        uint256 price = IUniversalCore(UNIVERSAL_CORE).gasPriceByChainId(SOURCE_CHAIN_ID);
         if (price == 0) revert PRC20Errors.ZeroGasPrice();
 
         gasFee = price * gasLimit_ + PC_PROTOCOL_FEE;
@@ -211,11 +211,11 @@ contract PRC20 is IPRC20 {
 
     //*** ADMIN ***//
 
-    /// @notice Update Handler contract (gas coin & price oracle source)
+    /// @notice Update UniversalCore contract (gas coin & price oracle source)
     /// @dev only Universal Executor may update
     function updateUniversalCore(address addr) external onlyUniversalExecutor {
         if (addr == address(0)) revert PRC20Errors.ZeroAddress();
-        HANDLER_CONTRACT = addr;
+        UNIVERSAL_CORE = addr;
         emit UpdatedUniversalCore(addr);
     }
 

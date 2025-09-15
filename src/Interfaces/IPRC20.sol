@@ -8,7 +8,7 @@ interface IPRC20 {
     /**
      * @notice Standard ERC-20 events
      */
-    event UpdatedUniversalCore(address handler);
+    event UpdatedUniversalCore(address universalCore);
     event UpdatedGasLimit(uint256 gasLimit);
     event UpdatedProtocolFlatFee(uint256 protocolFlatFee);
     event Transfer(address indexed from, address indexed to, uint256 value);
@@ -44,7 +44,7 @@ interface IPRC20 {
     function UNIVERSAL_EXECUTOR_MODULE() external view returns (address);
     function SOURCE_CHAIN_ID() external view returns (uint256);
     function TOKEN_TYPE() external view returns (TokenType);
-    function HANDLER_CONTRACT() external view returns (address);
+    function UNIVERSAL_CORE() external view returns (address);
     function GAS_LIMIT() external view returns (uint256);
     function PC_PROTOCOL_FEE() external view returns (uint256);
 

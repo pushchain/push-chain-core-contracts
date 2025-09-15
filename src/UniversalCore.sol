@@ -14,7 +14,7 @@ import "@openzeppelin/contracts-upgradeable/utils/PausableUpgradeable.sol";
 
 /**
  * @title UniversalCore
- * @notice The UniversalCore acts as the main HANDLER for all functionalities needed by the interoperability feature of Push Chain.
+ * @notice The UniversalCore acts as the core contract for all functionalities needed by the interoperability feature of Push Chain.
  * @dev    The UniversalCore primarily handles the following functionalities:
  *         - Generation of supported PRC20 tokens, and transfering it to accurate recipients.
  *         - Setting up the gas tokens for each chain.
@@ -22,7 +22,7 @@ import "@openzeppelin/contracts-upgradeable/utils/PausableUpgradeable.sol";
  *         - Maintaining a registry of uniswap v3 pools for each token pair.
  * @dev    All imperative functionalities are handled by the Universal Executor Module.
  */
-contract UniversalCore is IHandler, Initializable, ReentrancyGuardUpgradeable, AccessControlUpgradeable, PausableUpgradeable {
+contract UniversalCore is IUniversalCore, Initializable, ReentrancyGuardUpgradeable, AccessControlUpgradeable, PausableUpgradeable {
     using SafeERC20 for IERC20;
 
     /// @notice Map to know the gas price of each chain given a chain id.
@@ -68,7 +68,7 @@ contract UniversalCore is IHandler, Initializable, ReentrancyGuardUpgradeable, A
     }
 
     /**
-     * @dev Only fungible module can deploy a handler contract.
+     * @dev Only fungible module can deploy a universalCore contract.
      * @param wpc_ Address of the wrapped PC token
      * @param uniswapV3Factory_ Address of the Uniswap V3 factory
      * @param uniswapV3SwapRouter_ Address of the Uniswap V3 swap router

@@ -2,8 +2,8 @@
 pragma solidity 0.8.26;
 
 /// @title IUniversalCore
-/// @notice Interface for the Handler contract.
-/// @dev Defines functions for handler contract callable by fungible module.
+/// @notice Interface for the UniversalCore contract.
+/// @dev Defines functions for UniversalCore contract callable by fungible module.
 interface IUniversalCore {
     // Constants
     function UNIVERSAL_EXECUTOR_MODULE() external view returns (address);

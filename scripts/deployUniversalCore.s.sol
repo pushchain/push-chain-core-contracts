@@ -64,19 +64,19 @@ contract Deploy is Script {
     function run() external {
         vm.startBroadcast();
 
-        // Deploy handler (UniversalCore proxy)
-        address handler = deployUniversalCoreHandler();
+        // Deploy UniversalCore proxy
+        address universalCore = deployUniversalCore();
 
         // Deploy multiple PRC20s
         for (uint256 i = 0; i < configs.length; i++) {
-            deployPRC20(handler, configs[i]);
+            deployPRC20(universalCore, configs[i]);
         }
 
         vm.stopBroadcast();
     }
 
-    /// @notice Deploy UniversalCore implementation + proxy (handler)
-    function deployUniversalCoreHandler() internal returns (address) {
+    /// @notice Deploy UniversalCore implementation + proxy (universalCore)
+    function deployUniversalCore() internal returns (address) {
         UniversalCore universalImpl = new UniversalCore();
         console.log("UniversalCore implementation:", address(universalImpl));
 
@@ -98,8 +98,8 @@ contract Deploy is Script {
         return address(proxy);
     }
 
-    /// @notice Deploy one PRC20 with given config and handler
-    function deployPRC20(address handler, PRC20Config memory cfg) internal returns (address) {
+    /// @notice Deploy one PRC20 with given config and universalCore
+    function deployPRC20(address universalCore, PRC20Config memory cfg) internal returns (address) {
         PRC20 prc20 = new PRC20(
             cfg.name,
             cfg.symbol,
@@ -108,7 +108,7 @@ contract Deploy is Script {
             cfg.tokenType,
             cfg.gasLimit,
             cfg.fee,
-            handler,
+            universalCore,
             cfg.sourceERC20
         );
 

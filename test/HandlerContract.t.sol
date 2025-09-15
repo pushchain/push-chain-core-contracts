@@ -5,7 +5,7 @@ import "forge-std/Test.sol";
 import "../src/UniversalCore.sol";
 import "../src/PRC20.sol";
 import "../src/interfaces/IPRC20.sol";
-import "../src/interfaces/IHandler.sol";
+import "../src/interfaces/IUniversalCore.sol";
 import "../src/libraries/Errors.sol";
 import "../test/helpers/UpgradeableContractHelper.sol";
 import "../test/mocks/MockUniswapV3Factory.sol";
@@ -19,7 +19,7 @@ import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import "@openzeppelin/contracts-upgradeable/utils/PausableUpgradeable.sol";
 
 contract UniversalCoreTest is Test, UpgradeableContractHelper {
-    UniversalCore public handler;
+    UniversalCore public universalCore;
     PRC20 public prc20Token;
     MockUniswapV3Factory public mockFactory;
     MockUniswapV3Router public mockRouter;
@@ -69,7 +69,7 @@ contract UniversalCoreTest is Test, UpgradeableContractHelper {
         mockWPC = new MockWPC();
         mockPRC20 = new MockPRC20();
         
-        // Deploy PRC20 token with temporary handler address
+        // Deploy PRC20 token with temporary universalCore address
         prc20Token = new PRC20(
             "Test PRC20",
             "TPRC20",
@@ -95,11 +95,11 @@ contract UniversalCoreTest is Test, UpgradeableContractHelper {
         );
         
         address proxyAddress = deployUpgradeableContract(address(implementation), initData);
-        handler = UniversalCore(payable(proxyAddress));
+        universalCore = UniversalCore(payable(proxyAddress));
         
-        // Update PRC20 handler contract
+        // Update PRC20 universalCore contract
         vm.prank(UNIVERSAL_EXECUTOR_MODULE);
-        prc20Token.updateUniversalCore(address(handler));
+        prc20Token.updateUniversalCore(address(universalCore));
         
         // Setup mock pool
         address pool = makeAddr("mockPool");
@@ -123,7 +123,7 @@ contract UniversalCoreTest is Test, UpgradeableContractHelper {
     }
 
     function test_Initialize_GrantsAdminRoleToDeployer() public {
-        // Deploy new handler with different deployer
+        // Deploy new universalCore with different deployer
         address newDeployer = makeAddr("newDeployer");
         vm.startPrank(newDeployer);
         
@@ -145,14 +145,14 @@ contract UniversalCoreTest is Test, UpgradeableContractHelper {
     }
 
     function test_Initialize_SetsAddresses() public view {
-        assertEq(handler.wPCContractAddress(), address(mockWPC));
-        assertEq(handler.uniswapV3FactoryAddress(), address(mockFactory));
-        assertEq(handler.uniswapV3SwapRouterAddress(), address(mockRouter));
-        assertEq(handler.uniswapV3QuoterAddress(), address(mockQuoter));
+        assertEq(universalCore.wPCContractAddress(), address(mockWPC));
+        assertEq(universalCore.uniswapV3FactoryAddress(), address(mockFactory));
+        assertEq(universalCore.uniswapV3SwapRouterAddress(), address(mockRouter));
+        assertEq(universalCore.uniswapV3QuoterAddress(), address(mockQuoter));
     }
 
     function test_Initialize_EmitsSystemContractDeployed() public {
-        // Deploy new handler to test event emission
+        // Deploy new universalCore to test event emission
         address newDeployer = makeAddr("newDeployer");
         vm.startPrank(newDeployer);
         
@@ -174,7 +174,7 @@ contract UniversalCoreTest is Test, UpgradeableContractHelper {
 
     function test_Initialize_RevertsOnSecondCall() public {
         vm.expectRevert();
-        handler.initialize(
+        universalCore.initialize(
             address(mockWPC),
             address(mockFactory),
             address(mockRouter),
@@ -183,14 +183,14 @@ contract UniversalCoreTest is Test, UpgradeableContractHelper {
     }
 
     function test_UniversalExecutorModule_IsImmutable() public view {
-        assertEq(handler.UNIVERSAL_EXECUTOR_MODULE(), UNIVERSAL_EXECUTOR_MODULE);
+        assertEq(universalCore.UNIVERSAL_EXECUTOR_MODULE(), UNIVERSAL_EXECUTOR_MODULE);
     }
 
     function test_ReceiveETH_Reverts() public {
         // Handler contract has no receive function, so sending ETH should revert
         vm.expectRevert();
-        (bool success,) = address(handler).call{value: 1 ether}("");
-        // Note: This test documents that handler doesn't accept ETH directly
+        (bool success,) = address(universalCore).call{value: 1 ether}("");
+        // Note: This test documents that universalCore doesn't accept ETH directly
         // The assertion will fail if ETH is successfully sent, which is expected
     }
 
@@ -204,32 +204,32 @@ contract UniversalCoreTest is Test, UpgradeableContractHelper {
         // Non-owner should revert
         vm.prank(nonOwner);
         vm.expectRevert(UniversalCoreErrors.CallerIsNotOwner.selector);
-        handler.setAutoSwapSupported(token, true);
+        universalCore.setAutoSwapSupported(token, true);
         
         // Deployer (who has admin role) should succeed
         vm.prank(deployer);
-        handler.setAutoSwapSupported(token, true);
-        assertTrue(handler.isAutoSwapSupported(token));
+        universalCore.setAutoSwapSupported(token, true);
+        assertTrue(universalCore.isAutoSwapSupported(token));
     }
 
     function test_SetAutoSwapSupported_HappyPath() public {
         address token = makeAddr("token");
         
         vm.prank(deployer);
-        handler.setAutoSwapSupported(token, true);
-        assertTrue(handler.isAutoSwapSupported(token));
+        universalCore.setAutoSwapSupported(token, true);
+        assertTrue(universalCore.isAutoSwapSupported(token));
         
         // Test flipping to false
         vm.prank(deployer);
-        handler.setAutoSwapSupported(token, false);
-        assertFalse(handler.isAutoSwapSupported(token));
+        universalCore.setAutoSwapSupported(token, false);
+        assertFalse(universalCore.isAutoSwapSupported(token));
     }
 
     function test_SetAutoSwapSupported_ZeroAddressAllowed() public {
         // Current implementation allows zero address
         vm.prank(deployer);
-        handler.setAutoSwapSupported(address(0), true);
-        assertTrue(handler.isAutoSwapSupported(address(0)));
+        universalCore.setAutoSwapSupported(address(0), true);
+        assertTrue(universalCore.isAutoSwapSupported(address(0)));
     }
 
     function test_SetWPCContractAddress_OnlyOwner() public {
@@ -238,27 +238,27 @@ contract UniversalCoreTest is Test, UpgradeableContractHelper {
         // Non-owner should revert
         vm.prank(nonOwner);
         vm.expectRevert(UniversalCoreErrors.CallerIsNotOwner.selector);
-        handler.setWPCContractAddress(newWPC);
+        universalCore.setWPCContractAddress(newWPC);
         
         // Deployer (who has admin role) should succeed
         vm.prank(deployer);
-        handler.setWPCContractAddress(newWPC);
-        assertEq(handler.wPCContractAddress(), newWPC);
+        universalCore.setWPCContractAddress(newWPC);
+        assertEq(universalCore.wPCContractAddress(), newWPC);
     }
 
     function test_SetWPCContractAddress_HappyPath() public {
         address newWPC = makeAddr("newWPC");
         
         vm.prank(deployer);
-        handler.setWPCContractAddress(newWPC);
+        universalCore.setWPCContractAddress(newWPC);
         
-        assertEq(handler.wPCContractAddress(), newWPC);
+        assertEq(universalCore.wPCContractAddress(), newWPC);
     }
 
     function test_SetWPCContractAddress_ZeroAddressReverts() public {
         vm.prank(deployer);
         vm.expectRevert(UniversalCoreErrors.ZeroAddress.selector);
-        handler.setWPCContractAddress(address(0));
+        universalCore.setWPCContractAddress(address(0));
     }
 
     // ========================================
@@ -279,17 +279,17 @@ contract UniversalCoreTest is Test, UpgradeableContractHelper {
         // Non-UEM should revert
         vm.prank(nonUEModule);
         vm.expectRevert(UniversalCoreErrors.CallerIsNotUEModule.selector);
-        handler.setGasPCPool(CHAIN_ID, gasToken, FEE_TIER);
+        universalCore.setGasPCPool(CHAIN_ID, gasToken, FEE_TIER);
         
         // UEM should succeed
         vm.prank(UNIVERSAL_EXECUTOR_MODULE);
-        handler.setGasPCPool(CHAIN_ID, gasToken, FEE_TIER);
+        universalCore.setGasPCPool(CHAIN_ID, gasToken, FEE_TIER);
     }
 
     function test_SetGasPCPool_ZeroAddressReverts() public {
         vm.prank(UNIVERSAL_EXECUTOR_MODULE);
         vm.expectRevert(UniversalCoreErrors.ZeroAddress.selector);
-        handler.setGasPCPool(CHAIN_ID, address(0), FEE_TIER);
+        universalCore.setGasPCPool(CHAIN_ID, address(0), FEE_TIER);
     }
 
     function test_SetGasPCPool_PoolNotFoundReverts() public {
@@ -300,7 +300,7 @@ contract UniversalCoreTest is Test, UpgradeableContractHelper {
         
         vm.prank(UNIVERSAL_EXECUTOR_MODULE);
         vm.expectRevert(UniversalCoreErrors.PoolNotFound.selector);
-        handler.setGasPCPool(CHAIN_ID, gasToken, FEE_TIER);
+        universalCore.setGasPCPool(CHAIN_ID, gasToken, FEE_TIER);
     }
 
     function test_SetGasPCPool_HappyPath() public {
@@ -315,9 +315,9 @@ contract UniversalCoreTest is Test, UpgradeableContractHelper {
         }
         
         vm.prank(UNIVERSAL_EXECUTOR_MODULE);
-        handler.setGasPCPool(CHAIN_ID, gasToken, FEE_TIER);
+        universalCore.setGasPCPool(CHAIN_ID, gasToken, FEE_TIER);
         
-        assertEq(handler.gasPCPoolByChainId(CHAIN_ID), pool);
+        assertEq(universalCore.gasPCPoolByChainId(CHAIN_ID), pool);
     }
 
     function test_SetGasPCPool_AddressOrdering() public {
@@ -332,9 +332,9 @@ contract UniversalCoreTest is Test, UpgradeableContractHelper {
         }
         
         vm.prank(UNIVERSAL_EXECUTOR_MODULE);
-        handler.setGasPCPool(CHAIN_ID, gasToken, FEE_TIER);
+        universalCore.setGasPCPool(CHAIN_ID, gasToken, FEE_TIER);
         
-        assertEq(handler.gasPCPoolByChainId(CHAIN_ID), pool);
+        assertEq(universalCore.gasPCPoolByChainId(CHAIN_ID), pool);
     }
 
     function test_SetGasPCPool_AfterWPCChange() public {
@@ -344,7 +344,7 @@ contract UniversalCoreTest is Test, UpgradeableContractHelper {
         
         // Change WPC first
         vm.prank(deployer);
-        handler.setWPCContractAddress(newWPC);
+        universalCore.setWPCContractAddress(newWPC);
         
         // Setup pool with new WPC (both orderings)
         if (newWPC < gasToken) {
@@ -354,9 +354,9 @@ contract UniversalCoreTest is Test, UpgradeableContractHelper {
         }
         
         vm.prank(UNIVERSAL_EXECUTOR_MODULE);
-        handler.setGasPCPool(CHAIN_ID, gasToken, FEE_TIER);
+        universalCore.setGasPCPool(CHAIN_ID, gasToken, FEE_TIER);
         
-        assertEq(handler.gasPCPoolByChainId(CHAIN_ID), pool);
+        assertEq(universalCore.gasPCPoolByChainId(CHAIN_ID), pool);
     }
 
     function test_SetGasPrice_OnlyUEModule() public {
@@ -365,28 +365,28 @@ contract UniversalCoreTest is Test, UpgradeableContractHelper {
         // Non-UEM should revert
         vm.prank(nonUEModule);
         vm.expectRevert(UniversalCoreErrors.CallerIsNotUEModule.selector);
-        handler.setGasPrice(CHAIN_ID, price);
+        universalCore.setGasPrice(CHAIN_ID, price);
         
         // UEM should succeed
         vm.prank(UNIVERSAL_EXECUTOR_MODULE);
-        handler.setGasPrice(CHAIN_ID, price);
-        assertEq(handler.gasPriceByChainId(CHAIN_ID), price);
+        universalCore.setGasPrice(CHAIN_ID, price);
+        assertEq(universalCore.gasPriceByChainId(CHAIN_ID), price);
     }
 
     function test_SetGasPrice_HappyPath() public {
         uint256 price = 1000;
         
         vm.prank(UNIVERSAL_EXECUTOR_MODULE);
-        handler.setGasPrice(CHAIN_ID, price);
+        universalCore.setGasPrice(CHAIN_ID, price);
         
-        assertEq(handler.gasPriceByChainId(CHAIN_ID), price);
+        assertEq(universalCore.gasPriceByChainId(CHAIN_ID), price);
     }
 
     function test_SetGasPrice_ZeroPriceAllowed() public {
         // Current implementation allows zero price
         vm.prank(UNIVERSAL_EXECUTOR_MODULE);
-        handler.setGasPrice(CHAIN_ID, 0);
-        assertEq(handler.gasPriceByChainId(CHAIN_ID), 0);
+        universalCore.setGasPrice(CHAIN_ID, 0);
+        assertEq(universalCore.gasPriceByChainId(CHAIN_ID), 0);
     }
 
     function test_SetGasTokenPRC20_OnlyUEModule() public {
@@ -395,27 +395,27 @@ contract UniversalCoreTest is Test, UpgradeableContractHelper {
         // Non-UEM should revert
         vm.prank(nonUEModule);
         vm.expectRevert(UniversalCoreErrors.CallerIsNotUEModule.selector);
-        handler.setGasTokenPRC20(CHAIN_ID, prc20);
+        universalCore.setGasTokenPRC20(CHAIN_ID, prc20);
         
         // UEM should succeed
         vm.prank(UNIVERSAL_EXECUTOR_MODULE);
-        handler.setGasTokenPRC20(CHAIN_ID, prc20);
-        assertEq(handler.gasTokenPRC20ByChainId(CHAIN_ID), prc20);
+        universalCore.setGasTokenPRC20(CHAIN_ID, prc20);
+        assertEq(universalCore.gasTokenPRC20ByChainId(CHAIN_ID), prc20);
     }
 
     function test_SetGasTokenPRC20_ZeroAddressReverts() public {
         vm.prank(UNIVERSAL_EXECUTOR_MODULE);
         vm.expectRevert(UniversalCoreErrors.ZeroAddress.selector);
-        handler.setGasTokenPRC20(CHAIN_ID, address(0));
+        universalCore.setGasTokenPRC20(CHAIN_ID, address(0));
     }
 
     function test_SetGasTokenPRC20_HappyPath() public {
         address prc20 = makeAddr("prc20");
         
         vm.prank(UNIVERSAL_EXECUTOR_MODULE);
-        handler.setGasTokenPRC20(CHAIN_ID, prc20);
+        universalCore.setGasTokenPRC20(CHAIN_ID, prc20);
         
-        assertEq(handler.gasTokenPRC20ByChainId(CHAIN_ID), prc20);
+        assertEq(universalCore.gasTokenPRC20ByChainId(CHAIN_ID), prc20);
     }
 
     // ========================================
@@ -426,23 +426,23 @@ contract UniversalCoreTest is Test, UpgradeableContractHelper {
         // Non-UEM should revert
         vm.prank(nonUEModule);
         vm.expectRevert(UniversalCoreErrors.CallerIsNotUEModule.selector);
-        handler.depositPRC20Token(address(prc20Token), 1000, makeAddr("target"));
+        universalCore.depositPRC20Token(address(prc20Token), 1000, makeAddr("target"));
         
         // UEM should succeed
         vm.prank(UNIVERSAL_EXECUTOR_MODULE);
-        handler.depositPRC20Token(address(prc20Token), 1000, makeAddr("target"));
+        universalCore.depositPRC20Token(address(prc20Token), 1000, makeAddr("target"));
     }
 
     function test_DepositPRC20Token_InvalidTargets() public {
         // Target cannot be UNIVERSAL_EXECUTOR_MODULE
         vm.prank(UNIVERSAL_EXECUTOR_MODULE);
         vm.expectRevert(UniversalCoreErrors.InvalidTarget.selector);
-        handler.depositPRC20Token(address(prc20Token), 1000, UNIVERSAL_EXECUTOR_MODULE);
+        universalCore.depositPRC20Token(address(prc20Token), 1000, UNIVERSAL_EXECUTOR_MODULE);
         
-        // Target cannot be handler contract itself
+        // Target cannot be universalCore contract itself
         vm.prank(UNIVERSAL_EXECUTOR_MODULE);
         vm.expectRevert(UniversalCoreErrors.InvalidTarget.selector);
-        handler.depositPRC20Token(address(prc20Token), 1000, address(handler));
+        universalCore.depositPRC20Token(address(prc20Token), 1000, address(universalCore));
     }
 
     function test_DepositPRC20Token_ZeroAddressAllowed() public {
@@ -450,7 +450,7 @@ contract UniversalCoreTest is Test, UpgradeableContractHelper {
         // Note: PRC20.deposit() will revert on zero address, so this documents current behavior
         vm.prank(UNIVERSAL_EXECUTOR_MODULE);
         vm.expectRevert(PRC20Errors.ZeroAddress.selector);
-        handler.depositPRC20Token(address(prc20Token), 1000, address(0));
+        universalCore.depositPRC20Token(address(prc20Token), 1000, address(0));
     }
 
     function test_DepositPRC20Token_ZeroAmountAllowed() public {
@@ -460,7 +460,7 @@ contract UniversalCoreTest is Test, UpgradeableContractHelper {
         // Note: PRC20.deposit() will revert on zero amount, so this documents current behavior
         vm.prank(UNIVERSAL_EXECUTOR_MODULE);
         vm.expectRevert(PRC20Errors.ZeroAmount.selector);
-        handler.depositPRC20Token(address(prc20Token), 0, target);
+        universalCore.depositPRC20Token(address(prc20Token), 0, target);
     }
 
     function test_DepositPRC20Token_ZeroPRC20Address() public {
@@ -469,7 +469,7 @@ contract UniversalCoreTest is Test, UpgradeableContractHelper {
         // Zero PRC20 address should cause low-level revert
         vm.prank(UNIVERSAL_EXECUTOR_MODULE);
         vm.expectRevert();
-        handler.depositPRC20Token(address(0), 1000, target);
+        universalCore.depositPRC20Token(address(0), 1000, target);
     }
 
     function test_DepositPRC20Token_HappyPath() public {
@@ -477,7 +477,7 @@ contract UniversalCoreTest is Test, UpgradeableContractHelper {
         uint256 amount = 1000;
         
         vm.prank(UNIVERSAL_EXECUTOR_MODULE);
-        handler.depositPRC20Token(address(prc20Token), amount, target);
+        universalCore.depositPRC20Token(address(prc20Token), amount, target);
         
         // Verify tokens were minted to target
         assertEq(prc20Token.balanceOf(target), amount);
@@ -486,12 +486,12 @@ contract UniversalCoreTest is Test, UpgradeableContractHelper {
 
     function test_DepositPRC20Token_ReentrancyProtection() public {
         // Deploy malicious PRC20 that tries to reenter
-        MaliciousPRC20 maliciousToken = new MaliciousPRC20(address(handler));
+        MaliciousPRC20 maliciousToken = new MaliciousPRC20(address(universalCore));
         
         vm.prank(UNIVERSAL_EXECUTOR_MODULE);
         // Should revert due to reentrancy attempt
         vm.expectRevert("Reentry failed");
-        handler.depositPRC20Token(address(maliciousToken), 1000, makeAddr("target"));
+        universalCore.depositPRC20Token(address(maliciousToken), 1000, makeAddr("target"));
     }
 
     function test_DepositPRC20Token_Atomicity() public {
@@ -500,10 +500,10 @@ contract UniversalCoreTest is Test, UpgradeableContractHelper {
         
         vm.prank(UNIVERSAL_EXECUTOR_MODULE);
         vm.expectRevert("Deposit failed");
-        handler.depositPRC20Token(address(revertingToken), 1000, makeAddr("target"));
+        universalCore.depositPRC20Token(address(revertingToken), 1000, makeAddr("target"));
         
-        // Verify handler state unchanged
-        assertEq(handler.wPCContractAddress(), address(mockWPC));
+        // Verify universalCore state unchanged
+        assertEq(universalCore.wPCContractAddress(), address(mockWPC));
     }
 
     // ============ Pause/Unpause Tests ============
@@ -511,82 +511,82 @@ contract UniversalCoreTest is Test, UpgradeableContractHelper {
     function test_Pause_OnlyOwner() public {
         vm.prank(nonOwner);
         vm.expectRevert(abi.encodeWithSelector(UniversalCoreErrors.CallerIsNotOwner.selector));
-        handler.pause();
+        universalCore.pause();
     }
 
     function test_Pause_HappyPath() public {
         vm.prank(deployer);
         vm.expectEmit(true, true, true, true);
         emit Paused(deployer);
-        handler.pause();
+        universalCore.pause();
         
-        assertTrue(handler.paused());
+        assertTrue(universalCore.paused());
     }
 
     function test_Unpause_OnlyOwner() public {
         // First pause the contract
         vm.prank(deployer);
-        handler.pause();
+        universalCore.pause();
         
         // Try to unpause as non-owner
         vm.prank(nonOwner);
         vm.expectRevert(abi.encodeWithSelector(UniversalCoreErrors.CallerIsNotOwner.selector));
-        handler.unpause();
+        universalCore.unpause();
     }
 
     function test_Unpause_HappyPath() public {
         // First pause the contract
         vm.prank(deployer);
-        handler.pause();
-        assertTrue(handler.paused());
+        universalCore.pause();
+        assertTrue(universalCore.paused());
         
         // Unpause
         vm.prank(deployer);
         vm.expectEmit(true, true, true, true);
         emit Unpaused(deployer);
-        handler.unpause();
+        universalCore.unpause();
         
-        assertFalse(handler.paused());
+        assertFalse(universalCore.paused());
     }
 
     function test_DepositPRC20Token_WhenPaused_Reverts() public {
         // Pause the contract
         vm.prank(deployer);
-        handler.pause();
+        universalCore.pause();
         
         // Try to deposit when paused
         vm.prank(UNIVERSAL_EXECUTOR_MODULE);
         vm.expectRevert(abi.encodeWithSelector(PausableUpgradeable.EnforcedPause.selector));
-        handler.depositPRC20Token(address(mockPRC20), 1000, user);
+        universalCore.depositPRC20Token(address(mockPRC20), 1000, user);
     }
 
     function test_DepositPRC20WithAutoSwap_WhenPaused_Reverts() public {
         // Setup auto-swap support
         vm.prank(deployer);
-        handler.setAutoSwapSupported(address(mockPRC20), true);
+        universalCore.setAutoSwapSupported(address(mockPRC20), true);
         
         // Pause the contract
         vm.prank(deployer);
-        handler.pause();
+        universalCore.pause();
         
         // Try to deposit with auto-swap when paused
         vm.prank(UNIVERSAL_EXECUTOR_MODULE);
         vm.expectRevert(abi.encodeWithSelector(PausableUpgradeable.EnforcedPause.selector));
-        handler.depositPRC20WithAutoSwap(address(mockPRC20), 1000, user, 0, 0, 0);
+        universalCore.depositPRC20WithAutoSwap(address(mockPRC20), 1000, user, 0, 0, 0);
     }
 
     function test_DepositPRC20Token_AfterUnpause_Works() public {
         // Pause the contract
         vm.prank(deployer);
-        handler.pause();
+        universalCore.pause();
         
         // Unpause the contract
         vm.prank(deployer);
-        handler.unpause();
+        universalCore.unpause();
         
         // Now deposit should work
         vm.prank(UNIVERSAL_EXECUTOR_MODULE);
-        handler.depositPRC20Token(address(mockPRC20), 1000, user);
+        universalCore.depositPRC20Token(address(mockPRC20), 1000, user);
         
         assertEq(mockPRC20.balanceOf(user), 1000);
     }

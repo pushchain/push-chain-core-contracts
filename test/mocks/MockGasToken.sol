@@ -111,6 +111,7 @@ contract MockGasToken is IPRC20 {
     function SOURCE_CHAIN_ID() external pure returns (uint256) { revert("Not implemented"); }
     function TOKEN_TYPE() external pure returns (TokenType) { revert("Not implemented"); }
     function HANDLER_CONTRACT() external pure returns (address) { revert("Not implemented"); }
+    function UNIVERSAL_CORE() external pure returns (address) { revert("Not implemented"); }
     function GAS_LIMIT() external pure returns (uint256) { revert("Not implemented"); }
     function PC_PROTOCOL_FEE() external pure returns (uint256) { revert("Not implemented"); }
 }
