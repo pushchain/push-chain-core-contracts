@@ -2,7 +2,7 @@
 pragma solidity ^0.8.20;
 
 import "forge-std/Script.sol";
-import {UEAFactoryV1} from "../src/UEAFactoryV1.sol";
+import {UEAFactoryV1} from "../src/UEA/UEAFactoryV1.sol";
 import {UEA_EVM} from "../src/UEA/UEA_EVM.sol";
 import {UEA_SVM} from "../src/UEA/UEA_SVM.sol";
 
