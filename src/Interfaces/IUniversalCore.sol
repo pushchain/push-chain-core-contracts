@@ -20,11 +20,11 @@ interface IUniversalCore {
     function gasPCPoolByChainId(uint256 chainID) external view returns (address);
 
     // Events
-    event SystemContractDeployed();
     event SetGasPrice(uint256 chainId, uint256 price);
     event SetGasToken(uint256 chainId, address prc20);
     event SetGasPCPool(uint256 chainId, address pool, uint24 fee);
     event SetWPC(address wpc);
+    event SetUniswapV3Addresses(address factory, address swapRouter, address quoter);
     event SetConnectorEVM(address connector);
     event SetAutoSwapSupported(address token, bool supported);
     event SetDefaultFeeTier(address indexed token, uint24 feeTier);

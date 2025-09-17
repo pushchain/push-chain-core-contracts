@@ -101,8 +101,6 @@ contract UniversalCore is IUniversalCore, Initializable, ReentrancyGuardUpgradea
         uniswapV3FactoryAddress = uniswapV3Factory_;
         uniswapV3SwapRouterAddress = uniswapV3SwapRouter_;
         uniswapV3QuoterAddress = uniswapV3Quoter_;
-
-        emit SystemContractDeployed();
     }
 
     /**
@@ -267,6 +265,20 @@ contract UniversalCore is IUniversalCore, Initializable, ReentrancyGuardUpgradea
         if (addr == address(0)) revert UniversalCoreErrors.ZeroAddress();
         wPCContractAddress = addr;
         emit SetWPC(addr);
+    }
+
+    /**
+     * @dev Setter for uniswap V3 addresses.
+     * @param factory Uniswap V3 Factory address
+     * @param swapRouter Uniswap V3 SwapRouter address
+     * @param quoter Uniswap V3 Quoter address
+     */
+    function setUniswapV3Addresses(address factory, address swapRouter, address quoter) external onlyOwner {
+        if (factory == address(0) || swapRouter == address(0) || quoter == address(0)) revert UniversalCoreErrors.ZeroAddress();
+        uniswapV3FactoryAddress = factory;
+        uniswapV3SwapRouterAddress = swapRouter;
+        uniswapV3QuoterAddress = quoter;
+        emit SetUniswapV3Addresses(factory, swapRouter, quoter);
     }
 
     /**
