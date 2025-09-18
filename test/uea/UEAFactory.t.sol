@@ -4,15 +4,15 @@ pragma solidity 0.8.26;
 import "forge-std/Test.sol";
 import "forge-std/console.sol";
 
-import "../src/libraries/Types.sol";
-import {UEAFactoryV1} from "../src/UEAFactoryV1.sol";
-import {UEA_EVM} from "../src/UEA/UEA_EVM.sol";
-import {UEA_SVM} from "../src/UEA/UEA_SVM.sol";
-import {Errors} from "../src/libraries/Errors.sol";
-import {IUEA} from "../src/Interfaces/IUEA.sol";
+import "../../src/libraries/Types.sol";
+import {UEAFactoryV1} from "../../src/uea/UEAFactoryV1.sol";
+import {UEA_EVM} from "../../src/uea/UEA_EVM.sol";
+import {UEA_SVM} from "../../src/uea/UEA_SVM.sol";
+import {UEAErrors as Errors} from "../../src/libraries/Errors.sol";
+import {IUEA} from "../../src/interfaces/IUEA.sol";
 import {OwnableUpgradeable} from "@openzeppelin/contracts-upgradeable/access/OwnableUpgradeable.sol";
 import {ERC1967Proxy} from "@openzeppelin/contracts/proxy/ERC1967/ERC1967Proxy.sol";
-import {UEAProxy} from "../src/UEAProxy.sol";
+import {UEAProxy} from "../../src/uea/UEAProxy.sol";
 
 contract UEAFactoryTest is Test {
     UEAFactoryV1 factory;
@@ -667,7 +667,7 @@ contract UEAFactoryTest is Test {
         assertEq(account.chainId, "42101");
     }
 
-    // Test for comparing native and UEA accounts
+        // Test for comparing native and UEA accounts
     function testCompareNativeAndUEAAccounts() public {
         // Create and deploy a UEA
         bytes memory ueaOwnerBytes = abi.encodePacked(makeAddr("uea_owner"));
@@ -715,6 +715,7 @@ contract UEAFactoryTest is Test {
         }
     }
 
+    
     // Error Cases
     function testRevertComputeUEAWithUnregisteredChain() public {
         // Create an account with unregistered chain
