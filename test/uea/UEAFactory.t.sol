@@ -651,7 +651,6 @@ contract UEAFactoryTest is Test {
         assertTrue(isUEA2);
     }
 
-    // Test for native account detection with empty owner and chain
     // Test for native account detection with populated owner and chain
     function testNativeAccountDetection() public {
         // Create a random address that is not a UEA
@@ -694,6 +693,26 @@ contract UEAFactoryTest is Test {
         assertEq(nativeAccount.owner, bytes(abi.encodePacked(nativeAddr)));
         assertEq(nativeAccount.chainNamespace, "eip155");
         assertEq(nativeAccount.chainId, "42101");
+    }
+
+    // Test for multiple native accounts all returning consistent Push Chain data
+    function testMultipleNativeAccounts() public {
+        // Create multiple random addresses
+        address[] memory nativeAddrs = new address[](3);
+        nativeAddrs[0] = makeAddr("native1");
+        nativeAddrs[1] = makeAddr("native2");
+        nativeAddrs[2] = makeAddr("native3");
+
+        // Check all addresses are correctly identified as native with consistent Push Chain data
+        for (uint256 i = 0; i < nativeAddrs.length; i++) {
+            (UniversalAccountId memory account, bool isUEA) = factory.getOriginForUEA(nativeAddrs[i]);
+
+            assertFalse(isUEA);
+            assertEq(account.owner.length, 20); // Address is 20 bytes
+            assertEq(account.owner, bytes(abi.encodePacked(nativeAddrs[i])));
+            assertEq(account.chainNamespace, "eip155");
+            assertEq(account.chainId, "42101");
+        }
     }
 
     
