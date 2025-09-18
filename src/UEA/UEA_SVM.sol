@@ -146,7 +146,7 @@ contract UEA_SVM is ReentrancyGuard, IUEA {
         bytes32 payloadHash = getMigrationPayloadHash(payload);
 
         if (!verifyPayloadSignature(payloadHash, signature)) {
-            revert Errors.InvalidEVMSignature();
+            revert Errors.InvalidSVMSignature();
         }
 
         unchecked {
