@@ -5,9 +5,7 @@ import {UEAErrors as Errors} from "../libraries/Errors.sol";
 import {IUEA} from "../Interfaces/IUEA.sol";
 import {ReentrancyGuard} from "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
 import {StringUtils} from "../libraries/Utils.sol";
-import {
-    UniversalAccountId, UniversalPayload, VerificationType, UNIVERSAL_PAYLOAD_TYPEHASH
-} from "../libraries/Types.sol";
+import {UniversalAccountId, UniversalPayload, VerificationType, UNIVERSAL_PAYLOAD_TYPEHASH, MULTICALL_SELECTOR, Multicall} from "../libraries/Types.sol";
 /**
  * @title UEA_SVM (Universal Executor Account for SVM)
  * @dev Implementation of the IUEA interface for SVM-based external accounts.
@@ -104,6 +102,26 @@ contract UEA_SVM is ReentrancyGuard, IUEA {
     }
 
     /**
+    * @dev Checks whether the payload data uses the multicall format by verifying a magic selector prefix.
+    * @param data The raw calldata from the UniversalPayload.
+    * @return bool Returns true if the data starts with the MULTICALL_SELECTOR, indicating a multicall batch.
+    */
+    function isMulticall(bytes calldata data) internal pure returns (bool) {
+        if (data.length < 4) return false;
+        return bytes4(data[:4]) == MULTICALL_SELECTOR;
+    } 
+
+    /**
+    * @dev Decodes the payload data into an array of Call structs, assuming the data uses the multicall format.
+    * @notice This function assumes that isMulticall(data) has already returned true.
+    * @param data The raw calldata containing the MULTICALL_SELECTOR followed by the ABI-encoded Call[].
+    * @return Call[] The decoded array of Call structs to be executed.
+    */
+    function decodeCalls(bytes calldata data) internal pure returns (Multicall[] memory) {
+        return abi.decode(data[4:], (Multicall[])); // Strip selector
+    }
+
+    /**
      * @inheritdoc IUEA
      */
     function executePayload(UniversalPayload calldata payload, bytes calldata verificationData) external nonReentrant {
@@ -123,7 +141,23 @@ contract UEA_SVM is ReentrancyGuard, IUEA {
             nonce++;
         }
 
-        (bool success, bytes memory returnData) = payload.to.call{value: payload.value}(payload.data);
+        // flag to overwrite success
+        bool success;
+        bytes memory returnData;
+
+        // Execute the payload: either single call or multicall batch
+        if (isMulticall(payload.data)) {
+            Multicall[] memory calls = decodeCalls(payload.data);
+            for (uint256 i = 0; i < calls.length; i++) {
+                // If any sub-call fails, revert entire multicall
+                (success, returnData) = calls[i].to.call{value: calls[i].value}(calls[i].data);
+                if (!success) {
+                    break;
+                }
+            }
+        } else {
+            (success, returnData) = payload.to.call{value: payload.value}(payload.data);
+        }
 
         if (!success) {
             if (returnData.length > 0) {
