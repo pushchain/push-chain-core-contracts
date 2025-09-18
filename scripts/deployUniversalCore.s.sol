@@ -107,7 +107,10 @@ contract Deploy is Script {
 
     /// @notice Deploy one PRC20 with given config and universalCore
     function deployPRC20(address universalCore, PRC20Config memory cfg) internal returns (address) {
-        PRC20 prc20 = new PRC20(
+        PRC20 prc20Impl = new PRC20();
+
+        bytes memory initData = abi.encodeWithSelector(
+            PRC20.initialize.selector,
             cfg.name,
             cfg.symbol,
             cfg.decimals,
@@ -119,8 +122,14 @@ contract Deploy is Script {
             cfg.sourceERC20
         );
 
-        console.log("PRC20 deployed at:", address(prc20));
+        TransparentUpgradeableProxy proxy = new TransparentUpgradeableProxy(
+            address(prc20Impl),
+            owner,
+            initData
+        );
+
+        console.log("PRC20 deployed at:", address(proxy));
         console.log("    Name:", cfg.name, "Symbol:", cfg.symbol);
-        return address(prc20);
+        return address(proxy);
     }
 }

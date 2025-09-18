@@ -432,8 +432,8 @@ contract UEASVMTest is Test {
             data: abi.encodeWithSignature("setMagicNumberWithFee(uint256)", 456)
         });
 
-        // Encode with multicall prefix (0x4e2d2ff6 is keccak256("MulticallPayload")[0:4])
-        bytes4 selector = bytes4(keccak256("MulticallPayload"));
+        // Encode with multicall prefix (0x4e2d2ff6 is keccak256("UEA_MULTICALL")[0:4])
+        bytes4 selector = bytes4(keccak256("UEA_MULTICALL"));
         bytes memory callData = abi.encode(calls);
         bytes memory multicallData = abi.encodePacked(selector, callData);
 
@@ -486,7 +486,7 @@ contract UEASVMTest is Test {
         });
 
         // Encode with selector
-        bytes4 selector = bytes4(keccak256("MulticallPayload"));
+        bytes4 selector = bytes4(keccak256("UEA_MULTICALL"));
         bytes memory callData = abi.encode(calls);
         bytes memory multicallData = abi.encodePacked(selector, callData);
 
@@ -544,7 +544,7 @@ contract UEASVMTest is Test {
         });
 
         // Encode with multicall prefix
-        bytes4 selector = bytes4(keccak256("MulticallPayload"));
+        bytes4 selector = bytes4(keccak256("UEA_MULTICALL"));
         bytes memory callData = abi.encode(calls);
         bytes memory multicallData = abi.encodePacked(selector, callData);
 
@@ -608,7 +608,7 @@ contract UEASVMTest is Test {
         });
 
         // Encode with multicall prefix
-        bytes4 selector = bytes4(keccak256("MulticallPayload"));
+        bytes4 selector = bytes4(keccak256("UEA_MULTICALL"));
         bytes memory callData = abi.encode(calls);
         bytes memory multicallData = abi.encodePacked(selector, callData);
 
@@ -679,7 +679,7 @@ contract UEASVMTest is Test {
         });
 
         // Encode with multicall prefix
-        bytes4 selector = bytes4(keccak256("MulticallPayload"));
+        bytes4 selector = bytes4(keccak256("UEA_MULTICALL"));
         bytes memory callData = abi.encode(calls);
         bytes memory multicallData = abi.encodePacked(selector, callData);
 

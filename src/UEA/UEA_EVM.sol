@@ -1,13 +1,12 @@
 // SPDX-License-Identifier: MIT
 pragma solidity 0.8.26;
 
-import "../libraries/Types.sol";
 import {UEAErrors as Errors} from "../libraries/Errors.sol";
 import {IUEA} from "../Interfaces/IUEA.sol";
 import {ECDSA} from "@openzeppelin/contracts/utils/cryptography/ECDSA.sol";
 import {ReentrancyGuard} from "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
 import {StringUtils} from "../libraries/Utils.sol";
-import {UniversalAccountId, UniversalPayload, Multicall, MigrationPayload, VerificationType, UNIVERSAL_PAYLOAD_TYPEHASH} from "../libraries/Types.sol";
+import {UniversalAccountId, UniversalPayload, MigrationPayload, VerificationType, UNIVERSAL_PAYLOAD_TYPEHASH, MIGRATION_PAYLOAD_TYPEHASH, MULTICALL_SELECTOR, Multicall} from "../libraries/Types.sol";
 /**
  * @title UEA_EVM (Universal Executor Account for EVM)
  * @dev Implementation of the IUEA interface for EVM-based external accounts.
