@@ -1,11 +1,13 @@
 // SPDX-License-Identifier: MIT
 pragma solidity 0.8.26;
 
-import {Errors} from "../libraries/Errors.sol";
+import {UEAErrors as Errors} from "../libraries/Errors.sol";
 import {IUEA} from "../Interfaces/IUEA.sol";
 import {ReentrancyGuard} from "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
 import {StringUtils} from "../libraries/Utils.sol";
-import {UniversalAccountId, UniversalPayload, VerificationType, UNIVERSAL_PAYLOAD_TYPEHASH} from "../libraries/Types.sol";
+import {
+    UniversalAccountId, UniversalPayload, VerificationType, UNIVERSAL_PAYLOAD_TYPEHASH
+} from "../libraries/Types.sol";
 /**
  * @title UEA_SVM (Universal Executor Account for SVM)
  * @dev Implementation of the IUEA interface for SVM-based external accounts.
@@ -28,7 +30,8 @@ contract UEA_SVM is ReentrancyGuard, IUEA {
     // @notice Precompile address for TxHash Based Verification
     address public constant TX_BASED_VERIFIER = 0x00000000000000000000000000000000000000CB;
     // @notice Hash of keccak256("EIP712Domain_SVM(string version,string chainId,address verifyingContract)")
-    bytes32 public constant DOMAIN_SEPARATOR_TYPEHASH_SVM = 0x3aefc31558906b9b2c54de94f82a9b2455c24b4ba2b642ebb545ea2cc64a1e4b;
+    bytes32 public constant DOMAIN_SEPARATOR_TYPEHASH_SVM =
+        0x3aefc31558906b9b2c54de94f82a9b2455c24b4ba2b642ebb545ea2cc64a1e4b;
 
     /**
      * @dev Returns the domain separator for EIP-712 signing.
@@ -84,7 +87,8 @@ contract UEA_SVM is ReentrancyGuard, IUEA {
 
     function verifyPayloadTxHash(bytes32 payloadHash, bytes calldata txHash) public view returns (bool) {
         (bool success, bytes memory result) = TX_BASED_VERIFIER.staticcall(
-            abi.encodeWithSignature("verifyTxHash(string,string,bytes,bytes32,bytes)",
+            abi.encodeWithSignature(
+                "verifyTxHash(string,string,bytes,bytes32,bytes)",
                 id.chainNamespace,
                 id.chainId,
                 id.owner,

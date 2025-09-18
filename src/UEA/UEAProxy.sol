@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: MIT
 pragma solidity 0.8.26;
 
-import {Errors} from "./libraries/Errors.sol";
+import {UEAErrors as Errors} from "../libraries/Errors.sol";
 import {Initializable} from "@openzeppelin/contracts/proxy/utils/Initializable.sol";
-import { Proxy } from "@openzeppelin/contracts/proxy/Proxy.sol";
+import {Proxy} from "@openzeppelin/contracts/proxy/Proxy.sol";
 
 /**
  * @title UEAProxy

@@ -1,14 +1,14 @@
 // SPDX-License-Identifier: MIT
 pragma solidity 0.8.26;
 
-import {IUEA} from "./Interfaces/IUEA.sol";
+import {IUEA} from "../interfaces/IUEA.sol";
 import {Clones} from "@openzeppelin/contracts/proxy/Clones.sol";
 
-import {Errors} from "./libraries/Errors.sol";
+import {UEAErrors as Errors} from "../libraries/Errors.sol";
 import {Initializable} from "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol";
 import {OwnableUpgradeable} from "@openzeppelin/contracts-upgradeable/access/OwnableUpgradeable.sol";
-import {IUEAFactory} from "./Interfaces/IUEAFactory.sol";
-import {UniversalAccountId} from "./libraries/Types.sol";
+import {IUEAFactory} from "../interfaces/IUEAFactory.sol";
+import {UniversalAccountId} from "../libraries/Types.sol";
 import {UEAProxy} from "./UEAProxy.sol";
 
 /**
@@ -170,7 +170,7 @@ contract UEAFactoryV1 is Initializable, OwnableUpgradeable, IUEAFactory {
         if (UEA_PROXY_IMPLEMENTATION == address(0)) {
             revert Errors.InvalidInputArgs();
         }
-        
+
         bytes32 salt = generateSalt(_id);
 
         // Get the appropriate UEA Implementation based on VM type
@@ -187,10 +187,10 @@ contract UEAFactoryV1 is Initializable, OwnableUpgradeable, IUEAFactory {
 
         // Deploy the UEAProxy using CREATE2 via cloneDeterministic
         address payable _UEAProxy = payable(UEA_PROXY_IMPLEMENTATION.cloneDeterministic(salt));
-        
+
         // Initialize the proxy with the implementation address
         UEAProxy(_UEAProxy).initializeUEA(_ueaImplementation);
-        
+
         // Initialize the UEA implementation through the proxy
         IUEA(_UEAProxy).initialize(_id);
 
@@ -213,7 +213,7 @@ contract UEAFactoryV1 is Initializable, OwnableUpgradeable, IUEAFactory {
         if (UEA_PROXY_IMPLEMENTATION == address(0)) {
             revert Errors.InvalidInputArgs();
         }
-        
+
         bytes32 chainHash = keccak256(abi.encode(_id.chainNamespace, _id.chainId));
         (, bool isRegistered) = getVMType(chainHash);
         if (!isRegistered) {
