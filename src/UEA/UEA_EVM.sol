@@ -17,9 +17,6 @@ import {UniversalAccountId, UniversalPayload, Multicall, VerificationType, UNIVE
  */
 
 contract UEA_EVM is ReentrancyGuard, IUEA {
-    // Magic Prefix for deciding if the payload is a Multicall
-    bytes4 constant MULTICALL_SELECTOR = bytes4(keccak256("MulticallPayload"));
-
     using ECDSA for bytes32;
 
     // @notice The Universal Account information
