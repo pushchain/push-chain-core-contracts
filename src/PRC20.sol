@@ -16,7 +16,7 @@ contract PRC20 is IPRC20 {
     /// @notice Source chain this PRC20 mirrors (used for oracle lookups)
     uint256 public immutable SOURCE_CHAIN_ID;
     /// @notice Source Chain ERC20 address of the PRC20
-    address public immutable SOURCE_ERC20_ADDRESS;
+    address public immutable SOURCE_TOKEN_ADDRESS;
 
     /// @notice Classification of this synthetic
     TokenType public immutable TOKEN_TYPE;
@@ -65,9 +65,9 @@ contract PRC20 is IPRC20 {
         uint256 gasLimit_,
         uint256 protocolFlatFee_,
         address universalCore_,
-        address sourceERC20Address_
+        address sourceTokenAddress_
     ) {
-        if (universalCore_ == address(0) || sourceERC20Address_ == address(0)) revert PRC20Errors.ZeroAddress();
+        if (universalCore_ == address(0)) revert PRC20Errors.ZeroAddress();
 
         _name = name_;
         _symbol = symbol_;
@@ -78,7 +78,7 @@ contract PRC20 is IPRC20 {
         GAS_LIMIT = gasLimit_;
         PC_PROTOCOL_FEE = protocolFlatFee_;
         UNIVERSAL_CORE = universalCore_;
-        SOURCE_ERC20_ADDRESS = sourceERC20Address_;
+        SOURCE_TOKEN_ADDRESS = sourceTokenAddress_;
     }
 
     //*** VIEW FUNCTIONS ***//

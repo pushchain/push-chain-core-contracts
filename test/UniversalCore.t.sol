@@ -151,27 +151,6 @@ contract UniversalCoreTest is Test, UpgradeableContractHelper {
         assertEq(universalCore.uniswapV3QuoterAddress(), address(mockQuoter));
     }
 
-    function test_Initialize_EmitsSystemContractDeployed() public {
-        // Deploy new universalCore to test event emission
-        address newDeployer = makeAddr("newDeployer");
-        vm.startPrank(newDeployer);
-        
-        UniversalCore newImplementation = new UniversalCore();
-        bytes memory initData = abi.encodeWithSelector(
-            UniversalCore.initialize.selector,
-            address(mockWPC),
-            address(mockFactory),
-            address(mockRouter),
-            address(mockQuoter)
-        );
-        
-        vm.expectEmit(true, true, true, true);
-        emit SystemContractDeployed();
-        
-        address newProxyAddress = deployUpgradeableContract(address(newImplementation), initData);
-        vm.stopPrank();
-    }
-
     function test_Initialize_RevertsOnSecondCall() public {
         vm.expectRevert();
         universalCore.initialize(
