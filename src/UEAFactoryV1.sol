@@ -242,11 +242,15 @@ contract UEAFactoryV1 is Initializable, OwnableUpgradeable, IUEAFactory {
     function getOriginForUEA(address addr) external view returns (UniversalAccountId memory account, bool isUEA) {
         account = UEA_to_UOA[addr];
 
-        // If the address has no associated Universal Account (owner.length == 0),
-        // then it's likely a native EOA account on PUSH Chain
-        // else it is a UEA contract
+        // If the address has an associated Universal Account (owner.length > 0),
+        // then it is a UEA contract - isUEA = true
         if (account.owner.length > 0) {
             isUEA = true;
+        }else{
+            // If Account is NOT UEA, then it is a native EOA account on PUSH Chain
+            // So we need to set the chainNamespace to eip155 and chainId to 42101
+            // and the owner to the address of the EOA
+            account = UniversalAccountId({chainNamespace: "eip155", chainId: "42101", owner: bytes(abi.encodePacked(addr))});
         }
 
         return (account, isUEA);

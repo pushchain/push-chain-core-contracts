@@ -583,12 +583,14 @@ contract UEAFactoryTest is Test {
         assertEq(retrievedUEA, ueaAddress);
         assertTrue(isDeployed);
 
-        // Test with non-existent UEA
+        // Test with non-existent UEA (native account)
         address randomAddr = makeAddr("random");
         (UniversalAccountId memory randomAccount, bool isRandomUEA) = factory.getOriginForUEA(randomAddr);
         assertFalse(isRandomUEA);
-        assertEq(randomAccount.owner.length, 0);
-        assertEq(bytes(randomAccount.chainNamespace).length, 0);
+        assertEq(randomAccount.owner.length, 20); // Address is 20 bytes
+        assertEq(randomAccount.owner, bytes(abi.encodePacked(randomAddr)));
+        assertEq(randomAccount.chainNamespace, "eip155");
+        assertEq(randomAccount.chainId, "42101");
 
         // Test with non-existent owner key but predictable address
         (address newOwner, uint256 newOwnerPK) = makeAddrAndKey("newOwner");
@@ -649,7 +651,7 @@ contract UEAFactoryTest is Test {
         assertTrue(isUEA2);
     }
 
-    // Test for native account detection with empty owner and chain
+    // Test for native account detection with populated owner and chain
     function testNativeAccountDetection() public {
         // Create a random address that is not a UEA
         address randomAddr = makeAddr("randomNative");
@@ -658,9 +660,11 @@ contract UEAFactoryTest is Test {
         (UniversalAccountId memory account, bool isUEA) = factory.getOriginForUEA(randomAddr);
 
         assertFalse(isUEA);
-        // For native accounts, both owner and chain should be empty
-        assertEq(account.owner.length, 0);
-        assertEq(bytes(account.chainNamespace).length, 0);
+        // For native accounts, owner should be the address itself and chain should be "eip155"/"42101"
+        assertEq(account.owner.length, 20); // Address is 20 bytes
+        assertEq(account.owner, bytes(abi.encodePacked(randomAddr)));
+        assertEq(account.chainNamespace, "eip155");
+        assertEq(account.chainId, "42101");
     }
 
     // Test for comparing native and UEA accounts
@@ -683,13 +687,15 @@ contract UEAFactoryTest is Test {
         assertEq(keccak256(ueaAccount.owner), keccak256(ueaOwnerBytes));
         assertEq(keccak256(abi.encode(ueaAccount.chainNamespace)), keccak256(abi.encode("eip155")));
 
-        // Native account should be marked as not a UEA and have empty data
+        // Native account should be marked as not a UEA and have populated data for Push Chain
         assertFalse(isNativeUEA);
-        assertEq(nativeAccount.owner.length, 0);
-        assertEq(bytes(nativeAccount.chainNamespace).length, 0);
+        assertEq(nativeAccount.owner.length, 20); // Address is 20 bytes
+        assertEq(nativeAccount.owner, bytes(abi.encodePacked(nativeAddr)));
+        assertEq(nativeAccount.chainNamespace, "eip155");
+        assertEq(nativeAccount.chainId, "42101");
     }
 
-    // Test for multiple native accounts all returning empty data
+    // Test for multiple native accounts all returning consistent Push Chain data
     function testMultipleNativeAccounts() public {
         // Create multiple random addresses
         address[] memory nativeAddrs = new address[](3);
@@ -697,13 +703,15 @@ contract UEAFactoryTest is Test {
         nativeAddrs[1] = makeAddr("native2");
         nativeAddrs[2] = makeAddr("native3");
 
-        // Check all addresses are correctly identified as native with empty data
+        // Check all addresses are correctly identified as native with consistent Push Chain data
         for (uint256 i = 0; i < nativeAddrs.length; i++) {
             (UniversalAccountId memory account, bool isUEA) = factory.getOriginForUEA(nativeAddrs[i]);
 
             assertFalse(isUEA);
-            assertEq(account.owner.length, 0);
-            assertEq(bytes(account.chainNamespace).length, 0);
+            assertEq(account.owner.length, 20); // Address is 20 bytes
+            assertEq(account.owner, bytes(abi.encodePacked(nativeAddrs[i])));
+            assertEq(account.chainNamespace, "eip155");
+            assertEq(account.chainId, "42101");
         }
     }
 
