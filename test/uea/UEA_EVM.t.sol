@@ -327,6 +327,283 @@ contract UEA_EVMTest is Test {
         evmSmartAccountInstance.executePayload(payload, signature);
     }
 
+    function testExecuteMulticallSuccess() public deployEvmSmartAccount {
+        // Fund UEA smart account
+        vm.deal(address(evmSmartAccountInstance), 1 ether);
+
+        // Prepare multiple calls
+        Multicall[] memory calls = new Multicall[](2);
+        calls[0] = Multicall({
+            to: address(target),
+            value: 0,
+            data: abi.encodeWithSignature("setMagicNumber(uint256)", 123)
+        });
+
+        calls[1] = Multicall({
+            to: address(target),
+            value: 0.1 ether,
+            data: abi.encodeWithSignature("setMagicNumberWithFee(uint256)", 456)
+        });
+
+        // Encode with multicall prefix (0x4e2d2ff6 is keccak256("MulticallPayload")[0:4])
+        bytes4 selector = bytes4(keccak256("MulticallPayload"));
+        bytes memory callData = abi.encode(calls);
+        bytes memory multicallData = abi.encodePacked(selector, callData);
+
+        // Create the payload
+        UniversalPayload memory payload = UniversalPayload({
+            to: address(0), // unused in multicall mode
+            value: 0.1 ether, // total value to be distributed
+            data: multicallData,
+            gasLimit: 1000000,
+            maxFeePerGas: 0,
+            nonce: 0,
+            deadline: block.timestamp + 1000,
+            maxPriorityFeePerGas: 0,
+            vType: VerificationType.signedVerification
+        });
+
+        // Sign the payload
+        bytes32 txHash = getCrosschainTxhash(evmSmartAccountInstance, payload);
+        (uint8 v, bytes32 r, bytes32 s) = vm.sign(ownerPK, txHash);
+        bytes memory signature = abi.encodePacked(r, s, v);
+
+        // Expect event
+        vm.expectEmit(true, true, true, true);
+        emit IUEA.PayloadExecuted(ownerBytes, payload.to, payload.data);
+
+        // Execute
+        evmSmartAccountInstance.executePayload(payload, signature);
+
+        // Check both calls executed
+        uint256 magic = target.getMagicNumber();
+        assertEq(magic, 456, "Multicall failed: second call should set 456");
+        assertEq(address(target).balance, 0.1 ether, "Target should have received 0.1 ETH");
+    }
+
+    function testExecuteMulticallFailsAndRevertsWithReason() public deployEvmSmartAccount {
+        Multicall[] memory calls = new Multicall[](2);
+        calls[0] = Multicall({
+            to: address(target),
+            value: 0,
+            data: abi.encodeWithSignature("setMagicNumber(uint256)", 999)
+        });
+        calls[1] = Multicall({
+            to: address(revertingTarget),
+            value: 0,
+            data: abi.encodeWithSignature("revertWithReason()")
+        });
+
+        // Encode with selector
+        bytes4 selector = bytes4(keccak256("MulticallPayload"));
+        bytes memory callData = abi.encode(calls);
+        bytes memory multicallData = abi.encodePacked(selector, callData);
+
+        UniversalPayload memory payload = UniversalPayload({
+            to: address(0),
+            value: 0,
+            data: multicallData,
+            gasLimit: 1000000,
+            maxFeePerGas: 0,
+            nonce: 0,
+            deadline: block.timestamp + 1000,
+            maxPriorityFeePerGas: 0,
+            vType: VerificationType.signedVerification
+        });
+
+        bytes32 txHash = getCrosschainTxhash(evmSmartAccountInstance, payload);
+        (uint8 v, bytes32 r, bytes32 s) = vm.sign(ownerPK, txHash);
+        bytes memory signature = abi.encodePacked(r, s, v);
+
+        // Should bubble up revert reason from revertingTarget
+        vm.expectRevert("This function always reverts with reason");
+        evmSmartAccountInstance.executePayload(payload, signature);
+    }
+
+    function testExecuteMulticallSuccessWithPayload() public deployEvmSmartAccount {
+        // Fund UEA smart account
+        vm.deal(address(evmSmartAccountInstance), 2 ether);
+
+        // Prepare multiple calls with different values
+        Multicall[] memory calls = new Multicall[](3);
+        calls[0] = Multicall({
+            to: address(target),
+            value: 0.1 ether,
+            data: abi.encodeWithSignature("setMagicNumberWithFee(uint256)", 111)
+        });
+
+        calls[1] = Multicall({
+            to: address(target),
+            value: 0.1 ether,
+            data: abi.encodeWithSignature("setMagicNumberWithFee(uint256)", 222)
+        });
+
+        calls[2] = Multicall({
+            to: address(target),
+            value: 0,
+            data: abi.encodeWithSignature("setMagicNumber(uint256)", 333)
+        });
+
+        // Encode with multicall prefix
+        bytes4 selector = bytes4(keccak256("MulticallPayload"));
+        bytes memory callData = abi.encode(calls);
+        bytes memory multicallData = abi.encodePacked(selector, callData);
+
+        // Create the payload with total value
+        UniversalPayload memory payload = UniversalPayload({
+            to: address(0), // unused in multicall mode
+            value: 0.2 ether, // total value to be distributed
+            data: multicallData,
+            gasLimit: 1000000,
+            maxFeePerGas: 0,
+            nonce: 0,
+            deadline: block.timestamp + 1000,
+            maxPriorityFeePerGas: 0,
+            vType: VerificationType.signedVerification
+        });
+
+        // Sign the payload
+        bytes32 txHash = getCrosschainTxhash(evmSmartAccountInstance, payload);
+        (uint8 v, bytes32 r, bytes32 s) = vm.sign(ownerPK, txHash);
+        bytes memory signature = abi.encodePacked(r, s, v);
+
+        // Expect event
+        vm.expectEmit(true, true, true, true);
+        emit IUEA.PayloadExecuted(ownerBytes, payload.to, payload.data);
+
+        // Execute
+        evmSmartAccountInstance.executePayload(payload, signature);
+
+        // Check all calls executed
+        uint256 magic = target.getMagicNumber();
+        assertEq(magic, 333, "Multicall failed: last call should set 333");
+        assertEq(address(target).balance, 0.2 ether, "Target should have received 0.2 ETH total");
+    }
+
+    function testExecuteMulticallSuccessWithDifferentTarget() public deployEvmSmartAccount {
+        // Fund UEA smart account
+        vm.deal(address(evmSmartAccountInstance), 1 ether);
+
+        // Deploy a second target for testing
+        Target target2 = new Target();
+
+        // Prepare multiple calls to different targets
+        Multicall[] memory calls = new Multicall[](2);
+        calls[0] = Multicall({
+            to: address(target),
+            value: 0,
+            data: abi.encodeWithSignature("setMagicNumber(uint256)", 777)
+        });
+
+        calls[1] = Multicall({
+            to: address(target2),
+            value: 0,
+            data: abi.encodeWithSignature("setMagicNumber(uint256)", 888)
+        });
+
+        // Encode with multicall prefix
+        bytes4 selector = bytes4(keccak256("MulticallPayload"));
+        bytes memory callData = abi.encode(calls);
+        bytes memory multicallData = abi.encodePacked(selector, callData);
+
+        // Create the payload
+        UniversalPayload memory payload = UniversalPayload({
+            to: address(0), // unused in multicall mode
+            value: 0,
+            data: multicallData,
+            gasLimit: 1000000,
+            maxFeePerGas: 0,
+            nonce: 0,
+            deadline: block.timestamp + 1000,
+            maxPriorityFeePerGas: 0,
+            vType: VerificationType.signedVerification
+        });
+
+        // Sign the payload
+        bytes32 txHash = getCrosschainTxhash(evmSmartAccountInstance, payload);
+        (uint8 v, bytes32 r, bytes32 s) = vm.sign(ownerPK, txHash);
+        bytes memory signature = abi.encodePacked(r, s, v);
+
+        // Expect event
+        vm.expectEmit(true, true, true, true);
+        emit IUEA.PayloadExecuted(ownerBytes, payload.to, payload.data);
+
+        // Execute
+        evmSmartAccountInstance.executePayload(payload, signature);
+
+        // Check both targets were called correctly
+        uint256 magic1 = target.getMagicNumber();
+        uint256 magic2 = target2.getMagicNumber();
+        assertEq(magic1, 777, "First target should have magic number 777");
+        assertEq(magic2, 888, "Second target should have magic number 888");
+    }
+
+    function testExecuteMulticallSuccessWithDifferentTargetAndPayload() public deployEvmSmartAccount {
+        // Fund UEA smart account
+        vm.deal(address(evmSmartAccountInstance), 2 ether);
+
+        // Deploy a second target for testing
+        Target target2 = new Target();
+
+        // Prepare multiple calls to different targets with different values
+        Multicall[] memory calls = new Multicall[](3);
+        calls[0] = Multicall({
+            to: address(target),
+            value: 0.1 ether,
+            data: abi.encodeWithSignature("setMagicNumberWithFee(uint256)", 555)
+        });
+
+        calls[1] = Multicall({
+            to: address(target2),
+            value: 0.1 ether,
+            data: abi.encodeWithSignature("setMagicNumberWithFee(uint256)", 666)
+        });
+
+        calls[2] = Multicall({
+            to: address(target),
+            value: 0,
+            data: abi.encodeWithSignature("setMagicNumber(uint256)", 999)
+        });
+
+        // Encode with multicall prefix
+        bytes4 selector = bytes4(keccak256("MulticallPayload"));
+        bytes memory callData = abi.encode(calls);
+        bytes memory multicallData = abi.encodePacked(selector, callData);
+
+        // Create the payload with total value
+        UniversalPayload memory payload = UniversalPayload({
+            to: address(0), // unused in multicall mode
+            value: 0.2 ether, // total value to be distributed
+            data: multicallData,
+            gasLimit: 1000000,
+            maxFeePerGas: 0,
+            nonce: 0,
+            deadline: block.timestamp + 1000,
+            maxPriorityFeePerGas: 0,
+            vType: VerificationType.signedVerification
+        });
+
+        // Sign the payload
+        bytes32 txHash = getCrosschainTxhash(evmSmartAccountInstance, payload);
+        (uint8 v, bytes32 r, bytes32 s) = vm.sign(ownerPK, txHash);
+        bytes memory signature = abi.encodePacked(r, s, v);
+
+        // Expect event
+        vm.expectEmit(true, true, true, true);
+        emit IUEA.PayloadExecuted(ownerBytes, payload.to, payload.data);
+
+        // Execute
+        evmSmartAccountInstance.executePayload(payload, signature);
+
+        // Check both targets were called correctly and received the right amounts
+        uint256 magic1 = target.getMagicNumber();
+        uint256 magic2 = target2.getMagicNumber();
+        assertEq(magic1, 999, "First target should have final magic number 999");
+        assertEq(magic2, 666, "Second target should have magic number 666");
+        assertEq(address(target).balance, 0.1 ether, "First target should have received 0.1 ETH");
+        assertEq(address(target2).balance, 0.1 ether, "Second target should have received 0.1 ETH");
+    }
+
     function testRevertWhenIncorrectNonce() public deployEvmSmartAccount {
         // Prepare calldata for target contract
         uint256 previousNonce = evmSmartAccountInstance.nonce();
