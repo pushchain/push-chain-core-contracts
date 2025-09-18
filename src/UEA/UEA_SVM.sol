@@ -5,7 +5,7 @@ import {UEAErrors as Errors} from "../libraries/Errors.sol";
 import {IUEA} from "../Interfaces/IUEA.sol";
 import {ReentrancyGuard} from "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
 import {StringUtils} from "../libraries/Utils.sol";
-import {UniversalAccountId, UniversalPayload, VerificationType, UNIVERSAL_PAYLOAD_TYPEHASH, MULTICALL_SELECTOR, Multicall} from "../libraries/Types.sol";
+import {UniversalAccountId, UniversalPayload, MigrationPayload, VerificationType, UNIVERSAL_PAYLOAD_TYPEHASH, MIGRATION_PAYLOAD_TYPEHASH, MULTICALL_SELECTOR, Multicall} from "../libraries/Types.sol";
 /**
  * @title UEA_SVM (Universal Executor Account for SVM)
  * @dev Implementation of the IUEA interface for SVM-based external accounts.
@@ -174,6 +174,39 @@ contract UEA_SVM is ReentrancyGuard, IUEA {
     }
 
     /**
+     * @inheritdoc IUEA
+     */
+    function migrateUEA(MigrationPayload calldata payload, bytes calldata signature) external nonReentrant {
+        bytes32 payloadHash = getMigrationPayloadHash(payload);
+
+        if (!verifyPayloadSignature(payloadHash, signature)) {
+            revert Errors.InvalidSVMSignature();
+        }
+
+        unchecked {
+            nonce++;
+        }
+
+        bytes memory migrateCallData = abi.encodeWithSignature("migrateUEASVM()");
+
+        // delegatecall into the migration contract
+        (bool success, bytes memory returnData) = payload.migration.delegatecall(migrateCallData);
+
+        if (!success) {
+            if (returnData.length > 0) {
+                assembly {
+                    let returnDataSize := mload(returnData)
+                    revert(add(32, returnData), returnDataSize)
+                }
+            } else {
+                revert Errors.ExecutionFailed();
+            }
+        }
+
+        emit PayloadExecuted(id.owner, payload.migration, migrateCallData);
+    }
+
+    /**
      * @dev Calculates the transaction hash for a given payload.
      * @param payload The payload to calculate the hash for.
      * @return bytes32 The transaction hash.
@@ -203,6 +236,33 @@ contract UEA_SVM is ReentrancyGuard, IUEA {
         // Calculate the domain separator using EIP-712
         bytes32 _domainSeparator = domainSeparator();
 
+        return keccak256(abi.encodePacked("\x19\x01", _domainSeparator, structHash));
+    }
+
+    /**
+     * @dev Calculates the transaction hash for a given migration payload.
+     * @param payload The migration payload to calculate the hash for.
+     * @return bytes32 The transaction hash.
+     */
+    function getMigrationPayloadHash(MigrationPayload memory payload) public view returns (bytes32) {
+        if (payload.deadline > 0 && block.timestamp > payload.deadline) {
+            revert Errors.ExpiredDeadline();
+        }
+
+        // Calculate the struct hash of the migration payload
+        bytes32 structHash = keccak256(
+            abi.encode(
+                MIGRATION_PAYLOAD_TYPEHASH,
+                payload.migration,       
+                nonce,               
+                payload.deadline 
+            )
+        );
+
+        // Calculate the domain separator (EIP-712 domain)
+        bytes32 _domainSeparator = domainSeparator();
+
+        // Final EIP-712 hash: keccak256("\x19\x01" || domainSeparator || structHash)
         return keccak256(abi.encodePacked("\x19\x01", _domainSeparator, structHash));
     }
 

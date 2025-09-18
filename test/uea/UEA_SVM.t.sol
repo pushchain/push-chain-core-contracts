@@ -8,10 +8,12 @@ import "../../src/libraries/Types.sol";
 import {Target} from "../../src/mocks/Target.sol";
 import {UEAFactoryV1} from "../../src/uea/UEAFactoryV1.sol";
 import {UEA_SVM} from "../../src/uea/UEA_SVM.sol";
+import {UEA_EVM} from "../../src/uea/UEA_EVM.sol";
 import {UEAErrors as Errors} from "../../src/libraries/Errors.sol";
 import {IUEA} from "../../src/interfaces/IUEA.sol";
 import {ERC1967Proxy} from "@openzeppelin/contracts/proxy/ERC1967/ERC1967Proxy.sol";
 import {UEAProxy} from "../../src/uea/UEAProxy.sol";
+import {UEAMigration} from "../../src/uea/UEAMigration.sol";
 
 contract UEASVMTest is Test {
     Target target;
@@ -19,9 +21,14 @@ contract UEASVMTest is Test {
     UEA_SVM svmSmartAccountImpl;
     UEA_SVM svmSmartAccountInstance;
     UEAProxy ueaProxyImpl;
+    UEA_EVM ueaEVMImpl;
+    UEA_SVM ueaSVMImpl2;
+    UEAMigration migration;
 
     // VM Hash constants
     bytes32 constant SVM_HASH = keccak256("SVM");
+
+    bytes32 private constant UEA_LOGIC_SLOT = 0x868a771a75a4aa6c2be13e9a9617cb8ea240ed84a3a90c8469537393ec3e115d;
 
     // Set up the test environment - SVM
     bytes ownerBytes = hex"e48f4e93ca594d3c5e09c3ad39c599bbd6e6a2937869f3456905f5aeb7c78a60"; // Placeholder Solana public key
@@ -51,6 +58,11 @@ contract UEASVMTest is Test {
         bytes32 svmChainHash = keccak256(abi.encode("solana", "101"));
         factory.registerNewChain(svmChainHash, SVM_HASH);
         factory.registerUEA(svmChainHash, SVM_HASH, address(svmSmartAccountImpl));
+
+        // Deploy UEAMigration with both impls
+        ueaEVMImpl = new UEA_EVM();
+        ueaSVMImpl2 = new UEA_SVM();
+        migration = new UEAMigration(address(ueaEVMImpl), address(ueaSVMImpl2));
     }
 
     modifier deploySvmSmartAccount() {
@@ -821,6 +833,96 @@ contract UEASVMTest is Test {
         // Verify ETH was received
         assertTrue(success, "ETH transfer should succeed");
         assertEq(address(newUEA).balance, 0.5 ether, "Contract should have received 0.5 ETH");
+    }
+
+    // =========================================================================
+    // Migration Tests
+    // =========================================================================
+
+    function test_RevertWhen_InvalidSignatureOnMigration() public deploySvmSmartAccount {
+        // prepare migration payload
+        MigrationPayload memory payload = MigrationPayload({
+            migration: address(migration),
+            nonce: 0,
+            deadline: block.timestamp + 1000
+        });
+
+        // Compute payload hash
+        bytes32 payloadHash = svmSmartAccountInstance.getMigrationPayloadHash(payload);
+
+        // Sign with owner key
+        bytes memory signature =
+            hex"16d760987b403d7a27fd095375f2a1275c0734701ad248c3bf9bc8f69456d626c37b9ee1c13da511c71d9ed0f90789327f2c40f3e59e360f7c832b6b0d818d03";
+
+        // Mock the verification to return false
+        vm.mockCall(
+            VERIFIER_PRECOMPILE,
+            abi.encodeWithSignature("verifyEd25519(bytes,bytes32,bytes)", ownerBytes, payloadHash, signature),
+            abi.encode(false)
+        );
+
+        vm.expectRevert(Errors.InvalidSVMSignature.selector);
+        svmSmartAccountInstance.migrateUEA(payload, signature);
+    }
+
+    function test_RevertWhen_ExpiredDeadlineOnMigration() public deploySvmSmartAccount {
+        MigrationPayload memory payload = MigrationPayload({
+            migration: address(migration),
+            nonce: 0,
+            deadline: block.timestamp
+        });
+
+        // Compute payload hash
+        bytes32 payloadHash = svmSmartAccountInstance.getMigrationPayloadHash(payload);
+
+        // skip so deadline is expired
+        skip(2);
+
+        bytes memory signature =
+            hex"16d760987b403d7a27fd095375f2a1275c0734701ad248c3bf9bc8f69456d626c37b9ee1c13da511c71d9ed0f90789327f2c40f3e59e360f7c832b6b0d818d03";
+
+        // Mock the verification to return false
+        vm.mockCall(
+            VERIFIER_PRECOMPILE,
+            abi.encodeWithSignature("verifyEd25519(bytes,bytes32,bytes)", ownerBytes, payloadHash, signature),
+            abi.encode(false)
+        );
+
+        vm.expectRevert(Errors.ExpiredDeadline.selector);
+        svmSmartAccountInstance.migrateUEA(payload, signature);
+    }
+
+    function test_SuccessfulMigrationUpdatesImplementation() public deploySvmSmartAccount {
+        MigrationPayload memory payload = MigrationPayload({
+            migration: address(migration),
+            nonce: 0,
+            deadline: block.timestamp + 1000
+        });
+
+        // Compute payload hash
+        bytes32 payloadHash = svmSmartAccountInstance.getMigrationPayloadHash(payload);
+
+        // Sign with owner key
+        // bytes32 txHash = getCrosschainTxhash(svmSmartAccountInstance, payload);
+        bytes memory signature =
+            hex"16d760987b403d7a27fd095375f2a1275c0734701ad248c3bf9bc8f69456d626c37b9ee1c13da511c71d9ed0f90789327f2c40f3e59e360f7c832b6b0d818d03";
+
+        // Mock the verification to return false
+        vm.mockCall(
+            VERIFIER_PRECOMPILE,
+            abi.encodeWithSignature("verifyEd25519(bytes,bytes32,bytes)", ownerBytes, payloadHash, signature),
+            abi.encode(true)
+        );
+
+        // Call migrateUEA
+        svmSmartAccountInstance.migrateUEA(payload, signature);
+
+        // Verify proxy’s storage slot now updated
+        bytes32 slot = UEA_LOGIC_SLOT;
+        bytes32 raw = vm.load(address(svmSmartAccountInstance), slot);
+        address newImpl = address(uint160(uint256(raw)));
+
+        assertEq(newImpl, migration.UEA_SVM_IMPLEMENTATION(), "Migration should update implementation");
     }
 
     // =========================================================================
