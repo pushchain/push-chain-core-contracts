@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 pragma solidity 0.8.26;
 
-import {UniversalAccountId, UniversalPayload} from "../libraries/Types.sol";
+import {UniversalAccountId, UniversalPayload, MigrationPayload} from "../libraries/Types.sol";
 
 /**
  * @title IUEA (Interface for Universal Executor Account)
@@ -94,4 +94,28 @@ interface IUEA {
      * - If the target contract execution fails, it reverts with ExecutionFailed or forwards the error message.
      */
     function executePayload(UniversalPayload calldata payload, bytes calldata verificationData) external;
+
+    /**
+     * @notice Executes a migration payload for updating UEAs.
+     * @param payload The MigrationPayload struct containing migration parameters:
+     *        - migration: The address of the new migration contract
+     *        - nonce: Used to prevent replay attacks
+     *        - deadline: Timestamp after which the migration is invalid
+     * @param signature The signature is the signature used for verification.
+     *        - For UEA_EVM: The signature is the ECDSA signature (r, s, v)
+     *        - For UEA_SVM: The signature is the Ed25519 signature
+     *
+     * @dev This function performs the following steps:
+     * 1. Generates a migration payload hash from the given payload
+     * 2. Verifies the signature against the migration payload hash
+     * 3. Increments the nonce to prevent replay attacks
+     * 4. Executes the migration logic defined by the migration contract
+     * 5. Handles any errors during execution
+     *
+     * @dev The function has the following reverts:
+     * - If signature verification fails, it reverts with InvalidEVMSignature or InvalidSVMSignature.
+     * - If the deadline has passed, it reverts with ExpiredDeadline.
+     * - If the migration contract execution fails, it reverts with MigrationFailed or forwards the error message.
+     */
+    function migrateUEA(MigrationPayload calldata payload, bytes calldata signature) external;
 }
