@@ -5,14 +5,13 @@ import "forge-std/Script.sol";
 import {UEAFactoryV1} from "../src/UEA/UEAFactoryV1.sol";
 import {UEA_EVM} from "../src/UEA/UEA_EVM.sol";
 import {UEA_SVM} from "../src/UEA/UEA_SVM.sol";
-import {UEAProxy} from "../src/UEAProxy.sol";
-import {UniversalAccountId} from "../src/libraries/Types.sol";
+import {UEAProxy} from "../src/UEA/UEAProxy.sol";
 
 contract DeploySmartAccountScript is Script {
     function run() external {
         vm.startBroadcast();
 
-        address owner = 0x778D3206374f8AC265728E18E3fE2Ae6b93E4ce4;
+        address owner = 0xa96CaA79eb2312DbEb0B8E93c1Ce84C98b67bF11;
         bytes32 evmHash = keccak256(abi.encode("EVM"));
         bytes32 svmHash = keccak256(abi.encode("SVM"));
         bytes32 evmSepoliaHash = keccak256(abi.encode("eip155",'11155111'));
@@ -20,7 +19,6 @@ contract DeploySmartAccountScript is Script {
 
         // Initialize the factory with the initial owner
         UEAFactoryV1 factory = UEAFactoryV1(0x00000000000000000000000000000000000000eA);
-        // factory.registerMultipleImplementations(vmTypes, implementations);
         address(factory).call(
             abi.encodeWithSignature(
                 "initialize(address)",
@@ -51,6 +49,12 @@ contract DeploySmartAccountScript is Script {
         factory.registerUEA(evmSepoliaHash, evmHash, address(ueaEVMImpl));
         factory.registerUEA(solanaDevnetHash, svmHash, address(ueaSVMImpl));
         console.log("UEA_EVM and UEA_SVM implementations registered in factory");
+
+        UEAProxy ueaProxy = new UEAProxy();
+        console.log("UEAProxy deployed at:", address(ueaProxy));
+
+        factory.setUEAProxyImplementation(address(ueaProxy));
+        console.log("UEAProxy set in the factory");
 
         vm.stopBroadcast();
     }

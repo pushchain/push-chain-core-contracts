@@ -8,7 +8,7 @@ import {UniversalCore} from "../src/UniversalCore.sol"; // adjust path if needed
 import {TransparentUpgradeableProxy} from "@openzeppelin/contracts/proxy/transparent/TransparentUpgradeableProxy.sol";
 
 contract Deploy is Script {
-    address owner = 0x778D3206374f8AC265728E18E3fE2Ae6b93E4ce4;
+    address owner = 0xa96CaA79eb2312DbEb0B8E93c1Ce84C98b67bF11;
 
     // ===== PRC20 Struct =====
     struct PRC20Config {
@@ -49,14 +49,28 @@ contract Deploy is Script {
         // Second PRC20 (USDC)
         configs.push(
             PRC20Config({
-                name: "USDC.eth",
-                symbol: "USDC",
+                name: "USDT.eth",
+                symbol: "USDT",
                 decimals: 6,
                 sourceChainId: 11155111,
                 tokenType: IPRC20.TokenType.ERC20,
                 gasLimit: 21000,
                 fee: 0,
                 sourceERC20: 0x7169D38820dfd117C3FA1f22a697dBA58d90BA06
+            })
+        );
+
+        // Third PRC20 (ETH)
+        configs.push(
+            PRC20Config({
+                name: "pETH",
+                symbol: "pETH",
+                decimals: 18,
+                sourceChainId: 11155111,
+                tokenType: IPRC20.TokenType.NATIVE,
+                gasLimit: 21000,
+                fee: 0,
+                sourceERC20: address(0)
             })
         );
     }
@@ -77,25 +91,18 @@ contract Deploy is Script {
 
     /// @notice Deploy UniversalCore implementation + proxy (universalCore)
     function deployUniversalCore() internal returns (address) {
-        UniversalCore universalImpl = new UniversalCore();
+        UniversalCore universalImpl = UniversalCore(0x00000000000000000000000000000000000000C0);
         console.log("UniversalCore implementation:", address(universalImpl));
 
-        bytes memory initData = abi.encodeWithSelector(
-            UniversalCore.initialize.selector,
+        universalImpl.initialize(
             WPC,
             UNISWAP_V3_FACTORY,
             UNISWAP_V3_ROUTER,
             UNISWAP_V3_QUOTER
         );
 
-        TransparentUpgradeableProxy proxy = new TransparentUpgradeableProxy(
-            address(universalImpl),
-            owner,
-            initData
-        );
-
-        console.log("UniversalCore Proxy deployed at:", address(proxy));
-        return address(proxy);
+        // console.log("UniversalCore Proxy deployed at:", address(proxy));
+        return address(universalImpl);
     }
 
     /// @notice Deploy one PRC20 with given config and universalCore
