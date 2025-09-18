@@ -68,9 +68,13 @@ contract UniversalCoreTest is Test, UpgradeableContractHelper {
         mockQuoter = new MockUniswapV3Quoter();
         mockWPC = new MockWPC();
         mockPRC20 = new MockPRC20();
-        
-        // Deploy PRC20 token with temporary universalCore address
-        prc20Token = new PRC20(
+
+        // Deploy PRC20 token implementation
+        PRC20 implementationPrc20 = new PRC20();
+
+        // Deploy proxy and initialize
+        bytes memory initDataPrc20 = abi.encodeWithSelector(
+            PRC20.initialize.selector,
             "Test PRC20",
             "TPRC20",
             18,
@@ -81,6 +85,9 @@ contract UniversalCoreTest is Test, UpgradeableContractHelper {
             address(0x1), // Temporary address, will be updated
             makeAddr("sourceERC20")
         );
+
+        address proxyAddressPrc20 = deployUpgradeableContract(address(implementationPrc20), initDataPrc20);
+        prc20Token = PRC20(payable(proxyAddressPrc20));
         
         // Deploy UniversalCore implementation
         UniversalCore implementation = new UniversalCore();

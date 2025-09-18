@@ -87,9 +87,13 @@ contract PRC20Test is Test, UpgradeableContractHelper {
         universalCore.setGasPrice(SOURCE_CHAIN_ID, GAS_PRICE);
         universalCore.setGasTokenPRC20(SOURCE_CHAIN_ID, address(gasToken));
         vm.stopPrank();
-        
-        // Deploy PRC20
-        prc20 = new PRC20(
+
+        // Deploy PRC20 token implementation
+        PRC20 implementationPrc20 = new PRC20();
+
+        // Deploy proxy and initialize
+        bytes memory initDataPrc20 = abi.encodeWithSelector(
+            PRC20.initialize.selector,
             "Push Chain Token",
             "PUSH",
             18,
@@ -100,7 +104,10 @@ contract PRC20Test is Test, UpgradeableContractHelper {
             address(universalCore),
             sourceERC20 
         );
-        
+
+        address proxyAddressPrc20 = deployUpgradeableContract(address(implementationPrc20), initDataPrc20);
+        prc20 = PRC20(payable(proxyAddressPrc20));
+    
         // Mint initial tokens to alice via deposit (from uExec)
         vm.startPrank(uExec);
         prc20.deposit(alice, INITIAL_BALANCE);
