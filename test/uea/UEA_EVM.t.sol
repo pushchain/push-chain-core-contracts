@@ -9,10 +9,12 @@ import {Target} from "../../src/mocks/Target.sol";
 import {UEAFactoryV1} from "../../src/uea/UEAFactoryV1.sol";
 import {ECDSA} from "@openzeppelin/contracts/utils/cryptography/ECDSA.sol";
 import {UEA_EVM} from "../../src/uea/UEA_EVM.sol";
+import {UEA_SVM} from "../../src/uea/UEA_SVM.sol";
 import {UEAErrors as Errors} from "../../src/libraries/Errors.sol";
 import {IUEA} from "../../src/interfaces/IUEA.sol";
 import {ERC1967Proxy} from "@openzeppelin/contracts/proxy/ERC1967/ERC1967Proxy.sol";
 import {UEAProxy} from "../../src/uea/UEAProxy.sol";
+import {UEAMigration} from "../../src/uea/UEAMigration.sol";
 
 contract UEA_EVMTest is Test {
     Target target;
@@ -20,9 +22,14 @@ contract UEA_EVMTest is Test {
     UEA_EVM ueaEVMImpl;
     UEA_EVM evmSmartAccountInstance;
     UEAProxy ueaProxyImpl;
+    UEA_EVM ueaEVMImpl2;
+    UEA_SVM ueaSVMImpl;
+    UEAMigration migration;
 
     // VM Hash constants
     bytes32 constant EVM_HASH = keccak256("EVM");
+
+    bytes32 private constant UEA_LOGIC_SLOT = 0x868a771a75a4aa6c2be13e9a9617cb8ea240ed84a3a90c8469537393ec3e115d;
 
     // Set up the test environment - EVM
     address owner;
@@ -61,6 +68,11 @@ contract UEA_EVMTest is Test {
         bytes32 evmChainHash = keccak256(abi.encode("eip155", "1"));
         factory.registerNewChain(evmChainHash, EVM_HASH);
         factory.registerUEA(evmChainHash, EVM_HASH, address(ueaEVMImpl));
+
+        // Deploy UEAMigration with both impls
+        ueaEVMImpl2 = new UEA_EVM();
+        ueaSVMImpl = new UEA_SVM();
+        migration = new UEAMigration(address(ueaEVMImpl2), address(ueaSVMImpl));
     }
 
     modifier deployEvmSmartAccount() {
@@ -480,6 +492,81 @@ contract UEA_EVMTest is Test {
         // Verify ETH was received
         assertTrue(success, "ETH transfer should succeed");
         assertEq(address(newUEA).balance, 0.5 ether, "Contract should have received 0.5 ETH");
+    }
+
+    // =========================================================================
+    // Migration Tests
+    // =========================================================================
+
+    function test_RevertWhen_InvalidSignatureOnMigration() public deployEvmSmartAccount {
+        // prepare migration payload
+        MigrationPayload memory payload = MigrationPayload({
+            migration: address(migration),
+            nonce: 0,
+            deadline: block.timestamp + 1000
+        });
+
+        MigrationPayload memory payload2 = MigrationPayload({
+            migration: address(migration),
+            nonce: 0,
+            deadline: block.timestamp
+        });
+
+        // Compute payload hash
+        bytes32 payloadHash = evmSmartAccountInstance.getMigrationPayloadHash(payload);
+
+        // Sign with owner key
+        (uint8 v, bytes32 r, bytes32 s) = vm.sign(ownerPK, payloadHash);
+        bytes memory sig = abi.encodePacked(r, s, v);
+
+        vm.expectRevert(Errors.InvalidEVMSignature.selector);
+        evmSmartAccountInstance.migrateUEA(payload2, sig);
+    }
+
+    function test_RevertWhen_ExpiredDeadlineOnMigration() public deployEvmSmartAccount {
+        MigrationPayload memory payload = MigrationPayload({
+            migration: address(migration),
+            nonce: 0,
+            deadline: block.timestamp
+        });
+
+        // Compute payload hash
+        bytes32 payloadHash = evmSmartAccountInstance.getMigrationPayloadHash(payload);
+
+        // skip so deadline is expired
+        skip(2);
+
+        // Sign with owner key
+        (uint8 v, bytes32 r, bytes32 s) = vm.sign(ownerPK, payloadHash);
+        bytes memory sig = abi.encodePacked(r, s, v);
+
+        vm.expectRevert(Errors.ExpiredDeadline.selector);
+        evmSmartAccountInstance.migrateUEA(payload, sig);
+    }
+
+    function test_SuccessfulMigrationUpdatesImplementation() public deployEvmSmartAccount {
+        MigrationPayload memory payload = MigrationPayload({
+            migration: address(migration),
+            nonce: 0,
+            deadline: block.timestamp + 1000
+        });
+
+        // Compute payload hash
+        bytes32 payloadHash = evmSmartAccountInstance.getMigrationPayloadHash(payload);
+
+        // Sign with owner key
+        (uint8 v, bytes32 r, bytes32 s) = vm.sign(ownerPK, payloadHash);
+        bytes memory sig = abi.encodePacked(r, s, v);
+
+        // Call migrateUEA
+        evmSmartAccountInstance.migrateUEA(payload, sig);
+
+        // Verify proxy’s storage slot now updated
+        bytes32 slot = UEA_LOGIC_SLOT;
+        bytes32 raw = vm.load(address(evmSmartAccountInstance), slot);
+        address newImpl = address(uint160(uint256(raw)));
+
+        assertEq(newImpl, migration.UEA_EVM_IMPLEMENTATION(), "Migration should update implementation");
     }
 
     // =========================================================================
