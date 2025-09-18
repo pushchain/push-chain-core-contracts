@@ -4,22 +4,23 @@ pragma solidity 0.8.26;
 import {IUniversalCore} from "./interfaces/IUniversalCore.sol";
 import {IPRC20} from "./interfaces/IPRC20.sol";
 import {PRC20Errors} from "./libraries/Errors.sol";
+import "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol";
 
 /// @title  PRC20 — Push Chain Synthetic Token (ZRC20-inspired)
 /// @notice ERC-20 compatible synthetic token minted/burned by Push Chain protocol.
 /// @dev    All imperative functionality is handled by the UniversalCore contract and Universal Executor Module.
-contract PRC20 is IPRC20 {
+contract PRC20 is IPRC20, Initializable {
 
     /// @notice The protocol's privileged executor module (auth & fee sink)
     address public immutable UNIVERSAL_EXECUTOR_MODULE = 0x14191Ea54B4c176fCf86f51b0FAc7CB1E71Df7d7;
 
     /// @notice Source chain this PRC20 mirrors (used for oracle lookups)
-    uint256 public immutable SOURCE_CHAIN_ID;
+    uint256 public SOURCE_CHAIN_ID;
     /// @notice Source Chain ERC20 address of the PRC20
-    address public immutable SOURCE_TOKEN_ADDRESS;
+    address public SOURCE_TOKEN_ADDRESS;
 
     /// @notice Classification of this synthetic
-    TokenType public immutable TOKEN_TYPE;
+    TokenType public TOKEN_TYPE;
 
     /// @notice UniversalCore contract providing gas oracles (gas coin token & gas price)
     address public UNIVERSAL_CORE;
@@ -46,6 +47,11 @@ contract PRC20 is IPRC20 {
         _;
     }
 
+    /// @custom:oz-upgrades-unsafe-allow constructor
+    constructor() {
+        _disableInitializers();
+    }
+
     //*** CONSTRUCTOR ***//
 
     /// @param name_              ERC-20 name
@@ -56,7 +62,7 @@ contract PRC20 is IPRC20 {
     /// @param gasLimit_          Protocol gas limit used in fee computation
     /// @param protocolFlatFee_   Absolute flat fee added to fee computation (units: gas coin PRC20)
     /// @param universalCore_           Initial universalCore contract providing gas coin & gas price
-    constructor(
+    function initialize(
         string memory name_,
         string memory symbol_,
         uint8 decimals_,
@@ -66,7 +72,9 @@ contract PRC20 is IPRC20 {
         uint256 protocolFlatFee_,
         address universalCore_,
         address sourceTokenAddress_
-    ) {
+    ) public
+        virtual
+        initializer {
         if (universalCore_ == address(0)) revert PRC20Errors.ZeroAddress();
 
         _name = name_;
