@@ -126,6 +126,22 @@ contract UniversalCore is IUniversalCore, Initializable, ReentrancyGuardUpgradea
     }
 
     /**
+     * @notice Deposits PRC20 tokens to the provided target address.
+     * @dev    Can only be called by the Owner, mainly to create liquidity in testnet
+     *         The target address can be any address of the owner's choice.
+     * @param prc20 PRC20 address for deposit
+     * @param amount Amount to deposit
+     * @param target Address to deposit tokens to
+     */
+    function mintPRCTokensviaAdmin(address prc20, uint256 amount, address target) external onlyOwner whenNotPaused {
+        if (target == UNIVERSAL_EXECUTOR_MODULE || target == address(this)) revert UniversalCoreErrors.InvalidTarget();
+        if (prc20 == address(0)) revert UniversalCoreErrors.ZeroAddress();
+        if (amount == 0) revert UniversalCoreErrors.ZeroAmount();
+        
+        IPRC20(prc20).deposit(target, amount);
+    } 
+
+    /**
      * @notice Deposits PRC20 tokens and automatically swaps them to native PC before sending to target.
      * @dev    Can only be called by the Universal Executor Module.
      *         Can only be called if the PRC20 token is in the auto-swap supported list. ( eg pETH, pSOL, pUSDC etc.)
