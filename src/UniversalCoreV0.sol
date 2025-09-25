@@ -13,10 +13,10 @@ import "@openzeppelin/contracts-upgradeable/access/AccessControlUpgradeable.sol"
 import "@openzeppelin/contracts-upgradeable/utils/PausableUpgradeable.sol";
 
 /**
- * @title UniversalCoreV0 
+ * @title UniversalCoreV0
  * @notice Temprorary UniversalCore contract for Push Chain TESTNET.
- *         The UniversalCoreV0 acts as the core contract for all functionalities needed by the interoperability feature of Push Chain.
- * @dev    The UniversalCoreV0 primarily handles the following functionalities:
+ *         The UniversalCore acts as the core contract for all functionalities needed by the interoperability feature of Push Chain.
+ * @dev    The UniversalCore primarily handles the following functionalities:
  *         - Generation of supported PRC20 tokens, and transfering it to accurate recipients.
  *         - Setting up the gas tokens for each chain.
  *         - Setting up the gas price for each chain.
@@ -27,13 +27,13 @@ contract UniversalCoreV0 is IUniversalCore, Initializable, ReentrancyGuardUpgrad
     using SafeERC20 for IERC20;
 
     /// @notice Map to know the gas price of each chain given a chain id.
-    mapping(uint256 => uint256) public gasPriceByChainId;
+    mapping(string => uint256) public gasPriceByChainId;
 
     /// @notice Map to know the PRC20 address of a token given a chain id, ex pETH, pBNB etc.
-    mapping(uint256 => address) public gasTokenPRC20ByChainId;
+    mapping(string => address) public gasTokenPRC20ByChainId;
 
     /// @notice Map to know Uniswap V3 pool of PC/PRC20 given a chain id.
-    mapping(uint256 => address) public gasPCPoolByChainId;
+    mapping(string => address) public gasPCPoolByChainId;
 
     /// @notice Supproted token list for auto swap to PC using Uniswap V3.
     mapping(address => bool) public isAutoSwapSupported;
@@ -126,7 +126,7 @@ contract UniversalCoreV0 is IUniversalCore, Initializable, ReentrancyGuardUpgrad
         IPRC20(prc20).deposit(target, amount);
     }
 
-    /**
+  /**
      * @notice Deposits PRC20 tokens to the provided target address.
      * @dev    Can only be called by the Owner, mainly to create liquidity in testnet
      *         The target address can be any address of the owner's choice.
@@ -234,7 +234,7 @@ contract UniversalCoreV0 is IUniversalCore, Initializable, ReentrancyGuardUpgrad
      * @param gasToken Gas coin address
      * @param fee Uniswap V3 fee tier
      */
-    function setGasPCPool(uint256 chainID, address gasToken, uint24 fee) external onlyUEModule {
+    function setGasPCPool(string memory chainID, address gasToken, uint24 fee) external onlyUEModule {
         if (gasToken == address(0)) revert UniversalCoreErrors.ZeroAddress();
         
         address pool = IUniswapV3Factory(uniswapV3FactoryAddress).getPool(
@@ -253,7 +253,7 @@ contract UniversalCoreV0 is IUniversalCore, Initializable, ReentrancyGuardUpgrad
      * @param chainID Chain ID
      * @param price New gas price
      */
-    function setGasPrice(uint256 chainID, uint256 price) external onlyUEModule {
+    function setGasPrice(string memory chainID, uint256 price) external onlyUEModule {
         gasPriceByChainId[chainID] = price;
         emit SetGasPrice(chainID, price);
     }
@@ -263,7 +263,7 @@ contract UniversalCoreV0 is IUniversalCore, Initializable, ReentrancyGuardUpgrad
      * @param chainID Chain ID
      * @param prc20 PRC20 address
      */
-    function setGasTokenPRC20(uint256 chainID, address prc20) external onlyUEModule {
+    function setGasTokenPRC20(string memory chainID, address prc20) external onlyUEModule {
         if (prc20 == address(0)) revert UniversalCoreErrors.ZeroAddress();
         gasTokenPRC20ByChainId[chainID] = prc20;
         emit SetGasToken(chainID, prc20);

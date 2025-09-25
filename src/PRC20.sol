@@ -15,9 +15,9 @@ contract PRC20 is IPRC20, Initializable {
     address public immutable UNIVERSAL_EXECUTOR_MODULE = 0x14191Ea54B4c176fCf86f51b0FAc7CB1E71Df7d7;
 
     /// @notice Source chain this PRC20 mirrors (used for oracle lookups)
-    uint256 public SOURCE_CHAIN_ID;
+    string public SOURCE_CHAIN_ID;
     /// @notice Source Chain ERC20 address of the PRC20
-    address public SOURCE_TOKEN_ADDRESS;
+    string   public SOURCE_TOKEN_ADDRESS;
 
     /// @notice Classification of this synthetic
     TokenType public TOKEN_TYPE;
@@ -66,12 +66,12 @@ contract PRC20 is IPRC20, Initializable {
         string memory name_,
         string memory symbol_,
         uint8 decimals_,
-        uint256 sourceChainId_,
+        string memory sourceChainId_,
         TokenType tokenType_,
         uint256 gasLimit_,
         uint256 protocolFlatFee_,
         address universalCore_,
-        address sourceTokenAddress_
+        string memory sourceTokenAddress_
     ) public
         virtual
         initializer {
