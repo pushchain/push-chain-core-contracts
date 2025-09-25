@@ -14,7 +14,7 @@ import "../test/mocks/MockUniswapV3Quoter.sol";
 import "../test/mocks/MockWPC.sol";
 import "../test/mocks/MockPRC20.sol";
 import "../test/mocks/MaliciousPRC20.sol";
-import "../test/mocks/RevertingPRC20.sol";
+import "../test/mocks/RevertingPRC20.sol";  
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import "@openzeppelin/contracts-upgradeable/utils/PausableUpgradeable.sol";
 
@@ -27,13 +27,15 @@ contract UniversalCoreTest is Test, UpgradeableContractHelper {
     MockWPC public mockWPC;
     
     address public constant UNIVERSAL_EXECUTOR_MODULE = 0x14191Ea54B4c176fCf86f51b0FAc7CB1E71Df7d7;
+    string public constant SOURCE_TOKEN_ADDRESS = "0x0000000000000000000000000000000000000000";
+
     address public deployer;
     address public nonOwner;
     address public nonUEModule;
     address public user;
     MockPRC20 public mockPRC20;
     
-    uint256 public constant CHAIN_ID = 1;
+    string public constant CHAIN_ID = "1";
     uint256 public constant GAS_LIMIT = 21000;
     uint256 public constant PROTOCOL_FEE = 1000;
     uint24 public constant FEE_TIER = 3000;
@@ -41,9 +43,9 @@ contract UniversalCoreTest is Test, UpgradeableContractHelper {
     event SystemContractDeployed();
     event SetAutoSwapSupported(address indexed token, bool supported);
     event SetWPC(address indexed wpc);
-    event SetGasPCPool(uint256 indexed chainId, address indexed pool, uint24 fee);
-    event SetGasPrice(uint256 indexed chainId, uint256 price);
-    event SetGasToken(uint256 indexed chainId, address indexed prc20);
+    event SetGasPCPool(string indexed chainId, address indexed pool, uint24 fee);
+    event SetGasPrice(string indexed chainId, uint256 price);
+    event SetGasToken(string indexed chainId, address indexed prc20);
     event DepositPRC20WithAutoSwap(
         address indexed prc20,
         uint256 amountIn,
@@ -83,7 +85,7 @@ contract UniversalCoreTest is Test, UpgradeableContractHelper {
             GAS_LIMIT,
             PROTOCOL_FEE,
             address(0x1), // Temporary address, will be updated
-            makeAddr("sourceERC20")
+            SOURCE_TOKEN_ADDRESS
         );
 
         address proxyAddressPrc20 = deployUpgradeableContract(address(implementationPrc20), initDataPrc20);

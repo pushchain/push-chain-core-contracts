@@ -42,12 +42,12 @@ interface IPRC20 {
      * @notice System constants (in upper case to maintain compatibility with ZRC20)
      */
     function UNIVERSAL_EXECUTOR_MODULE() external view returns (address);
-    function SOURCE_CHAIN_ID() external view returns (uint256);
+    function SOURCE_CHAIN_ID() external view returns (string memory);
     function TOKEN_TYPE() external view returns (TokenType);
     function UNIVERSAL_CORE() external view returns (address);
     function GAS_LIMIT() external view returns (uint256);
     function PC_PROTOCOL_FEE() external view returns (uint256);
-
+    
     /// @notice Token classification for provenance
     enum TokenType {
         PC, // Push Chain native PC-origin asset

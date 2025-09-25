@@ -27,10 +27,10 @@ contract PRC20Test is Test, UpgradeableContractHelper {
     address public alice;
     address public bob;
     address public attacker;
-    address public sourceERC20;
     
     // Constants
-    uint256 public constant SOURCE_CHAIN_ID = 1; // Ethereum
+    string public constant SOURCE_CHAIN_ID = "1"; // Ethereum
+    string public constant SOURCE_TOKEN_ADDRESS = "0x0000000000000000000000000000000000000000";
     uint256 public constant GAS_LIMIT = 500000;
     uint256 public constant PC_PROTOCOL_FEE = 10000;
     uint256 public constant GAS_PRICE = 50 * 10**9; // 50 gwei
@@ -55,7 +55,6 @@ contract PRC20Test is Test, UpgradeableContractHelper {
         alice = makeAddr("alice");
         bob = makeAddr("bob");
         attacker = makeAddr("attacker");
-        sourceERC20 = makeAddr("sourceERC20");
         
         // Deploy mock gas token
         gasToken = new MockGasToken();
@@ -102,7 +101,7 @@ contract PRC20Test is Test, UpgradeableContractHelper {
             GAS_LIMIT,
             PC_PROTOCOL_FEE,
             address(universalCore),
-            sourceERC20 
+            SOURCE_TOKEN_ADDRESS 
         );
 
         address proxyAddressPrc20 = deployUpgradeableContract(address(implementationPrc20), initDataPrc20);

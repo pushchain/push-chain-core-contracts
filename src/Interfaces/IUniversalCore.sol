@@ -15,14 +15,14 @@ interface IUniversalCore {
 
     // State variables
     function wPCContractAddress() external view returns (address);
-    function gasPriceByChainId(uint256 chainID) external view returns (uint256);
-    function gasTokenPRC20ByChainId(uint256 chainID) external view returns (address);
-    function gasPCPoolByChainId(uint256 chainID) external view returns (address);
+    function gasPriceByChainId(string memory chainID) external view returns (uint256);
+    function gasTokenPRC20ByChainId(string memory chainID) external view returns (address);
+    function gasPCPoolByChainId(string memory chainID) external view returns (address);
 
     // Events
-    event SetGasPrice(uint256 chainId, uint256 price);
-    event SetGasToken(uint256 chainId, address prc20);
-    event SetGasPCPool(uint256 chainId, address pool, uint24 fee);
+    event SetGasPrice(string chainId, uint256 price);
+    event SetGasToken(string chainId, address prc20);
+    event SetGasPCPool(string chainId, address pool, uint24 fee);
     event SetWPC(address wpc);
     event SetUniswapV3Addresses(address factory, address swapRouter, address quoter);
     event SetConnectorEVM(address connector);
@@ -37,19 +37,5 @@ interface IUniversalCore {
         uint256 amountOut,
         uint24 fee,
         address target
-    );
-    event GasFundedWithGasToken(
-        bytes32 payloadId, uint256 dstChainId, address gasToken, uint256 amount, address from, address to
-    );
-    event GasFundedViaSwap(
-        bytes32 payloadId,
-        uint256 dstChainId,
-        address tokenIn,
-        uint256 amountIn,
-        address gasToken,
-        uint256 amountOut,
-        uint24 fee,
-        address from,
-        address to
     );
 }

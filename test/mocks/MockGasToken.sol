@@ -108,7 +108,7 @@ contract MockGasToken is IPRC20 {
     function withdrawGasFee() external pure returns (address, uint256) { revert("Not implemented"); }
     function withdrawGasFeeWithGasLimit(uint256) external pure returns (address, uint256) { revert("Not implemented"); }
     function UNIVERSAL_EXECUTOR_MODULE() external pure returns (address) { revert("Not implemented"); }
-    function SOURCE_CHAIN_ID() external pure returns (uint256) { revert("Not implemented"); }
+    function SOURCE_CHAIN_ID() external pure returns (string memory) { revert("Not implemented"); }
     function TOKEN_TYPE() external pure returns (TokenType) { revert("Not implemented"); }
     function HANDLER_CONTRACT() external pure returns (address) { revert("Not implemented"); }
     function UNIVERSAL_CORE() external pure returns (address) { revert("Not implemented"); }

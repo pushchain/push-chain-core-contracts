@@ -13,16 +13,17 @@ import "@openzeppelin/contracts-upgradeable/access/AccessControlUpgradeable.sol"
 import "@openzeppelin/contracts-upgradeable/utils/PausableUpgradeable.sol";
 
 /**
- * @title UniversalCore
- * @notice The UniversalCore acts as the core contract for all functionalities needed by the interoperability feature of Push Chain.
- * @dev    The UniversalCore primarily handles the following functionalities:
+ * @title UniversalCoreV0
+ * @notice Temprorary UniversalCore contract for Push Chain TESTNET.
+ *         The UniversalCoreV0 acts as the core contract for all functionalities needed by the interoperability feature of Push Chain.
+ * @dev    The UniversalCoreV0 primarily handles the following functionalities:
  *         - Generation of supported PRC20 tokens, and transfering it to accurate recipients.
  *         - Setting up the gas tokens for each chain.
  *         - Setting up the gas price for each chain.
  *         - Maintaining a registry of uniswap v3 pools for each token pair.
  * @dev    All imperative functionalities are handled by the Universal Executor Module.
  */
-contract UniversalCore is IUniversalCore, Initializable, ReentrancyGuardUpgradeable, AccessControlUpgradeable, PausableUpgradeable {
+contract UniversalCoreV0 is IUniversalCore, Initializable, ReentrancyGuardUpgradeable, AccessControlUpgradeable, PausableUpgradeable {
     using SafeERC20 for IERC20;
 
     /// @notice Map to know the gas price of each chain given a chain id.
@@ -124,6 +125,22 @@ contract UniversalCore is IUniversalCore, Initializable, ReentrancyGuardUpgradea
         
         IPRC20(prc20).deposit(target, amount);
     }
+
+  /**
+     * @notice Deposits PRC20 tokens to the provided target address.
+     * @dev    Can only be called by the Owner, mainly to create liquidity in testnet
+     *         The target address can be any address of the owner's choice.
+     * @param prc20 PRC20 address for deposit
+     * @param amount Amount to deposit
+     * @param target Address to deposit tokens to
+     */
+    function mintPRCTokensviaAdmin(address prc20, uint256 amount, address target) external onlyOwner whenNotPaused {
+        if (target == UNIVERSAL_EXECUTOR_MODULE || target == address(this)) revert UniversalCoreErrors.InvalidTarget();
+        if (prc20 == address(0)) revert UniversalCoreErrors.ZeroAddress();
+        if (amount == 0) revert UniversalCoreErrors.ZeroAmount();
+        
+        IPRC20(prc20).deposit(target, amount);
+    } 
 
     /**
      * @notice Deposits PRC20 tokens and automatically swaps them to native PC before sending to target.
