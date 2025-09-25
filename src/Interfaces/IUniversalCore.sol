@@ -25,7 +25,6 @@ interface IUniversalCore {
     event SetGasPCPool(string chainId, address pool, uint24 fee);
     event SetWPC(address wpc);
     event SetUniswapV3Addresses(address factory, address swapRouter, address quoter);
-    event SetConnectorEVM(address connector);
     event SetAutoSwapSupported(address token, bool supported);
     event SetDefaultFeeTier(address indexed token, uint24 feeTier);
     event SetSlippageTolerance(address indexed token, uint256 tolerance);
