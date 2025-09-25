@@ -1,19 +1,15 @@
 // SPDX-License-Identifier: MIT
-pragma solidity ^0.8.0;
+pragma solidity 0.8.26;
 
-contract WPUSH {
-    string public name = "Wrapped PUSH";
-    string public symbol = "WPUSH";
+import {IWPC} from "./Interfaces/IWPC.sol";
+
+contract WPC is IWPC {
+    string public name = "Wrapped PC";
+    string public symbol = "WPC";
     uint8 public decimals = 18;
-
-    event Approval(address indexed src, address indexed guy, uint256 wad);
-    event Transfer(address indexed src, address indexed dst, uint256 wad);
-    event Deposit(address indexed dst, uint256 wad);
-    event Withdrawal(address indexed src, uint256 wad);
 
     mapping(address => uint256) public balanceOf;
     mapping(address => mapping(address => uint256)) public allowance;
-
     receive() external payable {
         deposit();
     }
