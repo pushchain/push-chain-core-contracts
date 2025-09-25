@@ -47,7 +47,7 @@ interface IPRC20 {
     function UNIVERSAL_CORE() external view returns (address);
     function GAS_LIMIT() external view returns (uint256);
     function PC_PROTOCOL_FEE() external view returns (uint256);
-    
+
     /// @notice Token classification for provenance
     enum TokenType {
         PC, // Push Chain native PC-origin asset

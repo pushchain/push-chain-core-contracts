@@ -246,11 +246,12 @@ contract UEAFactoryV1 is Initializable, OwnableUpgradeable, IUEAFactory {
         // then it is a UEA contract - isUEA = true
         if (account.owner.length > 0) {
             isUEA = true;
-        }else{
+        } else {
             // If Account is NOT UEA, then it is a native EOA account on PUSH Chain
             // So we need to set the chainNamespace to eip155 and chainId to 42101
             // and the owner to the address of the EOA
-            account = UniversalAccountId({chainNamespace: "eip155", chainId: "42101", owner: bytes(abi.encodePacked(addr))});
+            account =
+                UniversalAccountId({chainNamespace: "eip155", chainId: "42101", owner: bytes(abi.encodePacked(addr))});
         }
 
         return (account, isUEA);

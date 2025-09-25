@@ -31,11 +31,6 @@ interface IUniversalCore {
     event SetSlippageTolerance(address indexed token, uint256 tolerance);
     event SetDefaultDeadlineMins(uint256 minutesValue);
     event DepositPRC20WithAutoSwap(
-        address prc20,
-        uint256 amountIn,
-        address pcToken,
-        uint256 amountOut,
-        uint24 fee,
-        address target
+        address prc20, uint256 amountIn, address pcToken, uint256 amountOut, uint24 fee, address target
     );
 }

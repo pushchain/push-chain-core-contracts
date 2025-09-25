@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: MIT
 pragma solidity 0.8.26;
+
 import "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol";
 
 /**
@@ -15,9 +16,5 @@ contract Reserved is Initializable {
     /**
      * @dev Initializer function for the upgradeable contract.
      */
-    function initialize()
-        public
-        virtual
-        initializer
-    { }
+    function initialize() public virtual initializer {}
 }

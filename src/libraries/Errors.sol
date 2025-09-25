@@ -38,25 +38,25 @@ library UniversalCoreErrors {
     // Authentication errors
     error CallerIsNotUEModule();
     error CallerIsNotOwner();
-    
+
     // Target validation errors
     error InvalidTarget();
     error AutoSwapNotSupported();
-    
+
     // Address validation errors
     error CantBeIdenticalAddresses();
     error CantBeZeroAddress();
     error ZeroAddress();
     error ZeroAmount();
-    
+
     // Pool related errors
     error PoolNotFound();
     error TokenMismatch();
-    
+
     // Swap related errors
     error SlippageExceeded();
     error DeadlineExpired();
-    
+
     // Default value errors
     error InvalidFeeTier();
     error InvalidSlippageTolerance();
@@ -65,17 +65,17 @@ library UniversalCoreErrors {
 library PRC20Errors {
     // Authentication errors
     error CallerIsNotUniversalExecutor();
-    error InvalidSender();          // deposit() not from allowed caller
-    
+    error InvalidSender(); // deposit() not from allowed caller
+
     // Transfer related errors
     error GasFeeTransferFailed();
     error LowAllowance();
     error LowBalance();
-    
+
     // Gas related errors
     error ZerogasToken();
     error ZeroGasPrice();
-    
+
     // Input validation errors
     error ZeroAddress();
     error ZeroAmount();

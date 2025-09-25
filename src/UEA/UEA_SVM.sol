@@ -5,7 +5,16 @@ import {UEAErrors as Errors} from "../libraries/Errors.sol";
 import {IUEA} from "../Interfaces/IUEA.sol";
 import {ReentrancyGuard} from "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
 import {StringUtils} from "../libraries/Utils.sol";
-import {UniversalAccountId, UniversalPayload, MigrationPayload, VerificationType, UNIVERSAL_PAYLOAD_TYPEHASH, MIGRATION_PAYLOAD_TYPEHASH, MULTICALL_SELECTOR, Multicall} from "../libraries/Types.sol";
+import {
+    UniversalAccountId,
+    UniversalPayload,
+    MigrationPayload,
+    VerificationType,
+    UNIVERSAL_PAYLOAD_TYPEHASH,
+    MIGRATION_PAYLOAD_TYPEHASH,
+    MULTICALL_SELECTOR,
+    Multicall
+} from "../libraries/Types.sol";
 /**
  * @title UEA_SVM (Universal Executor Account for SVM)
  * @dev Implementation of the IUEA interface for SVM-based external accounts.
@@ -102,21 +111,21 @@ contract UEA_SVM is ReentrancyGuard, IUEA {
     }
 
     /**
-    * @dev Checks whether the payload data uses the multicall format by verifying a magic selector prefix.
-    * @param data The raw calldata from the UniversalPayload.
-    * @return bool Returns true if the data starts with the MULTICALL_SELECTOR, indicating a multicall batch.
-    */
+     * @dev Checks whether the payload data uses the multicall format by verifying a magic selector prefix.
+     * @param data The raw calldata from the UniversalPayload.
+     * @return bool Returns true if the data starts with the MULTICALL_SELECTOR, indicating a multicall batch.
+     */
     function isMulticall(bytes calldata data) internal pure returns (bool) {
         if (data.length < 4) return false;
         return bytes4(data[:4]) == MULTICALL_SELECTOR;
-    } 
+    }
 
     /**
-    * @dev Decodes the payload data into an array of Call structs, assuming the data uses the multicall format.
-    * @notice This function assumes that isMulticall(data) has already returned true.
-    * @param data The raw calldata containing the MULTICALL_SELECTOR followed by the ABI-encoded Call[].
-    * @return Call[] The decoded array of Call structs to be executed.
-    */
+     * @dev Decodes the payload data into an array of Call structs, assuming the data uses the multicall format.
+     * @notice This function assumes that isMulticall(data) has already returned true.
+     * @param data The raw calldata containing the MULTICALL_SELECTOR followed by the ABI-encoded Call[].
+     * @return Call[] The decoded array of Call structs to be executed.
+     */
     function decodeCalls(bytes calldata data) internal pure returns (Multicall[] memory) {
         return abi.decode(data[4:], (Multicall[])); // Strip selector
     }
@@ -250,14 +259,8 @@ contract UEA_SVM is ReentrancyGuard, IUEA {
         }
 
         // Calculate the struct hash of the migration payload
-        bytes32 structHash = keccak256(
-            abi.encode(
-                MIGRATION_PAYLOAD_TYPEHASH,
-                payload.migration,       
-                nonce,               
-                payload.deadline 
-            )
-        );
+        bytes32 structHash =
+            keccak256(abi.encode(MIGRATION_PAYLOAD_TYPEHASH, payload.migration, nonce, payload.deadline));
 
         // Calculate the domain separator (EIP-712 domain)
         bytes32 _domainSeparator = domainSeparator();
