@@ -10,14 +10,13 @@ import "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol";
 /// @notice ERC-20 compatible synthetic token minted/burned by Push Chain protocol.
 /// @dev    All imperative functionality is handled by the UniversalCore contract and Universal Executor Module.
 contract PRC20 is IPRC20, Initializable {
-
     /// @notice The protocol's privileged executor module (auth & fee sink)
     address public immutable UNIVERSAL_EXECUTOR_MODULE = 0x14191Ea54B4c176fCf86f51b0FAc7CB1E71Df7d7;
 
     /// @notice Source chain this PRC20 mirrors (used for oracle lookups)
     string public SOURCE_CHAIN_ID;
     /// @notice Source Chain ERC20 address of the PRC20
-    string   public SOURCE_TOKEN_ADDRESS;
+    string public SOURCE_TOKEN_ADDRESS;
 
     /// @notice Classification of this synthetic
     TokenType public TOKEN_TYPE;
@@ -72,9 +71,7 @@ contract PRC20 is IPRC20, Initializable {
         uint256 protocolFlatFee_,
         address universalCore_,
         string memory sourceTokenAddress_
-    ) public
-        virtual
-        initializer {
+    ) public virtual initializer {
         if (universalCore_ == address(0)) revert PRC20Errors.ZeroAddress();
 
         _name = name_;

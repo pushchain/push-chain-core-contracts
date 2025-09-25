@@ -667,7 +667,7 @@ contract UEAFactoryTest is Test {
         assertEq(account.chainId, "42101");
     }
 
-        // Test for comparing native and UEA accounts
+    // Test for comparing native and UEA accounts
     function testCompareNativeAndUEAAccounts() public {
         // Create and deploy a UEA
         bytes memory ueaOwnerBytes = abi.encodePacked(makeAddr("uea_owner"));
@@ -715,7 +715,6 @@ contract UEAFactoryTest is Test {
         }
     }
 
-    
     // Error Cases
     function testRevertComputeUEAWithUnregisteredChain() public {
         // Create an account with unregistered chain

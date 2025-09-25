@@ -23,7 +23,13 @@ import "@openzeppelin/contracts-upgradeable/utils/PausableUpgradeable.sol";
  *         - Maintaining a registry of uniswap v3 pools for each token pair.
  * @dev    All imperative functionalities are handled by the Universal Executor Module.
  */
-contract UniversalCoreV0 is IUniversalCore, Initializable, ReentrancyGuardUpgradeable, AccessControlUpgradeable, PausableUpgradeable {
+contract UniversalCoreV0 is
+    IUniversalCore,
+    Initializable,
+    ReentrancyGuardUpgradeable,
+    AccessControlUpgradeable,
+    PausableUpgradeable
+{
     using SafeERC20 for IERC20;
 
     /// @notice Map to know the gas price of each chain given a chain id.
@@ -114,19 +120,15 @@ contract UniversalCoreV0 is IUniversalCore, Initializable, ReentrancyGuardUpgrad
      * @param amount Amount to deposit
      * @param target Address to deposit tokens to
      */
-    function depositPRC20Token(
-        address prc20,
-        uint256 amount,
-        address target
-    ) external onlyUEModule whenNotPaused {
+    function depositPRC20Token(address prc20, uint256 amount, address target) external onlyUEModule whenNotPaused {
         if (target == UNIVERSAL_EXECUTOR_MODULE || target == address(this)) revert UniversalCoreErrors.InvalidTarget();
         if (prc20 == address(0)) revert UniversalCoreErrors.ZeroAddress();
         if (amount == 0) revert UniversalCoreErrors.ZeroAmount();
-        
+
         IPRC20(prc20).deposit(target, amount);
     }
 
-  /**
+    /**
      * @notice Deposits PRC20 tokens to the provided target address.
      * @dev    Can only be called by the Owner, mainly to create liquidity in testnet
      *         The target address can be any address of the owner's choice.
@@ -138,9 +140,9 @@ contract UniversalCoreV0 is IUniversalCore, Initializable, ReentrancyGuardUpgrad
         if (target == UNIVERSAL_EXECUTOR_MODULE || target == address(this)) revert UniversalCoreErrors.InvalidTarget();
         if (prc20 == address(0)) revert UniversalCoreErrors.ZeroAddress();
         if (amount == 0) revert UniversalCoreErrors.ZeroAmount();
-        
+
         IPRC20(prc20).deposit(target, amount);
-    } 
+    }
 
     /**
      * @notice Deposits PRC20 tokens and automatically swaps them to native PC before sending to target.
@@ -161,15 +163,15 @@ contract UniversalCoreV0 is IUniversalCore, Initializable, ReentrancyGuardUpgrad
         address prc20,
         uint256 amount,
         address target,
-        uint24 fee,        // 0 = use default
-        uint256 minPCOut,  // 0 = calculate from slippage tolerance
-        uint256 deadline   // 0 = use default
+        uint24 fee, // 0 = use default
+        uint256 minPCOut, // 0 = calculate from slippage tolerance
+        uint256 deadline // 0 = use default
     ) external onlyUEModule whenNotPaused nonReentrant {
         // Validate inputs
         if (target == UNIVERSAL_EXECUTOR_MODULE || target == address(this)) revert UniversalCoreErrors.InvalidTarget();
         if (prc20 == address(0)) revert UniversalCoreErrors.ZeroAddress();
         if (amount == 0) revert UniversalCoreErrors.ZeroAmount();
-        
+
         if (!isAutoSwapSupported[prc20]) revert UniversalCoreErrors.AutoSwapNotSupported();
 
         // Use default fee tier if not provided
@@ -182,7 +184,7 @@ contract UniversalCoreV0 is IUniversalCore, Initializable, ReentrancyGuardUpgrad
         if (deadline == 0) {
             deadline = block.timestamp + (defaultDeadlineMins * 1 minutes);
         }
-        
+
         if (block.timestamp > deadline) revert UniversalCoreErrors.DeadlineExpired();
 
         // Check pool exists
@@ -194,10 +196,11 @@ contract UniversalCoreV0 is IUniversalCore, Initializable, ReentrancyGuardUpgrad
         if (pool == address(0)) revert UniversalCoreErrors.PoolNotFound();
 
         // Calculate minimum output if not provided
-        if (minPCOut == 0) { // ToDo: check for accuracy
+        if (minPCOut == 0) {
+            // ToDo: check for accuracy
             // Get expected output from Uniswap V3 Quoter
             uint256 expectedOutput = getSwapQuote(prc20, wPCContractAddress, fee, amount);
-            
+
             // Calculate minimum output based on slippage tolerance
             minPCOut = calculateMinOutput(expectedOutput, prc20);
         }
@@ -236,7 +239,7 @@ contract UniversalCoreV0 is IUniversalCore, Initializable, ReentrancyGuardUpgrad
      */
     function setGasPCPool(string memory chainID, address gasToken, uint24 fee) external onlyUEModule {
         if (gasToken == address(0)) revert UniversalCoreErrors.ZeroAddress();
-        
+
         address pool = IUniswapV3Factory(uniswapV3FactoryAddress).getPool(
             wPCContractAddress < gasToken ? wPCContractAddress : gasToken,
             wPCContractAddress < gasToken ? gasToken : wPCContractAddress,
@@ -291,7 +294,9 @@ contract UniversalCoreV0 is IUniversalCore, Initializable, ReentrancyGuardUpgrad
      * @param quoter Uniswap V3 Quoter address
      */
     function setUniswapV3Addresses(address factory, address swapRouter, address quoter) external onlyOwner {
-        if (factory == address(0) || swapRouter == address(0) || quoter == address(0)) revert UniversalCoreErrors.ZeroAddress();
+        if (factory == address(0) || swapRouter == address(0) || quoter == address(0)) {
+            revert UniversalCoreErrors.ZeroAddress();
+        }
         uniswapV3FactoryAddress = factory;
         uniswapV3SwapRouterAddress = swapRouter;
         uniswapV3QuoterAddress = quoter;
@@ -352,17 +357,16 @@ contract UniversalCoreV0 is IUniversalCore, Initializable, ReentrancyGuardUpgrad
     /**
      * @notice Gets quote for token swap using Uniswap V3 Quoter
      * @param tokenIn Input token
-     * @param tokenOut Output token  
+     * @param tokenOut Output token
      * @param fee Fee tier
      * @param amountIn Input amount
      * @return amountOut Expected output amount
      */
-    function getSwapQuote(
-        address tokenIn,
-        address tokenOut,
-        uint24 fee,
-        uint256 amountIn
-    ) public view returns (uint256) {
+    function getSwapQuote(address tokenIn, address tokenOut, uint24 fee, uint256 amountIn)
+        public
+        view
+        returns (uint256)
+    {
         return IQuoter(uniswapV3QuoterAddress).quoteExactInputSingle(
             tokenIn,
             tokenOut,
@@ -383,7 +387,7 @@ contract UniversalCoreV0 is IUniversalCore, Initializable, ReentrancyGuardUpgrad
         if (tolerance == 0) {
             tolerance = 300; // Default 3% slippage tolerance
         }
-        
+
         // Calculate minimum output: expectedOutput * (10000 - tolerance) / 10000
         return expectedOutput * (10000 - tolerance) / 10000;
     }

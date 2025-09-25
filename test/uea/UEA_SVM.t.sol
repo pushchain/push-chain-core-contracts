@@ -420,11 +420,8 @@ contract UEASVMTest is Test {
 
         // Prepare multiple calls
         Multicall[] memory calls = new Multicall[](2);
-        calls[0] = Multicall({
-            to: address(target),
-            value: 0,
-            data: abi.encodeWithSignature("setMagicNumber(uint256)", 123)
-        });
+        calls[0] =
+            Multicall({to: address(target), value: 0, data: abi.encodeWithSignature("setMagicNumber(uint256)", 123)});
 
         calls[1] = Multicall({
             to: address(target),
@@ -474,16 +471,10 @@ contract UEASVMTest is Test {
     function testExecuteMulticallFailsAndRevertsWithReason() public deploySvmSmartAccount {
         RevertingTarget revertingTarget = new RevertingTarget();
         Multicall[] memory calls = new Multicall[](2);
-        calls[0] = Multicall({
-            to: address(target),
-            value: 0,
-            data: abi.encodeWithSignature("setMagicNumber(uint256)", 999)
-        });
-        calls[1] = Multicall({
-            to: address(revertingTarget),
-            value: 0,
-            data: abi.encodeWithSignature("revertWithReason()")
-        });
+        calls[0] =
+            Multicall({to: address(target), value: 0, data: abi.encodeWithSignature("setMagicNumber(uint256)", 999)});
+        calls[1] =
+            Multicall({to: address(revertingTarget), value: 0, data: abi.encodeWithSignature("revertWithReason()")});
 
         // Encode with selector
         bytes4 selector = bytes4(keccak256("UEA_MULTICALL"));
@@ -537,11 +528,8 @@ contract UEASVMTest is Test {
             data: abi.encodeWithSignature("setMagicNumberWithFee(uint256)", 222)
         });
 
-        calls[2] = Multicall({
-            to: address(target),
-            value: 0,
-            data: abi.encodeWithSignature("setMagicNumber(uint256)", 333)
-        });
+        calls[2] =
+            Multicall({to: address(target), value: 0, data: abi.encodeWithSignature("setMagicNumber(uint256)", 333)});
 
         // Encode with multicall prefix
         bytes4 selector = bytes4(keccak256("UEA_MULTICALL"));
@@ -595,17 +583,11 @@ contract UEASVMTest is Test {
 
         // Prepare multiple calls to different targets
         Multicall[] memory calls = new Multicall[](2);
-        calls[0] = Multicall({
-            to: address(target),
-            value: 0,
-            data: abi.encodeWithSignature("setMagicNumber(uint256)", 777)
-        });
+        calls[0] =
+            Multicall({to: address(target), value: 0, data: abi.encodeWithSignature("setMagicNumber(uint256)", 777)});
 
-        calls[1] = Multicall({
-            to: address(target2),
-            value: 0,
-            data: abi.encodeWithSignature("setMagicNumber(uint256)", 888)
-        });
+        calls[1] =
+            Multicall({to: address(target2), value: 0, data: abi.encodeWithSignature("setMagicNumber(uint256)", 888)});
 
         // Encode with multicall prefix
         bytes4 selector = bytes4(keccak256("UEA_MULTICALL"));
@@ -672,11 +654,8 @@ contract UEASVMTest is Test {
             data: abi.encodeWithSignature("setMagicNumberWithFee(uint256)", 666)
         });
 
-        calls[2] = Multicall({
-            to: address(target),
-            value: 0,
-            data: abi.encodeWithSignature("setMagicNumber(uint256)", 999)
-        });
+        calls[2] =
+            Multicall({to: address(target), value: 0, data: abi.encodeWithSignature("setMagicNumber(uint256)", 999)});
 
         // Encode with multicall prefix
         bytes4 selector = bytes4(keccak256("UEA_MULTICALL"));
@@ -841,11 +820,8 @@ contract UEASVMTest is Test {
 
     function test_RevertWhen_InvalidSignatureOnMigration() public deploySvmSmartAccount {
         // prepare migration payload
-        MigrationPayload memory payload = MigrationPayload({
-            migration: address(migration),
-            nonce: 0,
-            deadline: block.timestamp + 1000
-        });
+        MigrationPayload memory payload =
+            MigrationPayload({migration: address(migration), nonce: 0, deadline: block.timestamp + 1000});
 
         // Compute payload hash
         bytes32 payloadHash = svmSmartAccountInstance.getMigrationPayloadHash(payload);
@@ -866,11 +842,8 @@ contract UEASVMTest is Test {
     }
 
     function test_RevertWhen_ExpiredDeadlineOnMigration() public deploySvmSmartAccount {
-        MigrationPayload memory payload = MigrationPayload({
-            migration: address(migration),
-            nonce: 0,
-            deadline: block.timestamp
-        });
+        MigrationPayload memory payload =
+            MigrationPayload({migration: address(migration), nonce: 0, deadline: block.timestamp});
 
         // Compute payload hash
         bytes32 payloadHash = svmSmartAccountInstance.getMigrationPayloadHash(payload);
@@ -893,11 +866,8 @@ contract UEASVMTest is Test {
     }
 
     function test_SuccessfulMigrationUpdatesImplementation() public deploySvmSmartAccount {
-        MigrationPayload memory payload = MigrationPayload({
-            migration: address(migration),
-            nonce: 0,
-            deadline: block.timestamp + 1000
-        });
+        MigrationPayload memory payload =
+            MigrationPayload({migration: address(migration), nonce: 0, deadline: block.timestamp + 1000});
 
         // Compute payload hash
         bytes32 payloadHash = svmSmartAccountInstance.getMigrationPayloadHash(payload);

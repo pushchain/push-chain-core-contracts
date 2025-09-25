@@ -17,6 +17,7 @@ contract WPC is IWPC {
     /**
      * @notice Deposit PC and mint WPC tokens
      */
+
     function deposit() public payable {
         balanceOf[msg.sender] += msg.value;
         emit Deposit(msg.sender, msg.value);
@@ -85,12 +86,10 @@ contract WPC is IWPC {
         return true;
     }
 
-
     /**
      * @notice Receive function - automatically deposits sent PC
      */
     receive() external payable {
         deposit();
     }
-
 }
