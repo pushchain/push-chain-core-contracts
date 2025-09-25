@@ -3,41 +3,39 @@ pragma solidity 0.8.26;
 
 // User Struct
 struct UniversalAccountId {
-    string chainNamespace; // Chain namespace identifier of the owner account (e.g., "eip155" or "solana")
-    string chainId; // Chain ID of the source chain of the owner of this UEA.
-    bytes owner; // Owner's public key or address in bytes format
+    string chainNamespace;          // Chain namespace identifier of the owner account (e.g., "eip155" or "solana")
+    string chainId;                 // Chain ID of the source chain of the owner of this UEA.
+    bytes owner;                    // Owner's public key or address in bytes format
 }
 
 // Signature verification types
 enum VerificationType {
-    signedVerification,
-    universalTxVerification
+    signedVerification,             // Verification based on user signature
+    universalTxVerification         // Verification based on tx hash
 }
 
 struct UniversalPayload {
-    // Core execution parameters
-    address to; // Target contract address to call
-    uint256 value; // Native token amount to send
-    bytes data; // Call data for the function execution
-    uint256 gasLimit; // Maximum gas to be used for this tx (caps refund amount)
-    uint256 maxFeePerGas; // Maximum fee per gas unit
-    uint256 maxPriorityFeePerGas; // Maximum priority fee per gas unit
-    uint256 nonce; // Chain ID where this should be executed
-    uint256 deadline; // Timestamp after which this payload is invalid
-    VerificationType vType; // Type of verification to use before execution (signedVerification or universalTxVerification)
+    address to;                     // Target contract address to call
+    uint256 value;                  // Native token amount to send
+    bytes data;                     // Call data for the function execution
+    uint256 gasLimit;               // Maximum gas to be used for this tx (caps refund amount)
+    uint256 maxFeePerGas;           // Maximum fee per gas unit
+    uint256 maxPriorityFeePerGas;   // Maximum priority fee per gas unit
+    uint256 nonce;                  // Chain ID where this should be executed
+    uint256 deadline;               // Timestamp after which this payload is invalid
+    VerificationType vType;         // Type of verification to use before execution (signedVerification or universalTxVerification)
 }
 
 struct MigrationPayload {
-    address migration; // Migration contract address to call
-    uint256 nonce; // nonce of the UEA
-    uint256 deadline; // // Timestamp after which this payload is invalid
+    address migration;              // Migration contract address to call
+    uint256 nonce;                  // nonce of the UEA
+    uint256 deadline;               // Timestamp after which this payload is invalid
 }
 
-// Multicall
 struct Multicall {
-    address to; // Target contract address to call
-    uint256 value; // Native token amount to send
-    bytes data; // Call data for the function execution
+    address to;                     // Target contract address to call
+    uint256 value;                  // Native token amount to send
+    bytes data;                     // Call data for the function execution
 }
 
 // Magic Prefix for deciding if the payload is a Multicall
