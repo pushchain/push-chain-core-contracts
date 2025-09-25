@@ -15,8 +15,8 @@ import "@openzeppelin/contracts-upgradeable/utils/PausableUpgradeable.sol";
 /**
  * @title UniversalCoreV0
  * @notice Temprorary UniversalCore contract for Push Chain TESTNET.
- *         The UniversalCore acts as the core contract for all functionalities needed by the interoperability feature of Push Chain.
- * @dev    The UniversalCore primarily handles the following functionalities:
+ *         The UniversalCoreV0 acts as the core contract for all functionalities needed by the interoperability feature of Push Chain.
+ * @dev    The UniversalCoreV0 primarily handles the following functionalities:
  *         - Generation of supported PRC20 tokens, and transfering it to accurate recipients.
  *         - Setting up the gas tokens for each chain.
  *         - Setting up the gas price for each chain.
