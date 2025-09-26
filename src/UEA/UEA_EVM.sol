@@ -272,7 +272,7 @@ contract UEA_EVM is ReentrancyGuard, IUEA {
      * -    Included MAX_CALL CHECK
      * -    Included INSUFFICIENT BALANCE CHECK
      * -    Included INVALID TARGET CHECK - if zero, then MULTICALL
-     * -    Included new event BatchPayloadExecuted to emit in MULTICALL 
+     * -    Included new event BatchPayloadExecuted to emit in MULTICALL mode
      */
 
     error InvalidMulticallEnvelope();
