@@ -136,7 +136,7 @@ contract UEASVMTest is Test {
         UEA_SVM newUEA = new UEA_SVM();
 
         // Check the version constant
-        assertEq(newUEA.VERSION(), "0.1.0", "VERSION constant should be 0.1.0");
+        assertEq(newUEA.VERSION(), "1.0.0", "VERSION constant should be 1.0.0");
     }
 
     function testVerifierPrecompileConstant() public {

@@ -31,7 +31,7 @@ contract UEA_SVM is ReentrancyGuard, IUEA {
     // @notice The nonce for the UEA
     uint256 public nonce;
     // @notice The version of the UEA
-    string public constant VERSION = "0.1.0";
+    string public constant VERSION = "1.0.0";
     // @notice The verifier precompile address
     address public constant VERIFIER_PRECOMPILE = 0x00000000000000000000000000000000000000ca;
     // @notice Precompile address for TxHash Based Verification

@@ -34,7 +34,7 @@ contract UEA_EVM is ReentrancyGuard, IUEA {
     // @notice The nonce for the UEA
     uint256 public nonce;
     // @notice The version of the UEA
-    string public constant VERSION = "0.1.0";
+    string public constant VERSION = "1.0.0";
     // @notice Precompile address for TxHash Based Verification
     address public constant TX_BASED_VERIFIER = 0x00000000000000000000000000000000000000CB;
     // @notice Hash of keccak256("EIP712Domain(string version,uint256 chainId,address verifyingContract)")
