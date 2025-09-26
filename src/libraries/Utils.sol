@@ -7,10 +7,10 @@ pragma solidity 0.8.26;
  */
 library StringUtils {
     /**
-     * @notice Converts a strictly numeric decimal string to a uint256.
-     * @dev Reverts if the string contains non-digit characters or overflows uint256.
+     * @notice  Converts a strictly numeric decimal string to a uint256.
+     * @dev     Reverts if the string contains non-digit characters or overflows uint256.
      * @param s The string to convert, e.g., "12345".
-     * @return result The resulting unsigned integer.
+     * @return  result The resulting unsigned integer.
      */
     function stringToExactUInt256(string memory s) internal pure returns (uint256 result) {
         bytes memory b = bytes(s);
