@@ -76,9 +76,7 @@ contract UEAFactoryV1 is Initializable, OwnableUpgradeable, IUEAFactory {
     }
 
     /**
-     * @dev Returns the UEA implementation address for a given chain
-     * @param _chainHash The hash of the chain identifier (e.g., keccak256(abi.encode("eip155:1")))
-     * @return The UEA implementation address for the chain's VM type
+     * @inheritdoc IUEAFactory
      */
     function getUEA(bytes32 _chainHash) external view returns (address) {
         bytes32 vmHash = CHAIN_to_VM[_chainHash];
@@ -86,10 +84,7 @@ contract UEAFactoryV1 is Initializable, OwnableUpgradeable, IUEAFactory {
     }
 
     /**
-     * @dev Returns the VM type hash for a given chain hash and whether it's registered
-     * @param _chainHash The hash of the chain identifier (e.g., keccak256(abi.encode("eip155:1")))
-     * @return vmHash The VM type hash
-     * @return isRegistered True if the chain is registered, false otherwise
+     * @inheritdoc IUEAFactory
      */
     function getVMType(bytes32 _chainHash) public view returns (bytes32 vmHash, bool isRegistered) {
         vmHash = CHAIN_to_VM[_chainHash];
@@ -98,11 +93,7 @@ contract UEAFactoryV1 is Initializable, OwnableUpgradeable, IUEAFactory {
     }
 
     /**
-     * @dev Registers a new chain with its VM type hash
-     * @param _chainHash The hash of the chain identifier to register (e.g., keccak256(abi.encode("eip155:1")))
-     * @param _vmHash The VM type hash for this chain
-     * @notice Can only be called by the contract owner
-     * @notice Will revert if the chain is already registered or if VM type is invalid
+     * @inheritdoc IUEAFactory
      */
     function registerNewChain(bytes32 _chainHash, bytes32 _vmHash) external onlyOwner {
         // Check that the chainHash is not already registered. If yes, revert.
@@ -116,12 +107,7 @@ contract UEAFactoryV1 is Initializable, OwnableUpgradeable, IUEAFactory {
     }
 
     /**
-     * @dev Registers multiple UEA implementations in a batch
-     * @param _chainHashes Array of chain hashes
-     * @param _vmHashes Array of VM type hashes
-     * @param _UEA Array of UEA implementation addresses
-     * @notice Can only be called by the contract owner
-     * @notice Will revert if arrays are not the same length
+     * @inheritdoc IUEAFactory
      */
     function registerMultipleUEA(bytes32[] memory _chainHashes, bytes32[] memory _vmHashes, address[] memory _UEA)
         external
@@ -137,12 +123,7 @@ contract UEAFactoryV1 is Initializable, OwnableUpgradeable, IUEAFactory {
     }
 
     /**
-     * @dev Registers a UEA implementation for a specific VM type hash
-     * @param _chainHash The hash of the chain identifier (e.g., keccak256(abi.encode("eip155:1")))
-     * @param _vmHash The VM type hash for this chain
-     * @param _UEA The UEA implementation address
-     * @notice Can only be called by the contract owner
-     * @notice Will revert if the UEA address is zero or if vmHash doesn't match the chain's registered vmHash
+     * @inheritdoc IUEAFactory
      */
     function registerUEA(bytes32 _chainHash, bytes32 _vmHash, address _UEA) public onlyOwner {
         if (_UEA == address(0)) {
@@ -160,11 +141,7 @@ contract UEAFactoryV1 is Initializable, OwnableUpgradeable, IUEAFactory {
     }
 
     /**
-     * @dev Deploys a new UEA proxy for an external chain user
-     * @param _id The Universal Account information containing chain (e.g., "ETHEREUM") and owner key
-     * @return The address of the deployed UEA proxy
-     * @notice Will revert if the account already exists, the chain is not registered,
-     *         or if no UEA implementation is available for the chain's VM type
+     * @inheritdoc IUEAFactory
      */
     function deployUEA(UniversalAccountId memory _id) external returns (address) {
         if (UEA_PROXY_IMPLEMENTATION == address(0)) {
@@ -203,11 +180,7 @@ contract UEAFactoryV1 is Initializable, OwnableUpgradeable, IUEAFactory {
     }
 
     /**
-     * @dev Computes the address of a UEA proxy before it is deployed
-     * @param _id The Universal Account information containing chain identifier (e.g., "eip155:1") and owner key
-     * @return The computed address of the UEA proxy
-     * @notice Will revert if the chain is not registered or if no UEA implementation
-     *         is available for the chain's VM type
+     * @inheritdoc IUEAFactory
      */
     function computeUEA(UniversalAccountId memory _id) public view returns (address) {
         if (UEA_PROXY_IMPLEMENTATION == address(0)) {
@@ -223,19 +196,6 @@ contract UEAFactoryV1 is Initializable, OwnableUpgradeable, IUEAFactory {
         bytes32 salt = generateSalt(_id);
         // We're predicting the address of the UEAProxy using the fixed implementation
         return UEA_PROXY_IMPLEMENTATION.predictDeterministicAddress(salt, address(this));
-    }
-
-    /**
-     * @dev Helper function to check if an address has code deployed
-     * @param _addr The address to check
-     * @return True if the address has code, false otherwise
-     */
-    function hasCode(address _addr) public view returns (bool) {
-        uint256 size;
-        assembly {
-            size := extcodesize(_addr)
-        }
-        return size > 0;
     }
 
     /// @inheritdoc IUEAFactory
@@ -276,6 +236,24 @@ contract UEAFactoryV1 is Initializable, OwnableUpgradeable, IUEAFactory {
         isDeployed = hasCode(uea);
 
         return (uea, isDeployed);
+    }
+
+
+    //========================
+    //           Helpers
+    //========================
+
+    /**
+     * @dev Helper function to check if an address has code deployed
+     * @param _addr The address to check
+     * @return True if the address has code, false otherwise
+     */
+    function hasCode(address _addr) public view returns (bool) {
+        uint256 size;
+        assembly {
+            size := extcodesize(_addr)
+        }
+        return size > 0;
     }
 
     /**

@@ -71,10 +71,7 @@ contract UEA_EVM is ReentrancyGuard, IUEA {
     }
 
     /**
-     * @dev Verifies the EVM signature using the ECDSA library.
-     * @param payloadHash The hash of the message to verify.
-     * @param signature The signature to verify.
-     * @return bool indicating whether the signature is valid.
+     * @inheritdoc IUEA
      */
     function verifyPayloadSignature(bytes32 payloadHash, bytes memory signature) public view returns (bool) {
         address recoveredSigner = payloadHash.recover(signature);
