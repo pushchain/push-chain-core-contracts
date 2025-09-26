@@ -5,7 +5,7 @@ import "forge-std/Test.sol";
 import "forge-std/console.sol";
 
 import "../../src/libraries/Types.sol";
-import {UEAErrors as Errors} from "../../src/libraries/Errors.sol";
+import {UEAErrors as Errors, CommonErrors} from "../../src/libraries/Errors.sol";
 
 import {UEA_EVM} from "../../src/UEA/UEA_EVM.sol";
 import {UEA_SVM} from "../../src/UEA/UEA_SVM.sol";
@@ -421,10 +421,10 @@ contract BaseTest is Test {
         );
         
         // Verify migration contract prevents direct calls
-        vm.expectRevert("Migration should only be called via delegatecall");
+        vm.expectRevert(CommonErrors.Unauthorized.selector);
         migration.migrateUEAEVM();
         
-        vm.expectRevert("Migration should only be called via delegatecall");
+        vm.expectRevert(CommonErrors.Unauthorized.selector);
         migration.migrateUEASVM();
     }
     

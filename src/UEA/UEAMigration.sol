@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 pragma solidity 0.8.26;
 
-import {UEAErrors as Errors} from "../libraries/Errors.sol";
+import {UEAErrors, CommonErrors} from "../libraries/Errors.sol";
 
 /**
  * @title UEAMigration
@@ -46,7 +46,9 @@ contract UEAMigration {
      * If the function is called via a regular `CALL`, it will revert.
      */
     modifier onlyDelegateCall() {
-        require(address(this) != UEA_MIGRATION_IMPLEMENTATION, "Migration should only be called via delegatecall");
+        if (address(this) == UEA_MIGRATION_IMPLEMENTATION) {
+            revert CommonErrors.Unauthorized();
+        }
         _;
     }
 
@@ -58,9 +60,13 @@ contract UEAMigration {
     constructor(address _evmImplementation, address _svmImplementation) {
         UEA_MIGRATION_IMPLEMENTATION = address(this);
 
-        // Ensure implementations are deployed
-        require(hasCode(_evmImplementation), "UEA_EVM implementation is not deployed");
-        require(hasCode(_svmImplementation), "UEA_SVM implementation is not deployed");
+        if(!hasCode(_evmImplementation) || !hasCode(_svmImplementation)) {
+            revert UEAErrors.InvalidInputArgs();
+        }
+        
+        if (_evmImplementation == _svmImplementation) {
+            revert UEAErrors.InvalidInputArgs();
+        }
 
         UEA_EVM_IMPLEMENTATION = _evmImplementation;
         UEA_SVM_IMPLEMENTATION = _svmImplementation;
