@@ -7,7 +7,7 @@ pragma solidity 0.8.26;
  */
 
 // =========================
-//           COMMON ERRORS across all smart contracts
+//           COMMON ERRORS
 // =========================
 
 library CommonErrors {

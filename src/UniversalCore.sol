@@ -110,14 +110,7 @@ contract UniversalCore is
     }
 
     /**
-     * @notice Deposits PRC20 tokens to the provided target address.
-     * @dev    Can only be called by the Universal Executor Module.
-     *         For any inbound transactions of moving supported tokens from external chains to Push Chain,
-     *         the Universal Executor Module uses this function to deposit the tokens to the target address.
-     *         The target address can be any address of the user's choice.
-     * @param prc20 PRC20 address for deposit
-     * @param amount Amount to deposit
-     * @param target Address to deposit tokens to
+     * @inheritdoc IUniversalCore
      */
     function depositPRC20Token(address prc20, uint256 amount, address target) external onlyUEModule whenNotPaused {
         if (target == UNIVERSAL_EXECUTOR_MODULE || target == address(this)) revert UniversalCoreErrors.InvalidTarget();
@@ -128,19 +121,7 @@ contract UniversalCore is
     }
 
     /**
-     * @notice Deposits PRC20 tokens and automatically swaps them to native PC before sending to target.
-     * @dev    Can only be called by the Universal Executor Module.
-     *         Can only be called if the PRC20 token is in the auto-swap supported list. ( eg pETH, pSOL, pUSDC etc.)
-     *         If no pool exists, reverts with appropriate error. Although all auto-swap supported tokens are expected to have a pool.
-     *         Default values are used when parameters are set to 0. ( fee = defaultFeeTier[prc20], minPCOut = calculateMinOutput(expectedOutput, prc20), deadline = block.timestamp + (defaultDeadlineMins * 1 minutes) )
-     *         target address always receive the swapped native PC tokens.
-     *         The function is called directly by the Universal Executor Module and is also gasless.
-     * @param prc20 PRC20 address for deposit and swap
-     * @param amount Amount to deposit and swap
-     * @param target Address to receive the swapped native PC tokens
-     * @param fee Uniswap V3 fee tier for the pool (0 = use default)
-     * @param minPCOut Minimum amount of native PC expected from the swap (0 = calculate from slippage tolerance)
-     * @param deadline Timestamp after which the transaction will revert (0 = use default)
+     * @inheritdoc IUniversalCore
      */
     function depositPRC20WithAutoSwap(
         address prc20,
@@ -215,10 +196,7 @@ contract UniversalCore is
     }
 
     /**
-     * @dev Set the gas PC pool for a chain
-     * @param chainID Chain ID
-     * @param gasToken Gas coin address
-     * @param fee Uniswap V3 fee tier
+     * @inheritdoc IUniversalCore
      */
     function setGasPCPool(string memory chainID, address gasToken, uint24 fee) external onlyUEModule {
         if (gasToken == address(0)) revert CommonErrors.ZeroAddress();
@@ -235,9 +213,7 @@ contract UniversalCore is
     }
 
     /**
-     * @dev Fungible module updates the gas price oracle periodically.
-     * @param chainID Chain ID
-     * @param price New gas price
+     * @inheritdoc IUniversalCore
      */
     function setGasPrice(string memory chainID, uint256 price) external onlyUEModule {
         gasPriceByChainId[chainID] = price;
@@ -245,9 +221,7 @@ contract UniversalCore is
     }
 
     /**
-     * @dev Setter for gasTokenPRC20ByChainId map.
-     * @param chainID Chain ID
-     * @param prc20 PRC20 address
+     * @inheritdoc IUniversalCore
      */
     function setGasTokenPRC20(string memory chainID, address prc20) external onlyUEModule {
         if (prc20 == address(0)) revert CommonErrors.ZeroAddress();
@@ -255,14 +229,16 @@ contract UniversalCore is
         emit SetGasToken(chainID, prc20);
     }
 
+    /**
+     * @inheritdoc IUniversalCore
+     */
     function setAutoSwapSupported(address token, bool supported) external onlyOwner {
         isAutoSwapSupported[token] = supported;
         emit SetAutoSwapSupported(token, supported);
     }
 
     /**
-     * @dev Setter for wrapped PC address.
-     * @param addr WPC new address
+     * @inheritdoc IUniversalCore
      */
     function setWPCContractAddress(address addr) external onlyOwner {
         if (addr == address(0)) revert CommonErrors.ZeroAddress();
@@ -271,10 +247,7 @@ contract UniversalCore is
     }
 
     /**
-     * @dev Setter for uniswap V3 addresses.
-     * @param factory Uniswap V3 Factory address
-     * @param swapRouter Uniswap V3 SwapRouter address
-     * @param quoter Uniswap V3 Quoter address
+     * @inheritdoc IUniversalCore
      */
     function setUniswapV3Addresses(address factory, address swapRouter, address quoter) external onlyOwner {
         if (factory == address(0) || swapRouter == address(0) || quoter == address(0)) {
@@ -287,9 +260,7 @@ contract UniversalCore is
     }
 
     /**
-     * @notice Set default fee tier for a token
-     * @param token Token address
-     * @param feeTier Fee tier (500, 3000, 10000)
+     * @inheritdoc IUniversalCore
      */
     function setDefaultFeeTier(address token, uint24 feeTier) external onlyOwner {
         if (token == address(0)) revert CommonErrors.ZeroAddress();
@@ -301,9 +272,7 @@ contract UniversalCore is
     }
 
     /**
-     * @notice Set slippage tolerance for a token
-     * @param token Token address
-     * @param tolerance Slippage tolerance in basis points (e.g., 300 = 3%)
+     * @inheritdoc IUniversalCore
      */
     function setSlippageTolerance(address token, uint256 tolerance) external onlyOwner {
         if (token == address(0)) revert CommonErrors.ZeroAddress();
@@ -313,8 +282,7 @@ contract UniversalCore is
     }
 
     /**
-     * @notice Set default deadline in minutes
-     * @param minutesValue Default deadline in minutes
+     * @inheritdoc IUniversalCore
      */
     function setDefaultDeadlineMins(uint256 minutesValue) external onlyOwner {
         defaultDeadlineMins = minutesValue;
@@ -322,16 +290,14 @@ contract UniversalCore is
     }
 
     /**
-     * @notice Pause the contract - stops all deposit functions
-     * @dev Can only be called by the owner
+     * @inheritdoc IUniversalCore
      */
     function pause() external onlyOwner {
         _pause();
     }
 
     /**
-     * @notice Unpause the contract - resumes all deposit functions
-     * @dev Can only be called by the owner
+     * @inheritdoc IUniversalCore
      */
     function unpause() external onlyOwner {
         _unpause();
