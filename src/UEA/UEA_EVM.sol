@@ -262,4 +262,90 @@ contract UEA_EVM is ReentrancyGuard, IUEA {
      * @dev Fallback function to receive ether.
      */
     receive() external payable {}
+
+
+    /// EXPERIMENTAL FUNCTIONS
+    // Note: Currently safe around 200 gas compared to executePayload function - but can be optimized further by removing overheads due to checks
+    /**
+     * @dev Important changes are:
+     * -    REMOVED MULTICALL_SELECTOR
+     * -    Included MAX_CALL CHECK
+     * -    Included INSUFFICIENT BALANCE CHECK
+     * -    Included INVALID TARGET CHECK - if zero, then MULTICALL
+     * -    Included new event BatchPayloadExecuted to emit in MULTICALL 
+     */
+
+    error InvalidMulticallEnvelope();
+    error BatchSizeOutOfBounds();
+    error InvalidTarget();
+    error InsufficientBalance();
+
+    uint256 public constant MAX_CALLS = 32;
+
+    event BatchPayloadExecuted(bytes owner, bytes32 batchHash, uint256 count);
+
+    function executePayloadOPT(
+        UniversalPayload calldata payload,
+        bytes calldata verificationData
+    ) external nonReentrant {
+        bytes32 payloadHash = getPayloadHash(payload);
+
+        if (payload.vType == VerificationType.universalTxVerification) {
+            if (verificationData.length == 0 || !verifyPayloadTxHash(payloadHash, verificationData)) {
+                revert Errors.InvalidTxHash();
+            }
+        } else {
+            if (!verifyPayloadSignature(payloadHash, verificationData)) {
+                revert Errors.InvalidEVMSignature();
+            }
+        }
+
+        unchecked { ++nonce; }
+
+        bool isBatch = (payload.to == address(0));
+        bool success;
+        bytes memory returnData;
+        uint256 count = 0;
+
+        if (isBatch) {
+            if (payload.value != 0) revert InvalidMulticallEnvelope();  //@audit-info : can be removed
+
+            Multicall[] memory calls = abi.decode(payload.data, (Multicall[]));
+            count = calls.length;
+            if (count == 0 || count > MAX_CALLS) revert BatchSizeOutOfBounds();  //@audit-info : can be removed
+
+            uint256 total;
+            for (uint256 i = 0; i < count; i++) {
+                if (calls[i].to == address(0)) revert InvalidTarget();  //@audit-info : can be removed
+                total += calls[i].value;
+            }
+            if (address(this).balance < total) revert InsufficientBalance(); //@audit-info : can be removed
+
+            for (uint256 i = 0; i < count; i++) {
+                (success, returnData) = calls[i].to.call{value: calls[i].value}(calls[i].data);
+                if (!success) break; // break at the very first faliure encountered
+            }
+        } else {
+            (success, returnData) = payload.to.call{value: payload.value}(payload.data);
+        }
+
+        if (!success) {
+            if (returnData.length > 0) {
+                assembly {
+                    let len := mload(returnData)
+                    revert(add(returnData, 32), len)
+                }
+            }
+            revert Errors.ExecutionFailed();
+        }
+
+        // Emit only on success
+        if (isBatch) { // Note: should be used coz emitting payload.data will be too much data to emit. 
+            emit BatchPayloadExecuted(id.owner, payloadHash, count);
+        } else {
+            emit PayloadExecuted(id.owner, payload.to, payload.data);
+        }
+    }
+
+
 }

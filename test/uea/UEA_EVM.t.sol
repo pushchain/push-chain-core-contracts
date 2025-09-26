@@ -1107,6 +1107,135 @@ contract UEA_EVMTest is Test {
 
         return keccak256(abi.encodePacked("\x19\x01", _domainSeparator, structHash));
     }
+
+    // Gas comparison tests for executePayload vs executePayloadOPT
+    function testGasComparisonExecutePayload() public deployEvmSmartAccount {
+        // Create a simple payload
+        UniversalPayload memory payload = UniversalPayload({
+            to: address(target),
+            value: 0,
+            data: abi.encodeWithSignature("getMagicNumber()"),
+            gasLimit: 100000,
+            maxFeePerGas: 20 gwei,
+            maxPriorityFeePerGas: 2 gwei,
+            nonce: 0,
+            deadline: 0,
+            vType: VerificationType.signedVerification
+        });
+
+        bytes32 txHash = getCrosschainTxhash(evmSmartAccountInstance, payload);
+        (uint8 v, bytes32 r, bytes32 s) = vm.sign(ownerPK, txHash);
+        bytes memory signature = abi.encodePacked(r, s, v);
+
+        // Measure gas for executePayload
+        uint256 gasStart = gasleft();
+        evmSmartAccountInstance.executePayload(payload, signature);
+        uint256 gasUsedExecutePayload = gasStart - gasleft();
+
+        console.log("executePayload gas used:", gasUsedExecutePayload);
+    }
+
+    function testGasComparisonExecutePayloadOPT() public deployEvmSmartAccount {
+        // Create a simple payload
+        UniversalPayload memory payload = UniversalPayload({
+            to: address(target),
+            value: 0,
+            data: abi.encodeWithSignature("getMagicNumber()"),
+            gasLimit: 100000,
+            maxFeePerGas: 20 gwei,
+            maxPriorityFeePerGas: 2 gwei,
+            nonce: 0,
+            deadline: 0,
+            vType: VerificationType.signedVerification
+        });
+
+        bytes32 txHash = getCrosschainTxhash(evmSmartAccountInstance, payload);
+        (uint8 v, bytes32 r, bytes32 s) = vm.sign(ownerPK, txHash);
+        bytes memory signature = abi.encodePacked(r, s, v);
+
+        // Measure gas for executePayloadOPT
+        uint256 gasStart = gasleft();
+        evmSmartAccountInstance.executePayloadOPT(payload, signature);
+        uint256 gasUsedExecutePayloadOPT = gasStart - gasleft();
+
+        console.log("executePayloadOPT gas used:", gasUsedExecutePayloadOPT);
+    }
+
+    function testGasComparisonMulticall() public deployEvmSmartAccount {
+        // Create multicall payload
+        Multicall[] memory calls = new Multicall[](2);
+        calls[0] = Multicall({
+            to: address(target),
+            value: 0,
+            data: abi.encodeWithSignature("getMagicNumber()")
+        });
+        calls[1] = Multicall({
+            to: address(target),
+            value: 0,
+            data: abi.encodeWithSignature("getMagicNumber()")
+        });
+
+        UniversalPayload memory payload = UniversalPayload({
+            to: address(0), // Multicall indicator
+            value: 0,
+            data: abi.encode(calls),
+            gasLimit: 100000,
+            maxFeePerGas: 20 gwei,
+            maxPriorityFeePerGas: 2 gwei,
+            nonce: 0,
+            deadline: 0,
+            vType: VerificationType.signedVerification
+        });
+
+        bytes32 txHash = getCrosschainTxhash(evmSmartAccountInstance, payload);
+        (uint8 v, bytes32 r, bytes32 s) = vm.sign(ownerPK, txHash);
+        bytes memory signature = abi.encodePacked(r, s, v);
+
+        // Measure gas for executePayload (multicall)
+        uint256 gasStart = gasleft();
+        evmSmartAccountInstance.executePayload(payload, signature);
+        uint256 gasUsedExecutePayload = gasStart - gasleft();
+
+        console.log("executePayload (multicall) gas used:", gasUsedExecutePayload);
+    }
+
+    function testGasComparisonMulticallOPT() public deployEvmSmartAccount {
+        // Create multicall payload
+        Multicall[] memory calls = new Multicall[](2);
+        calls[0] = Multicall({
+            to: address(target),
+            value: 0,
+            data: abi.encodeWithSignature("getMagicNumber()")
+        });
+        calls[1] = Multicall({
+            to: address(target),
+            value: 0,
+            data: abi.encodeWithSignature("getMagicNumber()")
+        });
+
+        UniversalPayload memory payload = UniversalPayload({
+            to: address(0), // Multicall indicator
+            value: 0,
+            data: abi.encode(calls),
+            gasLimit: 100000,
+            maxFeePerGas: 20 gwei,
+            maxPriorityFeePerGas: 2 gwei,
+            nonce: 0,
+            deadline: 0,
+            vType: VerificationType.signedVerification
+        });
+
+        bytes32 txHash = getCrosschainTxhash(evmSmartAccountInstance, payload);
+        (uint8 v, bytes32 r, bytes32 s) = vm.sign(ownerPK, txHash);
+        bytes memory signature = abi.encodePacked(r, s, v);
+
+        // Measure gas for executePayloadOPT (multicall)
+        uint256 gasStart = gasleft();
+        evmSmartAccountInstance.executePayloadOPT(payload, signature);
+        uint256 gasUsedExecutePayloadOPT = gasStart - gasleft();
+
+        console.log("executePayloadOPT (multicall) gas used:", gasUsedExecutePayloadOPT);
+    }
 }
 
 // Helper contracts for testing reverts
