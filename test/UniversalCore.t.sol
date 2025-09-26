@@ -6,7 +6,7 @@ import "../src/UniversalCore.sol";
 import "../src/PRC20.sol";
 import "../src/interfaces/IPRC20.sol";
 import "../src/interfaces/IUniversalCore.sol";
-import "../src/libraries/Errors.sol";
+import {UniversalCoreErrors, PRC20Errors, CommonErrors} from "../src/libraries/Errors.sol";
 import "../test/helpers/UpgradeableContractHelper.sol";
 import "../test/mocks/MockUniswapV3Factory.sol";
 import "../test/mocks/MockUniswapV3Router.sol";
@@ -181,7 +181,7 @@ contract UniversalCoreTest is Test, UpgradeableContractHelper {
 
         // Non-owner should revert
         vm.prank(nonOwner);
-        vm.expectRevert(UniversalCoreErrors.CallerIsNotOwner.selector);
+        vm.expectRevert(CommonErrors.InvalidOwner.selector);
         universalCore.setAutoSwapSupported(token, true);
 
         // Deployer (who has admin role) should succeed
@@ -215,7 +215,7 @@ contract UniversalCoreTest is Test, UpgradeableContractHelper {
 
         // Non-owner should revert
         vm.prank(nonOwner);
-        vm.expectRevert(UniversalCoreErrors.CallerIsNotOwner.selector);
+        vm.expectRevert(CommonErrors.InvalidOwner.selector);
         universalCore.setWPCContractAddress(newWPC);
 
         // Deployer (who has admin role) should succeed
@@ -235,7 +235,7 @@ contract UniversalCoreTest is Test, UpgradeableContractHelper {
 
     function test_SetWPCContractAddress_ZeroAddressReverts() public {
         vm.prank(deployer);
-        vm.expectRevert(UniversalCoreErrors.ZeroAddress.selector);
+        vm.expectRevert(CommonErrors.ZeroAddress.selector);
         universalCore.setWPCContractAddress(address(0));
     }
 
@@ -266,7 +266,7 @@ contract UniversalCoreTest is Test, UpgradeableContractHelper {
 
     function test_SetGasPCPool_ZeroAddressReverts() public {
         vm.prank(UNIVERSAL_EXECUTOR_MODULE);
-        vm.expectRevert(UniversalCoreErrors.ZeroAddress.selector);
+        vm.expectRevert(CommonErrors.ZeroAddress.selector);
         universalCore.setGasPCPool(CHAIN_ID, address(0), FEE_TIER);
     }
 
@@ -383,7 +383,7 @@ contract UniversalCoreTest is Test, UpgradeableContractHelper {
 
     function test_SetGasTokenPRC20_ZeroAddressReverts() public {
         vm.prank(UNIVERSAL_EXECUTOR_MODULE);
-        vm.expectRevert(UniversalCoreErrors.ZeroAddress.selector);
+        vm.expectRevert(CommonErrors.ZeroAddress.selector);
         universalCore.setGasTokenPRC20(CHAIN_ID, address(0));
     }
 
@@ -427,7 +427,7 @@ contract UniversalCoreTest is Test, UpgradeableContractHelper {
         // Current implementation allows zero address target
         // Note: PRC20.deposit() will revert on zero address, so this documents current behavior
         vm.prank(UNIVERSAL_EXECUTOR_MODULE);
-        vm.expectRevert(PRC20Errors.ZeroAddress.selector);
+        vm.expectRevert(CommonErrors.ZeroAddress.selector);
         universalCore.depositPRC20Token(address(prc20Token), 1000, address(0));
     }
 
@@ -437,7 +437,7 @@ contract UniversalCoreTest is Test, UpgradeableContractHelper {
         // Current implementation allows zero amount
         // Note: PRC20.deposit() will revert on zero amount, so this documents current behavior
         vm.prank(UNIVERSAL_EXECUTOR_MODULE);
-        vm.expectRevert(PRC20Errors.ZeroAmount.selector);
+        vm.expectRevert(CommonErrors.ZeroAmount.selector);
         universalCore.depositPRC20Token(address(prc20Token), 0, target);
     }
 
@@ -488,7 +488,7 @@ contract UniversalCoreTest is Test, UpgradeableContractHelper {
 
     function test_Pause_OnlyOwner() public {
         vm.prank(nonOwner);
-        vm.expectRevert(abi.encodeWithSelector(UniversalCoreErrors.CallerIsNotOwner.selector));
+        vm.expectRevert(abi.encodeWithSelector(CommonErrors.InvalidOwner.selector));
         universalCore.pause();
     }
 
@@ -508,7 +508,7 @@ contract UniversalCoreTest is Test, UpgradeableContractHelper {
 
         // Try to unpause as non-owner
         vm.prank(nonOwner);
-        vm.expectRevert(abi.encodeWithSelector(UniversalCoreErrors.CallerIsNotOwner.selector));
+        vm.expectRevert(abi.encodeWithSelector(CommonErrors.InvalidOwner.selector));
         universalCore.unpause();
     }
 

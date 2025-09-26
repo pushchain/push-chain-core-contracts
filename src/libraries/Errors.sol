@@ -3,87 +3,61 @@ pragma solidity 0.8.26;
 
 /**
  * @title Errors
- * @dev Library for custom errors used across the UEAFactoryV1 contract and its dependencies
+ * @dev  Library for custom errors used across all smart contracts
  */
-library UEAErrors {
-    // Precompile related errors
-    error PrecompileCallFailed();
 
-    // Signature related errors
-    error InvalidEVMSignature();
-    error InvalidSVMSignature();
-    error InvalidTxHash();
+// =========================
+//           COMMON ERRORS across all smart contracts
+// =========================
 
-    // Execution related errors
-    error ExecutionFailed();
-
-    // Validation related errors
-    error ExpiredDeadline();
-
-    // Account related errors
-    error InvalidAccount();
-    error AccountAlreadyExists();
-
-    // Owner related errors
+library CommonErrors {
+    error ZeroAmount();
+    error ZeroAddress();
     error InvalidOwner();
-
-    // Input validation errors
-    error InvalidInputArgs();
-
-    // Common Errors
-    error InvalidCall();
+    error Unauthorized();
+    error InvalidInput();
+    error DeadlineExpired();
+    error InsufficientBalance();
 }
 
+// =========================
+//           PRC20-Specific ERRORS
+// =========================
+
+library PRC20Errors {
+    error LowAllowance();
+    error ZeroGasPrice();
+    error InvalidSender();
+    error GasFeeTransferFailed();
+    error CallerIsNotUniversalExecutor();
+}
+
+// =========================
+//           UNIVERSAL_CORE-Specific ERRORS
+// =========================
+
 library UniversalCoreErrors {
-    // Authentication errors
-    error CallerIsNotUEModule();
-    error CallerIsNotOwner();
-
-    // Target validation errors
-    error InvalidTarget();
-    error AutoSwapNotSupported();
-
-    // Address validation errors
-    error CantBeIdenticalAddresses();
-    error CantBeZeroAddress();
-    error ZeroAddress();
-    error ZeroAmount();
-
-    // Pool related errors
     error PoolNotFound();
-    error TokenMismatch();
-
-    // Swap related errors
-    error SlippageExceeded();
-    error DeadlineExpired();
-
-    // Default value errors
+    error InvalidTarget();
     error InvalidFeeTier();
+    error SlippageExceeded();
+    error CallerIsNotUEModule();
+    error AutoSwapNotSupported();
     error InvalidSlippageTolerance();
 }
 
-library PRC20Errors {
-    // Authentication errors
-    error CallerIsNotUniversalExecutor();
-    error InvalidSender(); // deposit() not from allowed caller
-
-    // Transfer related errors
-    error GasFeeTransferFailed();
-    error LowAllowance();
-    error LowBalance();
-
-    // Gas related errors
-    error ZerogasToken();
-    error ZeroGasPrice();
-
-    // Input validation errors
-    error ZeroAddress();
-    error ZeroAmount();
-}
-
-library CommonErrors {
-    // Common errors
-    error ZeroAddress();
-    error InvalidInput();
-    error Unauthorized();
+// =========================
+//           UEA-Specific ERRORS
+// =========================
+library UEAErrors {
+    error InvalidCall();
+    error InvalidTxHash();
+    error InvalidAccount();
+    error ExecutionFailed();
+    error ExpiredDeadline();
+    error InvalidInputArgs();
+    error InvalidEVMSignature();
+    error InvalidSVMSignature();
+    error PrecompileCallFailed();
+    error AccountAlreadyExists();
 }

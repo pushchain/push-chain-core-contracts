@@ -4,7 +4,7 @@ pragma solidity 0.8.26;
 import "./interfaces/IPRC20.sol";
 import "./interfaces/IUniswapV3.sol";
 import "./interfaces/IUniversalCore.sol";
-import {UniversalCoreErrors} from "./libraries/Errors.sol";
+import {UniversalCoreErrors, CommonErrors} from "./libraries/Errors.sol";
 import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import "@openzeppelin/contracts-upgradeable/utils/ReentrancyGuardUpgradeable.sol";
@@ -70,7 +70,7 @@ contract UniversalCoreV0 is
     }
 
     modifier onlyOwner() {
-        if (!hasRole(DEFAULT_ADMIN_ROLE, msg.sender)) revert UniversalCoreErrors.CallerIsNotOwner();
+        if (!hasRole(DEFAULT_ADMIN_ROLE, msg.sender)) revert CommonErrors.InvalidOwner();
         _;
     }
 
@@ -122,8 +122,8 @@ contract UniversalCoreV0 is
      */
     function depositPRC20Token(address prc20, uint256 amount, address target) external onlyUEModule whenNotPaused {
         if (target == UNIVERSAL_EXECUTOR_MODULE || target == address(this)) revert UniversalCoreErrors.InvalidTarget();
-        if (prc20 == address(0)) revert UniversalCoreErrors.ZeroAddress();
-        if (amount == 0) revert UniversalCoreErrors.ZeroAmount();
+        if (prc20 == address(0)) revert CommonErrors.ZeroAddress();
+        if (amount == 0) revert CommonErrors.ZeroAmount();
 
         IPRC20(prc20).deposit(target, amount);
     }
@@ -138,8 +138,8 @@ contract UniversalCoreV0 is
      */
     function mintPRCTokensviaAdmin(address prc20, uint256 amount, address target) external onlyOwner whenNotPaused {
         if (target == UNIVERSAL_EXECUTOR_MODULE || target == address(this)) revert UniversalCoreErrors.InvalidTarget();
-        if (prc20 == address(0)) revert UniversalCoreErrors.ZeroAddress();
-        if (amount == 0) revert UniversalCoreErrors.ZeroAmount();
+        if (prc20 == address(0)) revert CommonErrors.ZeroAddress();
+        if (amount == 0) revert CommonErrors.ZeroAmount();
 
         IPRC20(prc20).deposit(target, amount);
     }
@@ -169,8 +169,8 @@ contract UniversalCoreV0 is
     ) external onlyUEModule whenNotPaused nonReentrant {
         // Validate inputs
         if (target == UNIVERSAL_EXECUTOR_MODULE || target == address(this)) revert UniversalCoreErrors.InvalidTarget();
-        if (prc20 == address(0)) revert UniversalCoreErrors.ZeroAddress();
-        if (amount == 0) revert UniversalCoreErrors.ZeroAmount();
+        if (prc20 == address(0)) revert CommonErrors.ZeroAddress();
+        if (amount == 0) revert CommonErrors.ZeroAmount();
 
         if (!isAutoSwapSupported[prc20]) revert UniversalCoreErrors.AutoSwapNotSupported();
 
@@ -185,7 +185,7 @@ contract UniversalCoreV0 is
             deadline = block.timestamp + (defaultDeadlineMins * 1 minutes);
         }
 
-        if (block.timestamp > deadline) revert UniversalCoreErrors.DeadlineExpired();
+        if (block.timestamp > deadline) revert CommonErrors.DeadlineExpired();
 
         // Check pool exists
         address pool = IUniswapV3Factory(uniswapV3FactoryAddress).getPool(
@@ -238,7 +238,7 @@ contract UniversalCoreV0 is
      * @param fee Uniswap V3 fee tier
      */
     function setGasPCPool(string memory chainID, address gasToken, uint24 fee) external onlyUEModule {
-        if (gasToken == address(0)) revert UniversalCoreErrors.ZeroAddress();
+        if (gasToken == address(0)) revert CommonErrors.ZeroAddress();
 
         address pool = IUniswapV3Factory(uniswapV3FactoryAddress).getPool(
             wPCContractAddress < gasToken ? wPCContractAddress : gasToken,
@@ -267,7 +267,7 @@ contract UniversalCoreV0 is
      * @param prc20 PRC20 address
      */
     function setGasTokenPRC20(string memory chainID, address prc20) external onlyUEModule {
-        if (prc20 == address(0)) revert UniversalCoreErrors.ZeroAddress();
+        if (prc20 == address(0)) revert CommonErrors.ZeroAddress();
         gasTokenPRC20ByChainId[chainID] = prc20;
         emit SetGasToken(chainID, prc20);
     }
@@ -282,7 +282,7 @@ contract UniversalCoreV0 is
      * @param addr WPC new address
      */
     function setWPCContractAddress(address addr) external onlyOwner {
-        if (addr == address(0)) revert UniversalCoreErrors.ZeroAddress();
+        if (addr == address(0)) revert CommonErrors.ZeroAddress();
         wPCContractAddress = addr;
         emit SetWPC(addr);
     }
@@ -295,7 +295,7 @@ contract UniversalCoreV0 is
      */
     function setUniswapV3Addresses(address factory, address swapRouter, address quoter) external onlyOwner {
         if (factory == address(0) || swapRouter == address(0) || quoter == address(0)) {
-            revert UniversalCoreErrors.ZeroAddress();
+            revert CommonErrors.ZeroAddress();
         }
         uniswapV3FactoryAddress = factory;
         uniswapV3SwapRouterAddress = swapRouter;
@@ -309,7 +309,7 @@ contract UniversalCoreV0 is
      * @param feeTier Fee tier (500, 3000, 10000)
      */
     function setDefaultFeeTier(address token, uint24 feeTier) external onlyOwner {
-        if (token == address(0)) revert UniversalCoreErrors.ZeroAddress();
+        if (token == address(0)) revert CommonErrors.ZeroAddress();
         if (feeTier != 500 && feeTier != 3000 && feeTier != 10000) {
             revert UniversalCoreErrors.InvalidFeeTier();
         }
@@ -323,7 +323,7 @@ contract UniversalCoreV0 is
      * @param tolerance Slippage tolerance in basis points (e.g., 300 = 3%)
      */
     function setSlippageTolerance(address token, uint256 tolerance) external onlyOwner {
-        if (token == address(0)) revert UniversalCoreErrors.ZeroAddress();
+        if (token == address(0)) revert CommonErrors.ZeroAddress();
         if (tolerance > 5000) revert UniversalCoreErrors.InvalidSlippageTolerance(); // Max 50%
         slippageTolerance[token] = tolerance;
         emit SetSlippageTolerance(token, tolerance);

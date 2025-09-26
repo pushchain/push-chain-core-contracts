@@ -3,7 +3,7 @@ pragma solidity 0.8.26;
 
 import {IUniversalCore} from "./interfaces/IUniversalCore.sol";
 import {IPRC20} from "./interfaces/IPRC20.sol";
-import {PRC20Errors} from "./libraries/Errors.sol";
+import {PRC20Errors, CommonErrors} from "./libraries/Errors.sol";
 import "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol";
 
 /// @title  PRC20 — Push Chain Synthetic Token (ZRC20-inspired)
@@ -72,7 +72,7 @@ contract PRC20 is IPRC20, Initializable {
         address universalCore_,
         string memory sourceTokenAddress_
     ) public virtual initializer {
-        if (universalCore_ == address(0)) revert PRC20Errors.ZeroAddress();
+        if (universalCore_ == address(0)) revert CommonErrors.ZeroAddress();
 
         _name = name_;
         _symbol = symbol_;
@@ -128,7 +128,7 @@ contract PRC20 is IPRC20, Initializable {
 
     /// @notice Approve spender
     function approve(address spender, uint256 amount) external returns (bool) {
-        if (spender == address(0)) revert PRC20Errors.ZeroAddress();
+        if (spender == address(0)) revert CommonErrors.ZeroAddress();
         _allowances[msg.sender][spender] = amount;
         emit Approval(msg.sender, spender, amount);
         return true;
@@ -192,7 +192,7 @@ contract PRC20 is IPRC20, Initializable {
     /// @return gasFee   price * GAS_LIMIT + PC_PROTOCOL_FEE
     function withdrawGasFee() public view returns (address gasToken, uint256 gasFee) {
         gasToken = IUniversalCore(UNIVERSAL_CORE).gasTokenPRC20ByChainId(SOURCE_CHAIN_ID);
-        if (gasToken == address(0)) revert PRC20Errors.ZerogasToken();
+        if (gasToken == address(0)) revert CommonErrors.ZeroAddress();
 
         uint256 price = IUniversalCore(UNIVERSAL_CORE).gasPriceByChainId(SOURCE_CHAIN_ID);
         if (price == 0) revert PRC20Errors.ZeroGasPrice();
@@ -206,7 +206,7 @@ contract PRC20 is IPRC20, Initializable {
     /// @return gasFee    price * gasLimit_ + PC_PROTOCOL_FEE
     function withdrawGasFeeWithGasLimit(uint256 gasLimit_) external view returns (address gasToken, uint256 gasFee) {
         gasToken = IUniversalCore(UNIVERSAL_CORE).gasTokenPRC20ByChainId(SOURCE_CHAIN_ID);
-        if (gasToken == address(0)) revert PRC20Errors.ZerogasToken();
+        if (gasToken == address(0)) revert CommonErrors.ZeroAddress();
 
         uint256 price = IUniversalCore(UNIVERSAL_CORE).gasPriceByChainId(SOURCE_CHAIN_ID);
         if (price == 0) revert PRC20Errors.ZeroGasPrice();
@@ -219,7 +219,7 @@ contract PRC20 is IPRC20, Initializable {
     /// @notice Update UniversalCore contract (gas coin & price oracle source)
     /// @dev only Universal Executor may update
     function updateUniversalCore(address addr) external onlyUniversalExecutor {
-        if (addr == address(0)) revert PRC20Errors.ZeroAddress();
+        if (addr == address(0)) revert CommonErrors.ZeroAddress();
         UNIVERSAL_CORE = addr;
         emit UpdatedUniversalCore(addr);
     }
@@ -249,10 +249,10 @@ contract PRC20 is IPRC20, Initializable {
     //*** INTERNAL ERC-20 HELPERS ***//
 
     function _transfer(address sender, address recipient, uint256 amount) internal {
-        if (sender == address(0) || recipient == address(0)) revert PRC20Errors.ZeroAddress();
+        if (sender == address(0) || recipient == address(0)) revert CommonErrors.ZeroAddress();
 
         uint256 senderBalance = _balances[sender];
-        if (senderBalance < amount) revert PRC20Errors.LowBalance();
+        if (senderBalance < amount) revert CommonErrors.InsufficientBalance();
 
         unchecked {
             _balances[sender] = senderBalance - amount;
@@ -263,8 +263,8 @@ contract PRC20 is IPRC20, Initializable {
     }
 
     function _mint(address account, uint256 amount) internal {
-        if (account == address(0)) revert PRC20Errors.ZeroAddress();
-        if (amount == 0) revert PRC20Errors.ZeroAmount();
+        if (account == address(0)) revert CommonErrors.ZeroAddress();
+        if (amount == 0) revert CommonErrors.ZeroAmount();
 
         unchecked {
             _totalSupply += amount;
@@ -274,11 +274,11 @@ contract PRC20 is IPRC20, Initializable {
     }
 
     function _burn(address account, uint256 amount) internal {
-        if (account == address(0)) revert PRC20Errors.ZeroAddress();
-        if (amount == 0) revert PRC20Errors.ZeroAmount();
+        if (account == address(0)) revert CommonErrors.ZeroAddress();
+        if (amount == 0) revert CommonErrors.ZeroAmount();
 
         uint256 bal = _balances[account];
-        if (bal < amount) revert PRC20Errors.LowBalance();
+        if (bal < amount) revert CommonErrors.InsufficientBalance();
 
         unchecked {
             _balances[account] = bal - amount;

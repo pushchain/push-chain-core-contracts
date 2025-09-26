@@ -185,13 +185,13 @@ contract PRC20Test is Test, UpgradeableContractHelper {
 
     function testTransferRevertZeroAddress() public {
         vm.prank(alice);
-        vm.expectRevert(PRC20Errors.ZeroAddress.selector);
+        vm.expectRevert(CommonErrors.ZeroAddress.selector);
         prc20.transfer(address(0), TRANSFER_AMOUNT);
     }
 
     function testTransferRevertInsufficientBalance() public {
         vm.prank(alice);
-        vm.expectRevert(PRC20Errors.LowBalance.selector);
+        vm.expectRevert(CommonErrors.InsufficientBalance.selector);
         prc20.transfer(bob, INITIAL_BALANCE + 1);
     }
 
@@ -213,7 +213,7 @@ contract PRC20Test is Test, UpgradeableContractHelper {
 
     function testApproveRevertZeroAddress() public {
         vm.prank(alice);
-        vm.expectRevert(PRC20Errors.ZeroAddress.selector);
+        vm.expectRevert(CommonErrors.ZeroAddress.selector);
         prc20.approve(address(0), APPROVAL_AMOUNT);
     }
 
@@ -274,7 +274,7 @@ contract PRC20Test is Test, UpgradeableContractHelper {
 
     function testTransferFromRevertZeroAddressSender() public {
         vm.prank(bob);
-        vm.expectRevert(PRC20Errors.ZeroAddress.selector);
+        vm.expectRevert(CommonErrors.ZeroAddress.selector);
         prc20.transferFrom(address(0), bob, APPROVAL_AMOUNT);
     }
 
@@ -285,7 +285,7 @@ contract PRC20Test is Test, UpgradeableContractHelper {
 
         // Bob tries to transfer to zero address
         vm.prank(bob);
-        vm.expectRevert(PRC20Errors.ZeroAddress.selector);
+        vm.expectRevert(CommonErrors.ZeroAddress.selector);
         prc20.transferFrom(alice, address(0), APPROVAL_AMOUNT);
     }
 
@@ -296,7 +296,7 @@ contract PRC20Test is Test, UpgradeableContractHelper {
 
         // Bob tries to transfer more than Alice's balance
         vm.prank(bob);
-        vm.expectRevert(PRC20Errors.LowBalance.selector);
+        vm.expectRevert(CommonErrors.InsufficientBalance.selector);
         prc20.transferFrom(alice, bob, INITIAL_BALANCE + 1);
     }
 
@@ -335,13 +335,13 @@ contract PRC20Test is Test, UpgradeableContractHelper {
 
     function testBurnRevertZeroAmount() public {
         vm.prank(alice);
-        vm.expectRevert(PRC20Errors.ZeroAmount.selector);
+        vm.expectRevert(CommonErrors.ZeroAmount.selector);
         prc20.burn(0);
     }
 
     function testBurnRevertInsufficientBalance() public {
         vm.prank(alice);
-        vm.expectRevert(PRC20Errors.LowBalance.selector);
+        vm.expectRevert(CommonErrors.InsufficientBalance.selector);
         prc20.burn(INITIAL_BALANCE + 1);
     }
 
@@ -405,14 +405,14 @@ contract PRC20Test is Test, UpgradeableContractHelper {
     function testDepositToZeroAddress() public {
         // Attempt deposit to zero address
         vm.prank(uExec);
-        vm.expectRevert(PRC20Errors.ZeroAddress.selector);
+        vm.expectRevert(CommonErrors.ZeroAddress.selector);
         prc20.deposit(address(0), 1000 ether);
     }
 
     function testDepositZeroAmount() public {
         // Attempt deposit with zero amount
         vm.prank(uExec);
-        vm.expectRevert(PRC20Errors.ZeroAmount.selector);
+        vm.expectRevert(CommonErrors.ZeroAmount.selector);
         prc20.deposit(bob, 0);
     }
 
@@ -658,7 +658,7 @@ contract PRC20Test is Test, UpgradeableContractHelper {
     function testUpdateUniversalCoreZeroAddress() public {
         // Attempt to update universalCore contract to zero address
         vm.prank(uExec);
-        vm.expectRevert(PRC20Errors.ZeroAddress.selector);
+        vm.expectRevert(CommonErrors.ZeroAddress.selector);
         prc20.updateUniversalCore(address(0));
     }
 
