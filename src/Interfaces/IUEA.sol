@@ -61,7 +61,7 @@ interface IUEA {
     function initialize(UniversalAccountId memory universalAccount) external;
 
     /**
-     * @notice               Verifies if a signature is valid for a given message hash.
+     * @notice              Verifies if a signature is valid for a given message hash.
      * @dev                 Implementation behavior varies by UEA type:
      *                      1. For EVM-based UEAs: Uses ECDSA recovery to verify that the signature was created by the
      *                      address stored in the UniversalAccountId.owner field. The owner is expected to be an
