@@ -23,7 +23,6 @@ import {
  *      Used for testing migration functionality.
  * @notice Use this contract as implementation logic for SVM-based UEAs V2.
  */
-
 contract UEA_SVM_V2 is ReentrancyGuard, IUEA {
     // @notice The Universal Account information
     UniversalAccountId internal id;

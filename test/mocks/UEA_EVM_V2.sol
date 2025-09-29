@@ -24,7 +24,6 @@ import {
  *      Used for testing migration functionality.
  * @notice Use this contract as implementation logic for EVM-based UEAs V2.
  */
-
 contract UEA_EVM_V2 is ReentrancyGuard, IUEA {
     using ECDSA for bytes32;
 
