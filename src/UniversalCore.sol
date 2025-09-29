@@ -13,15 +13,16 @@ import "@openzeppelin/contracts-upgradeable/access/AccessControlUpgradeable.sol"
 import "@openzeppelin/contracts-upgradeable/utils/PausableUpgradeable.sol";
 
 /**
- * @title UniversalCore
- * @notice The UniversalCore acts as the core contract for all functionalities needed by the interoperability feature of Push Chain.
- * @dev    The UniversalCore primarily handles the following functionalities:
- *         - Generation of supported PRC20 tokens, and transfering it to accurate recipients.
- *         - Setting up the gas tokens for each chain.
- *         - Setting up the gas price for each chain.
- *         - Maintaining a registry of uniswap v3 pools for each token pair.
+ * @title   UniversalCore
+ * @notice  The UniversalCore acts as the core contract for all functionalities needed by the interoperability feature of Push Chain.
+ * @dev     The UniversalCore primarily handles the following functionalities:
+ *           - Generation of supported PRC20 tokens, and transfering it to accurate recipients.
+ *           - Setting up the gas tokens for each chain.
+ *           - Setting up the gas price for each chain.
+ *           - Maintaining a registry of uniswap v3 pools for each token pair.
  * @dev    All imperative functionalities are handled by the Universal Executor Module.
  */
+
 contract UniversalCore is
     IUniversalCore,
     Initializable,

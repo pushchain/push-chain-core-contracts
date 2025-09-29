@@ -248,6 +248,17 @@ contract PRC20 is IPRC20, Initializable {
 
     //*** INTERNAL ERC-20 HELPERS ***//
 
+    /**
+     * @notice Internal function to transfer PRC20 tokens between addresses
+     * @dev Handles the core transfer logic with balance and zero address checks
+     * @dev Uses unchecked arithmetic for gas optimization
+     * @param sender Address to transfer tokens from
+     * @param recipient Address to transfer tokens to
+     * @param amount Amount of PRC20 tokens to transfer
+     * @dev Reverts if sender or recipient is zero address
+     * @dev Reverts if sender has insufficient balance
+     * @dev Emits Transfer event on successful transfer
+     */
     function _transfer(address sender, address recipient, uint256 amount) internal {
         if (sender == address(0) || recipient == address(0)) revert CommonErrors.ZeroAddress();
 
@@ -262,6 +273,17 @@ contract PRC20 is IPRC20, Initializable {
         emit Transfer(sender, recipient, amount);
     }
 
+    /**
+     * @notice Internal function to mint new PRC20 tokens
+     * @dev Creates new tokens and assigns them to the specified account
+     * @dev Increases total supply and account balance
+     * @dev Uses unchecked arithmetic for gas optimization
+     * @param account Address to mint tokens to
+     * @param amount Amount of PRC20 tokens to mint
+     * @dev Reverts if account is zero address
+     * @dev Reverts if amount is zero
+     * @dev Emits Transfer event with zero address as sender (minting)
+     */
     function _mint(address account, uint256 amount) internal {
         if (account == address(0)) revert CommonErrors.ZeroAddress();
         if (amount == 0) revert CommonErrors.ZeroAmount();
@@ -273,6 +295,17 @@ contract PRC20 is IPRC20, Initializable {
         emit Transfer(address(0), account, amount);
     }
 
+    /**
+     * @notice Internal function to burn PRC20 tokens
+     * @dev Destroys tokens from the specified account and reduces total supply
+     * @dev Uses unchecked arithmetic for gas optimization
+     * @param account Address to burn tokens from
+     * @param amount Amount of PRC20 tokens to burn
+     * @dev Reverts if account is zero address
+     * @dev Reverts if amount is zero
+     * @dev Reverts if account has insufficient balance
+     * @dev Emits Transfer event with zero address as recipient (burning)
+     */
     function _burn(address account, uint256 amount) internal {
         if (account == address(0)) revert CommonErrors.ZeroAddress();
         if (amount == 0) revert CommonErrors.ZeroAmount();

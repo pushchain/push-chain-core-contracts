@@ -35,8 +35,10 @@ contract UEAProxy is Initializable, Proxy {
     }
 
     /**
-     * @dev Returns the current implementation address.
-     * @return impl The address of the current implementation
+     * @notice Returns the current implementation address stored in the proxy
+     * @dev Reads the implementation address from the UEA_LOGIC_SLOT storage slot
+     *      This is the address that all calls to the proxy will be delegated to
+     * @return impl The address of the current UEA implementation contract
      */
     function getImplementation() public view returns (address impl) {
         assembly {

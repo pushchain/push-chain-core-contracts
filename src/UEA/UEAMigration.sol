@@ -4,13 +4,17 @@ pragma solidity 0.8.26;
 import {UEAErrors, CommonErrors} from "../libraries/Errors.sol";
 
 /**
- * @title UEAMigration
- * @notice This contract facilitates migration of UEA proxy contracts to new implementation versions.
- * @dev This contract is designed to be used via delegatecall only from a UEAProxy contract.
- *      It updates the implementation address stored in the UEA_LOGIC_SLOT of the proxy.
- *      IMPORTANT: This contract will only work with UEAProxy contracts that follow the same
- *      storage layout and implementation slot as defined in UEAProxy.sol.
- * @author Push Chain Team
+ * @title   UEAMigration
+ * @notice  This contract facilitates migration of UEA proxy contracts to new implementation versions.
+ * @dev     UEAMigration is designed to be used via delegatecall only from a UEAProxy contract.
+ *          It updates the implementation address stored in the UEA_LOGIC_SLOT of the proxy.
+ * 
+ *          UEAMigration is designed to be not upgradable.
+ *          A single migration contract will include a specific implementation for EVM and SVM.
+ *          For ever new version of the UEA, a new migration contract will be deployed.
+ *          
+ * Note:    This contract will only work with UEAProxy contracts that follow the same
+ *          storage layout and implementation slot as defined in UEAProxy.sol.
  */
 contract UEAMigration {
     /**
