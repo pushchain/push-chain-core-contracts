@@ -6,8 +6,19 @@ import {IPRC20} from "./interfaces/IPRC20.sol";
 import {PRC20Errors, CommonErrors} from "./libraries/Errors.sol";
 import "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol";
 
-/// @title  PRC20 — Push Chain Synthetic Token
-/// @notice ERC-20 compatible synthetic token minted/burned by Push Chain protocol.
+
+/**
+ * @title   PRC20 (Push Chain Synthetic Token)
+ * @notice  ERC-20 compatible synthetic token minted/burned by Push Chain protocol.
+ * @dev     PRC20 token represents and acts as a alias for an already existing token 
+ *          of an external chain. 
+ *          All PRC20 tokens must ahdere to the IPRC20 interface.
+ *          Apart from the standard ERC-20 functions, PRC20 also supports the following functions:
+ *          - deposit:                      Mint PRC20 on inbound bridge (lock on source)
+ *          - withdraw:                     Burn and request outbound unlock on source, charging gas fee in the per-chain gas coin PRC20
+ *          - withdrawGasFee:               Compute gas coin token and fee for a withdraw using current GAS_LIMIT
+ *          - withdrawGasFeeWithGasLimit:   Compute gas coin token and fee for a withdraw given a custom gasLimit
+ */
 contract PRC20 is IPRC20, Initializable {
     /// @notice The protocol's privileged executor module (auth & fee sink)
     address public immutable UNIVERSAL_EXECUTOR_MODULE = 0x14191Ea54B4c176fCf86f51b0FAc7CB1E71Df7d7;
@@ -155,10 +166,10 @@ contract PRC20 is IPRC20, Initializable {
 
     //*** BRIDGE ENTRYPOINTS ***//
 
-    /// @notice Mint PRC20 on inbound bridge (lock on source)
-    /// @dev Only callable by UNIVERSAL_CORE or UNIVERSAL_EXECUTOR_MODULE
-    /// @param to      Recipient on Push EVM
-    /// @param amount  Amount to mint
+    /// @notice         Mint PRC20 on inbound bridge (lock on source)
+    /// @dev            Only callable by UNIVERSAL_CORE or UNIVERSAL_EXECUTOR_MODULE
+    /// @param to       Recipient on Push EVM
+    /// @param amount   Amount to mint
     function deposit(address to, uint256 amount) external returns (bool) {
         if (msg.sender != UNIVERSAL_CORE && msg.sender != UNIVERSAL_EXECUTOR_MODULE) revert PRC20Errors.InvalidSender();
 
@@ -168,9 +179,9 @@ contract PRC20 is IPRC20, Initializable {
         return true;
     }
 
-    /// @notice Burn and request outbound unlock on source, charging gas fee in the per-chain gas coin PRC20
-    /// @dev Caller (user/app) must have approved this PRC20 (for burn via this function)
-    ///      AND approved the gas coin PRC20 to allow this contract to pull `gasFee` to UNIVERSAL_EXECUTOR_MODULE.
+    /// @notice         Burn and request outbound unlock on source, charging gas fee in the per-chain gas coin PRC20
+    /// @dev            Caller (user/app) must have approved this PRC20 (for burn via this function)
+    ///                 AND approved the gas coin PRC20 to allow this contract to pull `gasFee` to UNIVERSAL_EXECUTOR_MODULE.
     /// @param to      Destination address on source chain (as raw bytes)
     /// @param amount  Amount of this PRC20 to burn
     function withdraw(bytes calldata to, uint256 amount) external returns (bool) {
@@ -186,9 +197,9 @@ contract PRC20 is IPRC20, Initializable {
 
     //*** GAS FEE QUOTING (VIEW) ***//
 
-    /// @notice Compute gas coin token and fee for a withdraw using current GAS_LIMIT
+    /// @notice           Compute gas coin token and fee for a withdraw using current GAS_LIMIT
     /// @return gasToken  PRC20 token used as gas coin for SOURCE_CHAIN_ID
-    /// @return gasFee   price * GAS_LIMIT + PC_PROTOCOL_FEE
+    /// @return gasFee    price * GAS_LIMIT + PC_PROTOCOL_FEE
     function withdrawGasFee() public view returns (address gasToken, uint256 gasFee) {
         gasToken = IUniversalCore(UNIVERSAL_CORE).gasTokenPRC20ByChainId(SOURCE_CHAIN_ID);
         if (gasToken == address(0)) revert CommonErrors.ZeroAddress();
@@ -199,10 +210,10 @@ contract PRC20 is IPRC20, Initializable {
         gasFee = price * GAS_LIMIT + PC_PROTOCOL_FEE;
     }
 
-    /// @notice Compute gas coin token and fee for a withdraw given a custom gasLimit
-    /// @param gasLimit_  Gas limit to use for the quote
-    /// @return gasToken   PRC20 gas coin token
-    /// @return gasFee    price * gasLimit_ + PC_PROTOCOL_FEE
+    /// @notice             Compute gas coin token and fee for a withdraw given a custom gasLimit
+    /// @param gasLimit_    Gas limit to use for the quote
+    /// @return gasToken    PRC20 gas coin token
+    /// @return gasFee      price * gasLimit_ + PC_PROTOCOL_FEE
     function withdrawGasFeeWithGasLimit(uint256 gasLimit_) external view returns (address gasToken, uint256 gasFee) {
         gasToken = IUniversalCore(UNIVERSAL_CORE).gasTokenPRC20ByChainId(SOURCE_CHAIN_ID);
         if (gasToken == address(0)) revert CommonErrors.ZeroAddress();
@@ -212,8 +223,6 @@ contract PRC20 is IPRC20, Initializable {
 
         gasFee = price * gasLimit_ + PC_PROTOCOL_FEE;
     }
-
-    //*** ADMIN ***//
 
     /// @notice Update UniversalCore contract (gas coin & price oracle source)
     /// @dev only Universal Executor may update
@@ -235,12 +244,12 @@ contract PRC20 is IPRC20, Initializable {
         emit UpdatedProtocolFlatFee(protocolFlatFee_);
     }
 
-    /// @notice Update token name (optional, parity with ZRC20 mutability)
+    /// @notice Update token name 
     function setName(string memory newName) external onlyUniversalExecutor {
         _name = newName;
     }
 
-    /// @notice Update token symbol (optional, parity with ZRC20 mutability)
+    /// @notice Update token symbol 
     function setSymbol(string memory newSymbol) external onlyUniversalExecutor {
         _symbol = newSymbol;
     }
@@ -248,15 +257,11 @@ contract PRC20 is IPRC20, Initializable {
     //*** INTERNAL ERC-20 HELPERS ***//
 
     /**
-     * @notice Internal function to transfer PRC20 tokens between addresses
-     * @dev Handles the core transfer logic with balance and zero address checks
-     * @dev Uses unchecked arithmetic for gas optimization
-     * @param sender Address to transfer tokens from
+     * @notice          Internal function to transfer PRC20 tokens between addresses
+     * @dev             Handles the core transfer logic with balance and zero address checks
+     * @param sender    Address to transfer tokens from
      * @param recipient Address to transfer tokens to
-     * @param amount Amount of PRC20 tokens to transfer
-     * @dev Reverts if sender or recipient is zero address
-     * @dev Reverts if sender has insufficient balance
-     * @dev Emits Transfer event on successful transfer
+     * @param amount    Amount of PRC20 tokens to transfer
      */
     function _transfer(address sender, address recipient, uint256 amount) internal {
         if (sender == address(0) || recipient == address(0)) revert CommonErrors.ZeroAddress();
@@ -273,15 +278,11 @@ contract PRC20 is IPRC20, Initializable {
     }
 
     /**
-     * @notice Internal function to mint new PRC20 tokens
-     * @dev Creates new tokens and assigns them to the specified account
-     * @dev Increases total supply and account balance
-     * @dev Uses unchecked arithmetic for gas optimization
-     * @param account Address to mint tokens to
-     * @param amount Amount of PRC20 tokens to mint
-     * @dev Reverts if account is zero address
-     * @dev Reverts if amount is zero
-     * @dev Emits Transfer event with zero address as sender (minting)
+     * @notice          Internal function to mint new PRC20 tokens
+     * @dev             Creates new tokens and assigns them to the specified account
+     * @dev             Increases total supply and account balance
+     * @param account   Address to mint tokens to
+     * @param amount    Amount of PRC20 tokens to mint
      */
     function _mint(address account, uint256 amount) internal {
         if (account == address(0)) revert CommonErrors.ZeroAddress();
@@ -295,15 +296,10 @@ contract PRC20 is IPRC20, Initializable {
     }
 
     /**
-     * @notice Internal function to burn PRC20 tokens
-     * @dev Destroys tokens from the specified account and reduces total supply
-     * @dev Uses unchecked arithmetic for gas optimization
-     * @param account Address to burn tokens from
-     * @param amount Amount of PRC20 tokens to burn
-     * @dev Reverts if account is zero address
-     * @dev Reverts if amount is zero
-     * @dev Reverts if account has insufficient balance
-     * @dev Emits Transfer event with zero address as recipient (burning)
+     * @notice          Internal function to burn PRC20 tokens
+     * @dev             Burns tokens from the specified account and reduces total supply
+     * @param account   Address to burn tokens from
+     * @param amount    Amount of PRC20 tokens to burn
      */
     function _burn(address account, uint256 amount) internal {
         if (account == address(0)) revert CommonErrors.ZeroAddress();
