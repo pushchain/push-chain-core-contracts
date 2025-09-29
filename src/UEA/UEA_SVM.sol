@@ -16,27 +16,29 @@ import {
     Multicall
 } from "../libraries/Types.sol";
 /**
- * @title UEA_SVM (Universal Executor Account for SVM)
- * @dev Implementation of the IUEA interface for SVM-based external accounts.
- *      This contract handles verification and execution of cross-chain payloads
- *      using Ed25519 signatures from Solana accounts.
- * @notice Use this contract as implementation logic for SVM-based UEAs.
+ * @title   UEA_SVM (Universal Executor Account for SVM)
+ * @notice  UEA_SVM acts as the implementation logic for SVM-based UEAs accounts
+ * @dev     Implementation of the IUEA interface for SVM-based external accounts.
+ *          This contract handles verification and execution of cross-chain payloads
+ *          using Ed25519 signatures from Solana accounts.
+ * 
+ * Note:    Find detailed natspec in the IUEA interface -> interfaces/IUEA.sol
  */
 
 contract UEA_SVM is ReentrancyGuard, IUEA {
-    // @notice The Universal Account information
+    /// @notice The Universal Account information
     UniversalAccountId internal id;
-    // @notice Flag to track initialization status
+    /// @notice Flag to track initialization status
     bool private initialized;
-    // @notice The nonce for the UEA
+    /// @notice The nonce for the UEA
     uint256 public nonce;
-    // @notice The version of the UEA
-    string public constant VERSION = "0.1.0";
-    // @notice The verifier precompile address
+    /// @notice The version of the UEA
+    string public constant VERSION = "1.0.0";
+    /// @notice The verifier precompile address
     address public constant VERIFIER_PRECOMPILE = 0x00000000000000000000000000000000000000ca;
-    // @notice Precompile address for TxHash Based Verification
+    /// @notice Precompile address for TxHash Based Verification
     address public constant TX_BASED_VERIFIER = 0x00000000000000000000000000000000000000CB;
-    // @notice Hash of keccak256("EIP712Domain_SVM(string version,string chainId,address verifyingContract)")
+    /// @notice Hash of keccak256("EIP712Domain_SVM(string version,string chainId,address verifyingContract)")
     bytes32 public constant DOMAIN_SEPARATOR_TYPEHASH_SVM =
         0x3aefc31558906b9b2c54de94f82a9b2455c24b4ba2b642ebb545ea2cc64a1e4b;
 
@@ -76,10 +78,10 @@ contract UEA_SVM is ReentrancyGuard, IUEA {
     }
 
     /**
-     * @dev Verifies the SVM signature using the verifier precompile.
-     * @param payloadHash The payload hash to verify.
-     * @param signature The signature to verify.
-     * @return bool indicating whether the signature is valid.
+     * @dev                 Verifies the SVM signature using the verifier precompile.
+     * @param payloadHash   payload hash to verify.
+     * @param signature     signature to verify.
+     * @return bool         indicates whether the signature is valid.
      */
     function _verifySignatureSVM(bytes32 payloadHash, bytes memory signature) internal view returns (bool) {
         (bool success, bytes memory result) = VERIFIER_PRECOMPILE.staticcall(
@@ -92,6 +94,13 @@ contract UEA_SVM is ReentrancyGuard, IUEA {
         return abi.decode(result, (bool));
     }
 
+    /**
+     * @notice              Verifies a payload using transaction hash-based verification
+     * @dev                 Uses a precompiled contract ( TX_BASED_VERIFIER on Push Chain) to verify transaction hash for universal transaction verification
+     * @param payloadHash   hash of the payload to verify
+     * @param txHash        transaction hash to verify against
+     * @return bool         indicates whether the transaction hash verification is valid
+     */
     function verifyPayloadTxHash(bytes32 payloadHash, bytes calldata txHash) public view returns (bool) {
         (bool success, bytes memory result) = TX_BASED_VERIFIER.staticcall(
             abi.encodeWithSignature(
@@ -108,26 +117,6 @@ contract UEA_SVM is ReentrancyGuard, IUEA {
         }
 
         return abi.decode(result, (bool));
-    }
-
-    /**
-     * @dev Checks whether the payload data uses the multicall format by verifying a magic selector prefix.
-     * @param data The raw calldata from the UniversalPayload.
-     * @return bool Returns true if the data starts with the MULTICALL_SELECTOR, indicating a multicall batch.
-     */
-    function isMulticall(bytes calldata data) internal pure returns (bool) {
-        if (data.length < 4) return false;
-        return bytes4(data[:4]) == MULTICALL_SELECTOR;
-    }
-
-    /**
-     * @dev Decodes the payload data into an array of Call structs, assuming the data uses the multicall format.
-     * @notice This function assumes that isMulticall(data) has already returned true.
-     * @param data The raw calldata containing the MULTICALL_SELECTOR followed by the ABI-encoded Call[].
-     * @return Call[] The decoded array of Call structs to be executed.
-     */
-    function decodeCalls(bytes calldata data) internal pure returns (Multicall[] memory) {
-        return abi.decode(data[4:], (Multicall[])); // Strip selector
     }
 
     /**
@@ -150,11 +139,9 @@ contract UEA_SVM is ReentrancyGuard, IUEA {
             nonce++;
         }
 
-        // flag to overwrite success
         bool success;
         bytes memory returnData;
 
-        // Execute the payload: either single call or multicall batch
         if (isMulticall(payload.data)) {
             Multicall[] memory calls = decodeCalls(payload.data);
             for (uint256 i = 0; i < calls.length; i++) {
@@ -198,7 +185,6 @@ contract UEA_SVM is ReentrancyGuard, IUEA {
 
         bytes memory migrateCallData = abi.encodeWithSignature("migrateUEASVM()");
 
-        // delegatecall into the migration contract
         (bool success, bytes memory returnData) = payload.migration.delegatecall(migrateCallData);
 
         if (!success) {
@@ -215,10 +201,37 @@ contract UEA_SVM is ReentrancyGuard, IUEA {
         emit PayloadExecuted(id.owner, payload.migration, migrateCallData);
     }
 
+    // =========================
+    //           Internal Helper Functions
+    // =========================
+
     /**
-     * @dev Calculates the transaction hash for a given payload.
-     * @param payload The payload to calculate the hash for.
-     * @return bytes32 The transaction hash.
+     * @notice          Checks whether the payload data uses the multicall format
+     * @dev             Determines if the payload data starts with the MULTICALL_SELECTOR magic prefix
+     * @dev             Used to distinguish between single call vs multicall batch execution
+     * @param data      raw calldata from the UniversalPayload
+     * @return bool     returns true if the data starts with MULTICALL_SELECTOR, indicating a multicall batch
+     */
+    function isMulticall(bytes calldata data) internal pure returns (bool) {
+        if (data.length < 4) return false;
+        return bytes4(data[:4]) == MULTICALL_SELECTOR;
+    }
+
+    /**
+     * @notice              Decodes the payload data into an array of Multicall structs
+     * @dev                 Assumes the data uses the multicall format (should be called after isMulticall returns true)
+     * @dev                 Strips the MULTICALL_SELECTOR prefix and decodes the remaining data as Multicall[]
+     * @param data          raw calldata containing MULTICALL_SELECTOR followed by ABI-encoded Multicall[]
+     * @return Multicall[] decoded array of Multicall structs to be executed
+     */
+    function decodeCalls(bytes calldata data) internal pure returns (Multicall[] memory) {
+        return abi.decode(data[4:], (Multicall[])); // Strip selector
+    }
+
+    /**
+     * @dev             Calculates the transaction hash for a given payload.
+     * @param payload   payload to calculate the hash for.
+     * @return bytes32  transaction hash.
      */
     function getPayloadHash(UniversalPayload calldata payload) public view returns (bytes32) {
         if (payload.deadline > 0) {
@@ -226,7 +239,6 @@ contract UEA_SVM is ReentrancyGuard, IUEA {
                 revert Errors.ExpiredDeadline();
             }
         }
-        // Calculate the hash of the payload using EIP-712
         bytes32 structHash = keccak256(
             abi.encode(
                 UNIVERSAL_PAYLOAD_TYPEHASH,
@@ -242,30 +254,26 @@ contract UEA_SVM is ReentrancyGuard, IUEA {
             )
         );
 
-        // Calculate the domain separator using EIP-712
         bytes32 _domainSeparator = domainSeparator();
 
         return keccak256(abi.encodePacked("\x19\x01", _domainSeparator, structHash));
     }
 
     /**
-     * @dev Calculates the transaction hash for a given migration payload.
-     * @param payload The migration payload to calculate the hash for.
-     * @return bytes32 The transaction hash.
+     * @dev             Calculates the transaction hash for a given migration payload.
+     * @param payload   migration payload to calculate the hash for.
+     * @return bytes32  transaction hash.
      */
     function getMigrationPayloadHash(MigrationPayload memory payload) public view returns (bytes32) {
         if (payload.deadline > 0 && block.timestamp > payload.deadline) {
             revert Errors.ExpiredDeadline();
         }
 
-        // Calculate the struct hash of the migration payload
         bytes32 structHash =
             keccak256(abi.encode(MIGRATION_PAYLOAD_TYPEHASH, payload.migration, nonce, payload.deadline));
 
-        // Calculate the domain separator (EIP-712 domain)
         bytes32 _domainSeparator = domainSeparator();
 
-        // Final EIP-712 hash: keccak256("\x19\x01" || domainSeparator || structHash)
         return keccak256(abi.encodePacked("\x19\x01", _domainSeparator, structHash));
     }
 

@@ -2,19 +2,19 @@
 pragma solidity 0.8.26;
 
 import "forge-std/Test.sol";
-import "../src/UniversalCore.sol";
-import "../src/PRC20.sol";
-import "../src/interfaces/IPRC20.sol";
-import "../src/interfaces/IUniversalCore.sol";
-import {UniversalCoreErrors, PRC20Errors, CommonErrors} from "../src/libraries/Errors.sol";
-import "../test/helpers/UpgradeableContractHelper.sol";
-import "../test/mocks/MockUniswapV3Factory.sol";
-import "../test/mocks/MockUniswapV3Router.sol";
-import "../test/mocks/MockUniswapV3Quoter.sol";
-import "../test/mocks/MockWPC.sol";
-import "../test/mocks/MockPRC20.sol";
-import "../test/mocks/MaliciousPRC20.sol";
-import "../test/mocks/RevertingPRC20.sol";
+import "../../src/UniversalCore.sol";
+import "../../src/PRC20.sol";
+import "../../src/interfaces/IPRC20.sol";
+import "../../src/interfaces/IUniversalCore.sol";
+import {UniversalCoreErrors, PRC20Errors, CommonErrors} from "../../src/libraries/Errors.sol";
+import "../../test/helpers/UpgradeableContractHelper.sol";
+import "../../test/mocks/MockUniswapV3Factory.sol";
+import "../../test/mocks/MockUniswapV3Router.sol";
+import "../../test/mocks/MockUniswapV3Quoter.sol";
+import "../../test/mocks/MockWPC.sol";
+import "../../test/mocks/MockPRC20.sol";
+import "../../test/mocks/MaliciousPRC20.sol";
+import "../../test/mocks/RevertingPRC20.sol";
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import "@openzeppelin/contracts-upgradeable/utils/PausableUpgradeable.sol";
 

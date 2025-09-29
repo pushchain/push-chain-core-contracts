@@ -13,15 +13,16 @@ import "@openzeppelin/contracts-upgradeable/access/AccessControlUpgradeable.sol"
 import "@openzeppelin/contracts-upgradeable/utils/PausableUpgradeable.sol";
 
 /**
- * @title UniversalCore
- * @notice The UniversalCore acts as the core contract for all functionalities needed by the interoperability feature of Push Chain.
- * @dev    The UniversalCore primarily handles the following functionalities:
- *         - Generation of supported PRC20 tokens, and transfering it to accurate recipients.
- *         - Setting up the gas tokens for each chain.
- *         - Setting up the gas price for each chain.
- *         - Maintaining a registry of uniswap v3 pools for each token pair.
+ * @title   UniversalCore
+ * @notice  The UniversalCore acts as the core contract for all functionalities needed by the interoperability feature of Push Chain.
+ * @dev     The UniversalCore primarily handles the following functionalities:
+ *           - Generation of supported PRC20 tokens, and transfering it to accurate recipients.
+ *           - Setting up the gas tokens for each chain.
+ *           - Setting up the gas price for each chain.
+ *           - Maintaining a registry of uniswap v3 pools for each token pair.
  * @dev    All imperative functionalities are handled by the Universal Executor Module.
  */
+
 contract UniversalCore is
     IUniversalCore,
     Initializable,
@@ -74,23 +75,22 @@ contract UniversalCore is
     }
 
     /**
-     * @dev Only fungible module can deploy a universalCore contract.
-     * @param wpc_ Address of the wrapped PC token
-     * @param uniswapV3Factory_ Address of the Uniswap V3 factory
-     * @param uniswapV3SwapRouter_ Address of the Uniswap V3 swap router
-     * @param uniswapV3Quoter_ Address of the Uniswap V3 quoter
+     * @dev                         Only fungible module can deploy a universalCore contract.
+     * @param wpc_                  Address of the wrapped PC token
+     * @param uniswapV3Factory_     Address of the Uniswap V3 factory
+     * @param uniswapV3SwapRouter_  Address of the Uniswap V3 swap router
+     * @param uniswapV3Quoter_      Address of the Uniswap V3 quoter
      */
-    /// @custom:oz-upgrades-unsafe-allow constructor
     constructor() {
         _disableInitializers();
     }
 
     /**
-     * @dev Initializer function for the upgradeable contract.
-     * @param wpc_ Address of the wrapped PC token
-     * @param uniswapV3Factory_ Address of the Uniswap V3 factory
-     * @param uniswapV3SwapRouter_ Address of the Uniswap V3 swap router
-     * @param uniswapV3Quoter_ Address of the Uniswap V3 quoter
+     * @dev                         Initializer function for the upgradeable contract.
+     * @param wpc_                  Address of the wrapped PC token
+     * @param uniswapV3Factory_     Address of the Uniswap V3 factory
+     * @param uniswapV3SwapRouter_  Address of the Uniswap V3 swap router
+     * @param uniswapV3Quoter_      Address of the Uniswap V3 quoter
      */
     function initialize(address wpc_, address uniswapV3Factory_, address uniswapV3SwapRouter_, address uniswapV3Quoter_)
         public
@@ -100,7 +100,6 @@ contract UniversalCore is
         __ReentrancyGuard_init();
         __AccessControl_init();
 
-        // Grant the deployer the default admin role
         _grantRole(DEFAULT_ADMIN_ROLE, msg.sender);
 
         wPCContractAddress = wpc_;
@@ -131,7 +130,6 @@ contract UniversalCore is
         uint256 minPCOut, // 0 = calculate from slippage tolerance
         uint256 deadline // 0 = use default
     ) external onlyUEModule whenNotPaused nonReentrant {
-        // Validate inputs
         if (target == UNIVERSAL_EXECUTOR_MODULE || target == address(this)) revert UniversalCoreErrors.InvalidTarget();
         if (prc20 == address(0)) revert CommonErrors.ZeroAddress();
         if (amount == 0) revert CommonErrors.ZeroAmount();
@@ -144,14 +142,12 @@ contract UniversalCore is
             if (fee == 0) revert UniversalCoreErrors.InvalidFeeTier();
         }
 
-        // Use default deadline if not provided
         if (deadline == 0) {
             deadline = block.timestamp + (defaultDeadlineMins * 1 minutes);
         }
 
         if (block.timestamp > deadline) revert CommonErrors.DeadlineExpired();
 
-        // Check pool exists
         address pool = IUniswapV3Factory(uniswapV3FactoryAddress).getPool(
             prc20 < wPCContractAddress ? prc20 : wPCContractAddress,
             prc20 < wPCContractAddress ? wPCContractAddress : prc20,
@@ -161,18 +157,13 @@ contract UniversalCore is
 
         // Calculate minimum output if not provided
         if (minPCOut == 0) {
-            // ToDo: check for accuracy
-            // Get expected output from Uniswap V3 Quoter
             uint256 expectedOutput = getSwapQuote(prc20, wPCContractAddress, fee, amount);
 
             // Calculate minimum output based on slippage tolerance
             minPCOut = calculateMinOutput(expectedOutput, prc20);
         }
 
-        // Deposit PRC20 tokens to this contract
         IPRC20(prc20).deposit(address(this), amount);
-
-        // Approve Uniswap V3 router to spend PRC20 tokens
         IPRC20(prc20).approve(uniswapV3SwapRouterAddress, amount);
 
         // Swap PRC20 -> native PC (wrapped PC) via ExactInputSingle
@@ -304,12 +295,12 @@ contract UniversalCore is
     }
 
     /**
-     * @notice Gets quote for token swap using Uniswap V3 Quoter
-     * @param tokenIn Input token
-     * @param tokenOut Output token
-     * @param fee Fee tier
-     * @param amountIn Input amount
-     * @return amountOut Expected output amount
+     * @notice              Gets quote for token swap using Uniswap V3 Quoter
+     * @param tokenIn       Input token
+     * @param tokenOut      Output token
+     * @param fee           Fee tier
+     * @param amountIn      Input amount
+     * @return amountOut    Expected output amount
      */
     function getSwapQuote(address tokenIn, address tokenOut, uint24 fee, uint256 amountIn)
         public
@@ -326,10 +317,10 @@ contract UniversalCore is
     }
 
     /**
-     * @notice Calculates minimum output based on slippage tolerance
-     * @param expectedOutput Expected output amount from quote (in PC tokens)
-     * @param token Token address to get slippage tolerance for
-     * @return minAmountOut Minimum output amount (in PC tokens)
+     * @notice                  Calculates minimum output based on slippage tolerance
+     * @param expectedOutput    Expected output amount from quote (in PC tokens)
+     * @param token             Token address to get slippage tolerance for
+     * @return minAmountOut     Minimum output amount (in PC tokens)
      */
     function calculateMinOutput(uint256 expectedOutput, address token) internal view returns (uint256) {
         uint256 tolerance = slippageTolerance[token];

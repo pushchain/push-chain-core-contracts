@@ -21,7 +21,7 @@ struct UniversalPayload {
     uint256 gasLimit;               // Maximum gas to be used for this tx (caps refund amount)
     uint256 maxFeePerGas;           // Maximum fee per gas unit
     uint256 maxPriorityFeePerGas;   // Maximum priority fee per gas unit
-    uint256 nonce;                  // Chain ID where this should be executed
+    uint256 nonce;                  // Nonce of the Transaction
     uint256 deadline;               // Timestamp after which this payload is invalid
     VerificationType vType;         // Type of verification to use before execution (signedVerification or universalTxVerification)
 }

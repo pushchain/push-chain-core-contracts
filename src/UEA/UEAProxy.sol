@@ -7,11 +7,12 @@ import {Proxy} from "@openzeppelin/contracts/proxy/Proxy.sol";
 
 /**
  * @title UEAProxy
- * @dev This is the clone that gets deployed via EIP1167 by UEAFactory.
- *      This represents a proxy contract that forwards all calls to a pre-defined UEA implementation contract.
- *      The Implementation contract is stored in the UEA_LOGIC_SLOT, i.e., keccak256("uea.proxy.implementation") - 1.
- *      The proxy is designed to be deployed via CREATE2 using OpenZeppelin's Clones library.
- *      Any calls to the proxy will be forwarded to the implementation contract.
+ * @dev     This is the clone that gets deployed via EIP1167 by UEAFactory.
+ *          This represents a proxy contract that forwards all calls to a pre-defined UEA implementation contract.
+ * 
+ * Note:    The Implementation contract is stored in the UEA_LOGIC_SLOT, i.e., keccak256("uea.proxy.implementation") - 1.
+ *          The proxy is designed to be deployed via CREATE2 using OpenZeppelin's Clones library.
+ *          Any calls to the proxy will be forwarded to the implementation contract.
  */
 contract UEAProxy is Initializable, Proxy {
     /// @dev Storage slot with the address of the current implementation.
@@ -35,8 +36,10 @@ contract UEAProxy is Initializable, Proxy {
     }
 
     /**
-     * @dev Returns the current implementation address.
-     * @return impl The address of the current implementation
+     * @notice Returns the current implementation address stored in the proxy
+     * @dev Reads the implementation address from the UEA_LOGIC_SLOT storage slot
+     *      This is the address that all calls to the proxy will be delegated to
+     * @return impl The address of the current UEA implementation contract
      */
     function getImplementation() public view returns (address impl) {
         assembly {
