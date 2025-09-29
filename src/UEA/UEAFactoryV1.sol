@@ -173,7 +173,7 @@ contract UEAFactoryV1 is Initializable, OwnableUpgradeable, IUEAFactory {
 
         // Store mappings
         UOA_to_UEA[salt] = _UEAProxy;
-        UEA_to_UOA[_UEAProxy] = _id; // Store the inverse mapping
+        UEA_to_UOA[_UEAProxy] = _id;
 
         emit UEADeployed(_UEAProxy, _id.owner, _id.chainId, chainHash);
         return _UEAProxy;
@@ -194,7 +194,6 @@ contract UEAFactoryV1 is Initializable, OwnableUpgradeable, IUEAFactory {
         }
 
         bytes32 salt = generateSalt(_id);
-        // We're predicting the address of the UEAProxy using the fixed implementation
         return UEA_PROXY_IMPLEMENTATION.predictDeterministicAddress(salt, address(this));
     }
 
@@ -219,19 +218,15 @@ contract UEAFactoryV1 is Initializable, OwnableUpgradeable, IUEAFactory {
     /// @inheritdoc IUEAFactory
 
     function getUEAForOrigin(UniversalAccountId memory _id) external view returns (address uea, bool isDeployed) {
-        // Generate salt from the UniversalAccountId struct
         bytes32 salt = generateSalt(_id);
 
-        // Check if we already have a mapping
         uea = UOA_to_UEA[salt];
 
         if (uea != address(0)) {
-            // We have a mapping, but check if it's actually deployed
             isDeployed = hasCode(uea);
             return (uea, isDeployed);
         }
 
-        // No mapping exists, compute the address
         uea = computeUEA(_id);
         isDeployed = hasCode(uea);
 
@@ -244,9 +239,9 @@ contract UEAFactoryV1 is Initializable, OwnableUpgradeable, IUEAFactory {
     //========================
 
     /**
-     * @dev Helper function to check if an address has code deployed
-     * @param _addr The address to check
-     * @return True if the address has code, false otherwise
+     * @dev         Helper function to check if an address has code deployed
+     * @param _addr address to check
+     * @return bool True if the address has code, false otherwise
      */
     function hasCode(address _addr) public view returns (bool) {
         uint256 size;
@@ -257,9 +252,9 @@ contract UEAFactoryV1 is Initializable, OwnableUpgradeable, IUEAFactory {
     }
 
     /**
-     * @dev Generates a unique salt for CREATE2 deployment based on Universal Account info
-     * @param _id The Universal Account information
-     * @return A unique salt derived from the account information
+     * @dev             Generates a unique salt for CREATE2 deployment based on Universal Account info
+     * @param _id       Universal Account information
+     * @return bytes32  a unique salt derived from the account information
      */
     function generateSalt(UniversalAccountId memory _id) public pure returns (bytes32) {
         return keccak256(abi.encode(_id));

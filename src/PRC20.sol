@@ -6,9 +6,8 @@ import {IPRC20} from "./interfaces/IPRC20.sol";
 import {PRC20Errors, CommonErrors} from "./libraries/Errors.sol";
 import "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol";
 
-/// @title  PRC20 — Push Chain Synthetic Token (ZRC20-inspired)
+/// @title  PRC20 — Push Chain Synthetic Token
 /// @notice ERC-20 compatible synthetic token minted/burned by Push Chain protocol.
-/// @dev    All imperative functionality is handled by the UniversalCore contract and Universal Executor Module.
 contract PRC20 is IPRC20, Initializable {
     /// @notice The protocol's privileged executor module (auth & fee sink)
     address public immutable UNIVERSAL_EXECUTOR_MODULE = 0x14191Ea54B4c176fCf86f51b0FAc7CB1E71Df7d7;
