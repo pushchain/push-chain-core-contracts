@@ -11,7 +11,7 @@ contract DeploySmartAccountScript is Script {
     function run() external {
         vm.startBroadcast();
 
-        address owner = 0xa96CaA79eb2312DbEb0B8E93c1Ce84C98b67bF11;
+        address owner = 0x778D3206374f8AC265728E18E3fE2Ae6b93E4ce4;
         bytes32 evmHash = keccak256(abi.encode("EVM"));
         bytes32 svmHash = keccak256(abi.encode("SVM"));
         bytes32 evmSepoliaHash = keccak256(abi.encode("eip155",'11155111'));
