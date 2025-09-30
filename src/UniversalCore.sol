@@ -73,14 +73,6 @@ contract UniversalCore is
         if (!hasRole(DEFAULT_ADMIN_ROLE, msg.sender)) revert CommonErrors.InvalidOwner();   
         _;
     }
-
-    /**
-     * @dev                         Only fungible module can deploy a universalCore contract.
-     * @param wpc_                  Address of the wrapped PC token
-     * @param uniswapV3Factory_     Address of the Uniswap V3 factory
-     * @param uniswapV3SwapRouter_  Address of the Uniswap V3 swap router
-     * @param uniswapV3Quoter_      Address of the Uniswap V3 quoter
-     */
     constructor() {
         _disableInitializers();
     }
