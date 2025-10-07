@@ -37,7 +37,7 @@
           </tr>
           <tr>
             <td class="headerItem">Test Date:</td>
-            <td class="headerValue">2025-10-07 15:49:52</td>
+            <td class="headerValue">2025-10-08 01:13:30</td>
             <td></td>
             <td class="headerItem">Functions:</td>
             <td class="headerCovTableEntryHi">100.0&nbsp;%</td>
@@ -77,10 +77,10 @@
 <span id="L15"><span class="lineNum">      15</span>              :      * @param initData The initialization data to pass to the proxy</span>
 <span id="L16"><span class="lineNum">      16</span>              :      * @return proxy The deployed proxy contract</span>
 <span id="L17"><span class="lineNum">      17</span>              :      */</span>
-<span id="L18"><span class="lineNum">      18</span> <span class="tlaGNC">         199 :     function deployUpgradeableContract(address implementation, bytes memory initData) public returns (address) {</span></span>
+<span id="L18"><span class="lineNum">      18</span> <span class="tlaGNC">         197 :     function deployUpgradeableContract(address implementation, bytes memory initData) public returns (address) {</span></span>
 <span id="L19"><span class="lineNum">      19</span>              :         // Deploy the proxy</span>
-<span id="L20"><span class="lineNum">      20</span> <span class="tlaGNC">         199 :         ERC1967Proxy proxy = new ERC1967Proxy(implementation, initData);</span></span>
-<span id="L21"><span class="lineNum">      21</span> <span class="tlaGNC">         199 :         return address(proxy);</span></span>
+<span id="L20"><span class="lineNum">      20</span> <span class="tlaGNC">         197 :         ERC1967Proxy proxy = new ERC1967Proxy(implementation, initData);</span></span>
+<span id="L21"><span class="lineNum">      21</span> <span class="tlaGNC">         197 :         return address(proxy);</span></span>
 <span id="L22"><span class="lineNum">      22</span>              :     }</span>
 <span id="L23"><span class="lineNum">      23</span>              : }</span>
         </pre>

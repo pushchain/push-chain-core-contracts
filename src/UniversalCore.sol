@@ -154,11 +154,9 @@ contract UniversalCore is
         // Calculate minimum output if not provided
         if (minPCOut == 0) {
             uint256 expectedOutput = getSwapQuote(prc20, wPCContractAddress, fee, amount);
-
             // Calculate minimum output based on slippage tolerance
             minPCOut = calculateMinOutput(expectedOutput, prc20);
         }
-
         IPRC20(prc20).deposit(address(this), amount);
         IPRC20(prc20).approve(uniswapV3SwapRouterAddress, amount);
 
@@ -300,7 +298,6 @@ contract UniversalCore is
      */
     function getSwapQuote(address tokenIn, address tokenOut, uint24 fee, uint256 amountIn)
         public
-        view
         returns (uint256)
     {
         // Use QuoterV2 interface with struct parameter
@@ -312,38 +309,12 @@ contract UniversalCore is
             sqrtPriceLimitX96: 0
         });
 
-        // QuoterV2 always reverts on-chain, so we need to catch the revert and decode the data
-        try IQuoterV2(uniswapV3QuoterAddress).quoteExactInputSingle(params) returns (
-            uint256 amountOut, uint160 sqrtPriceX96After, uint32 initializedTicksCrossed, uint256 gasEstimate
-        ) {
-            // This branch will never execute on-chain, but included for completeness
-            return amountOut;
-        } catch (bytes memory reason) {
-            // QuoterV2 revert data format: (uint256 amountOut, uint160 sqrtPriceX96After, uint32 initializedTicksCrossed, uint256 gasEstimate)
-            if (reason.length >= 128) { // 4 * 32 bytes
-                try this.decodeQuoterV2Revert(reason) returns (uint256 amountOut) {
-                    if (amountOut == 0) {
-                        return amountIn / 1000; // Return 1/1000 of input as rough estimate
-                    }
-                    return amountOut;
-                } catch {
-                    return amountIn / 1000; // Return 1/1000 of input as rough estimate
-                }
-            } else {
-                // If decoding fails, return a reasonable fallback
-                return amountIn / 1000; // Return 1/1000 of input as rough estimate
-            }
-        }
+        // Call QuoterV2 directly - it handles the revert internally and returns the values
+        (uint256 amountOut, , , ) = IQuoterV2(uniswapV3QuoterAddress).quoteExactInputSingle(params);
+        
+        return amountOut;
     }
 
-    /**
-     * @notice Helper function to decode QuoterV2 revert data
-     * @param data The revert data from QuoterV2
-     * @return amountOut The decoded amount out
-     */
-    function decodeQuoterV2Revert(bytes memory data) external pure returns (uint256 amountOut) {
-        (amountOut,,,) = abi.decode(data, (uint256, uint160, uint32, uint256));
-    }
 
     /**
      * @notice                  Calculates minimum output based on slippage tolerance

@@ -68,12 +68,16 @@ contract UniversalCoreV0 is
     address public wPCContractAddress;
 
     modifier onlyUEModule() {
-        if (msg.sender != UNIVERSAL_EXECUTOR_MODULE) revert UniversalCoreErrors.CallerIsNotUEModule();
+        if (msg.sender != UNIVERSAL_EXECUTOR_MODULE) {
+            revert UniversalCoreErrors.CallerIsNotUEModule();
+        }
         _;
     }
 
     modifier onlyOwner() {
-        if (!hasRole(DEFAULT_ADMIN_ROLE, msg.sender)) revert CommonErrors.InvalidOwner();
+        if (!hasRole(DEFAULT_ADMIN_ROLE, msg.sender)) {
+            revert CommonErrors.InvalidOwner();
+        }
         _;
     }
 
@@ -125,7 +129,9 @@ contract UniversalCoreV0 is
      * @param target Address to deposit tokens to
      */
     function depositPRC20Token(address prc20, uint256 amount, address target) external onlyUEModule whenNotPaused {
-        if (target == UNIVERSAL_EXECUTOR_MODULE || target == address(this)) revert UniversalCoreErrors.InvalidTarget();
+        if (target == UNIVERSAL_EXECUTOR_MODULE || target == address(this)) {
+            revert UniversalCoreErrors.InvalidTarget();
+        }
         if (prc20 == address(0)) revert CommonErrors.ZeroAddress();
         if (amount == 0) revert CommonErrors.ZeroAmount();
 
@@ -141,7 +147,9 @@ contract UniversalCoreV0 is
      * @param target Address to deposit tokens to
      */
     function mintPRCTokensviaAdmin(address prc20, uint256 amount, address target) external onlyOwner whenNotPaused {
-        if (target == UNIVERSAL_EXECUTOR_MODULE || target == address(this)) revert UniversalCoreErrors.InvalidTarget();
+        if (target == UNIVERSAL_EXECUTOR_MODULE || target == address(this)) {
+            revert UniversalCoreErrors.InvalidTarget();
+        }
         if (prc20 == address(0)) revert CommonErrors.ZeroAddress();
         if (amount == 0) revert CommonErrors.ZeroAmount();
 
@@ -172,11 +180,15 @@ contract UniversalCoreV0 is
         uint256 deadline // 0 = use default
     ) external onlyUEModule whenNotPaused nonReentrant {
         // Validate inputs
-        if (target == UNIVERSAL_EXECUTOR_MODULE || target == address(this)) revert UniversalCoreErrors.InvalidTarget();
+        if (target == UNIVERSAL_EXECUTOR_MODULE || target == address(this)) {
+            revert UniversalCoreErrors.InvalidTarget();
+        }
         if (prc20 == address(0)) revert CommonErrors.ZeroAddress();
         if (amount == 0) revert CommonErrors.ZeroAmount();
 
-        if (!isAutoSwapSupported[prc20]) revert UniversalCoreErrors.AutoSwapNotSupported();
+        if (!isAutoSwapSupported[prc20]) {
+            revert UniversalCoreErrors.AutoSwapNotSupported();
+        }
 
         // Use default fee tier if not provided
         if (fee == 0) {
@@ -328,7 +340,9 @@ contract UniversalCoreV0 is
      */
     function setSlippageTolerance(address token, uint256 tolerance) external onlyOwner {
         if (token == address(0)) revert CommonErrors.ZeroAddress();
-        if (tolerance > 5000) revert UniversalCoreErrors.InvalidSlippageTolerance(); // Max 50%
+        if (tolerance > 5000) {
+            revert UniversalCoreErrors.InvalidSlippageTolerance();
+        } // Max 50%
         slippageTolerance[token] = tolerance;
         emit SetSlippageTolerance(token, tolerance);
     }
@@ -366,11 +380,7 @@ contract UniversalCoreV0 is
      * @param amountIn Input amount
      * @return amountOut Expected output amount
      */
-    function getSwapQuote(address tokenIn, address tokenOut, uint24 fee, uint256 amountIn)
-        public
-        view
-        returns (uint256)
-    {
+    function getSwapQuote(address tokenIn, address tokenOut, uint24 fee, uint256 amountIn) public returns (uint256) {
         // Use QuoterV2 interface with struct parameter
         IQuoterV2.QuoteExactInputSingleParams memory params = IQuoterV2.QuoteExactInputSingleParams({
             tokenIn: tokenIn,
@@ -380,30 +390,11 @@ contract UniversalCoreV0 is
             sqrtPriceLimitX96: 0
         });
 
-        // QuoterV2 always reverts on-chain, so we need to catch the revert and decode the data
-        try IQuoterV2(uniswapV3QuoterAddress).quoteExactInputSingle(params) returns (
-            uint256 amountOut, uint160 sqrtPriceX96After, uint32 initializedTicksCrossed, uint256 gasEstimate
-        ) {
-            // This branch will never execute on-chain, but included for completeness
-            return amountOut;
-        } catch (bytes memory reason) {
-            // The revert data might be in a different format
-            // Let's try to decode it step by step
-            if (reason.length >= 32) {
-                // Try to decode as a single uint256 (amountOut)
-                uint256 amountOut = abi.decode(reason, (uint256));
-                // If amountOut is 0, return a small positive value to avoid calculation issues
-                if (amountOut == 0) {
-                    return 1; // Return 1 wei to avoid division by zero and underflow issues
-                }
-                return amountOut;
-            } else {
-                // If decoding fails, return 1 wei to avoid calculation issues
-                return 1;
-            }
-        }
-    }
+        // Call QuoterV2 directly - it handles the revert internally and returns the values
+        (uint256 amountOut,,,) = IQuoterV2(uniswapV3QuoterAddress).quoteExactInputSingle(params);
 
+        return amountOut;
+    }
 
     /**
      * @notice                  Calculates minimum output based on slippage tolerance

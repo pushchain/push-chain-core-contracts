@@ -12,7 +12,11 @@ interface IUniswapV3Factory {
      * @param fee The fee tier
      * @return pool The address of the pool
      */
-    function getPool(address tokenA, address tokenB, uint24 fee) external view returns (address pool);
+    function getPool(
+        address tokenA,
+        address tokenB,
+        uint24 fee
+    ) external view returns (address pool);
 }
 
 /**
@@ -35,7 +39,9 @@ interface ISwapRouter {
      * @param params The parameters necessary for the swap
      * @return amountOut The amount of the received token
      */
-    function exactInputSingle(ExactInputSingleParams calldata params) external payable returns (uint256 amountOut);
+    function exactInputSingle(
+        ExactInputSingleParams calldata params
+    ) external payable returns (uint256 amountOut);
 }
 
 /**
@@ -58,8 +64,42 @@ interface IQuoterV2 {
      * @return initializedTicksCrossed The number of initialized ticks crossed
      * @return gasEstimate The estimated gas for the swap
      */
-    function quoteExactInputSingle(QuoteExactInputSingleParams memory params)
+    function quoteExactInputSingle(
+        QuoteExactInputSingleParams memory params
+    )
+        external
+        returns (
+            uint256 amountOut,
+            uint160 sqrtPriceX96After,
+            uint32 initializedTicksCrossed,
+            uint256 gasEstimate
+        );
+}
+
+/**
+ * @dev Interface for Uniswap V3 Pool
+ */
+interface IUniswapV3Pool {
+    /**
+     * @dev Returns the current price and tick information
+     * @return sqrtPriceX96 The current price of the pool as a sqrt(token1/token0) Q64.96 value
+     * @return tick The current tick of the pool
+     * @return observationIndex The index of the last oracle observation
+     * @return observationCardinality The current maximum number of observations
+     * @return observationCardinalityNext The next maximum number of observations
+     * @return feeProtocol The protocol fee for both tokens of the pool
+     * @return unlocked Whether the pool is currently locked to reentrancy
+     */
+    function slot0()
         external
         view
-        returns (uint256 amountOut, uint160 sqrtPriceX96After, uint32 initializedTicksCrossed, uint256 gasEstimate);
+        returns (
+            uint160 sqrtPriceX96,
+            int24 tick,
+            uint16 observationIndex,
+            uint16 observationCardinality,
+            uint16 observationCardinalityNext,
+            uint8 feeProtocol,
+            bool unlocked
+        );
 }
