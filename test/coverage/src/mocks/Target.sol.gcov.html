@@ -37,7 +37,7 @@
           </tr>
           <tr>
             <td class="headerItem">Test Date:</td>
-            <td class="headerValue">2025-07-08 17:43:50</td>
+            <td class="headerValue">2025-10-07 15:49:52</td>
             <td></td>
             <td class="headerItem">Functions:</td>
             <td class="headerCovTableEntryHi">100.0&nbsp;%</td>
@@ -49,9 +49,9 @@
             <td></td>
             <td></td>
             <td class="headerItem">Branches:</td>
-            <td class="headerCovTableEntryLo">50.0&nbsp;%</td>
+            <td class="headerCovTableEntryLo">0.0&nbsp;%</td>
             <td class="headerCovTableEntry">2</td>
-            <td class="headerCovTableEntry">1</td>
+            <td class="headerCovTableEntry">0</td>
           </tr>
                   <tr><td><img src="../../glass.png" width=3 height=3 alt=""></td></tr>
                 </table>
@@ -76,19 +76,19 @@
 <span id="L5"><span class="lineNum">       5</span>                 :             :     uint256 public magicNumber;</span>
 <span id="L6"><span class="lineNum">       6</span>                 :             : </span>
 <span id="L7"><span class="lineNum">       7</span>                 :             :     // Setter function to set the magic number without any cost</span>
-<span id="L8"><span class="lineNum">       8</span>                 :<span class="tlaGNC">           6 :     function setMagicNumber(uint256 _magicNumber) public {</span></span>
-<span id="L9"><span class="lineNum">       9</span>                 :<span class="tlaGNC">           6 :         magicNumber = _magicNumber;</span></span>
+<span id="L8"><span class="lineNum">       8</span>                 :<span class="tlaGNC">          25 :     function setMagicNumber(uint256 _magicNumber) public {</span></span>
+<span id="L9"><span class="lineNum">       9</span>                 :<span class="tlaGNC">          25 :         magicNumber = _magicNumber;</span></span>
 <span id="L10"><span class="lineNum">      10</span>                 :             :     }</span>
 <span id="L11"><span class="lineNum">      11</span>                 :             : </span>
 <span id="L12"><span class="lineNum">      12</span>                 :             :     // Setter function to set the magic number with a cost of 0.1 ETH</span>
-<span id="L13"><span class="lineNum">      13</span>                 :<span class="tlaGNC">           2 :     function setMagicNumberWithFee(uint256 _magicNumber) public payable {</span></span>
-<span id="L14"><span class="lineNum">      14</span>         [<span class="tlaUNC" title="Branch 0 was not executed"> # </span><span class="tlaGBC" title="Branch 1 was taken 2 times"> + </span>]:<span class="tlaGNC">           2 :         require(msg.value == 0.1 ether, &quot;Insufficient fee: 0.1 ETH required&quot;);</span></span>
-<span id="L15"><span class="lineNum">      15</span>                 :<span class="tlaGNC">           2 :         magicNumber = _magicNumber;</span></span>
+<span id="L13"><span class="lineNum">      13</span>                 :<span class="tlaGNC">          16 :     function setMagicNumberWithFee(uint256 _magicNumber) public payable {</span></span>
+<span id="L14"><span class="lineNum">      14</span>         [<span class="tlaUNC" title="Branch 0 was not executed"> # </span><span class="tlaUNC" title="Branch 1 was not executed"> # </span>]:<span class="tlaGNC">          16 :         require(msg.value == 0.1 ether, &quot;Insufficient fee: 0.1 ETH required&quot;);</span></span>
+<span id="L15"><span class="lineNum">      15</span>                 :<span class="tlaGNC">          16 :         magicNumber = _magicNumber;</span></span>
 <span id="L16"><span class="lineNum">      16</span>                 :             :     }</span>
 <span id="L17"><span class="lineNum">      17</span>                 :             : </span>
 <span id="L18"><span class="lineNum">      18</span>                 :             :     // Getter function to retrieve the magic number</span>
-<span id="L19"><span class="lineNum">      19</span>                 :<span class="tlaGNC">           8 :     function getMagicNumber() public view returns (uint256) {</span></span>
-<span id="L20"><span class="lineNum">      20</span>                 :<span class="tlaGNC">           8 :         return magicNumber;</span></span>
+<span id="L19"><span class="lineNum">      19</span>                 :<span class="tlaGNC">          30 :     function getMagicNumber() public view returns (uint256) {</span></span>
+<span id="L20"><span class="lineNum">      20</span>                 :<span class="tlaGNC">          30 :         return magicNumber;</span></span>
 <span id="L21"><span class="lineNum">      21</span>                 :             :     }</span>
 <span id="L22"><span class="lineNum">      22</span>                 :             : }</span>
         </pre>
@@ -99,7 +99,7 @@
 
           <table width="100%" border=0 cellspacing=0 cellpadding=0>
             <tr><td class="ruler"><img src="../../glass.png" width=3 height=3 alt=""></td></tr>
-            <tr><td class="versionInfo">Generated by: <a href="https://github.com//linux-test-project/lcov" target="_parent">LCOV version 2.3.1-1</a></td></tr>
+            <tr><td class="versionInfo">Generated by: <a href="https://github.com//linux-test-project/lcov" target="_parent">LCOV version 2.3.2-1</a></td></tr>
           </table>
           <br>
 

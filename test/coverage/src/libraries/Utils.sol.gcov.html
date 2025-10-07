@@ -37,7 +37,7 @@
           </tr>
           <tr>
             <td class="headerItem">Test Date:</td>
-            <td class="headerValue">2025-07-08 17:43:50</td>
+            <td class="headerValue">2025-10-07 15:49:52</td>
             <td></td>
             <td class="headerItem">Functions:</td>
             <td class="headerCovTableEntryHi">100.0&nbsp;%</td>
@@ -49,9 +49,9 @@
             <td></td>
             <td></td>
             <td class="headerItem">Branches:</td>
-            <td class="headerCovTableEntryHi">100.0&nbsp;%</td>
+            <td class="headerCovTableEntryLo">50.0&nbsp;%</td>
             <td class="headerCovTableEntry">4</td>
-            <td class="headerCovTableEntry">4</td>
+            <td class="headerCovTableEntry">2</td>
           </tr>
                   <tr><td><img src="../../glass.png" width=3 height=3 alt=""></td></tr>
                 </table>
@@ -78,23 +78,23 @@
 <span id="L7"><span class="lineNum">       7</span>                 :             :  */</span>
 <span id="L8"><span class="lineNum">       8</span>                 :             : library StringUtils {</span>
 <span id="L9"><span class="lineNum">       9</span>                 :             :     /**</span>
-<span id="L10"><span class="lineNum">      10</span>                 :             :      * @notice Converts a strictly numeric decimal string to a uint256.</span>
-<span id="L11"><span class="lineNum">      11</span>                 :             :      * @dev Reverts if the string contains non-digit characters or overflows uint256.</span>
+<span id="L10"><span class="lineNum">      10</span>                 :             :      * @notice  Converts a strictly numeric decimal string to a uint256.</span>
+<span id="L11"><span class="lineNum">      11</span>                 :             :      * @dev     Reverts if the string contains non-digit characters or overflows uint256.</span>
 <span id="L12"><span class="lineNum">      12</span>                 :             :      * @param s The string to convert, e.g., &quot;12345&quot;.</span>
-<span id="L13"><span class="lineNum">      13</span>                 :             :      * @return result The resulting unsigned integer.</span>
+<span id="L13"><span class="lineNum">      13</span>                 :             :      * @return  result The resulting unsigned integer.</span>
 <span id="L14"><span class="lineNum">      14</span>                 :             :      */</span>
-<span id="L15"><span class="lineNum">      15</span>                 :<span class="tlaGNC">         561 :     function stringToExactUInt256(string memory s) internal pure returns (uint256 result) {</span></span>
-<span id="L16"><span class="lineNum">      16</span>                 :<span class="tlaGNC">         561 :         bytes memory b = bytes(s);</span></span>
-<span id="L17"><span class="lineNum">      17</span>                 :<span class="tlaGNC">         561 :         uint256 len = b.length;</span></span>
+<span id="L15"><span class="lineNum">      15</span>                 :<span class="tlaGNC">         604 :     function stringToExactUInt256(string memory s) internal pure returns (uint256 result) {</span></span>
+<span id="L16"><span class="lineNum">      16</span>                 :<span class="tlaGNC">         604 :         bytes memory b = bytes(s);</span></span>
+<span id="L17"><span class="lineNum">      17</span>                 :<span class="tlaGNC">         604 :         uint256 len = b.length;</span></span>
 <span id="L18"><span class="lineNum">      18</span>                 :             : </span>
-<span id="L19"><span class="lineNum">      19</span>         [<span class="tlaGBC" title="Branch 0 was taken 1 time"> + </span><span class="tlaGBC" title="Branch 1 was taken 560 times"> + </span>]:<span class="tlaGNC">         561 :         require(len &gt; 0, &quot;Empty string cannot be converted.&quot;);</span></span>
+<span id="L19"><span class="lineNum">      19</span>         [<span class="tlaUNC" title="Branch 0 was not executed"> # </span><span class="tlaUNC" title="Branch 1 was not executed"> # </span>]:<span class="tlaGNC">         604 :         require(len &gt; 0, &quot;Empty string cannot be converted.&quot;);</span></span>
 <span id="L20"><span class="lineNum">      20</span>                 :             : </span>
-<span id="L21"><span class="lineNum">      21</span>                 :<span class="tlaGNC">         560 :         for (uint256 i = 0; i &lt; len; ++i) {</span></span>
-<span id="L22"><span class="lineNum">      22</span>                 :<span class="tlaGNC">        7208 :             uint8 c = uint8(b[i]);</span></span>
-<span id="L23"><span class="lineNum">      23</span>         [<span class="tlaGBC" title="Branch 0 was taken 6 times"> + </span><span class="tlaGBC" title="Branch 1 was taken 7202 times"> + </span>]:<span class="tlaGNC">        7208 :             require(c &gt;= 48 &amp;&amp; c &lt;= 57, &quot;Non-digit character found.&quot;); // ASCII '0' to '9'</span></span>
+<span id="L21"><span class="lineNum">      21</span>                 :<span class="tlaGNC">         603 :         for (uint256 i = 0; i &lt; len; ++i) {</span></span>
+<span id="L22"><span class="lineNum">      22</span>                 :<span class="tlaGNC">        6963 :             uint8 c = uint8(b[i]);</span></span>
+<span id="L23"><span class="lineNum">      23</span>         [<span class="tlaGBC" title="Branch 0 was taken 6963 times"> + </span><span class="tlaGBC" title="Branch 1 was taken 6959 times"> + </span>]:<span class="tlaGNC">        6963 :             require(c &gt;= 48 &amp;&amp; c &lt;= 57, &quot;Non-digit character found.&quot;); // ASCII '0' to '9'</span></span>
 <span id="L24"><span class="lineNum">      24</span>                 :             : </span>
 <span id="L25"><span class="lineNum">      25</span>                 :             :             // Multiply current result by 10 and add the new digit</span>
-<span id="L26"><span class="lineNum">      26</span>                 :<span class="tlaGNC">        7202 :             result = result * 10 + (c - 48);</span></span>
+<span id="L26"><span class="lineNum">      26</span>                 :<span class="tlaGNC">        6963 :             result = result * 10 + (c - 48);</span></span>
 <span id="L27"><span class="lineNum">      27</span>                 :             :         }</span>
 <span id="L28"><span class="lineNum">      28</span>                 :             :     }</span>
 <span id="L29"><span class="lineNum">      29</span>                 :             : }</span>
@@ -106,7 +106,7 @@
 
           <table width="100%" border=0 cellspacing=0 cellpadding=0>
             <tr><td class="ruler"><img src="../../glass.png" width=3 height=3 alt=""></td></tr>
-            <tr><td class="versionInfo">Generated by: <a href="https://github.com//linux-test-project/lcov" target="_parent">LCOV version 2.3.1-1</a></td></tr>
+            <tr><td class="versionInfo">Generated by: <a href="https://github.com//linux-test-project/lcov" target="_parent">LCOV version 2.3.2-1</a></td></tr>
           </table>
           <br>
 
