@@ -39,23 +39,27 @@ interface ISwapRouter {
 }
 
 /**
- * @dev Interface for Uniswap V3 Quoter
+ * @dev Interface for Uniswap V3 QuoterV2 (replaces old Quoter)
  */
-interface IQuoter {
+interface IQuoterV2 {
+    struct QuoteExactInputSingleParams {
+        address tokenIn;
+        address tokenOut;
+        uint256 amountIn;
+        uint24 fee;
+        uint160 sqrtPriceLimitX96;
+    }
+
     /**
      * @dev Returns the amount out received for a given exact input swap without executing the swap
-     * @param tokenIn The token being swapped in
-     * @param tokenOut The token being swapped out
-     * @param fee The fee tier of the pool
-     * @param amountIn The amount of tokenIn to swap
-     * @param sqrtPriceLimitX96 The price limit of the pool that cannot be exceeded by the swap
+     * @param params The quote parameters
      * @return amountOut The amount of tokenOut received
+     * @return sqrtPriceX96After The sqrt price after the swap
+     * @return initializedTicksCrossed The number of initialized ticks crossed
+     * @return gasEstimate The estimated gas for the swap
      */
-    function quoteExactInputSingle(
-        address tokenIn,
-        address tokenOut,
-        uint24 fee,
-        uint256 amountIn,
-        uint160 sqrtPriceLimitX96
-    ) external view returns (uint256 amountOut);
+    function quoteExactInputSingle(QuoteExactInputSingleParams memory params)
+        external
+        view
+        returns (uint256 amountOut, uint160 sqrtPriceX96After, uint32 initializedTicksCrossed, uint256 gasEstimate);
 }
