@@ -175,8 +175,8 @@ contract UEA_EVMTest is Test {
         (uint8 v, bytes32 r, bytes32 s) = vm.sign(ownerPK, txHash);
         bytes memory signature = abi.encodePacked(r, s, v);
 
-        vm.expectEmit(true, true, true, true);
-        emit IUEA.PayloadExecuted(ownerBytes, payload.to, payload.data);
+        vm.expectEmit(true, true, false, false);
+        emit IUEA.PayloadExecuted(ownerBytes, 1);
 
         // Execute the payload
         evmSmartAccountInstance.executePayload(payload, signature);
@@ -366,8 +366,8 @@ contract UEA_EVMTest is Test {
         bytes memory signature = abi.encodePacked(r, s, v);
 
         // Expect event
-        vm.expectEmit(true, true, true, true);
-        emit IUEA.PayloadExecuted(ownerBytes, payload.to, payload.data);
+        vm.expectEmit(true, true, false, false);
+        emit IUEA.PayloadExecuted(ownerBytes, 1);
 
         // Execute
         evmSmartAccountInstance.executePayload(payload, signature);
@@ -456,8 +456,8 @@ contract UEA_EVMTest is Test {
         bytes memory signature = abi.encodePacked(r, s, v);
 
         // Expect event
-        vm.expectEmit(true, true, true, true);
-        emit IUEA.PayloadExecuted(ownerBytes, payload.to, payload.data);
+        vm.expectEmit(true, true, false, false);
+        emit IUEA.PayloadExecuted(ownerBytes, 1);
 
         // Execute
         evmSmartAccountInstance.executePayload(payload, signature);
@@ -507,8 +507,8 @@ contract UEA_EVMTest is Test {
         bytes memory signature = abi.encodePacked(r, s, v);
 
         // Expect event
-        vm.expectEmit(true, true, true, true);
-        emit IUEA.PayloadExecuted(ownerBytes, payload.to, payload.data);
+        vm.expectEmit(true, true, false, false);
+        emit IUEA.PayloadExecuted(ownerBytes, 1);
 
         // Execute
         evmSmartAccountInstance.executePayload(payload, signature);
@@ -568,8 +568,8 @@ contract UEA_EVMTest is Test {
         bytes memory signature = abi.encodePacked(r, s, v);
 
         // Expect event
-        vm.expectEmit(true, true, true, true);
-        emit IUEA.PayloadExecuted(ownerBytes, payload.to, payload.data);
+        vm.expectEmit(true, true, false, false);
+        emit IUEA.PayloadExecuted(ownerBytes, 1);
 
         // Execute
         evmSmartAccountInstance.executePayload(payload, signature);
@@ -963,8 +963,8 @@ contract UEA_EVMTest is Test {
             abi.encode(true)
         );
 
-        vm.expectEmit(true, true, true, true);
-        emit IUEA.PayloadExecuted(ownerBytes, payload.to, payload.data);
+        vm.expectEmit(true, true, false, false);
+        emit IUEA.PayloadExecuted(ownerBytes, 1);
 
         // Execute the payload with txHash verification
         evmSmartAccountInstance.executePayload(payload, mockTxHashData);

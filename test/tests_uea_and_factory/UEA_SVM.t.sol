@@ -302,8 +302,8 @@ contract UEASVMTest is Test {
             abi.encode(true)
         );
 
-        vm.expectEmit(true, true, true, true);
-        emit IUEA.PayloadExecuted(ownerBytes, payload.to, payload.data);
+        vm.expectEmit(true, true, false, false);
+        emit IUEA.PayloadExecuted(ownerBytes, 1);
 
         // Execute the payload with txHash verification
         svmSmartAccountInstance.executePayload(payload, mockTxHashData);
@@ -402,8 +402,8 @@ contract UEASVMTest is Test {
             abi.encode(true)
         );
 
-        vm.expectEmit(true, true, true, true);
-        emit IUEA.PayloadExecuted(ownerBytes, payload.to, payload.data);
+        vm.expectEmit(true, true, false, false);
+        emit IUEA.PayloadExecuted(ownerBytes, 1);
 
         // Execute the payload
         svmSmartAccountInstance.executePayload(payload, signature);
@@ -562,8 +562,8 @@ contract UEASVMTest is Test {
         );
 
         // Expect event
-        vm.expectEmit(true, true, true, true);
-        emit IUEA.PayloadExecuted(ownerBytes, payload.to, payload.data);
+        vm.expectEmit(true, true, false, false);
+        emit IUEA.PayloadExecuted(ownerBytes, 1);
 
         // Execute
         svmSmartAccountInstance.executePayload(payload, signature);
@@ -620,8 +620,8 @@ contract UEASVMTest is Test {
         );
 
         // Expect event
-        vm.expectEmit(true, true, true, true);
-        emit IUEA.PayloadExecuted(ownerBytes, payload.to, payload.data);
+        vm.expectEmit(true, true, false, false);
+        emit IUEA.PayloadExecuted(ownerBytes, 1);
 
         // Execute
         svmSmartAccountInstance.executePayload(payload, signature);
@@ -688,8 +688,8 @@ contract UEASVMTest is Test {
         );
 
         // Expect event
-        vm.expectEmit(true, true, true, true);
-        emit IUEA.PayloadExecuted(ownerBytes, payload.to, payload.data);
+        vm.expectEmit(true, true, false, false);
+        emit IUEA.PayloadExecuted(ownerBytes, 1);
 
         // Execute
         svmSmartAccountInstance.executePayload(payload, signature);

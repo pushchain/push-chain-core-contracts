@@ -25,10 +25,9 @@ interface IUEA {
     /**
      * @notice        Emitted when a payload is successfully executed by a UEA.
      * @param caller  The external chain address (UOA) that initiated the execution.
-     * @param target  The target contract address where the payload was executed.
-     * @param data    The calldata that was executed on the target contract.
+     * @param nonce   The nonce of the payload that was executed.
      */
-    event PayloadExecuted(bytes caller, address target, bytes data);
+    event PayloadExecuted(bytes caller, uint256 nonce);
 
     //========================
     //           Functions

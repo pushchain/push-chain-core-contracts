@@ -166,7 +166,7 @@ contract UEA_SVM is ReentrancyGuard, IUEA {
             }
         }
 
-        emit PayloadExecuted(id.owner, payload.to, payload.data);
+        emit PayloadExecuted(id.owner, nonce);
     }
 
     /**
@@ -198,7 +198,7 @@ contract UEA_SVM is ReentrancyGuard, IUEA {
             }
         }
 
-        emit PayloadExecuted(id.owner, payload.migration, migrateCallData);
+        emit PayloadExecuted(id.owner, nonce);
     }
 
     // =========================
