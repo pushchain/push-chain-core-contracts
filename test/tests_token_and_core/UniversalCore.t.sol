@@ -17,6 +17,8 @@ import "../../test/mocks/MaliciousPRC20.sol";
 import "../../test/mocks/RevertingPRC20.sol";
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import "@openzeppelin/contracts-upgradeable/utils/PausableUpgradeable.sol";
+import "@openzeppelin/contracts/access/AccessControl.sol";
+import {IAccessControl} from "@openzeppelin/contracts/access/IAccessControl.sol";
 
 contract UniversalCoreTest is Test, UpgradeableContractHelper {
     UniversalCore public universalCore;
@@ -122,7 +124,7 @@ contract UniversalCoreTest is Test, UpgradeableContractHelper {
     function test_Constructor_DisablesInitializers() public {
         UniversalCore newHandler = new UniversalCore();
         // Should not be able to call initialize on implementation directly
-        vm.expectRevert();
+        vm.expectRevert(Initializable.InvalidInitialization.selector);
         newHandler.initialize(address(mockWPC), address(mockFactory), address(mockRouter), address(mockQuoter));
     }
 
@@ -156,7 +158,7 @@ contract UniversalCoreTest is Test, UpgradeableContractHelper {
     }
 
     function test_Initialize_RevertsOnSecondCall() public {
-        vm.expectRevert();
+        vm.expectRevert(Initializable.InvalidInitialization.selector);
         universalCore.initialize(address(mockWPC), address(mockFactory), address(mockRouter), address(mockQuoter));
     }
 
@@ -166,7 +168,7 @@ contract UniversalCoreTest is Test, UpgradeableContractHelper {
 
     function test_ReceiveETH_Reverts() public {
         // Handler contract has no receive function, so sending ETH should revert
-        vm.expectRevert();
+        vm.expectRevert(IAccessControl.AccessControlUnauthorizedAccount.selector);
         (bool success,) = address(universalCore).call{value: 1 ether}("");
         // Note: This test documents that universalCore doesn't accept ETH directly
         // The assertion will fail if ETH is successfully sent, which is expected
@@ -255,9 +257,14 @@ contract UniversalCoreTest is Test, UpgradeableContractHelper {
         }
 
         // Non-UEM should revert
-        vm.prank(nonUEModule);
-        vm.expectRevert(UniversalCoreErrors.CallerIsNotUEModule.selector);
+        vm.startPrank(nonUEModule);
+        vm.expectRevert(
+            abi.encodeWithSelector(
+                IAccessControl.AccessControlUnauthorizedAccount.selector, nonUEModule, universalCore.MANAGER_ROLE()
+            )
+        );
         universalCore.setGasPCPool(CHAIN_ID, gasToken, FEE_TIER);
+        vm.stopPrank();
 
         // UEM should succeed
         vm.prank(UNIVERSAL_EXECUTOR_MODULE);
@@ -341,9 +348,14 @@ contract UniversalCoreTest is Test, UpgradeableContractHelper {
         uint256 price = 1000;
 
         // Non-UEM should revert
-        vm.prank(nonUEModule);
-        vm.expectRevert(UniversalCoreErrors.CallerIsNotUEModule.selector);
+        vm.startPrank(nonUEModule);
+        vm.expectRevert(
+            abi.encodeWithSelector(
+                IAccessControl.AccessControlUnauthorizedAccount.selector, nonUEModule, universalCore.MANAGER_ROLE()
+            )
+        );
         universalCore.setGasPrice(CHAIN_ID, price);
+        vm.stopPrank();
 
         // UEM should succeed
         vm.prank(UNIVERSAL_EXECUTOR_MODULE);
@@ -371,9 +383,14 @@ contract UniversalCoreTest is Test, UpgradeableContractHelper {
         address prc20 = makeAddr("prc20");
 
         // Non-UEM should revert
-        vm.prank(nonUEModule);
-        vm.expectRevert(UniversalCoreErrors.CallerIsNotUEModule.selector);
+        vm.startPrank(nonUEModule);
+        vm.expectRevert(
+            abi.encodeWithSelector(
+                IAccessControl.AccessControlUnauthorizedAccount.selector, nonUEModule, universalCore.MANAGER_ROLE()
+            )
+        );
         universalCore.setGasTokenPRC20(CHAIN_ID, prc20);
+        vm.stopPrank();
 
         // UEM should succeed
         vm.prank(UNIVERSAL_EXECUTOR_MODULE);
@@ -444,9 +461,9 @@ contract UniversalCoreTest is Test, UpgradeableContractHelper {
     function test_DepositPRC20Token_ZeroPRC20Address() public {
         address target = makeAddr("target");
 
-        // Zero PRC20 address should cause low-level revert
+        // Zero PRC20 address should revert
         vm.prank(UNIVERSAL_EXECUTOR_MODULE);
-        vm.expectRevert();
+        vm.expectRevert(CommonErrors.ZeroAddress.selector);
         universalCore.depositPRC20Token(address(0), 1000, target);
     }
 
