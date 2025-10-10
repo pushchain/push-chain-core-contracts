@@ -4,6 +4,7 @@ pragma solidity 0.8.26;
 import "./interfaces/IPRC20.sol";
 import "./interfaces/IUniswapV3.sol";
 import "./interfaces/IUniversalCore.sol";
+import "./interfaces/IWPC.sol";
 import {UniversalCoreErrors, CommonErrors} from "./libraries/Errors.sol";
 import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
@@ -33,13 +34,13 @@ contract UniversalCoreV0 is
     using SafeERC20 for IERC20;
 
     /// @notice Map to know the gas price of each chain given a chain id.
-    mapping(uint256 => uint256) public _gasPriceByChainId;
+    mapping(string => uint256) public gasPriceByChainId;
 
     /// @notice Map to know the PRC20 address of a token given a chain id, ex pETH, pBNB etc.
-    mapping(uint256 => address) public _gasTokenPRC20ByChainId;
+    mapping(string => address) public gasTokenPRC20ByChainId;
 
     /// @notice Map to know Uniswap V3 pool of PC/PRC20 given a chain id.
-    mapping(uint256 => address) public _gasPCPoolByChainId;
+    mapping(string => address) public gasPCPoolByChainId;
 
     /// @notice Supproted token list for auto swap to PC using Uniswap V3.
     mapping(address => bool) public isAutoSwapSupported;
@@ -56,6 +57,9 @@ contract UniversalCoreV0 is
     /// @notice Fungible address is always the same, it's on protocol level.
     address public immutable UNIVERSAL_EXECUTOR_MODULE = 0x14191Ea54B4c176fCf86f51b0FAc7CB1E71Df7d7;
 
+    /// @notice Role for managing gas-related configurations
+    bytes32 public constant MANAGER_ROLE = keccak256("MANAGER_ROLE");
+
     /// @notice Uniswap V3 addresses.
     address public uniswapV3FactoryAddress;
     address public uniswapV3SwapRouterAddress;
@@ -63,12 +67,6 @@ contract UniversalCoreV0 is
 
     /// @notice Address of the wrapped PC to interact with Uniswap V3.
     address public wPCContractAddress;
-    /// @notice Only for TESTNET : String as key.
-    mapping(string => uint256) public gasPriceByChainId;
-    mapping(string => address) public gasTokenPRC20ByChainId;
-    mapping(string => address) public gasPCPoolByChainId;
-    /// @notice Role for managing gas-related configurations
-    bytes32 public constant MANAGER_ROLE = keccak256("MANAGER_ROLE");
 
     modifier onlyUEModule() {
         if (msg.sender != UNIVERSAL_EXECUTOR_MODULE) {
@@ -113,6 +111,7 @@ contract UniversalCoreV0 is
 
         // Grant the deployer the default admin role
         _grantRole(DEFAULT_ADMIN_ROLE, msg.sender);
+        _grantRole(MANAGER_ROLE, UNIVERSAL_EXECUTOR_MODULE);
 
         wPCContractAddress = wpc_;
         uniswapV3FactoryAddress = uniswapV3Factory_;
@@ -234,7 +233,7 @@ contract UniversalCoreV0 is
             tokenIn: prc20,
             tokenOut: wPCContractAddress,
             fee: fee,
-            recipient: target,
+            recipient: address(this),
             deadline: deadline,
             amountIn: amount,
             amountOutMinimum: minPCOut,
@@ -243,7 +242,9 @@ contract UniversalCoreV0 is
 
         uint256 pcOut = ISwapRouter(uniswapV3SwapRouterAddress).exactInputSingle(params);
         if (pcOut < minPCOut) revert UniversalCoreErrors.SlippageExceeded();
-
+        IWPC(wPCContractAddress).withdraw(pcOut);
+        (bool success,) = target.call{value: pcOut}("");    
+        if (!success) revert CommonErrors.TransferFailed();
         IPRC20(prc20).approve(uniswapV3SwapRouterAddress, 0);
 
         emit DepositPRC20WithAutoSwap(prc20, amount, wPCContractAddress, pcOut, fee, target);
@@ -417,6 +418,14 @@ contract UniversalCoreV0 is
 
         // Calculate minimum output: expectedOutput * (10000 - tolerance) / 10000
         return (expectedOutput * (10000 - tolerance)) / 10000;
+    }
+
+    /**
+     * @notice Receive function to accept native PC transfers from WPC withdraw
+     * @dev This is required for the WPC withdraw functionality to work
+     */
+    receive() external payable {
+        // Accept native PC transfers (e.g., from WPC withdraw)
     }
 
     /**
