@@ -4,6 +4,7 @@ pragma solidity 0.8.26;
 import "./interfaces/IPRC20.sol";
 import "./interfaces/IUniswapV3.sol";
 import "./interfaces/IUniversalCore.sol";
+import "./interfaces/IWPC.sol";
 import {UniversalCoreErrors, CommonErrors} from "./libraries/Errors.sol";
 import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
@@ -40,7 +41,6 @@ contract UniversalCoreV0 is
 
     /// @notice Map to know Uniswap V3 pool of PC/PRC20 given a chain id.
     mapping(uint256 => address) public _gasPCPoolByChainId;
-
     /// @notice Supproted token list for auto swap to PC using Uniswap V3.
     mapping(address => bool) public isAutoSwapSupported;
 
@@ -63,6 +63,7 @@ contract UniversalCoreV0 is
 
     /// @notice Address of the wrapped PC to interact with Uniswap V3.
     address public wPCContractAddress;
+
     /// @notice Only for TESTNET : String as key.
     mapping(string => uint256) public gasPriceByChainId;
     mapping(string => address) public gasTokenPRC20ByChainId;
@@ -234,7 +235,7 @@ contract UniversalCoreV0 is
             tokenIn: prc20,
             tokenOut: wPCContractAddress,
             fee: fee,
-            recipient: target,
+            recipient: address(this),
             deadline: deadline,
             amountIn: amount,
             amountOutMinimum: minPCOut,
@@ -243,7 +244,9 @@ contract UniversalCoreV0 is
 
         uint256 pcOut = ISwapRouter(uniswapV3SwapRouterAddress).exactInputSingle(params);
         if (pcOut < minPCOut) revert UniversalCoreErrors.SlippageExceeded();
-
+        IWPC(wPCContractAddress).withdraw(pcOut);
+        (bool success,) = target.call{value: pcOut}("");    
+        if (!success) revert CommonErrors.TransferFailed();
         IPRC20(prc20).approve(uniswapV3SwapRouterAddress, 0);
 
         emit DepositPRC20WithAutoSwap(prc20, amount, wPCContractAddress, pcOut, fee, target);
@@ -417,6 +420,14 @@ contract UniversalCoreV0 is
 
         // Calculate minimum output: expectedOutput * (10000 - tolerance) / 10000
         return (expectedOutput * (10000 - tolerance)) / 10000;
+    }
+
+    /**
+     * @notice Receive function to accept native PC transfers from WPC withdraw
+     * @dev This is required for the WPC withdraw functionality to work
+     */
+    receive() external payable {
+        // Accept native PC transfers (e.g., from WPC withdraw)
     }
 
     /**

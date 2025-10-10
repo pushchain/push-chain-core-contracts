@@ -18,6 +18,7 @@ library CommonErrors {
     error InvalidInput();
     error DeadlineExpired();
     error InsufficientBalance();
+    error TransferFailed();
 }
 
 // =========================

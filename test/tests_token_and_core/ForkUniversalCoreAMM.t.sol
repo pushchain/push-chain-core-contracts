@@ -3,7 +3,7 @@ pragma solidity 0.8.26;
 
 import "forge-std/Test.sol";
 import "forge-std/console.sol";
-import "../../src/UniversalCore.sol";
+import "../../src/UniversalCoreV0.sol";
 import "../../src/PRC20.sol";
 import "../../src/libraries/Errors.sol";
 import "../../test/helpers/UpgradeableContractHelper.sol";
@@ -45,7 +45,7 @@ contract UniversalCoreSwapTest is Test, UpgradeableContractHelper {
     address user;
 
     // Contracts
-    UniversalCore universalCore;
+    UniversalCoreV0 universalCore;
     PRC20 prc20Token;
 
     // Uniswap V3 interfaces (simplified for testing)
@@ -75,16 +75,16 @@ contract UniversalCoreSwapTest is Test, UpgradeableContractHelper {
         // Deploy PRC20 token
         prc20Token = new PRC20();
 
-        // Deploy UniversalCore implementation
-        UniversalCore implementation = new UniversalCore();
+        // Deploy UniversalCoreV0 implementation
+        UniversalCoreV0 implementation = new UniversalCoreV0();
 
         // Deploy proxy and initialize
         bytes memory initData = abi.encodeWithSelector(
-            UniversalCore.initialize.selector, WPC_TOKEN, UNISWAP_FACTORY, UNISWAP_ROUTER, UNISWAP_QUOTER
+            UniversalCoreV0.initialize.selector, WPC_TOKEN, UNISWAP_FACTORY, UNISWAP_ROUTER, UNISWAP_QUOTER
         );
 
         address proxyAddress = deployUpgradeableContract(address(implementation), initData);
-        universalCore = UniversalCore(payable(proxyAddress));
+        universalCore = UniversalCoreV0(payable(proxyAddress));
 
         vm.stopPrank();
 
@@ -148,7 +148,7 @@ contract UniversalCoreSwapTest is Test, UpgradeableContractHelper {
         uint256 amount = 1e18; // 1 PSOL
         address target = user;
 
-        uint256 initialTargetBalance = IERC20(WPC_TOKEN).balanceOf(target);
+        uint256 initialTargetNativeBalance = target.balance;
         uint256 initialUniversalCorePSOLBalance = IERC20(PSOL_TOKEN).balanceOf(address(universalCore));
 
         // Test the function call - should work with real Uniswap
@@ -167,11 +167,11 @@ contract UniversalCoreSwapTest is Test, UpgradeableContractHelper {
         // Verify the emitted event
         verifyDepositPRC20WithAutoSwapEvent(PSOL_TOKEN, amount, WPC_TOKEN, 500, target);
 
-        uint256 finalTargetBalance = IERC20(WPC_TOKEN).balanceOf(target);
+        uint256 finalTargetNativeBalance = target.balance;
         uint256 finalUniversalCorePSOLBalance = IERC20(PSOL_TOKEN).balanceOf(address(universalCore));
 
-        // User should have received WPC tokens
-        assertTrue(finalTargetBalance > initialTargetBalance, "Target should receive WPC tokens");
+        // User should have received native PC tokens
+        assertTrue(finalTargetNativeBalance > initialTargetNativeBalance, "Target should receive native PC tokens");
 
         // UniversalCore receives PSOL tokens (via minting) and swaps what it can
         // Due to low liquidity, only partial swaps may occur, leaving some PSOL in UniversalCore
@@ -182,10 +182,10 @@ contract UniversalCoreSwapTest is Test, UpgradeableContractHelper {
         );
 
         // Verify that some swap occurred if target received WPC tokens
-        if (finalTargetBalance > initialTargetBalance) {
+        if (finalTargetNativeBalance > initialTargetNativeBalance) {
             assertTrue(
                 finalUniversalCorePSOLBalance < initialUniversalCorePSOLBalance + amount,
-                "Some PSOL should have been swapped if target received WPC"
+                "Some PSOL should have been swapped if target received native PC"
             );
         }
     }
@@ -204,7 +204,7 @@ contract UniversalCoreSwapTest is Test, UpgradeableContractHelper {
         // Record initial balances
         uint256 initialPETHBalance = IERC20(PETH_TOKEN).balanceOf(user);
         uint256 initialWPCBalance = IERC20(WPC_TOKEN).balanceOf(user);
-        uint256 initialTargetBalance = IERC20(WPC_TOKEN).balanceOf(target);
+        uint256 initialTargetNativeBalance = target.balance;
         uint256 initialUniversalCorePETHBalance = IERC20(PETH_TOKEN).balanceOf(address(universalCore));
         uint256 initialUniversalCoreWPCBalance = IERC20(WPC_TOKEN).balanceOf(address(universalCore));
 
@@ -226,12 +226,12 @@ contract UniversalCoreSwapTest is Test, UpgradeableContractHelper {
         // Verify balances after swap
         uint256 finalPETHBalance = IERC20(PETH_TOKEN).balanceOf(user);
         uint256 finalWPCBalance = IERC20(WPC_TOKEN).balanceOf(user);
-        uint256 finalTargetBalance = IERC20(WPC_TOKEN).balanceOf(target);
+        uint256 finalTargetNativeBalance = target.balance;
         uint256 finalUniversalCorePETHBalance = IERC20(PETH_TOKEN).balanceOf(address(universalCore));
         uint256 finalUniversalCoreWPCBalance = IERC20(WPC_TOKEN).balanceOf(address(universalCore));
 
         // User should have received WPC tokens
-        assertTrue(finalTargetBalance > initialTargetBalance, "Target should receive WPC tokens");
+        assertTrue(finalTargetNativeBalance > initialTargetNativeBalance, "Target should receive native PC tokens");
 
         // UniversalCore receives PETH tokens (via minting) but then swaps them all to the pool
         // So final balance should equal initial balance (both 0)
@@ -261,7 +261,7 @@ contract UniversalCoreSwapTest is Test, UpgradeableContractHelper {
         // Record initial balances
         uint256 initialUSDTBalance = IERC20(USDT_TOKEN).balanceOf(user);
         uint256 initialWPCBalance = IERC20(WPC_TOKEN).balanceOf(user);
-        uint256 initialTargetBalance = IERC20(WPC_TOKEN).balanceOf(target);
+        uint256 initialTargetNativeBalance = target.balance;
         uint256 initialUniversalCoreUSDTBalance = IERC20(USDT_TOKEN).balanceOf(address(universalCore));
         uint256 initialUniversalCoreWPCBalance = IERC20(WPC_TOKEN).balanceOf(address(universalCore));
 
@@ -283,12 +283,12 @@ contract UniversalCoreSwapTest is Test, UpgradeableContractHelper {
         // Verify balances after swap
         uint256 finalUSDTBalance = IERC20(USDT_TOKEN).balanceOf(user);
         uint256 finalWPCBalance = IERC20(WPC_TOKEN).balanceOf(user);
-        uint256 finalTargetBalance = IERC20(WPC_TOKEN).balanceOf(target);
+        uint256 finalTargetNativeBalance = target.balance;
         uint256 finalUniversalCoreUSDTBalance = IERC20(USDT_TOKEN).balanceOf(address(universalCore));
         uint256 finalUniversalCoreWPCBalance = IERC20(WPC_TOKEN).balanceOf(address(universalCore));
 
         // User should have received WPC tokens
-        assertTrue(finalTargetBalance > initialTargetBalance, "Target should receive WPC tokens");
+        assertTrue(finalTargetNativeBalance > initialTargetNativeBalance, "Target should receive native PC tokens");
 
         // UniversalCore receives USDT tokens (via minting) but then swaps them all to the pool
         // So final balance should equal initial balance (both 0)
@@ -316,7 +316,7 @@ contract UniversalCoreSwapTest is Test, UpgradeableContractHelper {
         // Record initial balances
         uint256 initialPSOLBalance = IERC20(PSOL_TOKEN).balanceOf(user);
         uint256 initialWPCBalance = IERC20(WPC_TOKEN).balanceOf(user);
-        uint256 initialTargetBalance = IERC20(WPC_TOKEN).balanceOf(target);
+        uint256 initialTargetNativeBalance = target.balance;
 
         // Attempt swap should revert
         vm.prank(UNIVERSAL_EXECUTOR_MODULE);
@@ -326,7 +326,7 @@ contract UniversalCoreSwapTest is Test, UpgradeableContractHelper {
         // Verify balances remain unchanged
         assertEq(IERC20(PSOL_TOKEN).balanceOf(user), initialPSOLBalance);
         assertEq(IERC20(WPC_TOKEN).balanceOf(user), initialWPCBalance);
-        assertEq(IERC20(WPC_TOKEN).balanceOf(target), initialTargetBalance);
+        assertEq(target.balance, initialTargetNativeBalance);
 
         // Verify auto-swap support remains unchanged
         assertEq(universalCore.isAutoSwapSupported(PSOL_TOKEN), initialAutoSwap);
@@ -355,7 +355,7 @@ contract UniversalCoreSwapTest is Test, UpgradeableContractHelper {
         // Record initial balances
         uint256 initialPSOLBalance = IERC20(PSOL_TOKEN).balanceOf(user);
         uint256 initialWPCBalance = IERC20(WPC_TOKEN).balanceOf(user);
-        uint256 initialTargetBalance = IERC20(WPC_TOKEN).balanceOf(target);
+        uint256 initialTargetNativeBalance = target.balance;
 
         // Attempt swap should revert due to invalid fee tier
         vm.prank(UNIVERSAL_EXECUTOR_MODULE);
@@ -365,7 +365,7 @@ contract UniversalCoreSwapTest is Test, UpgradeableContractHelper {
         // Verify balances remain unchanged
         assertEq(IERC20(PSOL_TOKEN).balanceOf(user), initialPSOLBalance);
         assertEq(IERC20(WPC_TOKEN).balanceOf(user), initialWPCBalance);
-        assertEq(IERC20(WPC_TOKEN).balanceOf(target), initialTargetBalance);
+        assertEq(target.balance, initialTargetNativeBalance);
 
         // Verify configuration remains unchanged
         assertTrue(universalCore.isAutoSwapSupported(PSOL_TOKEN));
@@ -392,7 +392,7 @@ contract UniversalCoreSwapTest is Test, UpgradeableContractHelper {
         // Record initial balances
         uint256 initialPSOLBalance = IERC20(PSOL_TOKEN).balanceOf(user);
         uint256 initialWPCBalance = IERC20(WPC_TOKEN).balanceOf(user);
-        uint256 initialTargetBalance = IERC20(WPC_TOKEN).balanceOf(user);
+        uint256 initialTargetNativeBalance = user.balance;
 
         // Non-UEModule should not be able to call
         vm.prank(nonUEModule);
@@ -402,7 +402,7 @@ contract UniversalCoreSwapTest is Test, UpgradeableContractHelper {
         // Verify balances remain unchanged
         assertEq(IERC20(PSOL_TOKEN).balanceOf(user), initialPSOLBalance);
         assertEq(IERC20(WPC_TOKEN).balanceOf(user), initialWPCBalance);
-        assertEq(IERC20(WPC_TOKEN).balanceOf(user), initialTargetBalance);
+        assertEq(user.balance, initialTargetNativeBalance);
 
         // Verify configuration remains unchanged
         assertTrue(universalCore.isAutoSwapSupported(PSOL_TOKEN));
@@ -441,7 +441,7 @@ contract UniversalCoreSwapTest is Test, UpgradeableContractHelper {
         // Record initial balances
         uint256 initialPSOLBalance = IERC20(PSOL_TOKEN).balanceOf(user);
         uint256 initialWPCBalance = IERC20(WPC_TOKEN).balanceOf(user);
-        uint256 initialTargetBalance = IERC20(WPC_TOKEN).balanceOf(user);
+        uint256 initialTargetNativeBalance = user.balance;
 
         // Attempt swap should revert due to pause
         vm.prank(UNIVERSAL_EXECUTOR_MODULE);
@@ -451,7 +451,7 @@ contract UniversalCoreSwapTest is Test, UpgradeableContractHelper {
         // Verify balances remain unchanged
         assertEq(IERC20(PSOL_TOKEN).balanceOf(user), initialPSOLBalance);
         assertEq(IERC20(WPC_TOKEN).balanceOf(user), initialWPCBalance);
-        assertEq(IERC20(WPC_TOKEN).balanceOf(user), initialTargetBalance);
+        assertEq(user.balance, initialTargetNativeBalance);
 
         // Verify configuration remains unchanged
         assertTrue(universalCore.paused());
@@ -634,7 +634,7 @@ contract UniversalCoreSwapTest is Test, UpgradeableContractHelper {
         uint256 amount = 1e18; // 1 PSOL
         address target = user;
 
-        uint256 initialTargetBalance = IERC20(WPC_TOKEN).balanceOf(target);
+        uint256 initialTargetNativeBalance = target.balance;
         uint256 initialUniversalCorePSOLBalance = IERC20(PSOL_TOKEN).balanceOf(address(universalCore));
 
         // This should call getSwapQuote internally since minPCOut=0
@@ -655,12 +655,12 @@ contract UniversalCoreSwapTest is Test, UpgradeableContractHelper {
         // Verify balances after swap
         uint256 finalPSOLBalance = IERC20(PSOL_TOKEN).balanceOf(user);
         uint256 finalWPCBalance = IERC20(WPC_TOKEN).balanceOf(user);
-        uint256 finalTargetBalance = IERC20(WPC_TOKEN).balanceOf(target);
+        uint256 finalTargetNativeBalance = target.balance;
         uint256 finalUniversalCorePSOLBalance = IERC20(PSOL_TOKEN).balanceOf(address(universalCore));
         uint256 finalUniversalCoreWPCBalance = IERC20(WPC_TOKEN).balanceOf(address(universalCore));
 
         // User should have received WPC tokens
-        assertTrue(finalTargetBalance > initialTargetBalance, "Target should receive WPC tokens");
+        assertTrue(finalTargetNativeBalance > initialTargetNativeBalance, "Target should receive native PC tokens");
 
         // UniversalCore receives PSOL tokens (via minting) and swaps what it can
         // Due to low liquidity, only partial swaps may occur, leaving some PSOL in UniversalCore
@@ -671,10 +671,10 @@ contract UniversalCoreSwapTest is Test, UpgradeableContractHelper {
         );
 
         // Verify that some swap occurred if target received WPC tokens
-        if (finalTargetBalance > initialTargetBalance) {
+        if (finalTargetNativeBalance > initialTargetNativeBalance) {
             assertTrue(
                 finalUniversalCorePSOLBalance < initialUniversalCorePSOLBalance + amount,
-                "Some PSOL should have been swapped if target received WPC"
+                "Some PSOL should have been swapped if target received native PC"
             );
         }
         // Note: UniversalCore might not have WPC tokens initially, so we don't check its balance decrease
@@ -693,7 +693,7 @@ contract UniversalCoreSwapTest is Test, UpgradeableContractHelper {
         uint256 amount = 1e18; // 1 PSOL
         address target = user;
 
-        uint256 initialTargetBalance = IERC20(WPC_TOKEN).balanceOf(target);
+        uint256 initialTargetNativeBalance = target.balance;
         uint256 initialUniversalCorePSOLBalance = IERC20(PSOL_TOKEN).balanceOf(address(universalCore));
 
         // Note: Event testing is complex due to unpredictable amountOut values
@@ -717,12 +717,12 @@ contract UniversalCoreSwapTest is Test, UpgradeableContractHelper {
         // Verify balances after swap
         uint256 finalPSOLBalance = IERC20(PSOL_TOKEN).balanceOf(user);
         uint256 finalWPCBalance = IERC20(WPC_TOKEN).balanceOf(user);
-        uint256 finalTargetBalance = IERC20(WPC_TOKEN).balanceOf(target);
+        uint256 finalTargetNativeBalance = target.balance;
         uint256 finalUniversalCorePSOLBalance = IERC20(PSOL_TOKEN).balanceOf(address(universalCore));
         uint256 finalUniversalCoreWPCBalance = IERC20(WPC_TOKEN).balanceOf(address(universalCore));
 
         // User should have received WPC tokens
-        assertTrue(finalTargetBalance > initialTargetBalance, "Target should receive WPC tokens");
+        assertTrue(finalTargetNativeBalance > initialTargetNativeBalance, "Target should receive native PC tokens");
 
         // UniversalCore receives PSOL tokens (via minting) and swaps what it can
         // Due to low liquidity, only partial swaps may occur, leaving some PSOL in UniversalCore
@@ -733,10 +733,10 @@ contract UniversalCoreSwapTest is Test, UpgradeableContractHelper {
         );
 
         // Verify that some swap occurred if target received WPC tokens
-        if (finalTargetBalance > initialTargetBalance) {
+        if (finalTargetNativeBalance > initialTargetNativeBalance) {
             assertTrue(
                 finalUniversalCorePSOLBalance < initialUniversalCorePSOLBalance + amount,
-                "Some PSOL should have been swapped if target received WPC"
+                "Some PSOL should have been swapped if target received native PC"
             );
         }
         // Note: UniversalCore might not have WPC tokens initially, so we don't check its balance decrease
@@ -756,7 +756,7 @@ contract UniversalCoreSwapTest is Test, UpgradeableContractHelper {
         uint256 amount = 1e18;
         address target = user;
 
-        uint256 initialTargetBalance = IERC20(WPC_TOKEN).balanceOf(target);
+        uint256 initialTargetNativeBalance = target.balance;
         uint256 initialUniversalCorePSOLBalance = IERC20(PSOL_TOKEN).balanceOf(address(universalCore));
 
         // Note: Event testing is complex due to unpredictable amountOut values
@@ -780,12 +780,12 @@ contract UniversalCoreSwapTest is Test, UpgradeableContractHelper {
         // Verify balances after swap
         uint256 finalPSOLBalance = IERC20(PSOL_TOKEN).balanceOf(user);
         uint256 finalWPCBalance = IERC20(WPC_TOKEN).balanceOf(user);
-        uint256 finalTargetBalance = IERC20(WPC_TOKEN).balanceOf(target);
+        uint256 finalTargetNativeBalance = target.balance;
         uint256 finalUniversalCorePSOLBalance = IERC20(PSOL_TOKEN).balanceOf(address(universalCore));
         uint256 finalUniversalCoreWPCBalance = IERC20(WPC_TOKEN).balanceOf(address(universalCore));
 
         // User should have received WPC tokens
-        assertTrue(finalTargetBalance > initialTargetBalance, "Target should receive WPC tokens");
+        assertTrue(finalTargetNativeBalance > initialTargetNativeBalance, "Target should receive native PC tokens");
 
         // UniversalCore receives PSOL tokens (via minting) and swaps what it can
         // Due to low liquidity, only partial swaps may occur, leaving some PSOL in UniversalCore
@@ -796,10 +796,10 @@ contract UniversalCoreSwapTest is Test, UpgradeableContractHelper {
         );
 
         // Verify that some swap occurred if target received WPC tokens
-        if (finalTargetBalance > initialTargetBalance) {
+        if (finalTargetNativeBalance > initialTargetNativeBalance) {
             assertTrue(
                 finalUniversalCorePSOLBalance < initialUniversalCorePSOLBalance + amount,
-                "Some PSOL should have been swapped if target received WPC"
+                "Some PSOL should have been swapped if target received native PC"
             );
         }
         // Note: UniversalCore might not have WPC tokens initially, so we don't check its balance decrease
@@ -819,7 +819,7 @@ contract UniversalCoreSwapTest is Test, UpgradeableContractHelper {
         uint256 amount = 1e18;
         address target = user;
 
-        uint256 initialTargetBalance = IERC20(WPC_TOKEN).balanceOf(target);
+        uint256 initialTargetNativeBalance = target.balance;
         uint256 initialUniversalCorePSOLBalance = IERC20(PSOL_TOKEN).balanceOf(address(universalCore));
 
         // Note: Event testing is complex due to unpredictable amountOut values
@@ -849,12 +849,12 @@ contract UniversalCoreSwapTest is Test, UpgradeableContractHelper {
         // Verify balances after swap
         uint256 finalPSOLBalance = IERC20(PSOL_TOKEN).balanceOf(user);
         uint256 finalWPCBalance = IERC20(WPC_TOKEN).balanceOf(user);
-        uint256 finalTargetBalance = IERC20(WPC_TOKEN).balanceOf(target);
+        uint256 finalTargetNativeBalance = target.balance;
         uint256 finalUniversalCorePSOLBalance = IERC20(PSOL_TOKEN).balanceOf(address(universalCore));
         uint256 finalUniversalCoreWPCBalance = IERC20(WPC_TOKEN).balanceOf(address(universalCore));
 
         // User should have received WPC tokens
-        assertTrue(finalTargetBalance > initialTargetBalance, "Target should receive WPC tokens");
+        assertTrue(finalTargetNativeBalance > initialTargetNativeBalance, "Target should receive native PC tokens");
 
         // UniversalCore receives PSOL tokens (via minting) and swaps what it can
         // Due to low liquidity, only partial swaps may occur, leaving some PSOL in UniversalCore
@@ -865,10 +865,10 @@ contract UniversalCoreSwapTest is Test, UpgradeableContractHelper {
         );
 
         // Verify that some swap occurred if target received WPC tokens
-        if (finalTargetBalance > initialTargetBalance) {
+        if (finalTargetNativeBalance > initialTargetNativeBalance) {
             assertTrue(
                 finalUniversalCorePSOLBalance < initialUniversalCorePSOLBalance + amount,
-                "Some PSOL should have been swapped if target received WPC"
+                "Some PSOL should have been swapped if target received native PC"
             );
         }
         // Note: UniversalCore might not have WPC tokens initially, so we don't check its balance decrease
@@ -889,7 +889,7 @@ contract UniversalCoreSwapTest is Test, UpgradeableContractHelper {
         uint256 amount = 1e18;
         address target = user;
 
-        uint256 initialTargetBalance = IERC20(WPC_TOKEN).balanceOf(target);
+        uint256 initialTargetNativeBalance = target.balance;
         uint256 initialUniversalCorePSOLBalance = IERC20(PSOL_TOKEN).balanceOf(address(universalCore));
 
         // Should use default deadline (30 minutes from now)
@@ -910,12 +910,12 @@ contract UniversalCoreSwapTest is Test, UpgradeableContractHelper {
         // Verify balances after swap
         uint256 finalPSOLBalance = IERC20(PSOL_TOKEN).balanceOf(user);
         uint256 finalWPCBalance = IERC20(WPC_TOKEN).balanceOf(user);
-        uint256 finalTargetBalance = IERC20(WPC_TOKEN).balanceOf(target);
+        uint256 finalTargetNativeBalance = target.balance;
         uint256 finalUniversalCorePSOLBalance = IERC20(PSOL_TOKEN).balanceOf(address(universalCore));
         uint256 finalUniversalCoreWPCBalance = IERC20(WPC_TOKEN).balanceOf(address(universalCore));
 
         // User should have received WPC tokens
-        assertTrue(finalTargetBalance > initialTargetBalance, "Target should receive WPC tokens");
+        assertTrue(finalTargetNativeBalance > initialTargetNativeBalance, "Target should receive native PC tokens");
 
         // UniversalCore receives PSOL tokens (via minting) and swaps what it can
         // Due to low liquidity, only partial swaps may occur, leaving some PSOL in UniversalCore
@@ -926,10 +926,10 @@ contract UniversalCoreSwapTest is Test, UpgradeableContractHelper {
         );
 
         // Verify that some swap occurred if target received WPC tokens
-        if (finalTargetBalance > initialTargetBalance) {
+        if (finalTargetNativeBalance > initialTargetNativeBalance) {
             assertTrue(
                 finalUniversalCorePSOLBalance < initialUniversalCorePSOLBalance + amount,
-                "Some PSOL should have been swapped if target received WPC"
+                "Some PSOL should have been swapped if target received native PC"
             );
         }
     }
@@ -945,7 +945,7 @@ contract UniversalCoreSwapTest is Test, UpgradeableContractHelper {
         address target = user;
         uint256 customDeadline = block.timestamp + 60; // 1 minute from now
 
-        uint256 initialTargetBalance = IERC20(WPC_TOKEN).balanceOf(target);
+        uint256 initialTargetNativeBalance = target.balance;
         uint256 initialUniversalCorePSOLBalance = IERC20(PSOL_TOKEN).balanceOf(address(universalCore));
 
         // Should use provided deadline
@@ -966,12 +966,12 @@ contract UniversalCoreSwapTest is Test, UpgradeableContractHelper {
         // Verify balances after swap
         uint256 finalPSOLBalance = IERC20(PSOL_TOKEN).balanceOf(user);
         uint256 finalWPCBalance = IERC20(WPC_TOKEN).balanceOf(user);
-        uint256 finalTargetBalance = IERC20(WPC_TOKEN).balanceOf(target);
+        uint256 finalTargetNativeBalance = target.balance;
         uint256 finalUniversalCorePSOLBalance = IERC20(PSOL_TOKEN).balanceOf(address(universalCore));
         uint256 finalUniversalCoreWPCBalance = IERC20(WPC_TOKEN).balanceOf(address(universalCore));
 
         // User should have received WPC tokens
-        assertTrue(finalTargetBalance > initialTargetBalance, "Target should receive WPC tokens");
+        assertTrue(finalTargetNativeBalance > initialTargetNativeBalance, "Target should receive native PC tokens");
 
         // UniversalCore receives PSOL tokens (via minting) and swaps what it can
         // Due to low liquidity, only partial swaps may occur, leaving some PSOL in UniversalCore
@@ -982,10 +982,10 @@ contract UniversalCoreSwapTest is Test, UpgradeableContractHelper {
         );
 
         // Verify that some swap occurred if target received WPC tokens
-        if (finalTargetBalance > initialTargetBalance) {
+        if (finalTargetNativeBalance > initialTargetNativeBalance) {
             assertTrue(
                 finalUniversalCorePSOLBalance < initialUniversalCorePSOLBalance + amount,
-                "Some PSOL should have been swapped if target received WPC"
+                "Some PSOL should have been swapped if target received native PC"
             );
         }
         // Note: UniversalCore might not have WPC tokens initially, so we don't check its balance decrease
@@ -1006,7 +1006,7 @@ contract UniversalCoreSwapTest is Test, UpgradeableContractHelper {
         uint256 amount = 1e18;
         address target = user;
 
-        uint256 initialTargetBalance = IERC20(WPC_TOKEN).balanceOf(target);
+        uint256 initialTargetNativeBalance = target.balance;
         uint256 initialUniversalCorePSOLBalance = IERC20(PSOL_TOKEN).balanceOf(address(universalCore));
 
         // This should use default 3% slippage tolerance
@@ -1027,12 +1027,12 @@ contract UniversalCoreSwapTest is Test, UpgradeableContractHelper {
         // Verify balances after swap
         uint256 finalPSOLBalance = IERC20(PSOL_TOKEN).balanceOf(user);
         uint256 finalWPCBalance = IERC20(WPC_TOKEN).balanceOf(user);
-        uint256 finalTargetBalance = IERC20(WPC_TOKEN).balanceOf(target);
+        uint256 finalTargetNativeBalance = target.balance;
         uint256 finalUniversalCorePSOLBalance = IERC20(PSOL_TOKEN).balanceOf(address(universalCore));
         uint256 finalUniversalCoreWPCBalance = IERC20(WPC_TOKEN).balanceOf(address(universalCore));
 
         // User should have received WPC tokens
-        assertTrue(finalTargetBalance > initialTargetBalance, "Target should receive WPC tokens");
+        assertTrue(finalTargetNativeBalance > initialTargetNativeBalance, "Target should receive native PC tokens");
 
         // UniversalCore receives PSOL tokens (via minting) and swaps what it can
         // Due to low liquidity, only partial swaps may occur, leaving some PSOL in UniversalCore
@@ -1043,10 +1043,10 @@ contract UniversalCoreSwapTest is Test, UpgradeableContractHelper {
         );
 
         // Verify that some swap occurred if target received WPC tokens
-        if (finalTargetBalance > initialTargetBalance) {
+        if (finalTargetNativeBalance > initialTargetNativeBalance) {
             assertTrue(
                 finalUniversalCorePSOLBalance < initialUniversalCorePSOLBalance + amount,
-                "Some PSOL should have been swapped if target received WPC"
+                "Some PSOL should have been swapped if target received native PC"
             );
         }
     }
@@ -1062,7 +1062,7 @@ contract UniversalCoreSwapTest is Test, UpgradeableContractHelper {
         uint256 amount = 1e18;
         address target = user;
 
-        uint256 initialTargetBalance = IERC20(WPC_TOKEN).balanceOf(target);
+        uint256 initialTargetNativeBalance = target.balance;
         uint256 initialUniversalCorePSOLBalance = IERC20(PSOL_TOKEN).balanceOf(address(universalCore));
 
         // This should use 5% slippage tolerance
@@ -1083,12 +1083,12 @@ contract UniversalCoreSwapTest is Test, UpgradeableContractHelper {
         // Verify balances after swap
         uint256 finalPSOLBalance = IERC20(PSOL_TOKEN).balanceOf(user);
         uint256 finalWPCBalance = IERC20(WPC_TOKEN).balanceOf(user);
-        uint256 finalTargetBalance = IERC20(WPC_TOKEN).balanceOf(target);
+        uint256 finalTargetNativeBalance = target.balance;
         uint256 finalUniversalCorePSOLBalance = IERC20(PSOL_TOKEN).balanceOf(address(universalCore));
         uint256 finalUniversalCoreWPCBalance = IERC20(WPC_TOKEN).balanceOf(address(universalCore));
 
         // User should have received WPC tokens
-        assertTrue(finalTargetBalance > initialTargetBalance, "Target should receive WPC tokens");
+        assertTrue(finalTargetNativeBalance > initialTargetNativeBalance, "Target should receive native PC tokens");
 
         // UniversalCore receives PSOL tokens (via minting) and swaps what it can
         // Due to low liquidity, only partial swaps may occur, leaving some PSOL in UniversalCore
@@ -1099,10 +1099,10 @@ contract UniversalCoreSwapTest is Test, UpgradeableContractHelper {
         );
 
         // Verify that some swap occurred if target received WPC tokens
-        if (finalTargetBalance > initialTargetBalance) {
+        if (finalTargetNativeBalance > initialTargetNativeBalance) {
             assertTrue(
                 finalUniversalCorePSOLBalance < initialUniversalCorePSOLBalance + amount,
-                "Some PSOL should have been swapped if target received WPC"
+                "Some PSOL should have been swapped if target received native PC"
             );
         }
 
