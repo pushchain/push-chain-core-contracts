@@ -61,15 +61,15 @@ contract UniversalCoreV0 is
     address public uniswapV3SwapRouterAddress;
     address public uniswapV3QuoterAddress;
 
+    /// @notice Address of the wrapped PC to interact with Uniswap V3.
+    address public wPCContractAddress;
+
     /// @notice Only for TESTNET : String as key.
     mapping(string => uint256) public gasPriceByChainId;
     mapping(string => address) public gasTokenPRC20ByChainId;
     mapping(string => address) public gasPCPoolByChainId;
     /// @notice Role for managing gas-related configurations
     bytes32 public constant MANAGER_ROLE = keccak256("MANAGER_ROLE");
-
-    /// @notice Address of the wrapped PC to interact with Uniswap V3.
-    address public wPCContractAddress;
 
     modifier onlyUEModule() {
         if (msg.sender != UNIVERSAL_EXECUTOR_MODULE) {
