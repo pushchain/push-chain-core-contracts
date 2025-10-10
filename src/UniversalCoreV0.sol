@@ -33,7 +33,7 @@ contract UniversalCoreV0 is
     using SafeERC20 for IERC20;
 
     /// @notice Map to know the gas price of each chain given a chain id.
-    mapping(string => uint256) public gasPriceByChainId;
+    mapping(uint256 => uint256) public gasPriceByChainId;
 
     /// @notice Map to know the PRC20 address of a token given a chain id, ex pETH, pBNB etc.
     mapping(string => address) public gasTokenPRC20ByChainId;
@@ -63,7 +63,8 @@ contract UniversalCoreV0 is
 
     /// @notice Address of the wrapped PC to interact with Uniswap V3.
     address public wPCContractAddress;
-
+    /// @notice Only for TESTNET : String as key.
+    mapping(string => uint256) public gasPriceByChainId;
     /// @notice Role for managing gas-related configurations
     bytes32 public constant MANAGER_ROLE = keccak256("MANAGER_ROLE");
 
