@@ -56,9 +56,6 @@ contract UniversalCoreV0 is
     /// @notice Fungible address is always the same, it's on protocol level.
     address public immutable UNIVERSAL_EXECUTOR_MODULE = 0x14191Ea54B4c176fCf86f51b0FAc7CB1E71Df7d7;
 
-    /// @notice Role for managing gas-related configurations
-    bytes32 public constant MANAGER_ROLE = keccak256("MANAGER_ROLE");
-
     /// @notice Uniswap V3 addresses.
     address public uniswapV3FactoryAddress;
     address public uniswapV3SwapRouterAddress;
@@ -66,6 +63,9 @@ contract UniversalCoreV0 is
 
     /// @notice Address of the wrapped PC to interact with Uniswap V3.
     address public wPCContractAddress;
+
+    /// @notice Role for managing gas-related configurations
+    bytes32 public constant MANAGER_ROLE = keccak256("MANAGER_ROLE");
 
     modifier onlyUEModule() {
         if (msg.sender != UNIVERSAL_EXECUTOR_MODULE) {
@@ -110,7 +110,6 @@ contract UniversalCoreV0 is
 
         // Grant the deployer the default admin role
         _grantRole(DEFAULT_ADMIN_ROLE, msg.sender);
-        _grantRole(MANAGER_ROLE, UNIVERSAL_EXECUTOR_MODULE);
 
         wPCContractAddress = wpc_;
         uniswapV3FactoryAddress = uniswapV3Factory_;
