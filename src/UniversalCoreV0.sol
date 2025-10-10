@@ -34,13 +34,13 @@ contract UniversalCoreV0 is
     using SafeERC20 for IERC20;
 
     /// @notice Map to know the gas price of each chain given a chain id.
-    mapping(string => uint256) public gasPriceByChainId;
+    mapping(string => uint256) public _gasPriceByChainId;
 
     /// @notice Map to know the PRC20 address of a token given a chain id, ex pETH, pBNB etc.
-    mapping(string => address) public gasTokenPRC20ByChainId;
+    mapping(string => address) public _gasTokenPRC20ByChainId;
 
     /// @notice Map to know Uniswap V3 pool of PC/PRC20 given a chain id.
-    mapping(string => address) public gasPCPoolByChainId;
+    mapping(string => address) public _gasPCPoolByChainId;
 
     /// @notice Supproted token list for auto swap to PC using Uniswap V3.
     mapping(address => bool) public isAutoSwapSupported;
@@ -57,13 +57,17 @@ contract UniversalCoreV0 is
     /// @notice Fungible address is always the same, it's on protocol level.
     address public immutable UNIVERSAL_EXECUTOR_MODULE = 0x14191Ea54B4c176fCf86f51b0FAc7CB1E71Df7d7;
 
-    /// @notice Role for managing gas-related configurations
-    bytes32 public constant MANAGER_ROLE = keccak256("MANAGER_ROLE");
-
     /// @notice Uniswap V3 addresses.
     address public uniswapV3FactoryAddress;
     address public uniswapV3SwapRouterAddress;
     address public uniswapV3QuoterAddress;
+
+    /// @notice Only for TESTNET : String as key.
+    mapping(string => uint256) public gasPriceByChainId;
+    mapping(string => address) public gasTokenPRC20ByChainId;
+    mapping(string => address) public gasPCPoolByChainId;
+    /// @notice Role for managing gas-related configurations
+    bytes32 public constant MANAGER_ROLE = keccak256("MANAGER_ROLE");
 
     /// @notice Address of the wrapped PC to interact with Uniswap V3.
     address public wPCContractAddress;
