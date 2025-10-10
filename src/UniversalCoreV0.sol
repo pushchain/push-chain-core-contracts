@@ -34,14 +34,13 @@ contract UniversalCoreV0 is
     using SafeERC20 for IERC20;
 
     /// @notice Map to know the gas price of each chain given a chain id.
-    mapping(string => uint256) public _gasPriceByChainId;
+    mapping(uint256 => uint256) public _gasPriceByChainId;
 
     /// @notice Map to know the PRC20 address of a token given a chain id, ex pETH, pBNB etc.
-    mapping(string => address) public _gasTokenPRC20ByChainId;
+    mapping(uint256 => address) public _gasTokenPRC20ByChainId;
 
     /// @notice Map to know Uniswap V3 pool of PC/PRC20 given a chain id.
-    mapping(string => address) public _gasPCPoolByChainId;
-
+    mapping(uint256 => address) public _gasPCPoolByChainId;
     /// @notice Supproted token list for auto swap to PC using Uniswap V3.
     mapping(address => bool) public isAutoSwapSupported;
 
@@ -115,7 +114,6 @@ contract UniversalCoreV0 is
 
         // Grant the deployer the default admin role
         _grantRole(DEFAULT_ADMIN_ROLE, msg.sender);
-        _grantRole(MANAGER_ROLE, UNIVERSAL_EXECUTOR_MODULE);
 
         wPCContractAddress = wpc_;
         uniswapV3FactoryAddress = uniswapV3Factory_;
