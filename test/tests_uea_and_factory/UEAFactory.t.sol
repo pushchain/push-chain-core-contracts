@@ -81,6 +81,13 @@ contract UEAFactoryTest is Test {
         factory.registerUEA(solanaChainHash, SVM_HASH, address(ueaSVMImpl));
     }
 
+    function testUEAVersion() public {
+        // Test EVM version
+        assertEq(factory.UEA_VERSION(EVM_HASH), "1.0.0", "UEA_EVM version mismatch");
+        // Test SVM version
+        assertEq(factory.UEA_VERSION(SVM_HASH), "1.0.0", "UEA_SVM version mismatch");
+    }
+
     function testRegisterNewChain() public {
         bytes32 chainHash = keccak256(abi.encode("KOVAN", "42"));
         factory.registerNewChain(chainHash, EVM_HASH);

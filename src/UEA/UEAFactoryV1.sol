@@ -62,6 +62,12 @@ contract UEAFactoryV1 is Initializable, OwnableUpgradeable, IUEAFactory {
         __Ownable_init(initialOwner);
     }
 
+    function UEA_VERSION(bytes32 vmHash) public view returns (string memory) {
+        address implementation = UEA_VM[vmHash];
+        if (implementation == address(0)) revert Errors.InvalidInputArgs();
+        return IUEA(implementation).VERSION();
+    }
+
     /**
      * @dev Sets the UEAProxy implementation address
      * @param _UEA_PROXY_IMPLEMENTATION The new UEAProxy implementation address
