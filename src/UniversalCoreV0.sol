@@ -70,6 +70,8 @@ contract UniversalCoreV0 is
     mapping(string => address) public gasPCPoolByChainId;
     /// @notice Role for managing gas-related configurations
     bytes32 public constant MANAGER_ROLE = keccak256("MANAGER_ROLE");
+    /// @notice Base gas limit for the cross-chain outbound transactions.
+    uint256 public BASE_GAS_LIMIT = 500_000;
 
     modifier onlyUEModule() {
         if (msg.sender != UNIVERSAL_EXECUTOR_MODULE) {
@@ -295,7 +297,6 @@ contract UniversalCoreV0 is
 
     function setAutoSwapSupported(address token, bool supported) external onlyOwner {
         isAutoSwapSupported[token] = supported;
-        emit SetAutoSwapSupported(token, supported);
     }
 
     /**
@@ -305,7 +306,6 @@ contract UniversalCoreV0 is
     function setWPCContractAddress(address addr) external onlyOwner {
         if (addr == address(0)) revert CommonErrors.ZeroAddress();
         wPCContractAddress = addr;
-        emit SetWPC(addr);
     }
 
     /**
@@ -321,7 +321,6 @@ contract UniversalCoreV0 is
         uniswapV3FactoryAddress = factory;
         uniswapV3SwapRouterAddress = swapRouter;
         uniswapV3QuoterAddress = quoter;
-        emit SetUniswapV3Addresses(factory, swapRouter, quoter);
     }
 
     /**
@@ -335,7 +334,6 @@ contract UniversalCoreV0 is
             revert UniversalCoreErrors.InvalidFeeTier();
         }
         defaultFeeTier[token] = feeTier;
-        emit SetDefaultFeeTier(token, feeTier);
     }
 
     /**
@@ -349,7 +347,6 @@ contract UniversalCoreV0 is
             revert UniversalCoreErrors.InvalidSlippageTolerance();
         } // Max 50%
         slippageTolerance[token] = tolerance;
-        emit SetSlippageTolerance(token, tolerance);
     }
 
     /**
@@ -358,7 +355,12 @@ contract UniversalCoreV0 is
      */
     function setDefaultDeadlineMins(uint256 minutesValue) external onlyOwner {
         defaultDeadlineMins = minutesValue;
-        emit SetDefaultDeadlineMins(minutesValue);
+    }
+
+    /// @notice Update the base gas limit for the cross-chain outbound transactions.
+    /// @param  gasLimit New base gas limit
+    function updateBaseGasLimit(uint256 gasLimit) external onlyOwner {
+        BASE_GAS_LIMIT = gasLimit;
     }
 
     /**
@@ -420,6 +422,35 @@ contract UniversalCoreV0 is
 
         // Calculate minimum output: expectedOutput * (10000 - tolerance) / 10000
         return (expectedOutput * (10000 - tolerance)) / 10000;
+    }
+     /**
+     * @inheritdoc IUniversalCore
+     */
+    function withdrawGasFee(address _prc20) public view returns (address gasToken, uint256 gasFee) {
+        string memory chainID = IPRC20(_prc20).SOURCE_CHAIN_ID();
+
+        gasToken = gasTokenPRC20ByChainId[chainID];
+        if (gasToken == address(0)) revert CommonErrors.ZeroAddress();
+
+        uint256 price = gasPriceByChainId[chainID];
+        if (price == 0) revert UniversalCoreErrors.ZeroGasPrice();
+
+        gasFee = price * BASE_GAS_LIMIT + IPRC20(_prc20).PC_PROTOCOL_FEE();
+    }
+
+    /**
+     * @inheritdoc IUniversalCore
+     */
+    function withdrawGasFeeWithGasLimit(address _prc20, uint256 gasLimit) public view returns (address gasToken, uint256 gasFee) {
+        string memory chainID = IPRC20(_prc20).SOURCE_CHAIN_ID();
+
+        gasToken = gasTokenPRC20ByChainId[chainID];
+        if (gasToken == address(0)) revert CommonErrors.ZeroAddress();
+
+        uint256 price = gasPriceByChainId[chainID];
+        if (price == 0) revert UniversalCoreErrors.ZeroGasPrice();
+
+        gasFee = price * gasLimit + IPRC20(_prc20).PC_PROTOCOL_FEE();
     }
 
     /**

@@ -15,9 +15,6 @@ import "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol";
  *          All PRC20 tokens must ahdere to the IPRC20 interface.
  *          Apart from the standard ERC-20 functions, PRC20 also supports the following functions:
  *          - deposit:                      Mint PRC20 on inbound bridge (lock on source)
- *          - withdraw:                     Burn and request outbound unlock on source, charging gas fee in the per-chain gas coin PRC20
- *          - withdrawGasFee:               Compute gas coin token and fee for a withdraw using current GAS_LIMIT
- *          - withdrawGasFeeWithGasLimit:   Compute gas coin token and fee for a withdraw given a custom gasLimit
  */
 contract PRC20 is IPRC20, Initializable {
     /// @notice The protocol's privileged executor module (auth & fee sink)
@@ -33,9 +30,6 @@ contract PRC20 is IPRC20, Initializable {
 
     /// @notice UniversalCore contract providing gas oracles (gas coin token & gas price)
     address public UNIVERSAL_CORE;
-
-    /// @notice Gas limit used in fee computation; fee = price * GAS_LIMIT + PC_PROTOCOL_FEE
-    uint256 public GAS_LIMIT;
 
     /// @notice Flat fee (absolute units in gas coin PRC20), NOT basis points
     uint256 public PC_PROTOCOL_FEE;
@@ -68,7 +62,6 @@ contract PRC20 is IPRC20, Initializable {
     /// @param decimals_          ERC-20 decimals
     /// @param sourceChainId_     Source chain identifier this PRC20 represents
     /// @param tokenType_         Token classification (PC, NATIVE, ERC20)
-    /// @param gasLimit_          Protocol gas limit used in fee computation
     /// @param protocolFlatFee_   Absolute flat fee added to fee computation (units: gas coin PRC20)
     /// @param universalCore_           Initial universalCore contract providing gas coin & gas price
     function initialize(
@@ -77,7 +70,6 @@ contract PRC20 is IPRC20, Initializable {
         uint8 decimals_,
         string memory sourceChainId_,
         TokenType tokenType_,
-        uint256 gasLimit_,
         uint256 protocolFlatFee_,
         address universalCore_,
         string memory sourceTokenAddress_
@@ -90,7 +82,6 @@ contract PRC20 is IPRC20, Initializable {
 
         SOURCE_CHAIN_ID = sourceChainId_;
         TOKEN_TYPE = tokenType_;
-        GAS_LIMIT = gasLimit_;
         PC_PROTOCOL_FEE = protocolFlatFee_;
         UNIVERSAL_CORE = universalCore_;
         SOURCE_TOKEN_ADDRESS = sourceTokenAddress_;
@@ -179,50 +170,7 @@ contract PRC20 is IPRC20, Initializable {
         return true;
     }
 
-    /// @notice         Burn and request outbound unlock on source, charging gas fee in the per-chain gas coin PRC20
-    /// @dev            Caller (user/app) must have approved this PRC20 (for burn via this function)
-    ///                 AND approved the gas coin PRC20 to allow this contract to pull `gasFee` to UNIVERSAL_EXECUTOR_MODULE.
-    /// @param to      Destination address on source chain (as raw bytes)
-    /// @param amount  Amount of this PRC20 to burn
-    function withdraw(bytes calldata to, uint256 amount) external returns (bool) {
-        (address gasToken, uint256 gasFee) = withdrawGasFee();
 
-        bool result = IPRC20(gasToken).transferFrom(msg.sender, UNIVERSAL_EXECUTOR_MODULE, gasFee);
-        if (!result) revert PRC20Errors.GasFeeTransferFailed();
-
-        _burn(msg.sender, amount);
-        emit Withdrawal(msg.sender, to, amount, gasFee, PC_PROTOCOL_FEE);
-        return true;
-    }
-
-    //*** GAS FEE QUOTING (VIEW) ***//
-
-    /// @notice           Compute gas coin token and fee for a withdraw using current GAS_LIMIT
-    /// @return gasToken  PRC20 token used as gas coin for SOURCE_CHAIN_ID
-    /// @return gasFee    price * GAS_LIMIT + PC_PROTOCOL_FEE
-    function withdrawGasFee() public view returns (address gasToken, uint256 gasFee) {
-        gasToken = IUniversalCore(UNIVERSAL_CORE).gasTokenPRC20ByChainId(SOURCE_CHAIN_ID);
-        if (gasToken == address(0)) revert CommonErrors.ZeroAddress();
-
-        uint256 price = IUniversalCore(UNIVERSAL_CORE).gasPriceByChainId(SOURCE_CHAIN_ID);
-        if (price == 0) revert PRC20Errors.ZeroGasPrice();
-
-        gasFee = price * GAS_LIMIT + PC_PROTOCOL_FEE;
-    }
-
-    /// @notice             Compute gas coin token and fee for a withdraw given a custom gasLimit
-    /// @param gasLimit_    Gas limit to use for the quote
-    /// @return gasToken    PRC20 gas coin token
-    /// @return gasFee      price * gasLimit_ + PC_PROTOCOL_FEE
-    function withdrawGasFeeWithGasLimit(uint256 gasLimit_) external view returns (address gasToken, uint256 gasFee) {
-        gasToken = IUniversalCore(UNIVERSAL_CORE).gasTokenPRC20ByChainId(SOURCE_CHAIN_ID);
-        if (gasToken == address(0)) revert CommonErrors.ZeroAddress();
-
-        uint256 price = IUniversalCore(UNIVERSAL_CORE).gasPriceByChainId(SOURCE_CHAIN_ID);
-        if (price == 0) revert PRC20Errors.ZeroGasPrice();
-
-        gasFee = price * gasLimit_ + PC_PROTOCOL_FEE;
-    }
 
     /// @notice Update UniversalCore contract (gas coin & price oracle source)
     /// @dev only Universal Executor may update
@@ -230,12 +178,6 @@ contract PRC20 is IPRC20, Initializable {
         if (addr == address(0)) revert CommonErrors.ZeroAddress();
         UNIVERSAL_CORE = addr;
         emit UpdatedUniversalCore(addr);
-    }
-
-    /// @notice Update protocol gas limit used in fee computation
-    function updateGasLimit(uint256 gasLimit_) external onlyUniversalExecutor {
-        GAS_LIMIT = gasLimit_;
-        emit UpdatedGasLimit(gasLimit_);
     }
 
     /// @notice Update flat protocol fee (absolute units in gas coin PRC20)

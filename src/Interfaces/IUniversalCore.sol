@@ -8,15 +8,10 @@ interface IUniversalCore {
     // =========================
     //           Universal Core Events
     // =========================    
-    event SetWPC(address wpc);
     event SetGasPrice(string chainId, uint256 price);
     event SetGasToken(string chainId, address prc20);
     event SetDefaultDeadlineMins(uint256 minutesValue);
-    event SetAutoSwapSupported(address token, bool supported);
     event SetGasPCPool(string chainId, address pool, uint24 fee);   
-    event SetDefaultFeeTier(address indexed token, uint24 feeTier);
-    event SetSlippageTolerance(address indexed token, uint256 tolerance);
-    event SetUniswapV3Addresses(address factory, address swapRouter, address quoter);
     event DepositPRC20WithAutoSwap(address prc20, uint256 amountIn, address pcToken, uint256 amountOut, uint24 fee, address target);
 
     // =========================
@@ -59,80 +54,6 @@ interface IUniversalCore {
         uint256 deadline
     ) external;
 
-    /**
-     * @dev Set the gas PC pool for a chain
-     * @param chainID Chain ID
-     * @param gasToken Gas coin address
-     * @param fee Uniswap V3 fee tier
-     */
-    function setGasPCPool(string memory chainID, address gasToken, uint24 fee) external;
-
-    /**
-     * @dev Fungible module updates the gas price oracle periodically.
-     * @param chainID Chain ID
-     * @param price New gas price
-     */
-    function setGasPrice(string memory chainID, uint256 price) external;
-
-    /**
-     * @dev Setter for gasTokenPRC20ByChainId map.
-     * @param chainID Chain ID
-     * @param prc20 PRC20 address
-     */
-    function setGasTokenPRC20(string memory chainID, address prc20) external;
-
-    /**
-     * @notice Set auto-swap support for a token
-     * @param token Token address
-     * @param supported Whether the token supports auto-swap
-     */
-    function setAutoSwapSupported(address token, bool supported) external;
-
-    /**
-     * @dev Setter for wrapped PC address.
-     * @param addr WPC new address
-     */
-    function setWPCContractAddress(address addr) external;
-
-    /**
-     * @dev Setter for uniswap V3 addresses.
-     * @param factory Uniswap V3 Factory address
-     * @param swapRouter Uniswap V3 SwapRouter address
-     * @param quoter Uniswap V3 Quoter address
-     */
-    function setUniswapV3Addresses(address factory, address swapRouter, address quoter) external;
-
-    /**
-     * @notice Set default fee tier for a token
-     * @param token Token address
-     * @param feeTier Fee tier (500, 3000, 10000)
-     */
-    function setDefaultFeeTier(address token, uint24 feeTier) external;
-
-    /**
-     * @notice Set slippage tolerance for a token
-     * @param token Token address
-     * @param tolerance Slippage tolerance in basis points (e.g., 300 = 3%)
-     */
-    function setSlippageTolerance(address token, uint256 tolerance) external;
-
-    /**
-     * @notice Set default deadline in minutes
-     * @param minutesValue Default deadline in minutes
-     */
-    function setDefaultDeadlineMins(uint256 minutesValue) external;
-
-    /**
-     * @notice Pause the contract - stops all deposit functions
-     * @dev Can only be called by the owner
-     */
-    function pause() external;
-
-    /**
-     * @notice Unpause the contract - resumes all deposit functions
-     * @dev Can only be called by the owner
-     */
-    function unpause() external;
 
     // =========================
     //           Getter Functions
@@ -151,4 +72,29 @@ interface IUniversalCore {
      * @return price Gas price
      */
     function gasPriceByChainId(string memory chainId) external view returns (uint256 price);
+
+    /**
+     * @notice Get base gas limit for a chain
+     * @return baseGasLimit Base gas limit
+     */
+    function BASE_GAS_LIMIT() external view returns (uint256 baseGasLimit);
+
+    /**
+     * @notice Get gas fee for a PRC20 token.
+     * @dev    Uses BASE_GAS_LIMIT for the gas limit used in the fee computation.
+     * @param _prc20 PRC20 address
+     * @return gasToken Gas token address
+     * @return gasFee Gas fee
+     */
+    function withdrawGasFee(address _prc20) external view returns (address gasToken, uint256 gasFee);
+
+    /**
+     * @notice Get gas fee for a PRC20 token with a custom gas limit
+     * @dev    Uses the provided gas limit for the fee computation.
+     * @param _prc20 PRC20 address
+     * @param gasLimit Gas limit
+     * @return gasToken Gas token address
+     * @return gasFee Gas fee
+     */
+    function withdrawGasFeeWithGasLimit(address _prc20, uint256 gasLimit) external view returns (address gasToken, uint256 gasFee);
 }

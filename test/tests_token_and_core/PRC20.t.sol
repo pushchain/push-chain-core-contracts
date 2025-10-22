@@ -30,7 +30,6 @@ contract PRC20Test is Test, UpgradeableContractHelper {
     // Constants
     string public constant SOURCE_CHAIN_ID = "1"; // Ethereum
     string public constant SOURCE_TOKEN_ADDRESS = "0x0000000000000000000000000000000000000000";
-    uint256 public constant GAS_LIMIT = 500000;
     uint256 public constant PC_PROTOCOL_FEE = 10000;
     uint256 public constant GAS_PRICE = 50 * 10 ** 9; // 50 gwei
 
@@ -43,9 +42,7 @@ contract PRC20Test is Test, UpgradeableContractHelper {
     event Transfer(address indexed from, address indexed to, uint256 value);
     event Approval(address indexed owner, address indexed spender, uint256 value);
     event Deposit(bytes from, address to, uint256 amount);
-    event Withdrawal(address from, bytes to, uint256 amount, uint256 gasFee, uint256 protocolFlatFee);
     event UpdatedUniversalCore(address universalCore);
-    event UpdatedGasLimit(uint256 gasLimit);
     event UpdatedProtocolFlatFee(uint256 protocolFlatFee);
 
     function setUp() public {
@@ -93,7 +90,6 @@ contract PRC20Test is Test, UpgradeableContractHelper {
             18,
             SOURCE_CHAIN_ID,
             IPRC20.TokenType.PC,
-            GAS_LIMIT,
             PC_PROTOCOL_FEE,
             address(universalCore),
             SOURCE_TOKEN_ADDRESS
@@ -469,131 +465,6 @@ contract PRC20Test is Test, UpgradeableContractHelper {
     }
 
     // =========================================================================
-    // FEE QUOTING (withdrawGasFee & withdrawGasFeeWithGasLimit)
-    // =========================================================================
-
-    function testWithdrawGasFeeHappyPath() public view {
-        // Get the gas fee quote
-        (address returnedGasToken, uint256 gasFee) = prc20.withdrawGasFee();
-
-        // Verify returned gas token
-        assertEq(returnedGasToken, address(gasToken));
-
-        // Verify fee calculation: price * GAS_LIMIT + PC_PROTOCOL_FEE
-        uint256 expectedFee = GAS_PRICE * GAS_LIMIT + PC_PROTOCOL_FEE;
-        assertEq(gasFee, expectedFee);
-    }
-
-    function testWithdrawGasFeeWithCustomGasLimit() public view {
-        uint256 customGasLimit = 300000;
-
-        // Get the gas fee quote with custom gas limit
-        (address returnedGasToken, uint256 gasFee) = prc20.withdrawGasFeeWithGasLimit(customGasLimit);
-
-        // Verify returned gas token
-        assertEq(returnedGasToken, address(gasToken));
-
-        // Verify fee calculation: price * customGasLimit + PC_PROTOCOL_FEE
-        uint256 expectedFee = GAS_PRICE * customGasLimit + PC_PROTOCOL_FEE;
-        assertEq(gasFee, expectedFee);
-    }
-
-    function testWithdrawGasFeeZeroGasPrice() public {
-        vm.startPrank(uExec);
-        // Set gas price to zero
-        universalCore.setGasPrice(SOURCE_CHAIN_ID, 0);
-        vm.stopPrank();
-        // Expect revert when getting gas fee
-        vm.expectRevert(PRC20Errors.ZeroGasPrice.selector);
-        prc20.withdrawGasFee();
-    }
-
-    function testWithdrawGasFeeAfterHandlerUpdate() public {
-        // Create a new universalCore with different gas price
-        address newGasToken = address(new MockGasToken());
-        uint256 newGasPrice = GAS_PRICE * 2;
-
-        // Initialize the new universalCore
-        address mockWPC = makeAddr("newWPC");
-        address mockUniswapFactory = makeAddr("newUniswapFactory");
-        address mockUniswapRouter = makeAddr("newUniswapRouter");
-        address mockUniswapQuoter = makeAddr("newUniswapQuoter");
-
-        // Initialize and configure new universalCore
-        vm.startPrank(uExec);
-        // Deploy new universalCore implementation
-        UniversalCore newHandlerImpl = new UniversalCore();
-
-        // Create initialization data
-        bytes memory initData = abi.encodeWithSelector(
-            UniversalCore.initialize.selector, mockWPC, mockUniswapFactory, mockUniswapRouter, mockUniswapQuoter
-        );
-
-        // Deploy proxy and initialize
-        address proxyAddress = deployUpgradeableContract(address(newHandlerImpl), initData);
-        UniversalCore newHandler = UniversalCore(proxyAddress);
-        newHandler.setGasTokenPRC20(SOURCE_CHAIN_ID, newGasToken);
-        newHandler.setGasPrice(SOURCE_CHAIN_ID, newGasPrice);
-        vm.stopPrank();
-
-        // Update universalCore contract
-        vm.prank(uExec);
-
-        vm.expectEmit(false, false, false, true);
-        emit UpdatedUniversalCore(address(newHandler));
-
-        prc20.updateUniversalCore(address(newHandler));
-
-        // Get the gas fee quote with new universalCore
-        (address gasTokenResult, uint256 gasFee) = prc20.withdrawGasFee();
-
-        // Verify returned gas token from new universalCore
-        assertEq(gasTokenResult, newGasToken);
-
-        // Verify fee calculation with new gas price
-        uint256 expectedFee = newGasPrice * GAS_LIMIT + PC_PROTOCOL_FEE;
-        assertEq(gasFee, expectedFee);
-    }
-
-    function testWithdrawGasFeeAfterGasLimitUpdate() public {
-        uint256 newGasLimit = GAS_LIMIT * 2;
-
-        // Update gas limit
-        vm.prank(uExec);
-
-        vm.expectEmit(false, false, false, true);
-        emit UpdatedGasLimit(newGasLimit);
-
-        prc20.updateGasLimit(newGasLimit);
-
-        // Get the gas fee quote
-        (address gasTokenIgnored, uint256 gasFee) = prc20.withdrawGasFee();
-
-        // Verify fee calculation with new gas limit
-        uint256 expectedFee = GAS_PRICE * newGasLimit + PC_PROTOCOL_FEE;
-        assertEq(gasFee, expectedFee);
-    }
-
-    function testWithdrawGasFeeAfterProtocolFeeUpdate() public {
-        uint256 newProtocolFee = PC_PROTOCOL_FEE * 2;
-
-        // Update protocol fee
-        vm.prank(uExec);
-
-        vm.expectEmit(false, false, false, true);
-        emit UpdatedProtocolFlatFee(newProtocolFee);
-
-        prc20.updateProtocolFlatFee(newProtocolFee);
-
-        // Get the gas fee quote
-        (address gasTokenIgnored, uint256 gasFee) = prc20.withdrawGasFee();
-
-        // Verify fee calculation with new protocol fee
-        uint256 expectedFee = GAS_PRICE * GAS_LIMIT + newProtocolFee;
-        assertEq(gasFee, expectedFee);
-    }
-
-    // =========================================================================
     // ADMIN & GOVERNANCE CONTROLS
     // =========================================================================
 
@@ -660,30 +531,6 @@ contract PRC20Test is Test, UpgradeableContractHelper {
         vm.prank(uExec);
         vm.expectRevert(CommonErrors.ZeroAddress.selector);
         prc20.updateUniversalCore(address(0));
-    }
-
-    function testUpdateGasLimitFromUExec() public {
-        uint256 newGasLimit = GAS_LIMIT * 2;
-
-        // Update gas limit from Universal Executor Module
-        vm.prank(uExec);
-
-        vm.expectEmit(false, false, false, true);
-        emit UpdatedGasLimit(newGasLimit);
-
-        prc20.updateGasLimit(newGasLimit);
-
-        // Verify gas limit was updated
-        assertEq(prc20.GAS_LIMIT(), newGasLimit);
-    }
-
-    function testUpdateGasLimitFromNonUExec() public {
-        uint256 newGasLimit = GAS_LIMIT * 2;
-
-        // Attempt to update gas limit from non-Universal Executor Module
-        vm.prank(attacker);
-        vm.expectRevert(PRC20Errors.CallerIsNotUniversalExecutor.selector);
-        prc20.updateGasLimit(newGasLimit);
     }
 
     function testUpdateProtocolFlatFeeFromUExec() public {
