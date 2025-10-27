@@ -38,8 +38,9 @@ contract UniversalCoreTest is Test, UpgradeableContractHelper {
     MockPRC20 public mockPRC20;
 
     string public constant CHAIN_ID = "1";
-    uint256 public constant GAS_LIMIT = 21000;
+    uint256 public constant BASE_GAS_LIMIT = 500_000;
     uint256 public constant PROTOCOL_FEE = 1000;
+    uint256 public constant GAS_PRICE = 50 * 10 ** 9; // 50 gwei
     uint24 public constant FEE_TIER = 3000;
 
     event SystemContractDeployed();
@@ -84,7 +85,6 @@ contract UniversalCoreTest is Test, UpgradeableContractHelper {
             18,
             CHAIN_ID,
             IPRC20.TokenType.ERC20,
-            GAS_LIMIT,
             PROTOCOL_FEE,
             address(0x1), // Temporary address, will be updated
             SOURCE_TOKEN_ADDRESS
@@ -115,6 +115,12 @@ contract UniversalCoreTest is Test, UpgradeableContractHelper {
         // Setup mock pool
         address pool = makeAddr("mockPool");
         mockFactory.setPool(address(mockWPC), address(prc20Token), FEE_TIER, pool);
+
+        // Configure gas price and gas token for testing
+        vm.startPrank(UNIVERSAL_EXECUTOR_MODULE);
+        universalCore.setGasPrice(CHAIN_ID, GAS_PRICE);
+        universalCore.setGasTokenPRC20(CHAIN_ID, address(mockPRC20));
+        vm.stopPrank();
     }
 
     // ========================================
@@ -584,5 +590,166 @@ contract UniversalCoreTest is Test, UpgradeableContractHelper {
         universalCore.depositPRC20Token(address(mockPRC20), 1000, user);
 
         assertEq(mockPRC20.balanceOf(user), 1000);
+    }
+
+    // ========================================
+    // 4) Gas Fee Functions (moved from PRC20)
+    // ========================================
+
+    function testWithdrawGasFeeHappyPath() public view {
+        // Get the gas fee quote
+        (address returnedGasToken, uint256 gasFee) = universalCore.withdrawGasFee(address(prc20Token));
+
+        // Verify returned gas token
+        assertEq(returnedGasToken, address(mockPRC20));
+
+        // Debug: Check actual values
+        uint256 actualGasPrice = universalCore.gasPriceByChainId(CHAIN_ID);
+        uint256 actualBaseGasLimit = universalCore.BASE_GAS_LIMIT();
+        uint256 actualProtocolFee = prc20Token.PC_PROTOCOL_FEE();
+        
+        // Verify fee calculation: price * BASE_GAS_LIMIT + PROTOCOL_FEE
+        uint256 expectedFee = actualGasPrice * actualBaseGasLimit + actualProtocolFee;
+        assertEq(gasFee, expectedFee);
+    }
+
+    function testWithdrawGasFeeWithGasLimitHappyPath() public view {
+        uint256 customGasLimit = 300000;
+
+        // Get the gas fee quote with custom gas limit
+        (address returnedGasToken, uint256 gasFee) = universalCore.withdrawGasFeeWithGasLimit(
+            address(prc20Token), 
+            customGasLimit
+        );
+
+        // Verify returned gas token
+        assertEq(returnedGasToken, address(mockPRC20));
+
+        // Verify fee calculation: price * customGasLimit + PROTOCOL_FEE
+        uint256 expectedFee = GAS_PRICE * customGasLimit + PROTOCOL_FEE;
+        assertEq(gasFee, expectedFee);
+    }
+
+    function testWithdrawGasFeeZeroGasPrice() public {
+        vm.startPrank(UNIVERSAL_EXECUTOR_MODULE);
+        // Set gas price to zero
+        universalCore.setGasPrice(CHAIN_ID, 0);
+        vm.stopPrank();
+        
+        // Expect revert when getting gas fee
+        vm.expectRevert(UniversalCoreErrors.ZeroGasPrice.selector);
+        universalCore.withdrawGasFee(address(prc20Token));
+    }
+
+    function testWithdrawGasFeeZeroGasToken() public {
+        // Create a new PRC20 token with a different chain ID that has no gas token set
+        PRC20 newPrc20Token = new PRC20();
+        
+        // Initialize with a different chain ID
+        bytes memory initData = abi.encodeWithSelector(
+            PRC20.initialize.selector,
+            "New PRC20",
+            "NPRC20",
+            18,
+            "999", // Different chain ID
+            IPRC20.TokenType.ERC20,
+            PROTOCOL_FEE,
+            address(universalCore),
+            SOURCE_TOKEN_ADDRESS
+        );
+        
+        address proxyAddress = deployUpgradeableContract(address(newPrc20Token), initData);
+        PRC20 newToken = PRC20(payable(proxyAddress));
+        
+        // Don't set gas token for this chain ID, so it will be address(0)
+        
+        // Expect revert when getting gas fee
+        vm.expectRevert(CommonErrors.ZeroAddress.selector);
+        universalCore.withdrawGasFee(address(newToken));
+    }
+
+    function testWithdrawGasFeeAfterGasPriceUpdate() public {
+        uint256 newGasPrice = GAS_PRICE * 2;
+
+        // Update gas price
+        vm.prank(UNIVERSAL_EXECUTOR_MODULE);
+        universalCore.setGasPrice(CHAIN_ID, newGasPrice);
+
+        // Get the gas fee quote
+        (address _gasTokenIgnored, uint256 gasFee) = universalCore.withdrawGasFee(address(prc20Token));
+
+        // Verify fee calculation with new gas price
+        uint256 actualBaseGasLimit = universalCore.BASE_GAS_LIMIT();
+        uint256 actualProtocolFee = prc20Token.PC_PROTOCOL_FEE();
+        uint256 expectedFee = newGasPrice * actualBaseGasLimit + actualProtocolFee;
+        assertEq(gasFee, expectedFee);
+    }
+
+    function testWithdrawGasFeeAfterBaseGasLimitUpdate() public {
+        uint256 newBaseGasLimit = BASE_GAS_LIMIT * 2;
+
+        // Update base gas limit
+        vm.prank(deployer);
+        universalCore.updateBaseGasLimit(newBaseGasLimit);
+
+        // Get the gas fee quote
+        (address _gasTokenIgnored, uint256 gasFee) = universalCore.withdrawGasFee(address(prc20Token));
+
+        // Verify fee calculation with new base gas limit
+        uint256 actualGasPrice = universalCore.gasPriceByChainId(CHAIN_ID);
+        uint256 actualProtocolFee = prc20Token.PC_PROTOCOL_FEE();
+        uint256 expectedFee = actualGasPrice * newBaseGasLimit + actualProtocolFee;
+        assertEq(gasFee, expectedFee);
+    }
+
+    function testWithdrawGasFeeAfterProtocolFeeUpdate() public {
+        uint256 newProtocolFee = PROTOCOL_FEE * 2;
+
+        // Update protocol fee on PRC20 token
+        vm.prank(UNIVERSAL_EXECUTOR_MODULE);
+        prc20Token.updateProtocolFlatFee(newProtocolFee);
+
+        // Get the gas fee quote
+        (address _gasTokenIgnored, uint256 gasFee) = universalCore.withdrawGasFee(address(prc20Token));
+
+        // Verify fee calculation with new protocol fee
+        uint256 actualGasPrice = universalCore.gasPriceByChainId(CHAIN_ID);
+        uint256 actualBaseGasLimit = universalCore.BASE_GAS_LIMIT();
+        uint256 expectedFee = actualGasPrice * actualBaseGasLimit + newProtocolFee;
+        assertEq(gasFee, expectedFee);
+    }
+
+    // ========================================
+    // 5) Base Gas Limit Management
+    // ========================================
+
+    function testUpdateBaseGasLimitOnlyOwner() public {
+        uint256 newGasLimit = BASE_GAS_LIMIT * 2;
+
+        // Non-owner should revert
+        vm.prank(nonOwner);
+        vm.expectRevert(CommonErrors.InvalidOwner.selector);
+        universalCore.updateBaseGasLimit(newGasLimit);
+
+        // Owner should succeed
+        vm.prank(deployer);
+        universalCore.updateBaseGasLimit(newGasLimit);
+        assertEq(universalCore.BASE_GAS_LIMIT(), newGasLimit);
+    }
+
+    function testUpdateBaseGasLimitHappyPath() public {
+        uint256 newGasLimit = BASE_GAS_LIMIT * 2;
+
+        vm.prank(deployer);
+        universalCore.updateBaseGasLimit(newGasLimit);
+
+        assertEq(universalCore.BASE_GAS_LIMIT(), newGasLimit);
+    }
+
+    function testUpdateBaseGasLimitZeroValue() public {
+        // Current implementation allows zero gas limit
+        vm.prank(deployer);
+        universalCore.updateBaseGasLimit(0);
+        assertEq(universalCore.BASE_GAS_LIMIT(), 0);
     }
 }

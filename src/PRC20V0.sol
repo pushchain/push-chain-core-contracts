@@ -31,6 +31,10 @@ contract PRC20 is IPRC20, Initializable {
     /// @notice UniversalCore contract providing gas oracles (gas coin token & gas price)
     address public UNIVERSAL_CORE;
 
+    /// @notice Gas limit used in fee computation; fee = price * GAS_LIMIT + PC_PROTOCOL_FEE
+    /// Note: ONLY INCLUDED TO AVOID STORAGE COLLISION in Testnet PRC20 - Removed from Production PRC20
+    uint256 public GAS_LIMIT;
+
     /// @notice Flat fee (absolute units in gas coin PRC20), NOT basis points
     uint256 public PC_PROTOCOL_FEE;
 

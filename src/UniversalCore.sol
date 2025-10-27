@@ -64,6 +64,9 @@ contract UniversalCore is
     /// @notice Address of the wrapped PC to interact with Uniswap V3.
     address public wPCContractAddress;
 
+    /// @notice Base gas limit for the cross-chain outbound transactions.
+    uint256 public BASE_GAS_LIMIT = 500_000;
+
     /// @notice Role for managing gas-related configurations
     bytes32 public constant MANAGER_ROLE = keccak256("MANAGER_ROLE");
 
@@ -181,7 +184,10 @@ contract UniversalCore is
     }
 
     /**
-     * @inheritdoc IUniversalCore
+     * @dev Set the gas PC pool for a chain
+     * @param chainID Chain ID
+     * @param gasToken Gas coin address
+     * @param fee Uniswap V3 fee tier
      */
     function setGasPCPool(string memory chainID, address gasToken, uint24 fee) external onlyRole(MANAGER_ROLE) {
         if (gasToken == address(0)) revert CommonErrors.ZeroAddress();
@@ -198,7 +204,9 @@ contract UniversalCore is
     }
 
     /**
-     * @inheritdoc IUniversalCore
+     * @dev Fungible module updates the gas price oracle periodically.
+     * @param chainID Chain ID
+     * @param price New gas price
      */
     function setGasPrice(string memory chainID, uint256 price) external onlyRole(MANAGER_ROLE) {
         gasPriceByChainId[chainID] = price;
@@ -206,7 +214,9 @@ contract UniversalCore is
     }
 
     /**
-     * @inheritdoc IUniversalCore
+     * @dev Setter for gasTokenPRC20ByChainId map.
+     * @param chainID Chain ID
+     * @param prc20 PRC20 address
      */
     function setGasTokenPRC20(string memory chainID, address prc20) external onlyRole(MANAGER_ROLE) {
         if (prc20 == address(0)) revert CommonErrors.ZeroAddress();
@@ -214,25 +224,29 @@ contract UniversalCore is
         emit SetGasToken(chainID, prc20);
     }
 
-    /**
-     * @inheritdoc IUniversalCore
+     /**
+     * @notice Set auto-swap support for a token
+     * @param token Token address
+     * @param supported Whether the token supports auto-swap
      */
     function setAutoSwapSupported(address token, bool supported) external onlyOwner {
         isAutoSwapSupported[token] = supported;
-        emit SetAutoSwapSupported(token, supported);
     }
 
     /**
-     * @inheritdoc IUniversalCore
+     * @dev Setter for wrapped PC address.
+     * @param addr WPC new address
      */
     function setWPCContractAddress(address addr) external onlyOwner {
         if (addr == address(0)) revert CommonErrors.ZeroAddress();
         wPCContractAddress = addr;
-        emit SetWPC(addr);
     }
 
     /**
-     * @inheritdoc IUniversalCore
+     * @dev Setter for uniswap V3 addresses.
+     * @param factory Uniswap V3 Factory address
+     * @param swapRouter Uniswap V3 SwapRouter address
+     * @param quoter Uniswap V3 Quoter address
      */
     function setUniswapV3Addresses(address factory, address swapRouter, address quoter) external onlyOwner {
         if (factory == address(0) || swapRouter == address(0) || quoter == address(0)) {
@@ -241,11 +255,12 @@ contract UniversalCore is
         uniswapV3FactoryAddress = factory;
         uniswapV3SwapRouterAddress = swapRouter;
         uniswapV3QuoterAddress = quoter;
-        emit SetUniswapV3Addresses(factory, swapRouter, quoter);
     }
 
     /**
-     * @inheritdoc IUniversalCore
+     * @notice Set default fee tier for a token
+     * @param token Token address
+     * @param feeTier Fee tier (500, 3000, 10000)
      */
     function setDefaultFeeTier(address token, uint24 feeTier) external onlyOwner {
         if (token == address(0)) revert CommonErrors.ZeroAddress();
@@ -253,40 +268,52 @@ contract UniversalCore is
             revert UniversalCoreErrors.InvalidFeeTier();
         }
         defaultFeeTier[token] = feeTier;
-        emit SetDefaultFeeTier(token, feeTier);
     }
 
     /**
-     * @inheritdoc IUniversalCore
+     * @notice Set slippage tolerance for a token
+     * @param token Token address
+     * @param tolerance Slippage tolerance in basis points (e.g., 300 = 3%)
      */
     function setSlippageTolerance(address token, uint256 tolerance) external onlyOwner {
         if (token == address(0)) revert CommonErrors.ZeroAddress();
         if (tolerance > 5000) revert UniversalCoreErrors.InvalidSlippageTolerance(); // Max 50%
         slippageTolerance[token] = tolerance;
-        emit SetSlippageTolerance(token, tolerance);
-    }
+        }
 
     /**
-     * @inheritdoc IUniversalCore
+     * @notice Set default deadline in minutes
+     * @param minutesValue Default deadline in minutes
      */
     function setDefaultDeadlineMins(uint256 minutesValue) external onlyOwner {
         defaultDeadlineMins = minutesValue;
         emit SetDefaultDeadlineMins(minutesValue);
     }
 
+    /// @notice Update the base gas limit for the cross-chain outbound transactions.
+    /// @param  gasLimit New base gas limit
+    function updateBaseGasLimit(uint256 gasLimit) external onlyOwner {
+        BASE_GAS_LIMIT = gasLimit;
+    }
+
+    
     /**
-     * @inheritdoc IUniversalCore
+     * @notice Pause the contract - stops all deposit functions
+     * @dev Can only be called by the owner
      */
     function pause() external onlyOwner {
         _pause();
     }
 
     /**
-     * @inheritdoc IUniversalCore
+     * @notice Unpause the contract - resumes all deposit functions
+     * @dev Can only be called by the owner
      */
     function unpause() external onlyOwner {
         _unpause();
     }
+
+    //========= Public Helpers =========//
 
     /**
      * @notice              Gets quote for token swap using Uniswap V3 Quoter
@@ -335,6 +362,36 @@ contract UniversalCore is
 
         // Calculate minimum output: expectedOutput * (10000 - tolerance) / 10000
         return (expectedOutput * (10000 - tolerance)) / 10000;
+    }
+
+    /**
+     * @inheritdoc IUniversalCore
+     */
+    function withdrawGasFee(address _prc20) public view returns (address gasToken, uint256 gasFee) {
+        string memory chainID = IPRC20(_prc20).SOURCE_CHAIN_ID();
+
+        gasToken = gasTokenPRC20ByChainId[chainID];
+        if (gasToken == address(0)) revert CommonErrors.ZeroAddress();
+
+        uint256 price = gasPriceByChainId[chainID];
+        if (price == 0) revert UniversalCoreErrors.ZeroGasPrice();
+
+        gasFee = price * BASE_GAS_LIMIT + IPRC20(_prc20).PC_PROTOCOL_FEE();
+    }
+
+    /**
+     * @inheritdoc IUniversalCore
+     */
+    function withdrawGasFeeWithGasLimit(address _prc20, uint256 gasLimit) public view returns (address gasToken, uint256 gasFee) {
+        string memory chainID = IPRC20(_prc20).SOURCE_CHAIN_ID();
+
+        gasToken = gasTokenPRC20ByChainId[chainID];
+        if (gasToken == address(0)) revert CommonErrors.ZeroAddress();
+
+        uint256 price = gasPriceByChainId[chainID];
+        if (price == 0) revert UniversalCoreErrors.ZeroGasPrice();
+
+        gasFee = price * gasLimit + IPRC20(_prc20).PC_PROTOCOL_FEE();
     }
 
     /**

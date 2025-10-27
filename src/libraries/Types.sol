@@ -38,6 +38,11 @@ struct Multicall {
     bytes data;                     // Call data for the function execution
 }
 
+struct RevertInstructions {
+    address fundRecipient;           // where funds go in revert / refund cases
+    bytes revertContext;
+}
+
 // Magic Prefix for deciding if the payload is a Multicall
 bytes4 constant MULTICALL_SELECTOR = bytes4(keccak256("UEA_MULTICALL"));
 

@@ -27,7 +27,6 @@ library CommonErrors {
 
 library PRC20Errors {
     error LowAllowance();
-    error ZeroGasPrice();
     error InvalidSender();
     error GasFeeTransferFailed();
     error CallerIsNotUniversalExecutor();
@@ -38,6 +37,7 @@ library PRC20Errors {
 // =========================
 
 library UniversalCoreErrors {
+    error ZeroGasPrice();
     error PoolNotFound();
     error InvalidTarget();
     error InvalidFeeTier();
