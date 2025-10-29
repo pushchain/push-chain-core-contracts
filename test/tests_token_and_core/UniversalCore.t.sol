@@ -59,6 +59,7 @@ contract UniversalCoreTest is Test, UpgradeableContractHelper {
     );
     event Paused(address account);
     event Unpaused(address account);
+    event SetSupportedToken(address indexed prc20, bool supported);
 
     function setUp() public {
         // Setup accounts
@@ -751,5 +752,96 @@ contract UniversalCoreTest is Test, UpgradeableContractHelper {
         vm.prank(deployer);
         universalCore.updateBaseGasLimit(0);
         assertEq(universalCore.BASE_GAS_LIMIT(), 0);
+    }
+
+    // ========================================
+    // 6) Set Supported Token Tests
+    // ========================================
+
+    function test_SetSupportedToken_OnlyManagerRole() public {
+        address token = makeAddr("token");
+
+        // Non-manager should revert
+        vm.prank(nonUEModule);
+        vm.expectRevert(
+            abi.encodeWithSelector(
+                IAccessControl.AccessControlUnauthorizedAccount.selector, nonUEModule, universalCore.MANAGER_ROLE()
+            )
+        );
+        universalCore.setSupportedToken(token, true);
+
+        // MANAGER_ROLE (UNIVERSAL_EXECUTOR_MODULE) should succeed
+        vm.prank(UNIVERSAL_EXECUTOR_MODULE);
+        universalCore.setSupportedToken(token, true);
+        assertTrue(universalCore.isSupportedToken(token));
+    }
+
+    function test_SetSupportedToken_HappyPath_SetTrue() public {
+        address token = makeAddr("token");
+
+        vm.prank(UNIVERSAL_EXECUTOR_MODULE);
+        universalCore.setSupportedToken(token, true);
+        assertTrue(universalCore.isSupportedToken(token));
+    }
+
+    function test_SetSupportedToken_HappyPath_SetFalse() public {
+        address token = makeAddr("token");
+
+        // First set to true
+        vm.prank(UNIVERSAL_EXECUTOR_MODULE);
+        universalCore.setSupportedToken(token, true);
+        assertTrue(universalCore.isSupportedToken(token));
+
+        // Then set to false
+        vm.prank(UNIVERSAL_EXECUTOR_MODULE);
+        universalCore.setSupportedToken(token, false);
+        assertFalse(universalCore.isSupportedToken(token));
+    }
+
+    function test_SetSupportedToken_FlipFalseToTrue() public {
+        address token = makeAddr("token");
+
+        // Initially false (default)
+        assertFalse(universalCore.isSupportedToken(token));
+
+        // Flip to true
+        vm.prank(UNIVERSAL_EXECUTOR_MODULE);
+        universalCore.setSupportedToken(token, true);
+        assertTrue(universalCore.isSupportedToken(token));
+    }
+
+    function test_SetSupportedToken_ZeroAddressReverts() public {
+        vm.prank(UNIVERSAL_EXECUTOR_MODULE);
+        vm.expectRevert(CommonErrors.ZeroAddress.selector);
+        universalCore.setSupportedToken(address(0), true);
+    }
+
+    function test_SetSupportedToken_EmitsEvent() public {
+        address token = makeAddr("token");
+
+        // Test event emission when setting to true
+        vm.prank(UNIVERSAL_EXECUTOR_MODULE);
+        vm.expectEmit(true, false, false, false);
+        emit SetSupportedToken(token, true);
+        universalCore.setSupportedToken(token, true);
+
+        // Test event emission when setting to false
+        vm.prank(UNIVERSAL_EXECUTOR_MODULE);
+        vm.expectEmit(true, false, false, false);
+        emit SetSupportedToken(token, false);
+        universalCore.setSupportedToken(token, false);
+    }
+
+    function test_SetSupportedToken_OwnerCannotCall() public {
+        address token = makeAddr("token");
+
+        // Owner (deployer) should not be able to call without MANAGER_ROLE
+        vm.prank(deployer);
+        vm.expectRevert(
+            abi.encodeWithSelector(
+                IAccessControl.AccessControlUnauthorizedAccount.selector, deployer, universalCore.MANAGER_ROLE()
+            )
+        );
+        universalCore.setSupportedToken(token, true);
     }
 }

@@ -11,13 +11,19 @@ interface IUniversalCore {
     event SetGasPrice(string chainId, uint256 price);
     event SetGasToken(string chainId, address prc20);
     event SetDefaultDeadlineMins(uint256 minutesValue);
+    event SetSupportedToken(address indexed prc20, bool supported);
     event SetGasPCPool(string chainId, address pool, uint24 fee);   
     event DepositPRC20WithAutoSwap(address prc20, uint256 amountIn, address pcToken, uint256 amountOut, uint24 fee, address target);
-
     // =========================
     //           Universal Core Functions
     // =========================  
 
+    /**
+     * @notice Check if a PRC20 token is supported
+     * @param prc20 PRC20 token address
+     * @return supported Whether the token is supported
+     */
+    function isSupportedToken(address prc20) external view returns (bool supported);
     /**
      * @notice Deposits PRC20 tokens to the provided target address.
      * @dev    Can only be called by the Universal Executor Module.

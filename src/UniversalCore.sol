@@ -70,6 +70,9 @@ contract UniversalCore is
     /// @notice Role for managing gas-related configurations
     bytes32 public constant MANAGER_ROLE = keccak256("MANAGER_ROLE");
 
+    /// @notice Mapping for indicating an official PRC20 supported token
+    mapping(address => bool) public isSupportedToken;
+
     modifier onlyUEModule() {
         if (msg.sender != UNIVERSAL_EXECUTOR_MODULE) revert UniversalCoreErrors.CallerIsNotUEModule();
         _;
@@ -105,6 +108,18 @@ contract UniversalCore is
         uniswapV3FactoryAddress = uniswapV3Factory_;
         uniswapV3SwapRouterAddress = uniswapV3SwapRouter_;
         uniswapV3QuoterAddress = uniswapV3Quoter_;
+    }
+
+
+    /**
+     * @notice Set whether a PRC20 token is supported
+     * @param prc20 PRC20 token address
+     * @param supported Whether the token is supported
+     */
+    function setSupportedToken(address prc20, bool supported) external onlyRole(MANAGER_ROLE) {
+        if (prc20 == address(0)) revert CommonErrors.ZeroAddress();
+        isSupportedToken[prc20] = supported;
+        emit SetSupportedToken(prc20, supported);
     }
 
     /**
