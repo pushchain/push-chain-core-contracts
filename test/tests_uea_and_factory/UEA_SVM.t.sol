@@ -306,7 +306,7 @@ contract UEASVMTest is Test {
         emit IUEA.PayloadExecuted(ownerBytes, 1);
 
         // Execute the payload with txHash verification
-        svmSmartAccountInstance.executePayload(payload, mockTxHashData);
+        svmSmartAccountInstance.executePayload(abi.encode(payload), mockTxHashData);
 
         // Verify state changes
         uint256 magicValueAfter = target.getMagicNumber();
@@ -350,7 +350,7 @@ contract UEASVMTest is Test {
 
         // Expect revert when txHash verification fails
         vm.expectRevert(Errors.InvalidTxHash.selector);
-        svmSmartAccountInstance.executePayload(payload, mockTxHashData);
+        svmSmartAccountInstance.executePayload(abi.encode(payload), mockTxHashData);
     }
 
     // Test executePayload with txBased verification and empty txHash
@@ -373,7 +373,7 @@ contract UEASVMTest is Test {
 
         // Expect revert when txHash data is empty
         vm.expectRevert(Errors.InvalidTxHash.selector);
-        svmSmartAccountInstance.executePayload(payload, emptyTxHashData);
+        svmSmartAccountInstance.executePayload(abi.encode(payload), emptyTxHashData);
     }
 
     function testExecutionBasic() public deploySvmSmartAccount {
@@ -406,7 +406,7 @@ contract UEASVMTest is Test {
         emit IUEA.PayloadExecuted(ownerBytes, 1);
 
         // Execute the payload
-        svmSmartAccountInstance.executePayload(payload, signature);
+        svmSmartAccountInstance.executePayload(abi.encode(payload), signature);
 
         // Verify state changes
         uint256 magicValueAfter = target.getMagicNumber();
@@ -460,7 +460,7 @@ contract UEASVMTest is Test {
         );
 
         // Execute the payload
-        svmSmartAccountInstance.executePayload(payload, signature);
+        svmSmartAccountInstance.executePayload(abi.encode(payload), signature);
 
         // Check both calls executed
         uint256 magic = target.getMagicNumber();
@@ -507,7 +507,7 @@ contract UEASVMTest is Test {
 
         // Should bubble up revert reason from revertingTarget
         vm.expectRevert("This function always reverts with reason");
-        svmSmartAccountInstance.executePayload(payload, signature);
+        svmSmartAccountInstance.executePayload(abi.encode(payload), signature);
     }
 
     function testExecuteMulticallSuccessWithPayload() public deploySvmSmartAccount {
@@ -566,7 +566,7 @@ contract UEASVMTest is Test {
         emit IUEA.PayloadExecuted(ownerBytes, 1);
 
         // Execute
-        svmSmartAccountInstance.executePayload(payload, signature);
+        svmSmartAccountInstance.executePayload(abi.encode(payload), signature);
 
         // Check all calls executed
         uint256 magic = target.getMagicNumber();
@@ -624,7 +624,7 @@ contract UEASVMTest is Test {
         emit IUEA.PayloadExecuted(ownerBytes, 1);
 
         // Execute
-        svmSmartAccountInstance.executePayload(payload, signature);
+        svmSmartAccountInstance.executePayload(abi.encode(payload), signature);
 
         // Check both targets were called correctly
         uint256 magic1 = target.getMagicNumber();
@@ -692,7 +692,7 @@ contract UEASVMTest is Test {
         emit IUEA.PayloadExecuted(ownerBytes, 1);
 
         // Execute
-        svmSmartAccountInstance.executePayload(payload, signature);
+        svmSmartAccountInstance.executePayload(abi.encode(payload), signature);
 
         // Check both targets were called correctly and received the right amounts
         uint256 magic1 = target.getMagicNumber();
@@ -731,7 +731,7 @@ contract UEASVMTest is Test {
         );
 
         // Execute the payload
-        svmSmartAccountInstance.executePayload(payload, signature);
+        svmSmartAccountInstance.executePayload(abi.encode(payload), signature);
 
         // Verify state changes
         uint256 magicValueAfter = target.getMagicNumber();
@@ -765,7 +765,7 @@ contract UEASVMTest is Test {
 
         // Should revert with InvalidSVMSignature
         vm.expectRevert(Errors.InvalidSVMSignature.selector);
-        svmSmartAccountInstance.executePayload(payload, signature);
+        svmSmartAccountInstance.executePayload(abi.encode(payload), signature);
     }
 
     function testExecutionWithExpiredDeadline() public deploySvmSmartAccount {
@@ -790,7 +790,7 @@ contract UEASVMTest is Test {
 
         // Should revert with ExpiredDeadline
         vm.expectRevert(Errors.ExpiredDeadline.selector);
-        svmSmartAccountInstance.executePayload(payload, signature);
+        svmSmartAccountInstance.executePayload(abi.encode(payload), signature);
     }
 
     function testReceiveFunction() public {
@@ -1065,7 +1065,7 @@ contract UEASVMTest is Test {
 
         // Should revert with the target's revert reason
         vm.expectRevert("This function always reverts with reason");
-        svmSmartAccountInstance.executePayload(payload, signature);
+        svmSmartAccountInstance.executePayload(abi.encode(payload), signature);
     }
 
     // Add a test for execution that fails without a revert reason
@@ -1098,7 +1098,7 @@ contract UEASVMTest is Test {
 
         // Should revert with ExecutionFailed error
         vm.expectRevert(Errors.ExecutionFailed.selector);
-        svmSmartAccountInstance.executePayload(payload, signature);
+        svmSmartAccountInstance.executePayload(abi.encode(payload), signature);
     }
 
     // Add a test for execution with empty calldata
@@ -1129,7 +1129,7 @@ contract UEASVMTest is Test {
 
         // Expect the ExecutionFailed error when sending empty calldata
         vm.expectRevert(Errors.ExecutionFailed.selector);
-        svmSmartAccountInstance.executePayload(payload, signature);
+        svmSmartAccountInstance.executePayload(abi.encode(payload), signature);
     }
 }
 

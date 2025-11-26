@@ -111,7 +111,7 @@ contract ProxyCallTest is Test {
         (uint8 v, bytes32 r, bytes32 s) = vm.sign(user1PK, txHash);
         bytes memory signature = abi.encodePacked(r, s, v);
 
-        user1UEAInstance.executePayload(payload, signature);
+        user1UEAInstance.executePayload(abi.encode(payload), signature);
 
         assertEq(target.getMagicNumber(), 123);
     }
@@ -137,7 +137,7 @@ contract ProxyCallTest is Test {
         (uint8 v, bytes32 r, bytes32 s) = vm.sign(user2PK, txHash);
         bytes memory signature = abi.encodePacked(r, s, v);
 
-        user2UEAInstance.executePayload(payload, signature);
+        user2UEAInstance.executePayload(abi.encode(payload), signature);
 
         assertEq(target.getMagicNumber(), 456);
     }
@@ -165,7 +165,7 @@ contract ProxyCallTest is Test {
 
         uint256 targetBalanceBefore = address(target).balance;
 
-        user1UEAInstance.executePayload(payload, signature);
+        user1UEAInstance.executePayload(abi.encode(payload), signature);
 
         assertEq(target.getMagicNumber(), 789);
         assertEq(address(target).balance - targetBalanceBefore, 0.1 ether);
@@ -191,7 +191,7 @@ contract ProxyCallTest is Test {
         bytes memory signature = abi.encodePacked(r, s, v);
 
         vm.expectRevert(Errors.InvalidEVMSignature.selector);
-        user2UEAInstance.executePayload(payload, signature);
+        user2UEAInstance.executePayload(abi.encode(payload), signature);
     }
 
     // Test expired payload cannot be executed
@@ -216,7 +216,7 @@ contract ProxyCallTest is Test {
         bytes memory signature = abi.encodePacked(r, s, v);
 
         vm.expectRevert(Errors.ExpiredDeadline.selector);
-        user1UEAInstance.executePayload(payload, signature);
+        user1UEAInstance.executePayload(abi.encode(payload), signature);
     }
 
     // Test nonce increments after execution
@@ -240,7 +240,7 @@ contract ProxyCallTest is Test {
         (uint8 v, bytes32 r, bytes32 s) = vm.sign(user1PK, txHash);
         bytes memory signature = abi.encodePacked(r, s, v);
 
-        user1UEAInstance.executePayload(payload, signature);
+        user1UEAInstance.executePayload(abi.encode(payload), signature);
 
         uint256 newNonce = user1UEAInstance.nonce();
         assertEq(newNonce, initialNonce + 1);
@@ -264,10 +264,10 @@ contract ProxyCallTest is Test {
         (uint8 v, bytes32 r, bytes32 s) = vm.sign(user1PK, txHash);
         bytes memory signature = abi.encodePacked(r, s, v);
 
-        user1UEAInstance.executePayload(payload, signature);
+        user1UEAInstance.executePayload(abi.encode(payload), signature);
 
         vm.expectRevert(Errors.InvalidEVMSignature.selector);
-        user1UEAInstance.executePayload(payload, signature);
+        user1UEAInstance.executePayload(abi.encode(payload), signature);
     }
 
     // Test revert flow: User -> UEAProxy -> UEA_Implementation -> Target -> (revert) -> back to User
@@ -293,7 +293,7 @@ contract ProxyCallTest is Test {
 
         // Expect the specific error from Target to bubble up through the proxy chain
         vm.expectRevert("Insufficient fee: 0.1 ETH required");
-        user1UEAInstance.executePayload(payload, signature);
+        user1UEAInstance.executePayload(abi.encode(payload), signature);
     }
 
     // Helper function for UniversalPayload hash
