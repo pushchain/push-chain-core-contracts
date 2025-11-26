@@ -762,12 +762,12 @@ contract UniversalCoreTest is Test, UpgradeableContractHelper {
         address token = makeAddr("token");
 
         // Non-manager should revert
-        vm.prank(nonUEModule);
         vm.expectRevert(
             abi.encodeWithSelector(
                 IAccessControl.AccessControlUnauthorizedAccount.selector, nonUEModule, universalCore.MANAGER_ROLE()
             )
         );
+        vm.prank(nonUEModule);
         universalCore.setSupportedToken(token, true);
 
         // MANAGER_ROLE (UNIVERSAL_EXECUTOR_MODULE) should succeed

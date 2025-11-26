@@ -810,10 +810,10 @@ contract UniversalCoreSwapTest is Test, UpgradeableContractHelper {
     }
 
     function test_DepositPRC20WithAutoSwap_FeeProvided_UsesProvided() public {
-        // Test when fee>0, should use provided fee
+        // Test when fee>0, should use provided fee (default set to 0.3% but we pass 0.05%)
         vm.startPrank(deployer);
         universalCore.setAutoSwapSupported(PSOL_TOKEN, true);
-        universalCore.setDefaultFeeTier(PSOL_TOKEN, 500);
+        universalCore.setDefaultFeeTier(PSOL_TOKEN, 3000); // Set default to 0.3% pool
         vm.stopPrank();
 
         uint256 amount = 1e18;
@@ -822,60 +822,41 @@ contract UniversalCoreSwapTest is Test, UpgradeableContractHelper {
         uint256 initialTargetNativeBalance = target.balance;
         uint256 initialUniversalCorePSOLBalance = IERC20(PSOL_TOKEN).balanceOf(address(universalCore));
 
-        // Note: Event testing is complex due to unpredictable amountOut values
-        // We'll focus on testing the core functionality and balance changes
-
-        // Should use provided fee (3000)
         vm.recordLogs();
         vm.prank(UNIVERSAL_EXECUTOR_MODULE);
         universalCore.depositPRC20WithAutoSwap(
             PSOL_TOKEN,
             amount,
             target,
-            3000, // fee=3000 (should use this)
+            500, // fee=500 (should override default 3000)
             1, // minPCOut
             0 // deadline
         );
 
-        // Verify the emitted event
         verifyDepositPRC20WithAutoSwapEvent(
             PSOL_TOKEN,
             amount,
             WPC_TOKEN,
-            3000, // Should use provided fee, not default
+            500, // Should use provided fee, not default
             target
         );
 
-        // Verify balances after swap
-        uint256 finalPSOLBalance = IERC20(PSOL_TOKEN).balanceOf(user);
-        uint256 finalWPCBalance = IERC20(WPC_TOKEN).balanceOf(user);
         uint256 finalTargetNativeBalance = target.balance;
         uint256 finalUniversalCorePSOLBalance = IERC20(PSOL_TOKEN).balanceOf(address(universalCore));
-        uint256 finalUniversalCoreWPCBalance = IERC20(WPC_TOKEN).balanceOf(address(universalCore));
 
-        // User should have received WPC tokens
         assertTrue(finalTargetNativeBalance > initialTargetNativeBalance, "Target should receive native PC tokens");
 
-        // UniversalCore receives PSOL tokens (via minting) and swaps what it can
-        // Due to low liquidity, only partial swaps may occur, leaving some PSOL in UniversalCore
-        // The final balance should be: initial + minted - swapped_amount
         assertTrue(
             finalUniversalCorePSOLBalance >= initialUniversalCorePSOLBalance,
             "UniversalCore PSOL balance should be >= initial (partial swaps due to low liquidity are expected)"
         );
 
-        // Verify that some swap occurred if target received WPC tokens
         if (finalTargetNativeBalance > initialTargetNativeBalance) {
             assertTrue(
                 finalUniversalCorePSOLBalance < initialUniversalCorePSOLBalance + amount,
                 "Some PSOL should have been swapped if target received native PC"
             );
         }
-        // Note: UniversalCore might not have WPC tokens initially, so we don't check its balance decrease
-        // The important thing is that the target receives WPC tokens from the swap
-
-        // Verify the amount of PSOL deposited matches (check user's balance decrease)
-        // User's PSOL balance should not change - PRC20 is minted directly to UniversalCore
     }
 
     function test_DepositPRC20WithAutoSwap_DeadlineZero_UsesDefault() public {

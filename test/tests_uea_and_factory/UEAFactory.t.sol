@@ -8,6 +8,7 @@ import "../../src/libraries/Types.sol";
 import {UEAFactoryV1} from "../../src/uea/UEAFactoryV1.sol";
 import {UEA_EVM} from "../../src/uea/UEA_EVM.sol";
 import {UEA_SVM} from "../../src/uea/UEA_SVM.sol";
+import {UEAMigration} from "../../src/uea/UEAMigration.sol";
 import {UEAErrors as Errors} from "../../src/libraries/Errors.sol";
 import {IUEA} from "../../src/interfaces/IUEA.sol";
 import {OwnableUpgradeable} from "@openzeppelin/contracts-upgradeable/access/OwnableUpgradeable.sol";
@@ -105,6 +106,24 @@ contract UEAFactoryTest is Test {
 
         // Check that the UEA implementation is registered
         assertEq(factory.getUEA(chainHash), address(ueaEVMImpl));
+    }
+
+    function testSetUEAMigrationContractOnlyOwner() public {
+        UEAMigration migration = new UEAMigration(address(ueaEVMImpl), address(ueaSVMImpl));
+
+        // Non-owner should revert
+        vm.prank(nonOwner);
+        vm.expectRevert(abi.encodeWithSelector(OwnableUpgradeable.OwnableUnauthorizedAccount.selector, nonOwner));
+        factory.setUEAMigrationContract(address(migration));
+
+        // Owner can set and value is stored
+        factory.setUEAMigrationContract(address(migration));
+        assertEq(factory.UEA_MIGRATION_CONTRACT(), address(migration));
+    }
+
+    function testSetUEAMigrationContractZeroAddressReverts() public {
+        vm.expectRevert(Errors.InvalidInputArgs.selector);
+        factory.setUEAMigrationContract(address(0));
     }
 
     function testRegisterMultipleUEA() public {
