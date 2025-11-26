@@ -77,15 +77,20 @@ interface IUEA {
     function verifyPayloadSignature(bytes32 payloadHash, bytes memory signature) external view returns (bool);
 
     /**
-     * @notice                  Executes a cross-chain payload with the provided signature.
-     * @param payload           The UniversalPayload struct containing execution parameters:
-     *                          - to: Target contract address to call
-     *                          - value: Native token amount to send
-     *                          - data: Calldata for the function execution
-     *                          - gasLimit: Maximum gas to be used for this transaction
-     *                          - maxFeePerGas: Maximum fee per gas unit
-     *                          - nonce: Used to prevent replay attacks
-     *                          - deadline: Timestamp after which the payload is invalid
+     * @notice                  Executes a cross-chain payload with the provided verification data.
+     * @param payload           The ABI-encoded UniversalPayload struct. Callers must encode the payload as:
+     *                          `abi.encode(UniversalPayload({...}))` with the following fields in order:
+     *                          - to: Target contract address to call (address)
+     *                          - value: Native token amount to send (uint256)
+     *                          - data: Calldata for the function execution (bytes)
+     *                          - gasLimit: Maximum gas to be used for this transaction (uint256)
+     *                          - maxFeePerGas: Maximum fee per gas unit (uint256)
+     *                          - maxPriorityFeePerGas: Maximum priority fee per gas unit (uint256)
+     *                          - nonce: Used to prevent replay attacks (uint256)
+     *                          - deadline: Timestamp after which the payload is invalid (uint256)
+     *                          - vType: Verification type (uint8 - VerificationType enum)
+     * 
+     *                          The function will revert with decoding errors if the payload is not properly encoded.
      * 
      * @param verificationData The verificationData is the bytes passed as verifier data for the given payload.
      *                          The verificationData can be of 2 different types:
@@ -104,7 +109,7 @@ interface IUEA {
      *                         4. In a MultiCall, if any of the sub-calls fails, it reverts with ExecutionFailed.
      *                         5. If the target contract execution fails, it reverts with ExecutionFailed or forwards the error message.
      */
-    function executePayload(UniversalPayload calldata payload, bytes calldata verificationData) external;
+    function executePayload(bytes calldata payload, bytes calldata verificationData) external;
 
     /**
      * @notice                  Executes a migration payload for updating UEAs.

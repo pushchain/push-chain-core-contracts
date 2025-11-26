@@ -14,6 +14,9 @@ enum VerificationType {
     universalTxVerification         // Verification based on tx hash
 }
 
+// UniversalPayload struct used internally by UEAs
+// When calling executePayload, callers must encode this struct as: abi.encode(UniversalPayload({...}))
+// The encoding layout is: (address, uint256, bytes, uint256, uint256, uint256, uint256, uint256, uint8)
 struct UniversalPayload {
     address to;                     // Target contract address to call
     uint256 value;                  // Native token amount to send
