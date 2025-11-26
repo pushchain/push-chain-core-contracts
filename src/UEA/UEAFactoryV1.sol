@@ -48,6 +48,8 @@ contract UEAFactoryV1 is Initializable, OwnableUpgradeable, IUEAFactory {
     mapping(bytes32 => bytes32) public CHAIN_to_VM;
     /// @notice The implementation of UEAProxy that will be cloned for each user
     address public UEA_PROXY_IMPLEMENTATION;
+    /// @notice The current version of of UEA_MIGRATION contract to be used for migration
+    address public UEA_MIGRATION_CONTRACT;
 
     /// @custom:oz-upgrades-unsafe-allow constructor
     constructor() {
@@ -79,6 +81,19 @@ contract UEAFactoryV1 is Initializable, OwnableUpgradeable, IUEAFactory {
             revert Errors.InvalidInputArgs();
         }
         UEA_PROXY_IMPLEMENTATION = _UEA_PROXY_IMPLEMENTATION;
+    }
+
+    /**
+     * @dev Sets the UEA_MIGRATION_CONTRACT address
+     * @param _UEA_MIGRATION_CONTRACT The new UEA_MIGRATION_CONTRACT address
+     * @notice Can only be called by the contract owner
+     * @notice Will revert if the address is zero
+     */
+    function setUEAMigrationContract(address _UEA_MIGRATION_CONTRACT) external onlyOwner {
+        if (_UEA_MIGRATION_CONTRACT == address(0)) {
+            revert Errors.InvalidInputArgs();
+        }
+        UEA_MIGRATION_CONTRACT = _UEA_MIGRATION_CONTRACT;
     }
 
     /**
