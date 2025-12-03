@@ -239,10 +239,7 @@ contract CEA is ICEA, ReentrancyGuard {
         if (payload.length < 4) revert CEAErrors.InvalidInput();
 
         // Extract function selector from the first 4 bytes of payload
-        bytes4 selector;
-        assembly {
-            selector := shr(224, calldataload(payload.offset))
-        }
+        bytes4 selector = bytes4(payload);
 
         // the ONLY allowed self-call is withdrawFundsToUEA(address,uint256)
         if (selector != WITHDRAW_FUNDS_SELECTOR) {
