@@ -84,7 +84,6 @@ contract CEA is ICEA, ReentrancyGuard {
 
         _initialized = true;
 
-        emit CEAInitialized(_uea, _vault, _universalGateway);
     }
 
     //========================
@@ -183,7 +182,6 @@ contract CEA is ICEA, ReentrancyGuard {
         if (isExecuted[txID]) revert CEAErrors.PayloadExecuted();
         if (uea != UEA) revert CEAErrors.InvalidUEA();
         if (target == address(0)) revert CEAErrors.InvalidTarget();
-        if (amount == 0) revert CEAErrors.InvalidAmount();
 
         if (token != address(0)) {
             if (msg.value != 0) revert CEAErrors.InvalidAmount();
