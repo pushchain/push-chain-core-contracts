@@ -35,14 +35,6 @@ interface ICEA {
         bytes data
     );
 
-    /**
-     * @notice Emitted once when this CEA is initialized for a UEA + Vault.
-     * @param uea  UEA on Push Chain that this CEA represents.
-     * @param vault      Vault on this chain that is allowed to drive this CEA.
-     * @param universalGateway Address of the Universal Gateway contract of the respective chain.
-     */
-    event CEAInitialized(address indexed uea, address indexed vault, address indexed universalGateway);
-
     /// @notice                     Emitted when funds are withdrawn to the UEA on Push Chain.
     /// @param _cea                Address of the CEA that is withdrawing funds
     /// @param _uea                Address of the UEA on Push Chain that this CEA represents.
