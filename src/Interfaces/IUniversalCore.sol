@@ -12,6 +12,9 @@ interface IUniversalCore {
     event SetGasToken(string chainId, address prc20);
     event SetDefaultDeadlineMins(uint256 minutesValue);
     event SetSupportedToken(address indexed prc20, bool supported);
+    event ProtocolFeesUpdated(uint256 pc20ProtocolFees, uint256 pc721ProtocolFees, uint256 defaultProtocolFees);
+    event SetPC20Support(string indexed chainNamespace, bool supported);
+    event SetPC721Support(string indexed chainNamespace, bool supported);
     event SetGasPCPool(string chainId, address pool, uint24 fee);   
     event DepositPRC20WithAutoSwap(address prc20, uint256 amountIn, address pcToken, uint256 amountOut, uint24 fee, address target);
     // =========================

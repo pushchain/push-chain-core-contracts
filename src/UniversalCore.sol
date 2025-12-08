@@ -73,6 +73,15 @@ contract UniversalCore is
     /// @notice Mapping for indicating an official PRC20 supported token
     mapping(address => bool) public isSupportedToken;
 
+    /// @notice Protocol Fees for PC20, PC721 or default
+    uint256 public PC20_PROTOCOL_FEES;
+    uint256 public PC721_PROTOCOL_FEES;
+    uint256 public DEFAULT_PROTOCOL_FEES;
+
+    /// @notice Map to know if PC20 or if PC721 support for a given chain namespace
+    mapping(string => bool) public isPC20SupportedOnChain;
+    mapping(string => bool) public isPC721SupportedOnChain;
+
     modifier onlyUEModule() {
         if (msg.sender != UNIVERSAL_EXECUTOR_MODULE) revert UniversalCoreErrors.CallerIsNotUEModule();
         _;
@@ -196,6 +205,59 @@ contract UniversalCore is
         IPRC20(prc20).approve(uniswapV3SwapRouterAddress, 0);
 
         emit DepositPRC20WithAutoSwap(prc20, amount, wPCContractAddress, pcOut, fee, target);
+    }
+
+    /**
+     * @notice Set protocol fees for PC20, PC721 and default
+     * @dev  Only addresses with MANAGER_ROLE can call this
+     * @param pc20Fee     Protocol fee for PC20 tokens
+     * @param pc721Fee    Protocol fee for PC721 tokens
+     * @param defaultFee  Default protocol fee for other cases
+     */
+    function setProtocolFees(
+        uint256 pc20Fee,
+        uint256 pc721Fee,
+        uint256 defaultFee
+    ) external onlyRole(MANAGER_ROLE) whenNotPaused {
+        PC20_PROTOCOL_FEES = pc20Fee;
+        PC721_PROTOCOL_FEES = pc721Fee;
+        DEFAULT_PROTOCOL_FEES = defaultFee;
+
+        emit ProtocolFeesUpdated(pc20Fee, pc721Fee, defaultFee);
+    }
+
+    /**
+    * @notice Enables or disables PC20 asset support for a given external chain namespace.
+    * @dev @dev Only addresses with MANAGER_ROLE can modify support. 
+    *      Paused state prevents changes. 
+    *      This does not deploy or register any token; it only flips support metadata.
+    * @param chainNamespace The chain namespace identifier (e.g., "eip155:1").
+    * @param supported      True to enable PC20 support, false to disable.
+    */
+    function setPC20SupportOnChain(string calldata chainNamespace, bool supported)
+        external
+        onlyRole(MANAGER_ROLE)
+        whenNotPaused
+    {
+        isPC20SupportedOnChain[chainNamespace] = supported;
+        emit SetPC20Support(chainNamespace, supported);
+    }
+
+    /**
+    * @notice Enables or disables PC721 (NFT) asset support for a given external chain namespace.
+    * @dev  Only addresses with MANAGER_ROLE can modify support. 
+    *      Paused state prevents changes. 
+    *      This is purely metadata and does not deploy or map NFT contracts.
+    * @param chainNamespace The chain namespace identifier (e.g., "eip155:1").
+    * @param supported      True to enable PC721 support, false to disable.
+    */
+    function setPC721SupportOnChain(string calldata chainNamespace, bool supported)
+        external
+        onlyRole(MANAGER_ROLE)
+        whenNotPaused
+    {
+        isPC721SupportedOnChain[chainNamespace] = supported;
+        emit SetPC721Support(chainNamespace, supported);
     }
 
     /**
@@ -414,5 +476,5 @@ contract UniversalCore is
      * variables without shifting down storage in the inheritance chain.
      * See https://docs.openzeppelin.com/contracts/4.x/upgradeable#storage_gaps
      */
-    uint256[50] private __gap;
+    uint256[45] private __gap;
 }
