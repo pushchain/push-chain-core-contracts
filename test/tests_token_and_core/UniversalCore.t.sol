@@ -60,6 +60,10 @@ contract UniversalCoreTest is Test, UpgradeableContractHelper {
     event Paused(address account);
     event Unpaused(address account);
     event SetSupportedToken(address indexed prc20, bool supported);
+    event ProtocolFeesUpdated(uint256 pc20ProtocolFees, uint256 pc721ProtocolFees, uint256 defaultProtocolFees);
+    event SetPC20Support(string indexed chainNamespace, bool supported);
+    event SetPC721Support(string indexed chainNamespace, bool supported);
+
 
     function setUp() public {
         // Setup accounts
@@ -844,4 +848,214 @@ contract UniversalCoreTest is Test, UpgradeableContractHelper {
         );
         universalCore.setSupportedToken(token, true);
     }
+
+    // ========================================
+    // 7) Protocol fee configuration (MANAGER_ROLE)
+    // ========================================
+
+    function test_SetProtocolFees_OnlyManager() public {
+        uint256 pc20Fee = 123;
+        uint256 pc721Fee = 234;
+        uint256 defaultFee = 345;
+
+        // Non manager should revert
+        vm.expectRevert(
+            abi.encodeWithSelector(
+                IAccessControl.AccessControlUnauthorizedAccount.selector,
+                nonUEModule,
+                universalCore.MANAGER_ROLE()
+            )
+        );
+        vm.prank(nonUEModule);
+        universalCore.setProtocolFees(pc20Fee, pc721Fee, defaultFee);
+
+        // MANAGER_ROLE (UNIVERSAL_EXECUTOR_MODULE) should succeed
+        vm.prank(UNIVERSAL_EXECUTOR_MODULE);
+        universalCore.setProtocolFees(pc20Fee, pc721Fee, defaultFee);
+
+        // Verify stored values
+        assertEq(universalCore.PC20_PROTOCOL_FEES(), pc20Fee);
+        assertEq(universalCore.PC721_PROTOCOL_FEES(), pc721Fee);
+        assertEq(universalCore.DEFAULT_PROTOCOL_FEES(), defaultFee);
+    }
+
+    function test_SetProtocolFees_EmitsEvent() public {
+        uint256 pc20Fee = 222;
+        uint256 pc721Fee = 333;
+        uint256 defaultFee = 444;
+
+        vm.prank(UNIVERSAL_EXECUTOR_MODULE);
+        vm.expectEmit(false, false, false, true);
+        emit ProtocolFeesUpdated(pc20Fee, pc721Fee, defaultFee);
+        universalCore.setProtocolFees(pc20Fee, pc721Fee, defaultFee);
+    }
+
+    function test_ProtocolFees_DefaultZero() public view {
+        // By default, before any setProtocolFees call, all should be zero
+        assertEq(universalCore.PC20_PROTOCOL_FEES(), 0);
+        assertEq(universalCore.PC721_PROTOCOL_FEES(), 0);
+        assertEq(universalCore.DEFAULT_PROTOCOL_FEES(), 0);
+    }
+
+    function test_ProtocolFees_AfterSetReflectStoredValues() public {
+        uint256 pc20Fee = 123;
+        uint256 pc721Fee = 456;
+        uint256 defaultFee = 789;
+
+        vm.prank(UNIVERSAL_EXECUTOR_MODULE);
+        universalCore.setProtocolFees(pc20Fee, pc721Fee, defaultFee);
+
+        // Read back via public getters
+        assertEq(universalCore.PC20_PROTOCOL_FEES(), pc20Fee);
+        assertEq(universalCore.PC721_PROTOCOL_FEES(), pc721Fee);
+        assertEq(universalCore.DEFAULT_PROTOCOL_FEES(), defaultFee);
+    }
+
+    function test_SetProtocolFees_WhenPaused_Reverts() public {
+        uint256 pc20Fee = 1e15;
+        uint256 pc721Fee = 2e15;
+        uint256 defaultFee = 5e14;
+
+        // Pause by owner
+        vm.prank(deployer);
+        universalCore.pause();
+
+        // Manager cannot change fees while paused
+        vm.prank(UNIVERSAL_EXECUTOR_MODULE);
+        vm.expectRevert(
+            abi.encodeWithSelector(PausableUpgradeable.EnforcedPause.selector)
+        );
+        universalCore.setProtocolFees(pc20Fee, pc721Fee, defaultFee);
+    }
+
+    // ========================================
+    // 8) PC20 / PC721 chain support mapping (MANAGER_ROLE)
+    // ========================================
+
+    function test_PC20SupportOnChain_DefaultFalse() public view {
+        // By default, nothing is supported
+        assertFalse(universalCore.isPC20SupportedOnChain("eip155:1"));
+        assertFalse(universalCore.isPC20SupportedOnChain("eip155:8453"));
+    }
+
+    function test_PC721SupportOnChain_DefaultFalse() public view {
+        // By default, nothing is supported
+        assertFalse(universalCore.isPC721SupportedOnChain("eip155:1"));
+        assertFalse(universalCore.isPC721SupportedOnChain("eip155:8453"));
+    }
+
+    function test_SetPC20SupportOnChain_OnlyManagerRole() public {
+        string memory ns = "eip155:1";
+
+        // Non manager should revert
+        vm.expectRevert(
+            abi.encodeWithSelector(
+                IAccessControl.AccessControlUnauthorizedAccount.selector,
+                nonUEModule,
+                universalCore.MANAGER_ROLE()
+            )
+        );
+        vm.prank(nonUEModule);
+        universalCore.setPC20SupportOnChain(ns, true);
+
+        // MANAGER_ROLE (UNIVERSAL_EXECUTOR_MODULE) should succeed
+        vm.prank(UNIVERSAL_EXECUTOR_MODULE);
+        universalCore.setPC20SupportOnChain(ns, true);
+
+        assertTrue(universalCore.isPC20SupportedOnChain(ns));
+    }
+
+    function test_SetPC721SupportOnChain_OnlyManagerRole() public {
+        string memory ns = "eip155:1";
+
+        // Non manager should revert
+        vm.expectRevert(
+            abi.encodeWithSelector(
+                IAccessControl.AccessControlUnauthorizedAccount.selector,
+                nonUEModule,
+                universalCore.MANAGER_ROLE()
+            )
+        );
+        vm.prank(nonUEModule);
+        universalCore.setPC721SupportOnChain(ns, true);
+
+        // MANAGER_ROLE (UNIVERSAL_EXECUTOR_MODULE) should succeed
+        vm.prank(UNIVERSAL_EXECUTOR_MODULE);
+        universalCore.setPC721SupportOnChain(ns, true);
+
+        assertTrue(universalCore.isPC721SupportedOnChain(ns));
+    }
+
+    function test_SetPC20SupportOnChain_EmitsEvent() public {
+        string memory ns = "eip155:1";
+
+        vm.prank(UNIVERSAL_EXECUTOR_MODULE);
+        vm.expectEmit(true, false, false, true);
+        emit SetPC20Support(ns, true);
+        universalCore.setPC20SupportOnChain(ns, true);
+    }
+
+    function test_SetPC721SupportOnChain_EmitsEvent() public {
+        string memory ns = "eip155:8453";
+
+        vm.prank(UNIVERSAL_EXECUTOR_MODULE);
+        vm.expectEmit(true, false, false, true);
+        emit SetPC721Support(ns, true);
+        universalCore.setPC721SupportOnChain(ns, true);
+    }
+
+    function test_SetPC20SupportOnChain_ToggleTrueFalse() public {
+        string memory ns = "eip155:1";
+
+        vm.prank(UNIVERSAL_EXECUTOR_MODULE);
+        universalCore.setPC20SupportOnChain(ns, true);
+        assertTrue(universalCore.isPC20SupportedOnChain(ns));
+
+        vm.prank(UNIVERSAL_EXECUTOR_MODULE);
+        universalCore.setPC20SupportOnChain(ns, false);
+        assertFalse(universalCore.isPC20SupportedOnChain(ns));
+    }
+
+    function test_SetPC721SupportOnChain_ToggleTrueFalse() public {
+        string memory ns = "eip155:8453";
+
+        vm.prank(UNIVERSAL_EXECUTOR_MODULE);
+        universalCore.setPC721SupportOnChain(ns, true);
+        assertTrue(universalCore.isPC721SupportedOnChain(ns));
+
+        vm.prank(UNIVERSAL_EXECUTOR_MODULE);
+        universalCore.setPC721SupportOnChain(ns, false);
+        assertFalse(universalCore.isPC721SupportedOnChain(ns));
+    }
+
+    function test_SetPC20SupportOnChain_WhenPaused_Reverts() public {
+        string memory ns = "eip155:1";
+
+        // Pause by owner
+        vm.prank(deployer);
+        universalCore.pause();
+
+        // Manager cannot mutate while paused
+        vm.prank(UNIVERSAL_EXECUTOR_MODULE);
+        vm.expectRevert(
+            abi.encodeWithSelector(PausableUpgradeable.EnforcedPause.selector)
+        );
+        universalCore.setPC20SupportOnChain(ns, true);
+    }
+
+    function test_SetPC721SupportOnChain_WhenPaused_Reverts() public {
+        string memory ns = "eip155:8453";
+
+        // Pause by owner
+        vm.prank(deployer);
+        universalCore.pause();
+
+        // Manager cannot mutate while paused
+        vm.prank(UNIVERSAL_EXECUTOR_MODULE);
+        vm.expectRevert(
+            abi.encodeWithSelector(PausableUpgradeable.EnforcedPause.selector)
+        );
+        universalCore.setPC721SupportOnChain(ns, true);
+    }
+
 }
