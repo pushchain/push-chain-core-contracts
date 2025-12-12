@@ -286,7 +286,6 @@ contract BaseTest is Test {
      * @param data Call data
      * @param nonce Transaction nonce
      * @param deadline Transaction deadline
-     * @param vType Verification type
      * @return payload Universal payload struct
      */
     function createUniversalPayload(
@@ -294,8 +293,7 @@ contract BaseTest is Test {
         uint256 value,
         bytes memory data,
         uint256 nonce,
-        uint256 deadline,
-        VerificationType vType
+        uint256 deadline
     ) public pure returns (UniversalPayload memory payload) {
         return UniversalPayload({
             to: to,
@@ -305,8 +303,7 @@ contract BaseTest is Test {
             maxFeePerGas: 0,
             maxPriorityFeePerGas: 0,
             nonce: nonce,
-            deadline: deadline,
-            vType: vType
+            deadline: deadline
         });
     }
 

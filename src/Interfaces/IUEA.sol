@@ -88,26 +88,26 @@ interface IUEA {
      *                          - maxPriorityFeePerGas: Maximum priority fee per gas unit (uint256)
      *                          - nonce: Used to prevent replay attacks (uint256)
      *                          - deadline: Timestamp after which the payload is invalid (uint256)
-     *                          - vType: Verification type (uint8 - VerificationType enum)
      * 
      *                          The function will revert with decoding errors if the payload is not properly encoded.
      * 
-     * @param verificationData The verificationData is the bytes passed as verifier data for the given payload.
-     *                          The verificationData can be of 2 different types:
-     *                          1. For Signature-based verification: ECDSA signature (r, s, v)
-     *                          2. For TxHash-based verification: TxHash of the payload
+     * @param verificationData The verificationData is the signature bytes for verification.
+     *                          The signature format differs based on UEA type:
+     *                          - For UEA_EVM: ECDSA signature (r, s, v) - 65 bytes
+     *                          - For UEA_SVM: Ed25519 signature - 64 bytes
      * 
-     *                          Additionally, the sig-type verificationData for UEA_EVM vs UEA_SVM differs:
-     *                          1. For UEA_EVM: The verificationData is the ECDSA signature (r, s, v)
-     *                          2. For UEA_SVM: The verificationData is the Ed25519 signature
+     *                          Note: If the caller is UE_MODULE, signature verification is skipped.
      *
-     * @dev                     Function can allow SINGLE Payload execution or MULTIPLE Payload execution (Multicall).
-     *                         The function has following reverts:
-     *                         1. If signature verification fails, it reverts with InvalidEVMSignature or InvalidSVMSignature.
-     *                         2. If TxHash verification fails, it reverts with InvalidTxHash.
-     *                         3. If the deadline has passed, it reverts with ExpiredDeadline.
-     *                         4. In a MultiCall, if any of the sub-calls fails, it reverts with ExecutionFailed.
-     *                         5. If the target contract execution fails, it reverts with ExecutionFailed or forwards the error message.
+     * @dev                     Verification behavior:
+     *                          - If caller is UE_MODULE: No signature verification required
+     *                          - If caller is not UE_MODULE: Signature verification required
+     * 
+     *                          Function can allow SINGLE Payload execution or MULTIPLE Payload execution (Multicall).
+     *                          The function has following reverts:
+     *                          1. If signature verification fails, it reverts with InvalidEVMSignature or InvalidSVMSignature.
+     *                          2. If the deadline has passed, it reverts with ExpiredDeadline.
+     *                          3. In a MultiCall, if any of the sub-calls fails, it reverts with ExecutionFailed.
+     *                          4. If the target contract execution fails, it reverts with ExecutionFailed or forwards the error message.
      */
     function executePayload(bytes calldata payload, bytes calldata verificationData) external;
 

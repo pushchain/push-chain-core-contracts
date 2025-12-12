@@ -52,7 +52,6 @@ library UniversalCoreErrors {
 // =========================
 library UEAErrors {
     error InvalidCall();
-    error InvalidTxHash();
     error InvalidAccount();
     error ExecutionFailed();
     error ExpiredDeadline();

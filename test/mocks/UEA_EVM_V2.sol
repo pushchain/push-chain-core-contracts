@@ -10,7 +10,6 @@ import {
     UniversalAccountId,
     UniversalPayload,
     MigrationPayload,
-    VerificationType,
     UNIVERSAL_PAYLOAD_TYPEHASH,
     MIGRATION_PAYLOAD_TYPEHASH,
     MULTICALL_SELECTOR,
@@ -35,8 +34,8 @@ contract UEA_EVM_V2 is ReentrancyGuard, IUEA {
     uint256 public nonce;
     // @notice The version of the UEA - Updated to 2.0.0 for V2
     string public constant VERSION = "2.0.0";
-    // @notice Precompile address for TxHash Based Verification
-    address public constant TX_BASED_VERIFIER = 0x00000000000000000000000000000000000000CB;
+    // @notice UEModule address - authorized to execute without signature verification
+    address public constant UE_MODULE = 0x14191Ea54B4c176fCf86f51b0FAc7CB1E71Df7d7;
     // @notice Hash of keccak256("EIP712Domain(string version,uint256 chainId,address verifyingContract)")
     bytes32 public constant DOMAIN_SEPARATOR_TYPEHASH =
         0x2aef22f9d7df5f9d21c56d14029233f3fdaa91917727e1eb68e504d27072d6cd;
@@ -78,23 +77,6 @@ contract UEA_EVM_V2 is ReentrancyGuard, IUEA {
         return recoveredSigner == address(bytes20(id.owner));
     }
 
-    function verifyPayloadTxHash(bytes32 payloadHash, bytes calldata txHash) public view returns (bool) {
-        (bool success, bytes memory result) = TX_BASED_VERIFIER.staticcall(
-            abi.encodeWithSignature(
-                "verifyTxHash(string,string,bytes,bytes32,bytes)",
-                id.chainNamespace,
-                id.chainId,
-                id.owner,
-                payloadHash,
-                txHash
-            )
-        );
-        if (!success) {
-            revert Errors.PrecompileCallFailed();
-        }
-
-        return abi.decode(result, (bool));
-    }
 
     /**
      * @dev Checks whether the payload data uses the multicall format by verifying a magic selector prefix.
@@ -133,13 +115,9 @@ contract UEA_EVM_V2 is ReentrancyGuard, IUEA {
         // Decode the raw bytes payload into UniversalPayload struct
         UniversalPayload memory payload = abi.decode(rawPayload, (UniversalPayload));
         
-        bytes32 payloadHash = getPayloadHash(payload);
-
-        if (payload.vType == VerificationType.universalTxVerification) {
-            if (verificationData.length == 0 || !verifyPayloadTxHash(payloadHash, verificationData)) {
-                revert Errors.InvalidTxHash();
-            }
-        } else {
+        // Caller-based verification: UEModule can execute without signature, others need signature
+        if (msg.sender != UE_MODULE) {
+            bytes32 payloadHash = getPayloadHash(payload);
             if (!verifyPayloadSignature(payloadHash, verificationData)) {
                 revert Errors.InvalidEVMSignature();
             }
@@ -236,8 +214,7 @@ contract UEA_EVM_V2 is ReentrancyGuard, IUEA {
                 payload.maxFeePerGas,
                 payload.maxPriorityFeePerGas,
                 nonce,
-                payload.deadline,
-                uint8(payload.vType)
+                payload.deadline
             )
         );
 

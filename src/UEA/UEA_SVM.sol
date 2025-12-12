@@ -9,7 +9,6 @@ import {
     UniversalAccountId,
     UniversalPayload,
     MigrationPayload,
-    VerificationType,
     UNIVERSAL_PAYLOAD_TYPEHASH,
     MIGRATION_PAYLOAD_TYPEHASH,
     MULTICALL_SELECTOR,
@@ -36,8 +35,8 @@ contract UEA_SVM is ReentrancyGuard, IUEA {
     string public constant VERSION = "1.0.0";
     /// @notice The verifier precompile address
     address public constant VERIFIER_PRECOMPILE = 0x00000000000000000000000000000000000000ca;
-    /// @notice Precompile address for TxHash Based Verification
-    address public constant TX_BASED_VERIFIER = 0x00000000000000000000000000000000000000CB;
+    /// @notice UEModule address - authorized to execute without signature verification
+    address public constant UE_MODULE = 0x14191Ea54B4c176fCf86f51b0FAc7CB1E71Df7d7;
     /// @notice Hash of keccak256("EIP712Domain_SVM(string version,string chainId,address verifyingContract)")
     bytes32 public constant DOMAIN_SEPARATOR_TYPEHASH_SVM =
         0x3aefc31558906b9b2c54de94f82a9b2455c24b4ba2b642ebb545ea2cc64a1e4b;
@@ -94,30 +93,6 @@ contract UEA_SVM is ReentrancyGuard, IUEA {
         return abi.decode(result, (bool));
     }
 
-    /**
-     * @notice              Verifies a payload using transaction hash-based verification
-     * @dev                 Uses a precompiled contract ( TX_BASED_VERIFIER on Push Chain) to verify transaction hash for universal transaction verification
-     * @param payloadHash   hash of the payload to verify
-     * @param txHash        transaction hash to verify against
-     * @return bool         indicates whether the transaction hash verification is valid
-     */
-    function verifyPayloadTxHash(bytes32 payloadHash, bytes calldata txHash) public view returns (bool) {
-        (bool success, bytes memory result) = TX_BASED_VERIFIER.staticcall(
-            abi.encodeWithSignature(
-                "verifyTxHash(string,string,bytes,bytes32,bytes)",
-                id.chainNamespace,
-                id.chainId,
-                id.owner,
-                payloadHash,
-                txHash
-            )
-        );
-        if (!success) {
-            revert Errors.PrecompileCallFailed();
-        }
-
-        return abi.decode(result, (bool));
-    }
 
     /**
      * @inheritdoc IUEA
@@ -126,13 +101,9 @@ contract UEA_SVM is ReentrancyGuard, IUEA {
         // Decode the raw bytes payload into UniversalPayload struct
         UniversalPayload memory payload = abi.decode(rawPayload, (UniversalPayload));
         
-        bytes32 payloadHash = getPayloadHash(payload);
-
-        if (payload.vType == VerificationType.universalTxVerification) {
-            if (verificationData.length == 0 || !verifyPayloadTxHash(payloadHash, verificationData)) {
-                revert Errors.InvalidTxHash();
-            }
-        } else {
+        // Caller-based verification: UEModule can execute without signature, others need signature
+        if (msg.sender != UE_MODULE) {
+            bytes32 payloadHash = getPayloadHash(payload);
             if (!verifyPayloadSignature(payloadHash, verificationData)) {
                 revert Errors.InvalidSVMSignature();
             }
@@ -262,8 +233,7 @@ contract UEA_SVM is ReentrancyGuard, IUEA {
                 payload.maxFeePerGas,
                 payload.maxPriorityFeePerGas,
                 nonce,
-                payload.deadline,
-                uint8(payload.vType)
+                payload.deadline
             )
         );
 
