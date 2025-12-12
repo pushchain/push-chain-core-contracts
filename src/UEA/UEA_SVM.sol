@@ -8,11 +8,9 @@ import {StringUtils} from "../libraries/Utils.sol";
 import {
     UniversalAccountId,
     UniversalPayload,
-    MigrationPayload,
-    VerificationType,
     UNIVERSAL_PAYLOAD_TYPEHASH,
-    MIGRATION_PAYLOAD_TYPEHASH,
     MULTICALL_SELECTOR,
+    MIGRATION_SELECTOR,
     Multicall
 } from "../libraries/Types.sol";
 /**
@@ -36,8 +34,8 @@ contract UEA_SVM is ReentrancyGuard, IUEA {
     string public constant VERSION = "1.0.0";
     /// @notice The verifier precompile address
     address public constant VERIFIER_PRECOMPILE = 0x00000000000000000000000000000000000000ca;
-    /// @notice Precompile address for TxHash Based Verification
-    address public constant TX_BASED_VERIFIER = 0x00000000000000000000000000000000000000CB;
+    /// @notice UEModule address - authorized to execute without signature verification
+    address public constant UE_MODULE = 0x14191Ea54B4c176fCf86f51b0FAc7CB1E71Df7d7;
     /// @notice Hash of keccak256("EIP712Domain_SVM(string version,string chainId,address verifyingContract)")
     bytes32 public constant DOMAIN_SEPARATOR_TYPEHASH_SVM =
         0x3aefc31558906b9b2c54de94f82a9b2455c24b4ba2b642ebb545ea2cc64a1e4b;
@@ -62,6 +60,10 @@ contract UEA_SVM is ReentrancyGuard, IUEA {
 
         id = _id;
     }
+
+    // =========================
+    //    UEA_1: Public Getters and Helpers
+    // =========================
 
     /**
      * @inheritdoc IUEA
@@ -94,45 +96,38 @@ contract UEA_SVM is ReentrancyGuard, IUEA {
         return abi.decode(result, (bool));
     }
 
-    /**
-     * @notice              Verifies a payload using transaction hash-based verification
-     * @dev                 Uses a precompiled contract ( TX_BASED_VERIFIER on Push Chain) to verify transaction hash for universal transaction verification
-     * @param payloadHash   hash of the payload to verify
-     * @param txHash        transaction hash to verify against
-     * @return bool         indicates whether the transaction hash verification is valid
-     */
-    function verifyPayloadTxHash(bytes32 payloadHash, bytes calldata txHash) public view returns (bool) {
-        (bool success, bytes memory result) = TX_BASED_VERIFIER.staticcall(
-            abi.encodeWithSignature(
-                "verifyTxHash(string,string,bytes,bytes32,bytes)",
-                id.chainNamespace,
-                id.chainId,
-                id.owner,
-                payloadHash,
-                txHash
-            )
-        );
-        if (!success) {
-            revert Errors.PrecompileCallFailed();
-        }
-
-        return abi.decode(result, (bool));
-    }
+    // =========================
+    //    UEA_2: Execution Handler
+    // =========================
 
     /**
      * @inheritdoc IUEA
      */
-    function executePayload(UniversalPayload calldata payload, bytes calldata verificationData) external nonReentrant {
-        bytes32 payloadHash = getPayloadHash(payload);
-
-        if (payload.vType == VerificationType.universalTxVerification) {
-            if (verificationData.length == 0 || !verifyPayloadTxHash(payloadHash, verificationData)) {
-                revert Errors.InvalidTxHash();
-            }
-        } else {
+    function executePayload(bytes calldata rawPayload, bytes calldata verificationData) external nonReentrant {
+        UniversalPayload memory payload = abi.decode(rawPayload, (UniversalPayload));
+        
+        if (msg.sender != UE_MODULE) {
+            bytes32 payloadHash = getPayloadHash(payload);
             if (!verifyPayloadSignature(payloadHash, verificationData)) {
                 revert Errors.InvalidSVMSignature();
             }
+        }
+
+        _handleExecution(payload);
+    }
+
+    // =========================
+    //    UEA_3: Internal Execution Helpers
+    // =========================
+
+    /**
+     * @notice                  Internal handler for executing payloads
+     * @dev                     Handles nonce increment, selector-based dispatch, and event emission
+     * @param payload           the UniversalPayload to execute
+     */
+    function _handleExecution(UniversalPayload memory payload) internal {
+        if (payload.deadline > 0 && block.timestamp > payload.deadline) {
+            revert Errors.ExpiredDeadline();
         }
 
         unchecked {
@@ -143,16 +138,11 @@ contract UEA_SVM is ReentrancyGuard, IUEA {
         bytes memory returnData;
 
         if (isMulticall(payload.data)) {
-            Multicall[] memory calls = decodeCalls(payload.data);
-            for (uint256 i = 0; i < calls.length; i++) {
-                // If any sub-call fails, revert entire multicall
-                (success, returnData) = calls[i].to.call{value: calls[i].value}(calls[i].data);
-                if (!success) {
-                    break;
-                }
-            }
+            (success, returnData) = _handleMulticall(payload);
+        } else if (isMigration(payload.data)) {
+            (success, returnData) = _handleMigration(payload);
         } else {
-            (success, returnData) = payload.to.call{value: payload.value}(payload.data);
+            (success, returnData) = _handleSingleCall(payload);
         }
 
         if (!success) {
@@ -170,62 +160,139 @@ contract UEA_SVM is ReentrancyGuard, IUEA {
     }
 
     /**
-     * @inheritdoc IUEA
+     * @notice                  Internal handler for multicall execution
+     * @dev                     Executes multiple calls in sequence, reverting if any fails
+     * @dev                     Prevents migration selector in subcalls for safety
+     * @param payload           the UniversalPayload containing multicall data
+     * @return success          whether all calls succeeded
+     * @return returnData       return data from the last call or first failed call
      */
-    function migrateUEA(MigrationPayload calldata payload, bytes calldata signature) external nonReentrant {
-        bytes32 payloadHash = getMigrationPayloadHash(payload);
+    function _handleMulticall(UniversalPayload memory payload) 
+        internal 
+        returns (bool success, bytes memory returnData) 
+    {
+        Multicall[] memory calls = decodeCalls(payload.data);
 
-        if (!verifyPayloadSignature(payloadHash, signature)) {
-            revert Errors.InvalidSVMSignature();
-        }
+        for (uint256 i = 0; i < calls.length; i++) {
+            if (isMigration(calls[i].data)) {
+                revert Errors.InvalidCall();
+            }
 
-        unchecked {
-            nonce++;
-        }
-
-        bytes memory migrateCallData = abi.encodeWithSignature("migrateUEASVM()");
-
-        (bool success, bytes memory returnData) = payload.migration.delegatecall(migrateCallData);
-
-        if (!success) {
-            if (returnData.length > 0) {
-                assembly {
-                    let returnDataSize := mload(returnData)
-                    revert(add(32, returnData), returnDataSize)
-                }
-            } else {
-                revert Errors.ExecutionFailed();
+            (success, returnData) = calls[i].to.call{value: calls[i].value}(calls[i].data);
+            if (!success) {
+                return (success, returnData);
             }
         }
 
-        emit PayloadExecuted(id.owner, nonce);
+        return (true, "");
     }
 
+    /**
+     * @notice                  Internal handler for migration execution
+     * @dev                     Executes migration via delegatecall to migration contract
+     * @dev                     Enforces safety constraints: must target self, no value transfer
+     * @param payload           the UniversalPayload containing migration data
+     * @return success          whether the migration succeeded
+     * @return returnData       return data from the delegatecall
+     */
+    function _handleMigration(UniversalPayload memory payload) 
+        internal 
+        returns (bool success, bytes memory returnData) 
+    {
+        if (payload.to != address(this)) {
+            revert Errors.InvalidCall();
+        }
+        if (payload.value != 0) {
+            revert Errors.InvalidCall();
+        }
+
+        // Format: MIGRATION_SELECTOR + abi.encode(migrationContractAddress)
+        address migrationContract = decodeMigrationAddress(payload.data);
+
+        bytes memory migrateCallData = abi.encodeWithSignature("migrateUEASVM()");
+
+        (success, returnData) = migrationContract.delegatecall(migrateCallData);
+    }
+
+    /**
+     * @notice                  Internal handler for single call execution
+     * @dev                     Executes a single call to the target address
+     * @param payload           the UniversalPayload containing call data
+     * @return success          whether the call succeeded
+     * @return returnData       return data from the call
+     */
+    function _handleSingleCall(UniversalPayload memory payload) 
+        internal 
+        returns (bool success, bytes memory returnData) 
+    {
+        (success, returnData) = payload.to.call{value: payload.value}(payload.data);
+    }
+
+
+
     // =========================
-    //           Internal Helper Functions
+    //    UEA_4: Private Helpers
     // =========================
 
     /**
      * @notice          Checks whether the payload data uses the multicall format
      * @dev             Determines if the payload data starts with the MULTICALL_SELECTOR magic prefix
      * @dev             Used to distinguish between single call vs multicall batch execution
-     * @param data      raw calldata from the UniversalPayload
+     * @param data      raw data from the UniversalPayload
      * @return bool     returns true if the data starts with MULTICALL_SELECTOR, indicating a multicall batch
      */
-    function isMulticall(bytes calldata data) internal pure returns (bool) {
+    function isMulticall(bytes memory data) internal pure returns (bool) {
         if (data.length < 4) return false;
-        return bytes4(data[:4]) == MULTICALL_SELECTOR;
+        bytes4 selector;
+        assembly {
+            selector := mload(add(data, 32))
+        }
+        return selector == MULTICALL_SELECTOR;
+    }
+
+    /**
+     * @notice          Checks whether the payload data uses the migration format
+     * @dev             Determines if the payload data starts with the MIGRATION_SELECTOR magic prefix
+     * @param data      raw data from the UniversalPayload
+     * @return bool     returns true if the data starts with MIGRATION_SELECTOR, indicating a migration request
+     */
+    function isMigration(bytes memory data) internal pure returns (bool) {
+        if (data.length < 4) return false;
+        bytes4 selector;
+        assembly {
+            selector := mload(add(data, 32))
+        }
+        return selector == MIGRATION_SELECTOR;
     }
 
     /**
      * @notice              Decodes the payload data into an array of Multicall structs
      * @dev                 Assumes the data uses the multicall format (should be called after isMulticall returns true)
      * @dev                 Strips the MULTICALL_SELECTOR prefix and decodes the remaining data as Multicall[]
-     * @param data          raw calldata containing MULTICALL_SELECTOR followed by ABI-encoded Multicall[]
-     * @return Multicall[] decoded array of Multicall structs to be executed
+     * @param data          raw data containing MULTICALL_SELECTOR followed by ABI-encoded Multicall[]
+     * @return Multicall[]  decoded array of Multicall structs to be executed
      */
-    function decodeCalls(bytes calldata data) internal pure returns (Multicall[] memory) {
-        return abi.decode(data[4:], (Multicall[])); // Strip selector
+    function decodeCalls(bytes memory data) internal pure returns (Multicall[] memory) {
+
+        bytes memory strippedData = new bytes(data.length - 4);
+        for (uint256 i = 0; i < strippedData.length; i++) {
+            strippedData[i] = data[i + 4];
+        }
+        return abi.decode(strippedData, (Multicall[]));
+    }
+
+    /**
+     * @notice              Decodes the migration contract address from payload data
+     * @dev                 Strips the MIGRATION_SELECTOR prefix and decodes the address
+     * @param data          raw data containing MIGRATION_SELECTOR followed by ABI-encoded address
+     * @return address      the decoded migration contract address
+     */
+    function decodeMigrationAddress(bytes memory data) internal pure returns (address) {
+        bytes memory strippedData = new bytes(data.length - 4);
+        for (uint256 i = 0; i < strippedData.length; i++) {
+            strippedData[i] = data[i + 4];
+        }
+        return abi.decode(strippedData, (address));
     }
 
     /**
@@ -233,12 +300,7 @@ contract UEA_SVM is ReentrancyGuard, IUEA {
      * @param payload   payload to calculate the hash for.
      * @return bytes32  transaction hash.
      */
-    function getPayloadHash(UniversalPayload calldata payload) public view returns (bytes32) {
-        if (payload.deadline > 0) {
-            if (block.timestamp > payload.deadline) {
-                revert Errors.ExpiredDeadline();
-            }
-        }
+    function getPayloadHash(UniversalPayload memory payload) public view returns (bytes32) {
         bytes32 structHash = keccak256(
             abi.encode(
                 UNIVERSAL_PAYLOAD_TYPEHASH,
@@ -249,28 +311,9 @@ contract UEA_SVM is ReentrancyGuard, IUEA {
                 payload.maxFeePerGas,
                 payload.maxPriorityFeePerGas,
                 nonce,
-                payload.deadline,
-                uint8(payload.vType)
+                payload.deadline
             )
         );
-
-        bytes32 _domainSeparator = domainSeparator();
-
-        return keccak256(abi.encodePacked("\x19\x01", _domainSeparator, structHash));
-    }
-
-    /**
-     * @dev             Calculates the transaction hash for a given migration payload.
-     * @param payload   migration payload to calculate the hash for.
-     * @return bytes32  transaction hash.
-     */
-    function getMigrationPayloadHash(MigrationPayload memory payload) public view returns (bytes32) {
-        if (payload.deadline > 0 && block.timestamp > payload.deadline) {
-            revert Errors.ExpiredDeadline();
-        }
-
-        bytes32 structHash =
-            keccak256(abi.encode(MIGRATION_PAYLOAD_TYPEHASH, payload.migration, nonce, payload.deadline));
 
         bytes32 _domainSeparator = domainSeparator();
 

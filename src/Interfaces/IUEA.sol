@@ -77,46 +77,37 @@ interface IUEA {
     function verifyPayloadSignature(bytes32 payloadHash, bytes memory signature) external view returns (bool);
 
     /**
-     * @notice                  Executes a cross-chain payload with the provided signature.
-     * @param payload           The UniversalPayload struct containing execution parameters:
-     *                          - to: Target contract address to call
-     *                          - value: Native token amount to send
-     *                          - data: Calldata for the function execution
-     *                          - gasLimit: Maximum gas to be used for this transaction
-     *                          - maxFeePerGas: Maximum fee per gas unit
-     *                          - nonce: Used to prevent replay attacks
-     *                          - deadline: Timestamp after which the payload is invalid
+     * @notice                  Executes a cross-chain payload with the provided verification data.
+     * @param payload           The ABI-encoded UniversalPayload struct. Callers must encode the payload as:
+     *                          `abi.encode(UniversalPayload({...}))` with the following fields in order:
+     *                          - to: Target contract address to call (address)
+     *                          - value: Native token amount to send (uint256)
+     *                          - data: Calldata for the function execution (bytes)
+     *                          - gasLimit: Maximum gas to be used for this transaction (uint256)
+     *                          - maxFeePerGas: Maximum fee per gas unit (uint256)
+     *                          - maxPriorityFeePerGas: Maximum priority fee per gas unit (uint256)
+     *                          - nonce: Used to prevent replay attacks (uint256)
+     *                          - deadline: Timestamp after which the payload is invalid (uint256)
      * 
-     * @param verificationData The verificationData is the bytes passed as verifier data for the given payload.
-     *                          The verificationData can be of 2 different types:
-     *                          1. For Signature-based verification: ECDSA signature (r, s, v)
-     *                          2. For TxHash-based verification: TxHash of the payload
+     *                          The function will revert with decoding errors if the payload is not properly encoded.
      * 
-     *                          Additionally, the sig-type verificationData for UEA_EVM vs UEA_SVM differs:
-     *                          1. For UEA_EVM: The verificationData is the ECDSA signature (r, s, v)
-     *                          2. For UEA_SVM: The verificationData is the Ed25519 signature
+     * @param verificationData The verificationData is the signature bytes for verification.
+     *                          The signature format differs based on UEA type:
+     *                          - For UEA_EVM: ECDSA signature (r, s, v) - 65 bytes
+     *                          - For UEA_SVM: Ed25519 signature - 64 bytes
+     * 
+     *                          Note: If the caller is UE_MODULE, signature verification is skipped.
      *
-     * @dev                     Function can allow SINGLE Payload execution or MULTIPLE Payload execution (Multicall).
-     *                         The function has following reverts:
-     *                         1. If signature verification fails, it reverts with InvalidEVMSignature or InvalidSVMSignature.
-     *                         2. If TxHash verification fails, it reverts with InvalidTxHash.
-     *                         3. If the deadline has passed, it reverts with ExpiredDeadline.
-     *                         4. In a MultiCall, if any of the sub-calls fails, it reverts with ExecutionFailed.
-     *                         5. If the target contract execution fails, it reverts with ExecutionFailed or forwards the error message.
+     * @dev                     Verification behavior:
+     *                          - If caller is UE_MODULE: No signature verification required
+     *                          - If caller is not UE_MODULE: Signature verification required
+     * 
+     *                          Function allows 3 payload executon options: 
+     *                          - SINGLE Payload execution               -> using _handleSingleCall()
+     *                          - MULTIPLE Payload execution (Multicall) -> using _handleMulticall()
+     *                          - Migration execution                    -> using _handleMigration()
+     * 
+     *                          Note: A migration payload execution cannot be part of subcall in Multicall. Migration must be standalone payload execution.
      */
-    function executePayload(UniversalPayload calldata payload, bytes calldata verificationData) external;
-
-    /**
-     * @notice                  Executes a migration payload for updating UEAs.
-     * @param payload           The MigrationPayload struct containing migration parameters:
-     *                          - migration: The address of the new migration contract
-     *                          - nonce: Used to prevent replay attacks
-     *                          - deadline: Timestamp after which the migration is invalid
-     * @param signature         The signature is the signature used for verification.
-     *                          1. For UEA_EVM: The signature is the ECDSA signature (r, s, v)
-     *                          2. For UEA_SVM: The signature is the Ed25519 signature
-     *
-     * @dev                     Allows UEA Owner to sign and execute a migration of their UEA from old to new implementation.
-     */
-    function migrateUEA(MigrationPayload calldata payload, bytes calldata signature) external;
+    function executePayload(bytes calldata payload, bytes calldata verificationData) external;
 }

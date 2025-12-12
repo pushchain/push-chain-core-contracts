@@ -52,7 +52,6 @@ library UniversalCoreErrors {
 // =========================
 library UEAErrors {
     error InvalidCall();
-    error InvalidTxHash();
     error InvalidAccount();
     error ExecutionFailed();
     error ExpiredDeadline();
@@ -61,4 +60,18 @@ library UEAErrors {
     error InvalidSVMSignature();
     error PrecompileCallFailed();
     error AccountAlreadyExists();
+}
+
+library CEAErrors {
+    error AlreadyInitialized();
+    error ZeroAddress();
+    error NotVault();
+    error InvalidAmount();
+    error InvalidTarget();
+    error InsufficientBalance();
+    error PayloadExecuted();
+    error InvalidUEA();
+    error InvalidInput();
+    error ExecutionFailed();
+    error InvalidCall();
 }

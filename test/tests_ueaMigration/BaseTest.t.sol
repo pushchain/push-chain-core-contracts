@@ -246,13 +246,20 @@ contract BaseTest is Test {
         return MigrationPayload({migration: address(migration), nonce: nonce, deadline: deadline});
     }
 
-    // Helper functions for signing migration payloads
-    function signEVMMigrationPayload(UEA_EVM ueaInstance, MigrationPayload memory payload, uint256 signerPK)
+    // Helper functions for signing migration payloads using new executePayload approach
+    function signEVMMigrationPayload(UEA_EVM ueaInstance, MigrationPayload memory oldPayload, uint256 signerPK)
         public
         view
         returns (bytes memory signature)
     {
-        bytes32 payloadHash = ueaInstance.getMigrationPayloadHash(payload);
+        // Convert old MigrationPayload to new UniversalPayload format
+        UniversalPayload memory payload = createMigrationPayload(
+            address(ueaInstance),
+            oldPayload.migration,
+            oldPayload.nonce,
+            oldPayload.deadline
+        );
+        bytes32 payloadHash = ueaInstance.getPayloadHash(payload);
         (uint8 v, bytes32 r, bytes32 s) = vm.sign(signerPK, payloadHash);
         return abi.encodePacked(r, s, v);
     }
@@ -263,6 +270,25 @@ contract BaseTest is Test {
             bytes32(0x1111111111111111111111111111111111111111111111111111111111111111),
             bytes32(0x2222222222222222222222222222222222222222222222222222222222222222)
         );
+    }
+
+    // Wrapper function to maintain backward compatibility with old migration tests
+    // This converts old migrateUEA calls to new executePayload approach
+    function migrateUEAWrapper(
+        address ueaAddress,
+        MigrationPayload memory oldPayload,
+        bytes memory signature
+    ) public {
+        // Convert old MigrationPayload to new UniversalPayload format
+        UniversalPayload memory payload = createMigrationPayload(
+            ueaAddress,
+            oldPayload.migration,
+            oldPayload.nonce,
+            oldPayload.deadline
+        );
+        
+        // Call executePayload instead of migrateUEA
+        IUEA(ueaAddress).executePayload(abi.encode(payload), signature);
     }
 
     function getCurrentImplementation(address ueaProxy) public view returns (address impl) {
@@ -286,7 +312,6 @@ contract BaseTest is Test {
      * @param data Call data
      * @param nonce Transaction nonce
      * @param deadline Transaction deadline
-     * @param vType Verification type
      * @return payload Universal payload struct
      */
     function createUniversalPayload(
@@ -294,8 +319,7 @@ contract BaseTest is Test {
         uint256 value,
         bytes memory data,
         uint256 nonce,
-        uint256 deadline,
-        VerificationType vType
+        uint256 deadline
     ) public pure returns (UniversalPayload memory payload) {
         return UniversalPayload({
             to: to,
@@ -305,8 +329,39 @@ contract BaseTest is Test {
             maxFeePerGas: 0,
             maxPriorityFeePerGas: 0,
             nonce: nonce,
-            deadline: deadline,
-            vType: vType
+            deadline: deadline
+        });
+    }
+
+    /**
+     * @dev Create a migration payload for testing
+     * @param ueaAddress The UEA address (migration must target self)
+     * @param migrationContract The migration contract address
+     * @param nonce Transaction nonce
+     * @param deadline Transaction deadline
+     * @return payload Universal payload struct configured for migration
+     */
+    function createMigrationPayload(
+        address ueaAddress,
+        address migrationContract,
+        uint256 nonce,
+        uint256 deadline
+    ) public pure returns (UniversalPayload memory payload) {
+        // Encode migration data: MIGRATION_SELECTOR + abi.encode(migrationContractAddress)
+        bytes memory migrationData = abi.encodePacked(
+            MIGRATION_SELECTOR,
+            abi.encode(migrationContract)
+        );
+
+        return UniversalPayload({
+            to: ueaAddress,          // Migration targets the UEA itself
+            value: 0,                 // No value transfer during migration
+            data: migrationData,
+            gasLimit: 1000000,
+            maxFeePerGas: 0,
+            maxPriorityFeePerGas: 0,
+            nonce: nonce,
+            deadline: deadline
         });
     }
 
