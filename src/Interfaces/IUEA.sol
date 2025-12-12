@@ -102,12 +102,12 @@ interface IUEA {
      *                          - If caller is UE_MODULE: No signature verification required
      *                          - If caller is not UE_MODULE: Signature verification required
      * 
-     *                          Function can allow SINGLE Payload execution or MULTIPLE Payload execution (Multicall).
-     *                          The function has following reverts:
-     *                          1. If signature verification fails, it reverts with InvalidEVMSignature or InvalidSVMSignature.
-     *                          2. If the deadline has passed, it reverts with ExpiredDeadline.
-     *                          3. In a MultiCall, if any of the sub-calls fails, it reverts with ExecutionFailed.
-     *                          4. If the target contract execution fails, it reverts with ExecutionFailed or forwards the error message.
+     *                          Function allows 3 payload executon options: 
+     *                          - SINGLE Payload execution               -> using _handleSingleCall()
+     *                          - MULTIPLE Payload execution (Multicall) -> using _handleMulticall()
+     *                          - Migration execution                    -> using _handleMigration()
+     * 
+     *                          Note: A migration payload execution cannot be part of subcall in Multicall. Migration must be standalone payload execution.
      */
     function executePayload(bytes calldata payload, bytes calldata verificationData) external;
 }

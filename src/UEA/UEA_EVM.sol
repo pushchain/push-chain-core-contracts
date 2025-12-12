@@ -53,6 +53,10 @@ contract UEA_EVM is ReentrancyGuard, IUEA {
         id = _id;
     }
 
+    // =========================
+    //    UEA_1: Public Getters and Helpers
+    // =========================
+
     /**
      * @dev             Returns the domain separator for EIP-712 signing.
      * @return bytes32  domain separator
@@ -78,12 +82,14 @@ contract UEA_EVM is ReentrancyGuard, IUEA {
         return recoveredSigner == address(bytes20(id.owner));
     }
 
+    // =========================
+    //    UEA_2: Execution Handler
+    // =========================
 
     /**
      * @inheritdoc IUEA
      */
     function executePayload(bytes calldata rawPayload, bytes calldata verificationData) external nonReentrant {
-        // Decode the raw bytes payload into UniversalPayload struct
         UniversalPayload memory payload = abi.decode(rawPayload, (UniversalPayload));
         
         if (msg.sender != UE_MODULE) {
@@ -93,60 +99,12 @@ contract UEA_EVM is ReentrancyGuard, IUEA {
             }
         }
 
-        // Delegate to internal execution handler
         _handleExecution(payload);
     }
 
     // =========================
-    //           Internal Helper Functions
+    //    UEA_3: Internal Execution Helpers
     // =========================
-    
-    /**
-     * @notice          Checks whether the payload data uses the multicall format
-     * @dev             Determines if the payload data starts with the MULTICALL_SELECTOR magic prefix
-     * @dev             Used to distinguish between single call vs multicall batch execution
-     * @param data      raw data from the UniversalPayload
-     * @return bool     returns true if the data starts with MULTICALL_SELECTOR, indicating a multicall batch
-     */
-    function isMulticall(bytes memory data) internal pure returns (bool) {
-        if (data.length < 4) return false;
-        // Extract first 4 bytes and compare with MULTICALL_SELECTOR
-        bytes4 selector;
-        assembly {
-            selector := mload(add(data, 32))
-        }
-        return selector == MULTICALL_SELECTOR;
-    }
-
-    /**
-     * @notice              Decodes the payload data into an array of Multicall structs
-     * @dev                 Assumes the data uses the multicall format (should be called after isMulticall returns true)
-     * @dev                 Strips the MULTICALL_SELECTOR prefix and decodes the remaining data as Multicall[]
-     * @param data          raw data containing MULTICALL_SELECTOR followed by ABI-encoded Multicall[]
-     * @return Multicall[]  decoded array of Multicall structs to be executed
-     */
-    function decodeCalls(bytes memory data) internal pure returns (Multicall[] memory) {
-        bytes memory strippedData = new bytes(data.length - 4);
-        for (uint256 i = 0; i < strippedData.length; i++) {
-            strippedData[i] = data[i + 4];
-        }
-        return abi.decode(strippedData, (Multicall[]));
-    }
-
-    /**
-     * @notice          Checks whether the payload data uses the migration format
-     * @dev             Determines if the payload data starts with the MIGRATION_SELECTOR magic prefix
-     * @param data      raw data from the UniversalPayload
-     * @return bool     returns true if the data starts with MIGRATION_SELECTOR, indicating a migration request
-     */
-    function isMigration(bytes memory data) internal pure returns (bool) {
-        if (data.length < 4) return false;
-        bytes4 selector;
-        assembly {
-            selector := mload(add(data, 32))
-        }
-        return selector == MIGRATION_SELECTOR;
-    }
 
     /**
      * @notice                  Internal handler for executing payloads
@@ -165,7 +123,6 @@ contract UEA_EVM is ReentrancyGuard, IUEA {
         bool success;
         bytes memory returnData;
 
-        // Dispatch based on selector
         if (isMulticall(payload.data)) {
             (success, returnData) = _handleMulticall(payload);
         } else if (isMigration(payload.data)) {
@@ -174,7 +131,6 @@ contract UEA_EVM is ReentrancyGuard, IUEA {
             (success, returnData) = _handleSingleCall(payload);
         }
 
-        // Revert bubbling
         if (!success) {
             if (returnData.length > 0) {
                 assembly {
@@ -204,7 +160,6 @@ contract UEA_EVM is ReentrancyGuard, IUEA {
         Multicall[] memory calls = decodeCalls(payload.data);
 
         for (uint256 i = 0; i < calls.length; i++) {
-            // Safety check: prevent migration inside multicall
             if (isMigration(calls[i].data)) {
                 revert Errors.InvalidCall();
             }
@@ -245,24 +200,9 @@ contract UEA_EVM is ReentrancyGuard, IUEA {
         // Prepare delegatecall to migration contract
         bytes memory migrateCallData = abi.encodeWithSignature("migrateUEAEVM()");
 
-        // Execute migration via delegatecall
         (success, returnData) = migrationContract.delegatecall(migrateCallData);
     }
 
-    /**
-     * @notice              Decodes the migration contract address from payload data
-     * @dev                 Strips the MIGRATION_SELECTOR prefix and decodes the address
-     * @param data          raw data containing MIGRATION_SELECTOR followed by ABI-encoded address
-     * @return address      the decoded migration contract address
-     */
-    function decodeMigrationAddress(bytes memory data) internal pure returns (address) {
-        // Skip the first 4 bytes (MIGRATION_SELECTOR) and decode the rest
-        bytes memory strippedData = new bytes(data.length - 4);
-        for (uint256 i = 0; i < strippedData.length; i++) {
-            strippedData[i] = data[i + 4];
-        }
-        return abi.decode(strippedData, (address));
-    }
 
     /**
      * @notice                  Internal handler for single call execution
@@ -276,6 +216,69 @@ contract UEA_EVM is ReentrancyGuard, IUEA {
         returns (bool success, bytes memory returnData) 
     {
         (success, returnData) = payload.to.call{value: payload.value}(payload.data);
+    }
+
+    // =========================
+    //    UEA_4: Private Helpers
+    // =========================
+    
+    /**
+     * @notice          Checks whether the payload data uses the multicall format
+     * @dev             Determines if the payload data starts with the MULTICALL_SELECTOR magic prefix
+     * @dev             Used to distinguish between single call vs multicall batch execution
+     * @param data      raw data from the UniversalPayload
+     * @return bool     returns true if the data starts with MULTICALL_SELECTOR, indicating a multicall batch
+     */
+    function isMulticall(bytes memory data) private pure returns (bool) {
+        if (data.length < 4) return false;
+        bytes4 selector;
+        assembly {
+            selector := mload(add(data, 32))
+        }
+        return selector == MULTICALL_SELECTOR;
+    }
+
+    /**
+     * @notice          Checks whether the payload data uses the migration format
+     * @dev             Determines if the payload data starts with the MIGRATION_SELECTOR magic prefix
+     * @param data      raw data from the UniversalPayload
+     * @return bool     returns true if the data starts with MIGRATION_SELECTOR, indicating a migration request
+     */
+    function isMigration(bytes memory data) internal pure returns (bool) {
+        if (data.length < 4) return false;
+        bytes4 selector;
+        assembly {
+            selector := mload(add(data, 32))
+        }
+        return selector == MIGRATION_SELECTOR;
+    }
+
+    /**
+     * @notice              Decodes the payload data into an array of Multicall structs
+     * @dev                 Assumes the data uses the multicall format (should be called after isMulticall returns true)
+     * @dev                 Strips the MULTICALL_SELECTOR prefix and decodes the remaining data as Multicall[]
+     * @param data          raw data containing MULTICALL_SELECTOR followed by ABI-encoded Multicall[]
+     * @return Multicall[]  decoded array of Multicall structs to be executed
+     */
+    function decodeCalls(bytes memory data) internal pure returns (Multicall[] memory) {
+        bytes memory strippedData = new bytes(data.length - 4);
+        for (uint256 i = 0; i < strippedData.length; i++) {
+            strippedData[i] = data[i + 4];
+        }
+        return abi.decode(strippedData, (Multicall[]));
+    }
+    /**
+     * @notice              Decodes the migration contract address from payload data
+     * @dev                 Strips the MIGRATION_SELECTOR prefix and decodes the address
+     * @param data          raw data containing MIGRATION_SELECTOR followed by ABI-encoded address
+     * @return address      the decoded migration contract address
+     */
+    function decodeMigrationAddress(bytes memory data) internal pure returns (address) {
+        bytes memory strippedData = new bytes(data.length - 4);
+        for (uint256 i = 0; i < strippedData.length; i++) {
+            strippedData[i] = data[i + 4];
+        }
+        return abi.decode(strippedData, (address));
     }
 
     /**
