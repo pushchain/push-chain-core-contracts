@@ -140,12 +140,20 @@ contract UEAMigrationTest is BaseTest {
             deadline: block.timestamp + 1 hours
         });
 
-        // Get the actual payload hash that the UEA will calculate via low-level call
-        bytes memory callData =
-            abi.encodeWithSignature("getMigrationPayloadHash((address,uint256,uint256))", migrationPayload);
-        (bool success, bytes memory returnData) = address(ueaProxy).staticcall(callData);
-        require(success, "Failed to get migration payload hash");
-        bytes32 payloadHash = abi.decode(returnData, (bytes32));
+        // Convert MigrationPayload to UniversalPayload for new migration approach
+        UniversalPayload memory universalPayload = UniversalPayload({
+            to: address(ueaProxy),
+            value: 0,
+            data: abi.encodePacked(MIGRATION_SELECTOR, abi.encode(migrationPayload.migration)),
+            gasLimit: 1000000,
+            maxFeePerGas: 0,
+            maxPriorityFeePerGas: 0,
+            nonce: migrationPayload.nonce,
+            deadline: migrationPayload.deadline
+        });
+        
+        // Get the payload hash using getPayloadHash
+        bytes32 payloadHash = UEA_EVM(payable(address(ueaProxy))).getPayloadHash(universalPayload);
 
         // Create a valid signature using the owner's private key
         (uint8 v, bytes32 r, bytes32 s) = vm.sign(ownerPK, payloadHash);
@@ -157,7 +165,7 @@ contract UEAMigrationTest is BaseTest {
 
         // Execute migration through real UEA flow: proxy -> UEA_EVM -> migration contract
         vm.prank(owner);
-        IUEA(address(ueaProxy)).migrateUEA(migrationPayload, signature);
+        migrateUEAWrapper(address(ueaProxy), migrationPayload, signature);
 
         // Verify the storage was updated correctly
         assertEq(
@@ -209,7 +217,7 @@ contract UEAMigrationTest is BaseTest {
 
         // Execute migration through real UEA flow: proxy -> UEA_SVM -> migration contract
         vm.prank(owner);
-        IUEA(address(svmProxy)).migrateUEA(migrationPayload, signature);
+        migrateUEAWrapper(address(svmProxy), migrationPayload, signature);
 
         // Verify migration was successful by checking implementation change
         assertEq(
@@ -268,12 +276,20 @@ contract UEAMigrationTest is BaseTest {
             deadline: block.timestamp + 1 hours
         });
 
-        // Get the actual payload hash that the UEA will calculate via low-level call
-        bytes memory callData =
-            abi.encodeWithSignature("getMigrationPayloadHash((address,uint256,uint256))", migrationPayload);
-        (bool success, bytes memory returnData) = address(ueaProxy).staticcall(callData);
-        require(success, "Failed to get migration payload hash");
-        bytes32 payloadHash = abi.decode(returnData, (bytes32));
+        // Convert MigrationPayload to UniversalPayload for new migration approach
+        UniversalPayload memory universalPayload = UniversalPayload({
+            to: address(ueaProxy),
+            value: 0,
+            data: abi.encodePacked(MIGRATION_SELECTOR, abi.encode(migrationPayload.migration)),
+            gasLimit: 1000000,
+            maxFeePerGas: 0,
+            maxPriorityFeePerGas: 0,
+            nonce: migrationPayload.nonce,
+            deadline: migrationPayload.deadline
+        });
+        
+        // Get the payload hash using getPayloadHash
+        bytes32 payloadHash = UEA_EVM(payable(address(ueaProxy))).getPayloadHash(universalPayload);
 
         // Create a valid signature using the owner's private key
         (uint8 v, bytes32 r, bytes32 s) = vm.sign(ownerPK, payloadHash);
@@ -281,7 +297,7 @@ contract UEAMigrationTest is BaseTest {
 
         // First migration through real UEA flow
         vm.prank(owner);
-        IUEA(address(ueaProxy)).migrateUEA(migrationPayload, signature);
+        migrateUEAWrapper(address(ueaProxy), migrationPayload, signature);
         assertEq(ueaProxy.getImplementation(), newImpl, "First migration should update implementation");
 
         // Second migration (idempotent) - should succeed and emit event again
@@ -290,15 +306,13 @@ contract UEAMigrationTest is BaseTest {
 
         // Need to update nonce for second migration
         migrationPayload.nonce = 1;
-        callData = abi.encodeWithSignature("getMigrationPayloadHash((address,uint256,uint256))", migrationPayload);
-        (success, returnData) = address(ueaProxy).staticcall(callData);
-        require(success, "Failed to get migration payload hash for second call");
-        payloadHash = abi.decode(returnData, (bytes32));
+        universalPayload.nonce = 1;
+        payloadHash = UEA_EVM(payable(address(ueaProxy))).getPayloadHash(universalPayload);
         (v, r, s) = vm.sign(ownerPK, payloadHash);
         signature = abi.encodePacked(r, s, v);
 
         vm.prank(owner);
-        IUEA(address(ueaProxy)).migrateUEA(migrationPayload, signature);
+        migrateUEAWrapper(address(ueaProxy), migrationPayload, signature);
         assertEq(ueaProxy.getImplementation(), newImpl, "Implementation should remain the same");
     }
 
@@ -316,12 +330,20 @@ contract UEAMigrationTest is BaseTest {
             deadline: block.timestamp + 1 hours
         });
 
-        // Get the actual payload hash that the UEA will calculate via low-level call
-        bytes memory callData =
-            abi.encodeWithSignature("getMigrationPayloadHash((address,uint256,uint256))", migrationPayload);
-        (bool success, bytes memory returnData) = address(ueaProxy).staticcall(callData);
-        require(success, "Failed to get migration payload hash");
-        bytes32 payloadHash = abi.decode(returnData, (bytes32));
+        // Convert MigrationPayload to UniversalPayload for new migration approach
+        UniversalPayload memory universalPayload = UniversalPayload({
+            to: address(ueaProxy),
+            value: 0,
+            data: abi.encodePacked(MIGRATION_SELECTOR, abi.encode(migrationPayload.migration)),
+            gasLimit: 1000000,
+            maxFeePerGas: 0,
+            maxPriorityFeePerGas: 0,
+            nonce: migrationPayload.nonce,
+            deadline: migrationPayload.deadline
+        });
+        
+        // Get the payload hash using getPayloadHash
+        bytes32 payloadHash = UEA_EVM(payable(address(ueaProxy))).getPayloadHash(universalPayload);
 
         // Create a valid signature using the owner's private key
         (uint8 v, bytes32 r, bytes32 s) = vm.sign(ownerPK, payloadHash);
@@ -333,7 +355,7 @@ contract UEAMigrationTest is BaseTest {
 
         // Execute migration through real UEA flow: proxy -> UEA_EVM -> migration contract
         vm.prank(owner);
-        IUEA(address(ueaProxy)).migrateUEA(migrationPayload, signature);
+        migrateUEAWrapper(address(ueaProxy), migrationPayload, signature);
 
         // Verify migration succeeded by checking implementation was updated
         assertEq(ueaProxy.getImplementation(), newImpl, "Migration should update implementation");
@@ -351,17 +373,25 @@ contract UEAMigrationTest is BaseTest {
         MigrationPayload memory migrationPayload =
             MigrationPayload({migration: address(migration), nonce: 0, deadline: block.timestamp + 1 hours});
 
-        bytes memory callData =
-            abi.encodeWithSignature("getMigrationPayloadHash((address,uint256,uint256))", migrationPayload);
-        (bool success, bytes memory returnData) = address(ueaProxy).staticcall(callData);
-        require(success, "Failed to get migration payload hash");
-        bytes32 payloadHash = abi.decode(returnData, (bytes32));
+        // Convert MigrationPayload to UniversalPayload for new migration approach
+        UniversalPayload memory universalPayload = UniversalPayload({
+            to: address(ueaProxy),
+            value: 0,
+            data: abi.encodePacked(MIGRATION_SELECTOR, abi.encode(migrationPayload.migration)),
+            gasLimit: 1000000,
+            maxFeePerGas: 0,
+            maxPriorityFeePerGas: 0,
+            nonce: migrationPayload.nonce,
+            deadline: migrationPayload.deadline
+        });
+        
+        bytes32 payloadHash = UEA_EVM(payable(address(ueaProxy))).getPayloadHash(universalPayload);
 
         (uint8 v, bytes32 r, bytes32 s) = vm.sign(ownerPK, payloadHash);
         bytes memory signature = abi.encodePacked(r, s, v);
 
         vm.prank(owner);
-        IUEA(address(ueaProxy)).migrateUEA(migrationPayload, signature);
+        migrateUEAWrapper(address(ueaProxy), migrationPayload, signature);
 
         assertEq(ueaProxy.getImplementation(), migration.UEA_EVM_IMPLEMENTATION(), "Should migrate to EVM V2");
         assertEq(IUEA(address(ueaProxy)).VERSION(), "2.0.0", "Should be version 2.0.0");

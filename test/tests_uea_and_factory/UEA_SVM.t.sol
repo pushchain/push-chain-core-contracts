@@ -618,8 +618,16 @@ contract UEASVMTest is Test {
             maxPriorityFeePerGas: 0
         });
 
+        bytes32 txHash = getCrosschainTxhash(svmSmartAccountInstance, payload);
         bytes memory signature =
             hex"16d760987b403d7a27fd095375f2a1275c0734701ad248c3bf9bc8f69456d626c37b9ee1c13da511c71d9ed0f90789327f2c40f3e59e360f7c832b6b0d818d03";
+
+        // Mock the verification to return true so we can test the deadline check
+        vm.mockCall(
+            VERIFIER_PRECOMPILE,
+            abi.encodeWithSignature("verifyEd25519(bytes,bytes32,bytes)", ownerBytes, txHash, signature),
+            abi.encode(true)
+        );
 
         // Should revert with ExpiredDeadline
         vm.expectRevert(Errors.ExpiredDeadline.selector);
@@ -657,7 +665,18 @@ contract UEASVMTest is Test {
             MigrationPayload({migration: address(migration), nonce: 0, deadline: block.timestamp + 1000});
 
         // Compute payload hash
-        bytes32 payloadHash = svmSmartAccountInstance.getMigrationPayloadHash(payload);
+        // Convert to UniversalPayload for new migration approach
+        UniversalPayload memory universalPayload = UniversalPayload({
+            to: address(svmSmartAccountInstance),
+            value: 0,
+            data: abi.encodePacked(MIGRATION_SELECTOR, abi.encode(payload.migration)),
+            gasLimit: 1000000,
+            maxFeePerGas: 0,
+            maxPriorityFeePerGas: 0,
+            nonce: payload.nonce,
+            deadline: payload.deadline
+        });
+        bytes32 payloadHash = svmSmartAccountInstance.getPayloadHash(universalPayload);
 
         // Sign with owner key
         bytes memory signature =
@@ -671,7 +690,7 @@ contract UEASVMTest is Test {
         );
 
         vm.expectRevert(Errors.InvalidSVMSignature.selector);
-        svmSmartAccountInstance.migrateUEA(payload, signature);
+        svmSmartAccountInstance.executePayload(abi.encode(universalPayload), signature);
     }
 
     function test_RevertWhen_ExpiredDeadlineOnMigration() public deploySvmSmartAccount {
@@ -679,7 +698,18 @@ contract UEASVMTest is Test {
             MigrationPayload({migration: address(migration), nonce: 0, deadline: block.timestamp});
 
         // Compute payload hash
-        bytes32 payloadHash = svmSmartAccountInstance.getMigrationPayloadHash(payload);
+        // Convert to UniversalPayload for new migration approach
+        UniversalPayload memory universalPayload = UniversalPayload({
+            to: address(svmSmartAccountInstance),
+            value: 0,
+            data: abi.encodePacked(MIGRATION_SELECTOR, abi.encode(payload.migration)),
+            gasLimit: 1000000,
+            maxFeePerGas: 0,
+            maxPriorityFeePerGas: 0,
+            nonce: payload.nonce,
+            deadline: payload.deadline
+        });
+        bytes32 payloadHash = svmSmartAccountInstance.getPayloadHash(universalPayload);
 
         // skip so deadline is expired
         skip(2);
@@ -687,15 +717,15 @@ contract UEASVMTest is Test {
         bytes memory signature =
             hex"16d760987b403d7a27fd095375f2a1275c0734701ad248c3bf9bc8f69456d626c37b9ee1c13da511c71d9ed0f90789327f2c40f3e59e360f7c832b6b0d818d03";
 
-        // Mock the verification to return false
+        // Mock the verification to return true so we can test the deadline check
         vm.mockCall(
             VERIFIER_PRECOMPILE,
             abi.encodeWithSignature("verifyEd25519(bytes,bytes32,bytes)", ownerBytes, payloadHash, signature),
-            abi.encode(false)
+            abi.encode(true)
         );
 
         vm.expectRevert(Errors.ExpiredDeadline.selector);
-        svmSmartAccountInstance.migrateUEA(payload, signature);
+        svmSmartAccountInstance.executePayload(abi.encode(universalPayload), signature);
     }
 
     function test_SuccessfulMigrationUpdatesImplementation() public deploySvmSmartAccount {
@@ -703,7 +733,18 @@ contract UEASVMTest is Test {
             MigrationPayload({migration: address(migration), nonce: 0, deadline: block.timestamp + 1000});
 
         // Compute payload hash
-        bytes32 payloadHash = svmSmartAccountInstance.getMigrationPayloadHash(payload);
+        // Convert to UniversalPayload for new migration approach
+        UniversalPayload memory universalPayload = UniversalPayload({
+            to: address(svmSmartAccountInstance),
+            value: 0,
+            data: abi.encodePacked(MIGRATION_SELECTOR, abi.encode(payload.migration)),
+            gasLimit: 1000000,
+            maxFeePerGas: 0,
+            maxPriorityFeePerGas: 0,
+            nonce: payload.nonce,
+            deadline: payload.deadline
+        });
+        bytes32 payloadHash = svmSmartAccountInstance.getPayloadHash(universalPayload);
 
         // Sign with owner key
         // bytes32 txHash = getCrosschainTxhash(svmSmartAccountInstance, payload);
@@ -718,7 +759,7 @@ contract UEASVMTest is Test {
         );
 
         // Call migrateUEA
-        svmSmartAccountInstance.migrateUEA(payload, signature);
+        svmSmartAccountInstance.executePayload(abi.encode(universalPayload), signature);
 
         // Verify proxy’s storage slot now updated
         bytes32 slot = UEA_LOGIC_SLOT;
@@ -799,7 +840,8 @@ contract UEASVMTest is Test {
     }
 
     function testgetPayloadHashWithExpiredDeadline() public deploySvmSmartAccount {
-        // Create a payload with deadline in the future
+        // Note: getPayloadHash no longer checks deadline - that's done in _handleExecution
+        // This test now verifies that getPayloadHash works regardless of deadline
         uint256 deadline = block.timestamp + 100;
         UniversalPayload memory payload = UniversalPayload({
             to: address(target),
@@ -815,9 +857,9 @@ contract UEASVMTest is Test {
         // Warp to after the deadline
         vm.warp(deadline + 1);
 
-        // Should revert when trying to get transaction hash with expired deadline
-        vm.expectRevert(Errors.ExpiredDeadline.selector);
-        svmSmartAccountInstance.getPayloadHash(payload);
+        // getPayloadHash should still work - deadline is checked during execution
+        bytes32 hash = svmSmartAccountInstance.getPayloadHash(payload);
+        assertTrue(hash != bytes32(0), "Hash should be calculated regardless of deadline");
     }
 
     function testUniversalPayloadTypeHash() public pure {

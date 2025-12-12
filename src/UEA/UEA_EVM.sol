@@ -9,10 +9,9 @@ import {StringUtils} from "../libraries/Utils.sol";
 import {
     UniversalAccountId,
     UniversalPayload,
-    MigrationPayload,
     UNIVERSAL_PAYLOAD_TYPEHASH,
-    MIGRATION_PAYLOAD_TYPEHASH,
     MULTICALL_SELECTOR,
+    MIGRATION_SELECTOR,
     Multicall
 } from "../libraries/Types.sol";
 /**
@@ -87,7 +86,6 @@ contract UEA_EVM is ReentrancyGuard, IUEA {
         // Decode the raw bytes payload into UniversalPayload struct
         UniversalPayload memory payload = abi.decode(rawPayload, (UniversalPayload));
         
-        // Caller-based verification: UEModule can execute without signature, others need signature
         if (msg.sender != UE_MODULE) {
             bytes32 payloadHash = getPayloadHash(payload);
             if (!verifyPayloadSignature(payloadHash, verificationData)) {
@@ -95,70 +93,8 @@ contract UEA_EVM is ReentrancyGuard, IUEA {
             }
         }
 
-        unchecked {
-            nonce++;
-        }
-
-        bool success;
-        bytes memory returnData;
-
-        if (isMulticall(payload.data)) {
-            Multicall[] memory calls = decodeCalls(payload.data);
-            for (uint256 i = 0; i < calls.length; i++) {
-                // If any sub-call fails, revert entire multicall
-                (success, returnData) = calls[i].to.call{value: calls[i].value}(calls[i].data);
-                if (!success) {
-                    break;
-                }
-            }
-        } else {
-            (success, returnData) = payload.to.call{value: payload.value}(payload.data);
-        }
-
-        if (!success) {
-            if (returnData.length > 0) {
-                assembly {
-                    let returnDataSize := mload(returnData)
-                    revert(add(32, returnData), returnDataSize)
-                }
-            } else {
-                revert Errors.ExecutionFailed();
-            }
-        }
-
-        emit PayloadExecuted(id.owner, nonce);
-    }
-
-    /**
-     * @inheritdoc IUEA
-     */
-    function migrateUEA(MigrationPayload calldata payload, bytes calldata signature) external nonReentrant {
-        bytes32 payloadHash = getMigrationPayloadHash(payload);
-
-        if (!verifyPayloadSignature(payloadHash, signature)) {
-            revert Errors.InvalidEVMSignature();
-        }
-
-        unchecked {
-            nonce++;
-        }
-
-        bytes memory migrateCallData = abi.encodeWithSignature("migrateUEAEVM()");
-
-        (bool success, bytes memory returnData) = payload.migration.delegatecall(migrateCallData);
-
-        if (!success) {
-            if (returnData.length > 0) {
-                assembly {
-                    let returnDataSize := mload(returnData)
-                    revert(add(32, returnData), returnDataSize)
-                }
-            } else {
-                revert Errors.ExecutionFailed();
-            }
-        }
-
-        emit PayloadExecuted(id.owner, nonce);
+        // Delegate to internal execution handler
+        _handleExecution(payload);
     }
 
     // =========================
@@ -190,8 +126,6 @@ contract UEA_EVM is ReentrancyGuard, IUEA {
      * @return Multicall[]  decoded array of Multicall structs to be executed
      */
     function decodeCalls(bytes memory data) internal pure returns (Multicall[] memory) {
-        // Skip the first 4 bytes (MULTICALL_SELECTOR) and decode the rest
-        // We need to manually copy because slicing only works with calldata, not memory
         bytes memory strippedData = new bytes(data.length - 4);
         for (uint256 i = 0; i < strippedData.length; i++) {
             strippedData[i] = data[i + 4];
@@ -200,16 +134,156 @@ contract UEA_EVM is ReentrancyGuard, IUEA {
     }
 
     /**
+     * @notice          Checks whether the payload data uses the migration format
+     * @dev             Determines if the payload data starts with the MIGRATION_SELECTOR magic prefix
+     * @param data      raw data from the UniversalPayload
+     * @return bool     returns true if the data starts with MIGRATION_SELECTOR, indicating a migration request
+     */
+    function isMigration(bytes memory data) internal pure returns (bool) {
+        if (data.length < 4) return false;
+        bytes4 selector;
+        assembly {
+            selector := mload(add(data, 32))
+        }
+        return selector == MIGRATION_SELECTOR;
+    }
+
+    /**
+     * @notice                  Internal handler for executing payloads
+     * @dev                     Handles nonce increment, selector-based dispatch, and event emission
+     * @param payload           the UniversalPayload to execute
+     */
+    function _handleExecution(UniversalPayload memory payload) internal {
+        if (payload.deadline > 0 && block.timestamp > payload.deadline) {
+            revert Errors.ExpiredDeadline();
+        }
+
+        unchecked {
+            nonce++;
+        }
+
+        bool success;
+        bytes memory returnData;
+
+        // Dispatch based on selector
+        if (isMulticall(payload.data)) {
+            (success, returnData) = _handleMulticall(payload);
+        } else if (isMigration(payload.data)) {
+            (success, returnData) = _handleMigration(payload);
+        } else {
+            (success, returnData) = _handleSingleCall(payload);
+        }
+
+        // Revert bubbling
+        if (!success) {
+            if (returnData.length > 0) {
+                assembly {
+                    let returnDataSize := mload(returnData)
+                    revert(add(32, returnData), returnDataSize)
+                }
+            } else {
+                revert Errors.ExecutionFailed();
+            }
+        }
+
+        emit PayloadExecuted(id.owner, nonce);
+    }
+
+    /**
+     * @notice                  Internal handler for multicall execution
+     * @dev                     Executes multiple calls in sequence, reverting if any fails
+     * @dev                     Prevents migration selector in subcalls for safety
+     * @param payload           the UniversalPayload containing multicall data
+     * @return success          whether all calls succeeded
+     * @return returnData       return data from the last call or first failed call
+     */
+    function _handleMulticall(UniversalPayload memory payload) 
+        internal 
+        returns (bool success, bytes memory returnData) 
+    {
+        Multicall[] memory calls = decodeCalls(payload.data);
+
+        for (uint256 i = 0; i < calls.length; i++) {
+            // Safety check: prevent migration inside multicall
+            if (isMigration(calls[i].data)) {
+                revert Errors.InvalidCall();
+            }
+
+            (success, returnData) = calls[i].to.call{value: calls[i].value}(calls[i].data);
+            if (!success) {
+                return (success, returnData);
+            }
+        }
+
+        return (true, "");
+    }
+
+    /**
+     * @notice                  Internal handler for migration execution
+     * @dev                     Executes migration via delegatecall to migration contract
+     * @dev                     Enforces safety constraints: must target self, no value transfer
+     * @param payload           the UniversalPayload containing migration data
+     * @return success          whether the migration succeeded
+     * @return returnData       return data from the delegatecall
+     */
+    function _handleMigration(UniversalPayload memory payload) 
+        internal 
+        returns (bool success, bytes memory returnData) 
+    {
+        if (payload.to != address(this)) {
+            revert Errors.InvalidCall();
+        }
+        
+        if (payload.value != 0) {
+            revert Errors.InvalidCall();
+        }
+
+        // Decode migration contract address from data
+        // Format: MIGRATION_SELECTOR + abi.encode(migrationContractAddress)
+        address migrationContract = decodeMigrationAddress(payload.data);
+
+        // Prepare delegatecall to migration contract
+        bytes memory migrateCallData = abi.encodeWithSignature("migrateUEAEVM()");
+
+        // Execute migration via delegatecall
+        (success, returnData) = migrationContract.delegatecall(migrateCallData);
+    }
+
+    /**
+     * @notice              Decodes the migration contract address from payload data
+     * @dev                 Strips the MIGRATION_SELECTOR prefix and decodes the address
+     * @param data          raw data containing MIGRATION_SELECTOR followed by ABI-encoded address
+     * @return address      the decoded migration contract address
+     */
+    function decodeMigrationAddress(bytes memory data) internal pure returns (address) {
+        // Skip the first 4 bytes (MIGRATION_SELECTOR) and decode the rest
+        bytes memory strippedData = new bytes(data.length - 4);
+        for (uint256 i = 0; i < strippedData.length; i++) {
+            strippedData[i] = data[i + 4];
+        }
+        return abi.decode(strippedData, (address));
+    }
+
+    /**
+     * @notice                  Internal handler for single call execution
+     * @dev                     Executes a single call to the target address
+     * @param payload           the UniversalPayload containing call data
+     * @return success          whether the call succeeded
+     * @return returnData       return data from the call
+     */
+    function _handleSingleCall(UniversalPayload memory payload) 
+        internal 
+        returns (bool success, bytes memory returnData) 
+    {
+        (success, returnData) = payload.to.call{value: payload.value}(payload.data);
+    }
+
+    /**
      * @dev             Calculates the transaction hash for a given payload
      * @param payload   the payload to calculate the hash for
      * @return bytes32  payload hash
      */
     function getPayloadHash(UniversalPayload memory payload) public view returns (bytes32) {
-        if (payload.deadline > 0) {
-            if (block.timestamp > payload.deadline) {
-                revert Errors.ExpiredDeadline();
-            }
-        }
         bytes32 structHash = keccak256(
             abi.encode(
                 UNIVERSAL_PAYLOAD_TYPEHASH,
@@ -226,25 +300,6 @@ contract UEA_EVM is ReentrancyGuard, IUEA {
 
         bytes32 _domainSeparator = domainSeparator();
 
-        return keccak256(abi.encodePacked("\x19\x01", _domainSeparator, structHash));
-    }
-
-    /**
-     * @dev             Calculates the transaction hash for a given migration payload
-     * @param payload   migration payload to calculate the hash for
-     * @return bytes32  payload hash
-     */
-    function getMigrationPayloadHash(MigrationPayload memory payload) public view returns (bytes32) {
-        if (payload.deadline > 0 && block.timestamp > payload.deadline) {
-            revert Errors.ExpiredDeadline();
-        }
-
-        bytes32 structHash =
-            keccak256(abi.encode(MIGRATION_PAYLOAD_TYPEHASH, payload.migration, nonce, payload.deadline));
-
-        bytes32 _domainSeparator = domainSeparator();
-
-        // Final EIP-712 hash: keccak256("\x19\x01" || domainSeparator || structHash)
         return keccak256(abi.encodePacked("\x19\x01", _domainSeparator, structHash));
     }
 

@@ -8,10 +8,9 @@ import {StringUtils} from "../../src/libraries/Utils.sol";
 import {
     UniversalAccountId,
     UniversalPayload,
-    MigrationPayload,
     UNIVERSAL_PAYLOAD_TYPEHASH,
-    MIGRATION_PAYLOAD_TYPEHASH,
     MULTICALL_SELECTOR,
+    MIGRATION_SELECTOR,
     Multicall
 } from "../../src/libraries/Types.sol";
 
@@ -122,6 +121,102 @@ contract UEA_SVM_V2 is ReentrancyGuard, IUEA {
         return abi.decode(strippedData, (Multicall[]));
     }
 
+    function isMigration(bytes memory data) internal pure returns (bool) {
+        if (data.length < 4) return false;
+        bytes4 selector;
+        assembly {
+            selector := mload(add(data, 32))
+        }
+        return selector == MIGRATION_SELECTOR;
+    }
+
+    function _handleExecution(UniversalPayload memory payload) internal {
+        if (payload.deadline > 0 && block.timestamp > payload.deadline) {
+            revert Errors.ExpiredDeadline();
+        }
+
+        unchecked {
+            nonce++;
+        }
+
+        bool success;
+        bytes memory returnData;
+
+        if (isMulticall(payload.data)) {
+            (success, returnData) = _handleMulticall(payload);
+        } else if (isMigration(payload.data)) {
+            (success, returnData) = _handleMigration(payload);
+        } else {
+            (success, returnData) = _handleSingleCall(payload);
+        }
+
+        if (!success) {
+            if (returnData.length > 0) {
+                assembly {
+                    let returnDataSize := mload(returnData)
+                    revert(add(32, returnData), returnDataSize)
+                }
+            } else {
+                revert Errors.ExecutionFailed();
+            }
+        }
+
+        emit PayloadExecuted(id.owner, nonce);
+    }
+
+    function _handleMulticall(UniversalPayload memory payload) 
+        internal 
+        returns (bool success, bytes memory returnData) 
+    {
+        Multicall[] memory calls = decodeCalls(payload.data);
+
+        for (uint256 i = 0; i < calls.length; i++) {
+            if (isMigration(calls[i].data)) {
+                revert Errors.InvalidCall();
+            }
+
+            (success, returnData) = calls[i].to.call{value: calls[i].value}(calls[i].data);
+            if (!success) {
+                return (success, returnData);
+            }
+        }
+
+        return (true, "");
+    }
+
+    function _handleMigration(UniversalPayload memory payload) 
+        internal 
+        returns (bool success, bytes memory returnData) 
+    {
+        if (payload.to != address(this)) {
+            revert Errors.InvalidCall();
+        }
+        if (payload.value != 0) {
+            revert Errors.InvalidCall();
+        }
+
+        address migrationContract = decodeMigrationAddress(payload.data);
+
+        bytes memory migrateCallData = abi.encodeWithSignature("migrateUEASVM()");
+
+        (success, returnData) = migrationContract.delegatecall(migrateCallData);
+    }
+
+    function decodeMigrationAddress(bytes memory data) internal pure returns (address) {
+        bytes memory strippedData = new bytes(data.length - 4);
+        for (uint256 i = 0; i < strippedData.length; i++) {
+            strippedData[i] = data[i + 4];
+        }
+        return abi.decode(strippedData, (address));
+    }
+
+    function _handleSingleCall(UniversalPayload memory payload) 
+        internal 
+        returns (bool success, bytes memory returnData) 
+    {
+        (success, returnData) = payload.to.call{value: payload.value}(payload.data);
+    }
+
     /**
      * @inheritdoc IUEA
      */
@@ -137,73 +232,8 @@ contract UEA_SVM_V2 is ReentrancyGuard, IUEA {
             }
         }
 
-        unchecked {
-            nonce++;
-        }
-
-        // flag to overwrite success
-        bool success;
-        bytes memory returnData;
-
-        // Execute the payload: either single call or multicall batch
-        if (isMulticall(payload.data)) {
-            Multicall[] memory calls = decodeCalls(payload.data);
-            for (uint256 i = 0; i < calls.length; i++) {
-                // If any sub-call fails, revert entire multicall
-                (success, returnData) = calls[i].to.call{value: calls[i].value}(calls[i].data);
-                if (!success) {
-                    break;
-                }
-            }
-        } else {
-            (success, returnData) = payload.to.call{value: payload.value}(payload.data);
-        }
-
-        if (!success) {
-            if (returnData.length > 0) {
-                assembly {
-                    let returnDataSize := mload(returnData)
-                    revert(add(32, returnData), returnDataSize)
-                }
-            } else {
-                revert Errors.ExecutionFailed();
-            }
-        }
-
-        emit PayloadExecuted(id.owner, nonce);
-    }
-
-    /**
-     * @inheritdoc IUEA
-     */
-    function migrateUEA(MigrationPayload calldata payload, bytes calldata signature) external nonReentrant {
-        bytes32 payloadHash = getMigrationPayloadHash(payload);
-
-        if (!verifyPayloadSignature(payloadHash, signature)) {
-            revert Errors.InvalidSVMSignature();
-        }
-
-        unchecked {
-            nonce++;
-        }
-
-        bytes memory migrateCallData = abi.encodeWithSignature("migrateUEASVM()");
-
-        // delegatecall into the migration contract
-        (bool success, bytes memory returnData) = payload.migration.delegatecall(migrateCallData);
-
-        if (!success) {
-            if (returnData.length > 0) {
-                assembly {
-                    let returnDataSize := mload(returnData)
-                    revert(add(32, returnData), returnDataSize)
-                }
-            } else {
-                revert Errors.ExecutionFailed();
-            }
-        }
-
-        emit PayloadExecuted(id.owner, nonce);
+        // Delegate to internal handler
+        _handleExecution(payload);
     }
 
     /**
@@ -212,11 +242,6 @@ contract UEA_SVM_V2 is ReentrancyGuard, IUEA {
      * @return bytes32 The transaction hash.
      */
     function getPayloadHash(UniversalPayload memory payload) public view returns (bytes32) {
-        if (payload.deadline > 0) {
-            if (block.timestamp > payload.deadline) {
-                revert Errors.ExpiredDeadline();
-            }
-        }
         // Calculate the hash of the payload using EIP-712
         bytes32 structHash = keccak256(
             abi.encode(
@@ -243,22 +268,6 @@ contract UEA_SVM_V2 is ReentrancyGuard, IUEA {
      * @param payload The migration payload to calculate the hash for.
      * @return bytes32 The transaction hash.
      */
-    function getMigrationPayloadHash(MigrationPayload memory payload) public view returns (bytes32) {
-        if (payload.deadline > 0 && block.timestamp > payload.deadline) {
-            revert Errors.ExpiredDeadline();
-        }
-
-        // Calculate the struct hash of the migration payload
-        bytes32 structHash =
-            keccak256(abi.encode(MIGRATION_PAYLOAD_TYPEHASH, payload.migration, nonce, payload.deadline));
-
-        // Calculate the domain separator (EIP-712 domain)
-        bytes32 _domainSeparator = domainSeparator();
-
-        // Final EIP-712 hash: keccak256("\x19\x01" || domainSeparator || structHash)
-        return keccak256(abi.encodePacked("\x19\x01", _domainSeparator, structHash));
-    }
-
     /**
      * @dev Fallback function to receive ether.
      */

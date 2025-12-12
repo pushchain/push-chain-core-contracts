@@ -110,18 +110,4 @@ interface IUEA {
      *                          4. If the target contract execution fails, it reverts with ExecutionFailed or forwards the error message.
      */
     function executePayload(bytes calldata payload, bytes calldata verificationData) external;
-
-    /**
-     * @notice                  Executes a migration payload for updating UEAs.
-     * @param payload           The MigrationPayload struct containing migration parameters:
-     *                          - migration: The address of the new migration contract
-     *                          - nonce: Used to prevent replay attacks
-     *                          - deadline: Timestamp after which the migration is invalid
-     * @param signature         The signature is the signature used for verification.
-     *                          1. For UEA_EVM: The signature is the ECDSA signature (r, s, v)
-     *                          2. For UEA_SVM: The signature is the Ed25519 signature
-     *
-     * @dev                     Allows UEA Owner to sign and execute a migration of their UEA from old to new implementation.
-     */
-    function migrateUEA(MigrationPayload calldata payload, bytes calldata signature) external;
 }

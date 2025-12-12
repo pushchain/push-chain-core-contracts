@@ -742,18 +742,26 @@ contract UEA_EVMTest is Test {
         MigrationPayload memory payload =
             MigrationPayload({migration: address(migration), nonce: 0, deadline: block.timestamp + 1000});
 
-        MigrationPayload memory payload2 =
-            MigrationPayload({migration: address(migration), nonce: 0, deadline: block.timestamp});
+        // Convert to UniversalPayload for new migration approach
+        UniversalPayload memory universalPayload = UniversalPayload({
+            to: address(evmSmartAccountInstance),
+            value: 0,
+            data: abi.encodePacked(MIGRATION_SELECTOR, abi.encode(payload.migration)),
+            gasLimit: 1000000,
+            maxFeePerGas: 0,
+            maxPriorityFeePerGas: 0,
+            nonce: payload.nonce,
+            deadline: payload.deadline
+        });
 
-        // Compute payload hash
-        bytes32 payloadHash = evmSmartAccountInstance.getMigrationPayloadHash(payload);
-
-        // Sign with owner key
-        (uint8 v, bytes32 r, bytes32 s) = vm.sign(ownerPK, payloadHash);
+        // Create an invalid signature (wrong private key)
+        uint256 wrongPK = 0x1234;
+        bytes32 payloadHash = evmSmartAccountInstance.getPayloadHash(universalPayload);
+        (uint8 v, bytes32 r, bytes32 s) = vm.sign(wrongPK, payloadHash);
         bytes memory sig = abi.encodePacked(r, s, v);
 
         vm.expectRevert(Errors.InvalidEVMSignature.selector);
-        evmSmartAccountInstance.migrateUEA(payload2, sig);
+        evmSmartAccountInstance.executePayload(abi.encode(universalPayload), sig);
     }
 
     function test_RevertWhen_ExpiredDeadlineOnMigration() public deployEvmSmartAccount {
@@ -761,7 +769,18 @@ contract UEA_EVMTest is Test {
             MigrationPayload({migration: address(migration), nonce: 0, deadline: block.timestamp});
 
         // Compute payload hash
-        bytes32 payloadHash = evmSmartAccountInstance.getMigrationPayloadHash(payload);
+        // Convert to UniversalPayload for new migration approach
+        UniversalPayload memory universalPayload = UniversalPayload({
+            to: address(evmSmartAccountInstance),
+            value: 0,
+            data: abi.encodePacked(MIGRATION_SELECTOR, abi.encode(payload.migration)),
+            gasLimit: 1000000,
+            maxFeePerGas: 0,
+            maxPriorityFeePerGas: 0,
+            nonce: payload.nonce,
+            deadline: payload.deadline
+        });
+        bytes32 payloadHash = evmSmartAccountInstance.getPayloadHash(universalPayload);
 
         // skip so deadline is expired
         skip(2);
@@ -771,7 +790,7 @@ contract UEA_EVMTest is Test {
         bytes memory sig = abi.encodePacked(r, s, v);
 
         vm.expectRevert(Errors.ExpiredDeadline.selector);
-        evmSmartAccountInstance.migrateUEA(payload, sig);
+        evmSmartAccountInstance.executePayload(abi.encode(universalPayload), sig);
     }
 
     function test_SuccessfulMigrationUpdatesImplementation() public deployEvmSmartAccount {
@@ -779,14 +798,25 @@ contract UEA_EVMTest is Test {
             MigrationPayload({migration: address(migration), nonce: 0, deadline: block.timestamp + 1000});
 
         // Compute payload hash
-        bytes32 payloadHash = evmSmartAccountInstance.getMigrationPayloadHash(payload);
+        // Convert to UniversalPayload for new migration approach
+        UniversalPayload memory universalPayload = UniversalPayload({
+            to: address(evmSmartAccountInstance),
+            value: 0,
+            data: abi.encodePacked(MIGRATION_SELECTOR, abi.encode(payload.migration)),
+            gasLimit: 1000000,
+            maxFeePerGas: 0,
+            maxPriorityFeePerGas: 0,
+            nonce: payload.nonce,
+            deadline: payload.deadline
+        });
+        bytes32 payloadHash = evmSmartAccountInstance.getPayloadHash(universalPayload);
 
         // Sign with owner key
         (uint8 v, bytes32 r, bytes32 s) = vm.sign(ownerPK, payloadHash);
         bytes memory sig = abi.encodePacked(r, s, v);
 
         // Call migrateUEA
-        evmSmartAccountInstance.migrateUEA(payload, sig);
+        evmSmartAccountInstance.executePayload(abi.encode(universalPayload), sig);
 
         // Verify proxy’s storage slot now updated
         bytes32 slot = UEA_LOGIC_SLOT;

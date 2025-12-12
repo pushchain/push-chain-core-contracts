@@ -42,6 +42,9 @@ struct RevertInstructions {
 // Magic Prefix for deciding if the payload is a Multicall
 bytes4 constant MULTICALL_SELECTOR = bytes4(keccak256("UEA_MULTICALL"));
 
+// Magic Prefix for migration requests
+bytes4 constant MIGRATION_SELECTOR = bytes4(keccak256("UEA_MIGRATION"));
+
 // Hash of keccak256("UniversalPayload(address to,uint256 value,bytes data,uint256 gasLimit,uint256 maxFeePerGas,uint256 maxPriorityFeePerGas,uint256 nonce,uint256 deadline)")
 bytes32 constant UNIVERSAL_PAYLOAD_TYPEHASH = 0x102a0b05d0844e7ea580bbdbe2cfe69c4fa4bfac4cf45919f6b24381a1235844;
 
