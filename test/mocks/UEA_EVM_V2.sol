@@ -98,28 +98,41 @@ contract UEA_EVM_V2 is ReentrancyGuard, IUEA {
 
     /**
      * @dev Checks whether the payload data uses the multicall format by verifying a magic selector prefix.
-     * @param data The raw calldata from the UniversalPayload.
+     * @param data The raw data from the UniversalPayload.
      * @return bool Returns true if the data starts with the MULTICALL_SELECTOR, indicating a multicall batch.
      */
-    function isMulticall(bytes calldata data) internal pure returns (bool) {
+    function isMulticall(bytes memory data) internal pure returns (bool) {
         if (data.length < 4) return false;
-        return bytes4(data[:4]) == MULTICALL_SELECTOR;
+        bytes4 selector;
+        assembly {
+            selector := mload(add(data, 32))
+        }
+        return selector == MULTICALL_SELECTOR;
     }
 
     /**
      * @dev Decodes the payload data into an array of Call structs, assuming the data uses the multicall format.
      * @notice This function assumes that isMulticall(data) has already returned true.
-     * @param data The raw calldata containing the MULTICALL_SELECTOR followed by the ABI-encoded Call[].
+     * @param data The raw data containing the MULTICALL_SELECTOR followed by the ABI-encoded Call[].
      * @return Call[] The decoded array of Call structs to be executed.
      */
-    function decodeCalls(bytes calldata data) internal pure returns (Multicall[] memory) {
-        return abi.decode(data[4:], (Multicall[])); // Strip selector
+    function decodeCalls(bytes memory data) internal pure returns (Multicall[] memory) {
+        // Skip the first 4 bytes (MULTICALL_SELECTOR) and decode the rest
+        // We need to manually copy because slicing only works with calldata, not memory
+        bytes memory strippedData = new bytes(data.length - 4);
+        for (uint256 i = 0; i < strippedData.length; i++) {
+            strippedData[i] = data[i + 4];
+        }
+        return abi.decode(strippedData, (Multicall[]));
     }
 
     /**
      * @inheritdoc IUEA
      */
-    function executePayload(UniversalPayload calldata payload, bytes calldata verificationData) external nonReentrant {
+    function executePayload(bytes calldata rawPayload, bytes calldata verificationData) external nonReentrant {
+        // Decode the raw bytes payload into UniversalPayload struct
+        UniversalPayload memory payload = abi.decode(rawPayload, (UniversalPayload));
+        
         bytes32 payloadHash = getPayloadHash(payload);
 
         if (payload.vType == VerificationType.universalTxVerification) {
@@ -206,7 +219,7 @@ contract UEA_EVM_V2 is ReentrancyGuard, IUEA {
      * @param payload The payload to calculate the hash for.
      * @return bytes32 The transaction hash.
      */
-    function getPayloadHash(UniversalPayload calldata payload) public view returns (bytes32) {
+    function getPayloadHash(UniversalPayload memory payload) public view returns (bytes32) {
         if (payload.deadline > 0) {
             if (block.timestamp > payload.deadline) {
                 revert Errors.ExpiredDeadline();

@@ -108,7 +108,10 @@ contract UEA_EVM is ReentrancyGuard, IUEA {
     /**
      * @inheritdoc IUEA
      */
-    function executePayload(UniversalPayload calldata payload, bytes calldata verificationData) external nonReentrant {
+    function executePayload(bytes calldata rawPayload, bytes calldata verificationData) external nonReentrant {
+        // Decode the raw bytes payload into UniversalPayload struct
+        UniversalPayload memory payload = abi.decode(rawPayload, (UniversalPayload));
+        
         bytes32 payloadHash = getPayloadHash(payload);
 
         if (payload.vType == VerificationType.universalTxVerification) {
@@ -195,23 +198,34 @@ contract UEA_EVM is ReentrancyGuard, IUEA {
      * @notice          Checks whether the payload data uses the multicall format
      * @dev             Determines if the payload data starts with the MULTICALL_SELECTOR magic prefix
      * @dev             Used to distinguish between single call vs multicall batch execution
-     * @param data      raw calldata from the UniversalPayload
+     * @param data      raw data from the UniversalPayload
      * @return bool     returns true if the data starts with MULTICALL_SELECTOR, indicating a multicall batch
      */
-    function isMulticall(bytes calldata data) internal pure returns (bool) {
+    function isMulticall(bytes memory data) internal pure returns (bool) {
         if (data.length < 4) return false;
-        return bytes4(data[:4]) == MULTICALL_SELECTOR;
+        // Extract first 4 bytes and compare with MULTICALL_SELECTOR
+        bytes4 selector;
+        assembly {
+            selector := mload(add(data, 32))
+        }
+        return selector == MULTICALL_SELECTOR;
     }
 
     /**
      * @notice              Decodes the payload data into an array of Multicall structs
      * @dev                 Assumes the data uses the multicall format (should be called after isMulticall returns true)
      * @dev                 Strips the MULTICALL_SELECTOR prefix and decodes the remaining data as Multicall[]
-     * @param data          raw calldata containing MULTICALL_SELECTOR followed by ABI-encoded Multicall[]
+     * @param data          raw data containing MULTICALL_SELECTOR followed by ABI-encoded Multicall[]
      * @return Multicall[]  decoded array of Multicall structs to be executed
      */
-    function decodeCalls(bytes calldata data) internal pure returns (Multicall[] memory) {
-        return abi.decode(data[4:], (Multicall[])); // Strip selector
+    function decodeCalls(bytes memory data) internal pure returns (Multicall[] memory) {
+        // Skip the first 4 bytes (MULTICALL_SELECTOR) and decode the rest
+        // We need to manually copy because slicing only works with calldata, not memory
+        bytes memory strippedData = new bytes(data.length - 4);
+        for (uint256 i = 0; i < strippedData.length; i++) {
+            strippedData[i] = data[i + 4];
+        }
+        return abi.decode(strippedData, (Multicall[]));
     }
 
     /**
@@ -219,7 +233,7 @@ contract UEA_EVM is ReentrancyGuard, IUEA {
      * @param payload   the payload to calculate the hash for
      * @return bytes32  payload hash
      */
-    function getPayloadHash(UniversalPayload calldata payload) public view returns (bytes32) {
+    function getPayloadHash(UniversalPayload memory payload) public view returns (bytes32) {
         if (payload.deadline > 0) {
             if (block.timestamp > payload.deadline) {
                 revert Errors.ExpiredDeadline();
