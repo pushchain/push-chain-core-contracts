@@ -32,14 +32,14 @@ contract UniversalCore is
 {
     using SafeERC20 for IERC20;
 
-    /// @notice Map to know the gas price of each chain given a chain id.
-    mapping(string => uint256) public gasPriceByChainId;
+    /// @notice Map to know the gas price of each chain given a chain namespace.
+    mapping(string => uint256) public gasPriceByChainNamespace;
 
-    /// @notice Map to know the PRC20 address of a token given a chain id, ex pETH, pBNB etc.
-    mapping(string => address) public gasTokenPRC20ByChainId;
+    /// @notice Map to know the PRC20 address of a token given a chain namespace, ex pETH, pBNB etc.
+    mapping(string => address) public gasTokenPRC20ByChainNamespace;
 
-    /// @notice Map to know Uniswap V3 pool of PC/PRC20 given a chain id.
-    mapping(string => address) public gasPCPoolByChainId;
+    /// @notice Map to know Uniswap V3 pool of PC/PRC20 given a chain namespace.
+    mapping(string => address) public gasPCPoolByChainNamespace;
 
     /// @notice Supproted token list for auto swap to PC using Uniswap V3.
     mapping(address => bool) public isAutoSwapSupported;
@@ -200,11 +200,11 @@ contract UniversalCore is
 
     /**
      * @dev Set the gas PC pool for a chain
-     * @param chainID Chain ID
+     * @param chainNamespace Chain Namespace (e.g. "eip155:1" for Ethereum Mainnet)
      * @param gasToken Gas coin address
      * @param fee Uniswap V3 fee tier
      */
-    function setGasPCPool(string memory chainID, address gasToken, uint24 fee) external onlyRole(MANAGER_ROLE) {
+    function setGasPCPool(string memory chainNamespace, address gasToken, uint24 fee) external onlyRole(MANAGER_ROLE) {
         if (gasToken == address(0)) revert CommonErrors.ZeroAddress();
 
         address pool = IUniswapV3Factory(uniswapV3FactoryAddress).getPool(
@@ -214,29 +214,29 @@ contract UniversalCore is
         );
         if (pool == address(0)) revert UniversalCoreErrors.PoolNotFound();
 
-        gasPCPoolByChainId[chainID] = pool;
-        emit SetGasPCPool(chainID, pool, fee);
+        gasPCPoolByChainNamespace[chainNamespace] = pool;
+        emit SetGasPCPool(chainNamespace, pool, fee);
     }
 
     /**
      * @dev Fungible module updates the gas price oracle periodically.
-     * @param chainID Chain ID
+     * @param chainNamespace Chain Namespace (e.g. "eip155:1" for Ethereum Mainnet)
      * @param price New gas price
      */
-    function setGasPrice(string memory chainID, uint256 price) external onlyRole(MANAGER_ROLE) {
-        gasPriceByChainId[chainID] = price;
-        emit SetGasPrice(chainID, price);
+    function setGasPrice(string memory chainNamespace, uint256 price) external onlyRole(MANAGER_ROLE) {
+        gasPriceByChainNamespace[chainNamespace] = price;
+        emit SetGasPrice(chainNamespace, price);
     }
 
     /**
-     * @dev Setter for gasTokenPRC20ByChainId map.
-     * @param chainID Chain ID
+     * @dev Setter for gasTokenPRC20ByChainNamespace map.
+     * @param chainNamespace Chain Namespace (e.g. "eip155:1" for Ethereum Mainnet)
      * @param prc20 PRC20 address
      */
-    function setGasTokenPRC20(string memory chainID, address prc20) external onlyRole(MANAGER_ROLE) {
+    function setGasTokenPRC20(string memory chainNamespace, address prc20) external onlyRole(MANAGER_ROLE) {
         if (prc20 == address(0)) revert CommonErrors.ZeroAddress();
-        gasTokenPRC20ByChainId[chainID] = prc20;
-        emit SetGasToken(chainID, prc20);
+        gasTokenPRC20ByChainNamespace[chainNamespace] = prc20;
+        emit SetGasToken(chainNamespace, prc20);
     }
 
      /**
@@ -383,12 +383,12 @@ contract UniversalCore is
      * @inheritdoc IUniversalCore
      */
     function withdrawGasFee(address _prc20) public view returns (address gasToken, uint256 gasFee) {
-        string memory chainID = IPRC20(_prc20).SOURCE_CHAIN_NAMESPACE();
+        string memory chainNamespace = IPRC20(_prc20).SOURCE_CHAIN_NAMESPACE();
 
-        gasToken = gasTokenPRC20ByChainId[chainID];
+        gasToken = gasTokenPRC20ByChainNamespace[chainNamespace];
         if (gasToken == address(0)) revert CommonErrors.ZeroAddress();
 
-        uint256 price = gasPriceByChainId[chainID];
+        uint256 price = gasPriceByChainNamespace[chainNamespace];
         if (price == 0) revert UniversalCoreErrors.ZeroGasPrice();
 
         gasFee = price * BASE_GAS_LIMIT + IPRC20(_prc20).PC_PROTOCOL_FEE();
@@ -398,12 +398,12 @@ contract UniversalCore is
      * @inheritdoc IUniversalCore
      */
     function withdrawGasFeeWithGasLimit(address _prc20, uint256 gasLimit) public view returns (address gasToken, uint256 gasFee) {
-        string memory chainID = IPRC20(_prc20).SOURCE_CHAIN_NAMESPACE();
+        string memory chainNamespace = IPRC20(_prc20).SOURCE_CHAIN_NAMESPACE();
 
-        gasToken = gasTokenPRC20ByChainId[chainID];
+        gasToken = gasTokenPRC20ByChainNamespace[chainNamespace];
         if (gasToken == address(0)) revert CommonErrors.ZeroAddress();
 
-        uint256 price = gasPriceByChainId[chainID];
+        uint256 price = gasPriceByChainNamespace[chainNamespace];
         if (price == 0) revert UniversalCoreErrors.ZeroGasPrice();
 
         gasFee = price * gasLimit + IPRC20(_prc20).PC_PROTOCOL_FEE();

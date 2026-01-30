@@ -8,11 +8,11 @@ interface IUniversalCore {
     // =========================
     //           Universal Core Events
     // =========================    
-    event SetGasPrice(string chainId, uint256 price);
-    event SetGasToken(string chainId, address prc20);
+    event SetGasPrice(string chainNamespace, uint256 price);
+    event SetGasToken(string chainNamespace, address prc20);
     event SetDefaultDeadlineMins(uint256 minutesValue);
     event SetSupportedToken(address indexed prc20, bool supported);
-    event SetGasPCPool(string chainId, address pool, uint24 fee);   
+    event SetGasPCPool(string chainNamespace, address pool, uint24 fee);   
     event DepositPRC20WithAutoSwap(address prc20, uint256 amountIn, address pcToken, uint256 amountOut, uint24 fee, address target);
     // =========================
     //           Universal Core Functions
@@ -67,17 +67,17 @@ interface IUniversalCore {
 
     /**
      * @notice Get gas token PRC20 address for a chain
-     * @param chainId Chain ID
+     * @param chainNamespace Chain Namespace (e.g. "eip155:1" for Ethereum Mainnet)
      * @return gasToken Gas token address
      */
-    function gasTokenPRC20ByChainId(string memory chainId) external view returns (address gasToken);
+    function gasTokenPRC20ByChainNamespace(string memory chainNamespace) external view returns (address gasToken);
 
     /**
      * @notice Get gas price for a chain
-     * @param chainId Chain ID
+     * @param chainNamespace Chain Namespace
      * @return price Gas price
      */
-    function gasPriceByChainId(string memory chainId) external view returns (uint256 price);
+    function gasPriceByChainNamespace(string memory chainNamespace) external view returns (uint256 price);
 
     /**
      * @notice Get base gas limit for a chain
