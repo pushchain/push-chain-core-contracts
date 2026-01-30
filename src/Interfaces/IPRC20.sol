@@ -18,7 +18,7 @@ interface IPRC20 {
     function decimals() external view returns (uint8);
     function name() external view returns (string memory);
     function symbol() external view returns (string memory);
-    function SOURCE_CHAIN_ID() external view returns (string memory);
+    function SOURCE_CHAIN_NAMESPACE() external view returns (string memory);
     function PC_PROTOCOL_FEE() external view returns (uint256);
     
     /**

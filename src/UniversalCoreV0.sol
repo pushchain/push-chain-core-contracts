@@ -441,7 +441,7 @@ contract UniversalCoreV0 is
      * @inheritdoc IUniversalCore
      */
     function withdrawGasFee(address _prc20) public view returns (address gasToken, uint256 gasFee) {
-        string memory chainID = IPRC20(_prc20).SOURCE_CHAIN_ID();
+        string memory chainID = IPRC20(_prc20).SOURCE_CHAIN_NAMESPACE();
 
         gasToken = gasTokenPRC20ByChainId[chainID];
         if (gasToken == address(0)) revert CommonErrors.ZeroAddress();
@@ -456,7 +456,7 @@ contract UniversalCoreV0 is
      * @inheritdoc IUniversalCore
      */
     function withdrawGasFeeWithGasLimit(address _prc20, uint256 gasLimit) public view returns (address gasToken, uint256 gasFee) {
-        string memory chainID = IPRC20(_prc20).SOURCE_CHAIN_ID();
+        string memory chainID = IPRC20(_prc20).SOURCE_CHAIN_NAMESPACE();
 
         gasToken = gasTokenPRC20ByChainId[chainID];
         if (gasToken == address(0)) revert CommonErrors.ZeroAddress();
