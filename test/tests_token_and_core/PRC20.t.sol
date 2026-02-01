@@ -28,7 +28,7 @@ contract PRC20Test is Test, UpgradeableContractHelper {
     address public attacker;
 
     // Constants
-    string public constant SOURCE_CHAIN_ID = "1"; // Ethereum
+    string public constant SOURCE_CHAIN_NAMESPACE = "1"; // Ethereum
     string public constant SOURCE_TOKEN_ADDRESS = "0x0000000000000000000000000000000000000000";
     uint256 public constant PC_PROTOCOL_FEE = 10000;
     uint256 public constant GAS_PRICE = 50 * 10 ** 9; // 50 gwei
@@ -75,8 +75,8 @@ contract PRC20Test is Test, UpgradeableContractHelper {
 
         // Configure universalCore
         vm.startPrank(uExec);
-        universalCore.setGasPrice(SOURCE_CHAIN_ID, GAS_PRICE);
-        universalCore.setGasTokenPRC20(SOURCE_CHAIN_ID, address(gasToken));
+        universalCore.setGasPrice(SOURCE_CHAIN_NAMESPACE, GAS_PRICE);
+        universalCore.setGasTokenPRC20(SOURCE_CHAIN_NAMESPACE, address(gasToken));
         vm.stopPrank();
 
         // Deploy PRC20 token implementation
@@ -88,7 +88,7 @@ contract PRC20Test is Test, UpgradeableContractHelper {
             "Push Chain Token",
             "PUSH",
             18,
-            SOURCE_CHAIN_ID,
+            SOURCE_CHAIN_NAMESPACE,
             IPRC20.TokenType.PC,
             PC_PROTOCOL_FEE,
             address(universalCore),

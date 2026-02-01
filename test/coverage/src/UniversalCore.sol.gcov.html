@@ -104,13 +104,13 @@
 <span id="L33"><span class="lineNum">      33</span>                 :             :     using SafeERC20 for IERC20;</span>
 <span id="L34"><span class="lineNum">      34</span>                 :             : </span>
 <span id="L35"><span class="lineNum">      35</span>                 :             :     /// @notice Map to know the gas price of each chain given a chain id.</span>
-<span id="L36"><span class="lineNum">      36</span>                 :             :     mapping(string =&gt; uint256) public gasPriceByChainId;</span>
+<span id="L36"><span class="lineNum">      36</span>                 :             :     mapping(string =&gt; uint256) public gasPriceByChainNamespace;</span>
 <span id="L37"><span class="lineNum">      37</span>                 :             : </span>
 <span id="L38"><span class="lineNum">      38</span>                 :             :     /// @notice Map to know the PRC20 address of a token given a chain id, ex pETH, pBNB etc.</span>
-<span id="L39"><span class="lineNum">      39</span>                 :             :     mapping(string =&gt; address) public gasTokenPRC20ByChainId;</span>
+<span id="L39"><span class="lineNum">      39</span>                 :             :     mapping(string =&gt; address) public gasTokenPRC20ByChainNamespace;</span>
 <span id="L40"><span class="lineNum">      40</span>                 :             : </span>
 <span id="L41"><span class="lineNum">      41</span>                 :             :     /// @notice Map to know Uniswap V3 pool of PC/PRC20 given a chain id.</span>
-<span id="L42"><span class="lineNum">      42</span>                 :             :     mapping(string =&gt; address) public gasPCPoolByChainId;</span>
+<span id="L42"><span class="lineNum">      42</span>                 :             :     mapping(string =&gt; address) public gasPCPoolByChainNamespace;</span>
 <span id="L43"><span class="lineNum">      43</span>                 :             : </span>
 <span id="L44"><span class="lineNum">      44</span>                 :             :     /// @notice Supproted token list for auto swap to PC using Uniswap V3.</span>
 <span id="L45"><span class="lineNum">      45</span>                 :             :     mapping(address =&gt; bool) public isAutoSwapSupported;</span>
@@ -264,7 +264,7 @@
 <span id="L193"><span class="lineNum">     193</span>                 :             :         );</span>
 <span id="L194"><span class="lineNum">     194</span>            [<span class="tlaGBC" title="Branch 0 was taken 1 time"> + </span>]:<span class="tlaGNC">           5 :         if (pool == address(0)) revert UniversalCoreErrors.PoolNotFound();</span></span>
 <span id="L195"><span class="lineNum">     195</span>                 :             : </span>
-<span id="L196"><span class="lineNum">     196</span>                 :<span class="tlaGNC">           4 :         gasPCPoolByChainId[chainID] = pool;</span></span>
+<span id="L196"><span class="lineNum">     196</span>                 :<span class="tlaGNC">           4 :         gasPCPoolByChainNamespace[chainID] = pool;</span></span>
 <span id="L197"><span class="lineNum">     197</span>                 :<span class="tlaGNC">           4 :         emit SetGasPCPool(chainID, pool, fee);</span></span>
 <span id="L198"><span class="lineNum">     198</span>                 :             :     }</span>
 <span id="L199"><span class="lineNum">     199</span>                 :             : </span>
@@ -272,7 +272,7 @@
 <span id="L201"><span class="lineNum">     201</span>                 :             :      * @inheritdoc IUniversalCore</span>
 <span id="L202"><span class="lineNum">     202</span>                 :             :      */</span>
 <span id="L203"><span class="lineNum">     203</span>                 :<span class="tlaGNC">          51 :     function setGasPrice(string memory chainID, uint256 price) external onlyRole(MANAGER_ROLE) {</span></span>
-<span id="L204"><span class="lineNum">     204</span>                 :<span class="tlaGNC">          50 :         gasPriceByChainId[chainID] = price;</span></span>
+<span id="L204"><span class="lineNum">     204</span>                 :<span class="tlaGNC">          50 :         gasPriceByChainNamespace[chainID] = price;</span></span>
 <span id="L205"><span class="lineNum">     205</span>                 :<span class="tlaGNC">          50 :         emit SetGasPrice(chainID, price);</span></span>
 <span id="L206"><span class="lineNum">     206</span>                 :             :     }</span>
 <span id="L207"><span class="lineNum">     207</span>                 :             : </span>
@@ -281,7 +281,7 @@
 <span id="L210"><span class="lineNum">     210</span>                 :             :      */</span>
 <span id="L211"><span class="lineNum">     211</span>                 :<span class="tlaGNC">          50 :     function setGasTokenPRC20(string memory chainID, address prc20) external onlyRole(MANAGER_ROLE) {</span></span>
 <span id="L212"><span class="lineNum">     212</span>            [<span class="tlaGBC" title="Branch 0 was taken 1 time"> + </span>]:<span class="tlaGNC">          49 :         if (prc20 == address(0)) revert CommonErrors.ZeroAddress();</span></span>
-<span id="L213"><span class="lineNum">     213</span>                 :<span class="tlaGNC">          48 :         gasTokenPRC20ByChainId[chainID] = prc20;</span></span>
+<span id="L213"><span class="lineNum">     213</span>                 :<span class="tlaGNC">          48 :         gasTokenPRC20ByChainNamespace[chainID] = prc20;</span></span>
 <span id="L214"><span class="lineNum">     214</span>                 :<span class="tlaGNC">          48 :         emit SetGasToken(chainID, prc20);</span></span>
 <span id="L215"><span class="lineNum">     215</span>                 :             :     }</span>
 <span id="L216"><span class="lineNum">     216</span>                 :             : </span>

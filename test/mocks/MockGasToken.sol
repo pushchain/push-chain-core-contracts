@@ -135,7 +135,7 @@ contract MockGasToken is IPRC20 {
         revert("Not implemented");
     }
 
-    function SOURCE_CHAIN_ID() external pure returns (string memory) {
+    function SOURCE_CHAIN_NAMESPACE() external pure returns (string memory) {
         revert("Not implemented");
     }
 

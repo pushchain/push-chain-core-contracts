@@ -21,7 +21,7 @@ contract PRC20 is IPRC20, Initializable {
     address public immutable UNIVERSAL_EXECUTOR_MODULE = 0x14191Ea54B4c176fCf86f51b0FAc7CB1E71Df7d7;
 
     /// @notice Source chain this PRC20 mirrors (used for oracle lookups)
-    string public SOURCE_CHAIN_ID;
+    string public SOURCE_CHAIN_NAMESPACE;
     /// @notice Source Chain ERC20 address of the PRC20
     string public SOURCE_TOKEN_ADDRESS;
 
@@ -60,7 +60,7 @@ contract PRC20 is IPRC20, Initializable {
     /// @param name_              ERC-20 name
     /// @param symbol_            ERC-20 symbol
     /// @param decimals_          ERC-20 decimals
-    /// @param sourceChainId_     Source chain identifier this PRC20 represents
+    /// @param sourceChainNamespace_     Source chain identifier this PRC20 represents
     /// @param tokenType_         Token classification (PC, NATIVE, ERC20)
     /// @param protocolFlatFee_   Absolute flat fee added to fee computation (units: gas coin PRC20)
     /// @param universalCore_           Initial universalCore contract providing gas coin & gas price
@@ -68,7 +68,7 @@ contract PRC20 is IPRC20, Initializable {
         string memory name_,
         string memory symbol_,
         uint8 decimals_,
-        string memory sourceChainId_,
+        string memory sourceChainNamespace_,
         TokenType tokenType_,
         uint256 protocolFlatFee_,
         address universalCore_,
@@ -80,7 +80,7 @@ contract PRC20 is IPRC20, Initializable {
         _symbol = symbol_;
         _decimals = decimals_;
 
-        SOURCE_CHAIN_ID = sourceChainId_;
+        SOURCE_CHAIN_NAMESPACE = sourceChainNamespace_;
         TOKEN_TYPE = tokenType_;
         PC_PROTOCOL_FEE = protocolFlatFee_;
         UNIVERSAL_CORE = universalCore_;

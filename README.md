@@ -254,7 +254,7 @@ PRC20 is Push Chain's ERC-20 compatible synthetic token standard representing as
 - **Burning via `withdraw()`**: Outbound bridge operation (burn on Push Chain → unlock on source chain)
 
 **Source Chain Tracking:**
-- `SOURCE_CHAIN_ID`: Identifier of the origin chain (e.g., "1" for Ethereum mainnet)
+- `SOURCE_CHAIN_NAMESPACE`: Identifier of the origin chain (e.g., "eip155:1" for Ethereum mainnet)
 - `SOURCE_TOKEN_ADDRESS`: Address of the token on the origin chain
 - `TOKEN_TYPE`: Classification (PC, NATIVE, ERC20)
 
