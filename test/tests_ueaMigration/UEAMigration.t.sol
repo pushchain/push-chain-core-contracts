@@ -128,7 +128,7 @@ contract UEAMigrationTest is BaseTest {
      */
     function test_migrateUEAEVM_SuccessOnDelegateCall() public {
         ueaProxy.initializeUEA(address(ueaEVMImplV1));
-        IUEA(address(ueaProxy)).initialize(testAccountId);
+        IUEA(address(ueaProxy)).initialize(testAccountId, address(factory));
 
         assertEq(ueaProxy.getImplementation(), address(ueaEVMImplV1), "Initial implementation should be V1");
         assertEq(IUEA(address(ueaProxy)).VERSION(), "1.0.0", "Initial version should be 1.0.0");
@@ -144,7 +144,7 @@ contract UEAMigrationTest is BaseTest {
         UniversalPayload memory universalPayload = UniversalPayload({
             to: address(ueaProxy),
             value: 0,
-            data: abi.encodePacked(MIGRATION_SELECTOR, abi.encode(migrationPayload.migration)),
+            data: abi.encodePacked(MIGRATION_SELECTOR),
             gasLimit: 1000000,
             maxFeePerGas: 0,
             maxPriorityFeePerGas: 0,
@@ -188,7 +188,7 @@ contract UEAMigrationTest is BaseTest {
         svmProxy.initializeUEA(address(ueaSVMImplV1));
 
         // Initialize the UEA implementation itself
-        IUEA(address(svmProxy)).initialize(testAccountId);
+        IUEA(address(svmProxy)).initialize(testAccountId, address(factory));
 
         // Verify initial state
         assertEq(svmProxy.getImplementation(), address(ueaSVMImplV1), "Initial implementation should be SVM V1");
@@ -267,7 +267,7 @@ contract UEAMigrationTest is BaseTest {
         address newImpl = migration.UEA_EVM_IMPLEMENTATION();
 
         ueaProxy.initializeUEA(oldImpl);
-        IUEA(address(ueaProxy)).initialize(testAccountId);
+        IUEA(address(ueaProxy)).initialize(testAccountId, address(factory));
 
         // Create migration payload
         MigrationPayload memory migrationPayload = MigrationPayload({
@@ -280,7 +280,7 @@ contract UEAMigrationTest is BaseTest {
         UniversalPayload memory universalPayload = UniversalPayload({
             to: address(ueaProxy),
             value: 0,
-            data: abi.encodePacked(MIGRATION_SELECTOR, abi.encode(migrationPayload.migration)),
+            data: abi.encodePacked(MIGRATION_SELECTOR),
             gasLimit: 1000000,
             maxFeePerGas: 0,
             maxPriorityFeePerGas: 0,
@@ -321,7 +321,7 @@ contract UEAMigrationTest is BaseTest {
 
         // Initialize UEA proxy
         ueaProxy.initializeUEA(address(ueaEVMImplV1));
-        IUEA(address(ueaProxy)).initialize(testAccountId);
+        IUEA(address(ueaProxy)).initialize(testAccountId, address(factory));
 
         // Create migration payload
         MigrationPayload memory migrationPayload = MigrationPayload({
@@ -334,7 +334,7 @@ contract UEAMigrationTest is BaseTest {
         UniversalPayload memory universalPayload = UniversalPayload({
             to: address(ueaProxy),
             value: 0,
-            data: abi.encodePacked(MIGRATION_SELECTOR, abi.encode(migrationPayload.migration)),
+            data: abi.encodePacked(MIGRATION_SELECTOR),
             gasLimit: 1000000,
             maxFeePerGas: 0,
             maxPriorityFeePerGas: 0,
@@ -364,7 +364,7 @@ contract UEAMigrationTest is BaseTest {
     function test_migration_SwitchingImplementations() public {
         // Start with EVM implementation
         ueaProxy.initializeUEA(address(ueaEVMImplV1));
-        IUEA(address(ueaProxy)).initialize(testAccountId);
+        IUEA(address(ueaProxy)).initialize(testAccountId, address(factory));
 
         assertEq(ueaProxy.getImplementation(), address(ueaEVMImplV1), "Should start with EVM V1");
         assertEq(IUEA(address(ueaProxy)).VERSION(), "1.0.0", "Should start with version 1.0.0");
@@ -377,7 +377,7 @@ contract UEAMigrationTest is BaseTest {
         UniversalPayload memory universalPayload = UniversalPayload({
             to: address(ueaProxy),
             value: 0,
-            data: abi.encodePacked(MIGRATION_SELECTOR, abi.encode(migrationPayload.migration)),
+            data: abi.encodePacked(MIGRATION_SELECTOR),
             gasLimit: 1000000,
             maxFeePerGas: 0,
             maxPriorityFeePerGas: 0,

@@ -45,12 +45,11 @@ contract UEA_EVMTest is Test {
         target = new Target();
         revertingTarget = new RevertingTarget();
         silentRevertingTarget = new SilentRevertingTarget();
-        ueaEVMImpl = new UEA_EVM();
 
         // Deploy UEAProxy implementation
         ueaProxyImpl = new UEAProxy();
 
-        // Deploy the factory implementation
+        // Deploy the factory implementation FIRST
         UEAFactoryV1 factoryImpl = new UEAFactoryV1();
 
         // Deploy and initialize the proxy with initialOwner
@@ -60,6 +59,9 @@ contract UEA_EVMTest is Test {
 
         // Set UEAProxy implementation after initialization
         factory.setUEAProxyImplementation(address(ueaProxyImpl));
+
+        // NOW deploy UEA implementations with factory address
+        ueaEVMImpl = new UEA_EVM();
 
         (owner, ownerPK) = makeAddrAndKey("owner");
         ownerBytes = abi.encodePacked(owner);
@@ -96,7 +98,7 @@ contract UEA_EVMTest is Test {
         UniversalAccountId memory _id = UniversalAccountId({chainNamespace: "eip155", chainId: "1", owner: ownerBytes});
 
         // Initialize the account
-        newUEA.initialize(_id);
+        newUEA.initialize(_id, address(factory));
 
         // Verify account details were set correctly
         UniversalAccountId memory storedId = newUEA.universalAccount();
@@ -113,11 +115,11 @@ contract UEA_EVMTest is Test {
         UniversalAccountId memory _id = UniversalAccountId({chainNamespace: "eip155", chainId: "1", owner: ownerBytes});
 
         // Initialize the account
-        newUEA.initialize(_id);
+        newUEA.initialize(_id, address(factory));
 
         // Try to initialize again with the same ID
         vm.expectRevert(Errors.AccountAlreadyExists.selector);
-        newUEA.initialize(_id);
+        newUEA.initialize(_id, address(factory));
 
         // Try to initialize again with a different ID
         bytes memory differentOwnerBytes = abi.encodePacked(makeAddr("differentowner"));
@@ -125,7 +127,7 @@ contract UEA_EVMTest is Test {
             UniversalAccountId({chainNamespace: "eip155", chainId: "1", owner: differentOwnerBytes});
 
         vm.expectRevert(Errors.AccountAlreadyExists.selector);
-        newUEA.initialize(differentId);
+        newUEA.initialize(differentId, address(factory));
     }
 
     function testUEAImplementation() public view {
@@ -719,7 +721,7 @@ contract UEA_EVMTest is Test {
 
         // Initialize it
         UniversalAccountId memory _id = UniversalAccountId({chainNamespace: "eip155", chainId: "1", owner: ownerBytes});
-        newUEA.initialize(_id);
+        newUEA.initialize(_id, address(factory));
 
         // Check initial balance
         assertEq(address(newUEA).balance, 0, "Initial balance should be 0");
@@ -794,6 +796,9 @@ contract UEA_EVMTest is Test {
     }
 
     function test_SuccessfulMigrationUpdatesImplementation() public deployEvmSmartAccount {
+        // Set migration contract in factory
+        factory.setUEAMigrationContract(address(migration));
+        
         MigrationPayload memory payload =
             MigrationPayload({migration: address(migration), nonce: 0, deadline: block.timestamp + 1000});
 
@@ -802,7 +807,7 @@ contract UEA_EVMTest is Test {
         UniversalPayload memory universalPayload = UniversalPayload({
             to: address(evmSmartAccountInstance),
             value: 0,
-            data: abi.encodePacked(MIGRATION_SELECTOR, abi.encode(payload.migration)),
+            data: abi.encodePacked(MIGRATION_SELECTOR),
             gasLimit: 1000000,
             maxFeePerGas: 0,
             maxPriorityFeePerGas: 0,
@@ -818,7 +823,7 @@ contract UEA_EVMTest is Test {
         // Call migrateUEA
         evmSmartAccountInstance.executePayload(abi.encode(universalPayload), sig);
 
-        // Verify proxy’s storage slot now updated
+        // Verify proxy's storage slot now updated
         bytes32 slot = UEA_LOGIC_SLOT;
         bytes32 raw = vm.load(address(evmSmartAccountInstance), slot);
         address newImpl = address(uint160(uint256(raw)));

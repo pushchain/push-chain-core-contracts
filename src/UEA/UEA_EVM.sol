@@ -3,6 +3,7 @@ pragma solidity 0.8.26;
 
 import {UEAErrors as Errors} from "../libraries/Errors.sol";
 import {IUEA} from "../Interfaces/IUEA.sol";
+import {IUEAFactory} from "../Interfaces/IUEAFactory.sol";
 import {ECDSA} from "@openzeppelin/contracts/utils/cryptography/ECDSA.sol";
 import {ReentrancyGuard} from "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
 import {StringUtils} from "../libraries/Utils.sol";
@@ -40,17 +41,20 @@ contract UEA_EVM is ReentrancyGuard, IUEA {
     // @notice Hash of keccak256("EIP712Domain(string version,uint256 chainId,address verifyingContract)")
     bytes32 public constant DOMAIN_SEPARATOR_TYPEHASH =
         0x2aef22f9d7df5f9d21c56d14029233f3fdaa91917727e1eb68e504d27072d6cd;
+    // @notice Factory address to fetch migration contract
+    IUEAFactory public factory;
 
     /**
      * @inheritdoc IUEA
      */
-    function initialize(UniversalAccountId memory _id) external {
+    function initialize(UniversalAccountId memory _id, address _factory) external {
         if (initialized) {
             revert Errors.AccountAlreadyExists();
         }
         initialized = true;
 
         id = _id;
+        factory = IUEAFactory(_factory);
     }
 
     // =========================
@@ -160,9 +164,6 @@ contract UEA_EVM is ReentrancyGuard, IUEA {
         Multicall[] memory calls = decodeCalls(payload.data);
 
         for (uint256 i = 0; i < calls.length; i++) {
-            if (isMigration(calls[i].data)) {
-                revert Errors.InvalidCall();
-            }
 
             (success, returnData) = calls[i].to.call{value: calls[i].value}(calls[i].data);
             if (!success) {
@@ -177,6 +178,7 @@ contract UEA_EVM is ReentrancyGuard, IUEA {
      * @notice                  Internal handler for migration execution
      * @dev                     Executes migration via delegatecall to migration contract
      * @dev                     Enforces safety constraints: must target self, no value transfer
+     * @dev                     Fetches migration contract address from factory
      * @param payload           the UniversalPayload containing migration data
      * @return success          whether the migration succeeded
      * @return returnData       return data from the delegatecall
@@ -193,9 +195,13 @@ contract UEA_EVM is ReentrancyGuard, IUEA {
             revert Errors.InvalidCall();
         }
 
-        // Decode migration contract address from data
-        // Format: MIGRATION_SELECTOR + abi.encode(migrationContractAddress)
-        address migrationContract = decodeMigrationAddress(payload.data);
+        // Fetch migration contract address from factory
+        // Note: payload.data should only contain MIGRATION_SELECTOR (no additional data needed)
+        address migrationContract = factory.UEA_MIGRATION_CONTRACT();
+        
+        if (migrationContract == address(0)) {
+            revert Errors.InvalidCall();
+        }
 
         // Prepare delegatecall to migration contract
         bytes memory migrateCallData = abi.encodeWithSignature("migrateUEAEVM()");
@@ -266,19 +272,6 @@ contract UEA_EVM is ReentrancyGuard, IUEA {
             strippedData[i] = data[i + 4];
         }
         return abi.decode(strippedData, (Multicall[]));
-    }
-    /**
-     * @notice              Decodes the migration contract address from payload data
-     * @dev                 Strips the MIGRATION_SELECTOR prefix and decodes the address
-     * @param data          raw data containing MIGRATION_SELECTOR followed by ABI-encoded address
-     * @return address      the decoded migration contract address
-     */
-    function decodeMigrationAddress(bytes memory data) internal pure returns (address) {
-        bytes memory strippedData = new bytes(data.length - 4);
-        for (uint256 i = 0; i < strippedData.length; i++) {
-            strippedData[i] = data[i + 4];
-        }
-        return abi.decode(strippedData, (address));
     }
 
     /**

@@ -98,11 +98,11 @@ contract BaseTest is Test {
         // Deploy helper/target contracts
         _deployHelperContracts();
 
-        // Deploy UEA implementations (V1 and V2)
-        _deployUEAImplementations();
-
-        // Deploy and setup factory
+        // Deploy and setup factory FIRST (before UEA implementations need it)
         _deployAndSetupFactory();
+
+        // Deploy UEA implementations (V1 and V2) - they need factory address
+        _deployUEAImplementations();
 
         // Deploy migration contract
         _deployMigrationContract();
@@ -187,6 +187,9 @@ contract BaseTest is Test {
 
         assertEq(migration.UEA_EVM_IMPLEMENTATION(), address(ueaEVMImplV2), "Migration EVM implementation mismatch");
         assertEq(migration.UEA_SVM_IMPLEMENTATION(), address(ueaSVMImplV2), "Migration SVM implementation mismatch");
+        
+        // Set migration contract in factory so UEAs can fetch it
+        factory.setUEAMigrationContract(address(migration));
     }
 
     function _setupChainRegistrations() internal {
@@ -336,7 +339,7 @@ contract BaseTest is Test {
     /**
      * @dev Create a migration payload for testing
      * @param ueaAddress The UEA address (migration must target self)
-     * @param migrationContract The migration contract address
+     * @param migrationContract The migration contract address (unused, kept for backward compatibility)
      * @param nonce Transaction nonce
      * @param deadline Transaction deadline
      * @return payload Universal payload struct configured for migration
@@ -347,11 +350,10 @@ contract BaseTest is Test {
         uint256 nonce,
         uint256 deadline
     ) public pure returns (UniversalPayload memory payload) {
-        // Encode migration data: MIGRATION_SELECTOR + abi.encode(migrationContractAddress)
-        bytes memory migrationData = abi.encodePacked(
-            MIGRATION_SELECTOR,
-            abi.encode(migrationContract)
-        );
+        // Note: migrationContract parameter is ignored as the migration contract
+        // is now fetched from the factory by the UEA
+        // Encode migration data: only MIGRATION_SELECTOR (no address needed)
+        bytes memory migrationData = abi.encodePacked(MIGRATION_SELECTOR);
 
         return UniversalPayload({
             to: ueaAddress,          // Migration targets the UEA itself
