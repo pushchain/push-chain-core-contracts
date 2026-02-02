@@ -56,8 +56,9 @@ interface IUEA {
      *                          The format of the owner field depends on the UEA type:
      *                          - For EVM-based UEAs: An Ethereum address (20 bytes)
      *                          - For SVM-based UEAs: A Solana public key (32 bytes)
+     * @param factory           The address of the UEAFactory contract
      */
-    function initialize(UniversalAccountId memory universalAccount) external;
+    function initialize(UniversalAccountId memory universalAccount, address factory) external;
 
     /**
      * @notice              Verifies if a signature is valid for a given message hash.

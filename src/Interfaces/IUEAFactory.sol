@@ -108,4 +108,10 @@ interface IUEAFactory {
      */
     function computeUEA(UniversalAccountId memory _id) external view returns (address);
 
+    /**
+     * @dev            Returns the current UEA migration contract address
+     * @return         The address of the UEA migration contract
+     */
+    function UEA_MIGRATION_CONTRACT() external view returns (address);
+
 }

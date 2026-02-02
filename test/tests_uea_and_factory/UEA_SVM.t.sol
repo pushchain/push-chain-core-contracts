@@ -87,7 +87,7 @@ contract UEASVMTest is Test {
             UniversalAccountId({chainNamespace: "solana", chainId: "101", owner: ownerBytes});
 
         // Initialize the account
-        newUEA.initialize(_id);
+        newUEA.initialize(_id, address(factory));
 
         // Verify account details were set correctly
         UniversalAccountId memory storedId = newUEA.universalAccount();
@@ -105,11 +105,11 @@ contract UEASVMTest is Test {
             UniversalAccountId({chainNamespace: "solana", chainId: "101", owner: ownerBytes});
 
         // Initialize the account
-        newUEA.initialize(_id);
+        newUEA.initialize(_id, address(factory));
 
         // Try to initialize again with the same ID
         vm.expectRevert(Errors.AccountAlreadyExists.selector);
-        newUEA.initialize(_id);
+        newUEA.initialize(_id, address(factory));
 
         // Try to initialize again with a different ID
         bytes memory differentOwnerBytes = hex"a48f4e93ca594d3c5e09c3ad39c599bbd6e6a2937869f3456905f5aeb7c78a61";
@@ -117,7 +117,7 @@ contract UEASVMTest is Test {
             UniversalAccountId({chainNamespace: "solana", chainId: "101", owner: differentOwnerBytes});
 
         vm.expectRevert(Errors.AccountAlreadyExists.selector);
-        newUEA.initialize(differentId);
+        newUEA.initialize(differentId, address(factory));
     }
 
     function testRegisterChain() public view {
@@ -641,7 +641,7 @@ contract UEASVMTest is Test {
         // Initialize it
         UniversalAccountId memory _id =
             UniversalAccountId({chainNamespace: "solana", chainId: "101", owner: ownerBytes});
-        newUEA.initialize(_id);
+        newUEA.initialize(_id, address(factory));
 
         // Check initial balance
         assertEq(address(newUEA).balance, 0, "Initial balance should be 0");
@@ -729,6 +729,9 @@ contract UEASVMTest is Test {
     }
 
     function test_SuccessfulMigrationUpdatesImplementation() public deploySvmSmartAccount {
+        // Set migration contract in factory
+        factory.setUEAMigrationContract(address(migration));
+        
         MigrationPayload memory payload =
             MigrationPayload({migration: address(migration), nonce: 0, deadline: block.timestamp + 1000});
 
@@ -737,7 +740,7 @@ contract UEASVMTest is Test {
         UniversalPayload memory universalPayload = UniversalPayload({
             to: address(svmSmartAccountInstance),
             value: 0,
-            data: abi.encodePacked(MIGRATION_SELECTOR, abi.encode(payload.migration)),
+            data: abi.encodePacked(MIGRATION_SELECTOR),
             gasLimit: 1000000,
             maxFeePerGas: 0,
             maxPriorityFeePerGas: 0,

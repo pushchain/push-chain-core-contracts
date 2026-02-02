@@ -190,7 +190,7 @@ contract UEAFactoryV1 is Initializable, OwnableUpgradeable, IUEAFactory {
         UEAProxy(_UEAProxy).initializeUEA(_ueaImplementation);
 
         // Initialize the UEA implementation through the proxy
-        IUEA(_UEAProxy).initialize(_id);
+        IUEA(_UEAProxy).initialize(_id, address(this));
 
         // Store mappings
         UOA_to_UEA[salt] = _UEAProxy;

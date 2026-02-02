@@ -3,6 +3,7 @@ pragma solidity 0.8.26;
 
 import {UEAErrors as Errors} from "../../src/libraries/Errors.sol";
 import {IUEA} from "../../src/Interfaces/IUEA.sol";
+import {IUEAFactory} from "../../src/Interfaces/IUEAFactory.sol";
 import {ReentrancyGuard} from "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
 import {StringUtils} from "../../src/libraries/Utils.sol";
 import {
@@ -37,6 +38,8 @@ contract UEA_SVM_V2 is ReentrancyGuard, IUEA {
     // @notice Hash of keccak256("EIP712Domain_SVM(string version,string chainId,address verifyingContract)")
     bytes32 public constant DOMAIN_SEPARATOR_TYPEHASH_SVM =
         0x3aefc31558906b9b2c54de94f82a9b2455c24b4ba2b642ebb545ea2cc64a1e4b;
+    // @notice Factory address to fetch migration contract
+    IUEAFactory public factory;
 
     /**
      * @dev Returns the domain separator for EIP-712 signing.
@@ -50,13 +53,14 @@ contract UEA_SVM_V2 is ReentrancyGuard, IUEA {
     /**
      * @inheritdoc IUEA
      */
-    function initialize(UniversalAccountId memory _id) external {
+    function initialize(UniversalAccountId memory _id, address _factory) external {
         if (initialized) {
             revert Errors.AccountAlreadyExists();
         }
         initialized = true;
 
         id = _id;
+        factory = IUEAFactory(_factory);
     }
 
     /**
@@ -195,19 +199,16 @@ contract UEA_SVM_V2 is ReentrancyGuard, IUEA {
             revert Errors.InvalidCall();
         }
 
-        address migrationContract = decodeMigrationAddress(payload.data);
+        // Fetch migration contract address from factory
+        address migrationContract = factory.UEA_MIGRATION_CONTRACT();
+        
+        if (migrationContract == address(0)) {
+            revert Errors.InvalidCall();
+        }
 
         bytes memory migrateCallData = abi.encodeWithSignature("migrateUEASVM()");
 
         (success, returnData) = migrationContract.delegatecall(migrateCallData);
-    }
-
-    function decodeMigrationAddress(bytes memory data) internal pure returns (address) {
-        bytes memory strippedData = new bytes(data.length - 4);
-        for (uint256 i = 0; i < strippedData.length; i++) {
-            strippedData[i] = data[i + 4];
-        }
-        return abi.decode(strippedData, (address));
     }
 
     function _handleSingleCall(UniversalPayload memory payload) 
