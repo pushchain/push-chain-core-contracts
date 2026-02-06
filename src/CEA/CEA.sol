@@ -91,8 +91,9 @@ contract CEA is ICEA, ReentrancyGuard {
     //========================
 
     function executeUniversalTx(
-        bytes32 txID, 
-        address uea,
+        bytes32 txID,
+        bytes32 universalTxID,
+        address originCaller,
         address token,
         address target,
         uint256 amount,
@@ -100,11 +101,11 @@ contract CEA is ICEA, ReentrancyGuard {
         ) external onlyVault nonReentrant {
 
         if (target == address(this)) {
-            _handleSelfCalls(txID, uea, payload);
+            _handleSelfCalls(txID, universalTxID, originCaller, payload);
             return;
         }
 
-        _validateExecuteUniversalTxParams(txID, uea, token, target, amount);
+        _validateExecuteUniversalTxParams(txID, originCaller, token, target, amount);
 
         isExecuted[txID] = true;
 
@@ -113,29 +114,30 @@ contract CEA is ICEA, ReentrancyGuard {
         _executeCall(target, payload, 0);            // execute call with required amount
         _resetApproval(token, target);               // reset approval back to zero
 
-        emit UniversalTxExecuted(txID, uea, target, token, amount, payload);
+        emit UniversalTxExecuted(txID, universalTxID, originCaller, target, token, amount, payload);
     }
 
     function executeUniversalTx(
         bytes32 txID,
-        address uea,
+        bytes32 universalTxID,
+        address originCaller,
         address target,
         uint256 amount,
         bytes calldata payload
     ) external payable onlyVault nonReentrant {
 
         if (target == address(this)) {
-            _handleSelfCalls(txID, uea, payload);
+            _handleSelfCalls(txID, universalTxID, originCaller, payload);
             return;
         }
 
-        _validateExecuteUniversalTxParams(txID, uea, address(0), target, amount);
+        _validateExecuteUniversalTxParams(txID, originCaller, address(0), target, amount);
 
         isExecuted[txID] = true;
 
-        _executeCall(target, payload, amount);  
+        _executeCall(target, payload, amount);
 
-        emit UniversalTxExecuted(txID, uea, target, address(0), amount, payload);
+        emit UniversalTxExecuted(txID, universalTxID, originCaller, target, address(0), amount, payload);
     }
 
     function withdrawFundsToUEA(address token, uint256 amount) private {
@@ -174,13 +176,13 @@ contract CEA is ICEA, ReentrancyGuard {
 
     function _validateExecuteUniversalTxParams(
         bytes32 txID,
-        address uea,
+        address originCaller,
         address token,
         address target,
         uint256 amount
     ) internal view {
         if (isExecuted[txID]) revert CEAErrors.PayloadExecuted();
-        if (uea != UEA) revert CEAErrors.InvalidUEA();
+        if (originCaller != UEA) revert CEAErrors.InvalidUEA();
         if (target == address(0)) revert CEAErrors.InvalidTarget();
 
         if (token != address(0)) {
@@ -188,8 +190,8 @@ contract CEA is ICEA, ReentrancyGuard {
             if (IERC20(token).balanceOf(address(this)) < amount) revert CEAErrors.InsufficientBalance();
         } else {
             if (msg.value != amount ) revert CEAErrors.InvalidAmount();
-        } 
-        
+        }
+
     }
 
     /// @dev Safely reset approval to zero before granting any new allowance to target contract.
@@ -232,9 +234,9 @@ contract CEA is ICEA, ReentrancyGuard {
         return ret;
     }
 
-    function _handleSelfCalls(bytes32 txID, address _uea, bytes calldata payload) internal {
+    function _handleSelfCalls(bytes32 txID, bytes32 universalTxID, address originCaller, bytes calldata payload) internal {
         if (isExecuted[txID]) revert CEAErrors.PayloadExecuted();
-        if (_uea != UEA) revert CEAErrors.InvalidUEA();
+        if (originCaller != UEA) revert CEAErrors.InvalidUEA();
         // Need at least 4 bytes for selector
         if (payload.length < 4) revert CEAErrors.InvalidInput();
 
@@ -251,7 +253,7 @@ contract CEA is ICEA, ReentrancyGuard {
 
         isExecuted[txID] = true;
         withdrawFundsToUEA(token, amount);
-        emit UniversalTxExecuted(txID, UEA, address(this), token, amount, payload);
+        emit UniversalTxExecuted(txID, universalTxID, originCaller, address(this), token, amount, payload);
 }
 
     //========================

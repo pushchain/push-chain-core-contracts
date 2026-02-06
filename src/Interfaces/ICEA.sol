@@ -21,6 +21,7 @@ interface ICEA {
 
     /// @notice                     Universal tx execution event that is executed on External Chains.
     /// @param txID                 Unique transaction identifier
+    /// @param universalTxID        Unique transaction identifier on Universal Gateway
     /// @param originCaller         Original caller/user on source chain ( Push Chain)
     /// @param target               Target contract address to execute call
     /// @param token                Token address being sent
@@ -28,8 +29,9 @@ interface ICEA {
     /// @param data                 Calldata to be executed on target contract on external chain
     event UniversalTxExecuted(
         bytes32 indexed txID,
+        bytes32 indexed universalTxID,
         address indexed originCaller,
-        address indexed target,
+        address target,
         address token,
         uint256 amount,
         bytes data
@@ -79,7 +81,8 @@ interface ICEA {
      *  - This ensures the external protocol sees `msg.sender == CEA`, not Vault.
      *
      * @param txID    Transaction ID of the UniversalTx to execute.
-     * @param uea     UEA on Push Chain that this CEA represents.
+     * @param universalTxID    Unique transaction identifier on Universal Gateway
+     * @param originCaller     UEA on Push Chain that this CEA represents.
      * @param token   ERC20 token to be used for the operation (address(0) if purely native / no-ERC20 op).
      * @param target  Target protocol contract to call.
      * @param amount  Amount of `token` to make available to `target` (used for allowance).
@@ -87,7 +90,8 @@ interface ICEA {
      */
     function executeUniversalTx(
         bytes32 txID,
-        address uea,
+        bytes32 universalTxID,
+        address originCaller,
         address token,
         address target, 
         uint256 amount,
@@ -107,7 +111,8 @@ interface ICEA {
      */
     function executeUniversalTx(
         bytes32 txID,
-        address uea,
+        bytes32 universalTxID,
+        address originCaller,
         address target,
         uint256 amount,
         bytes calldata payload

@@ -258,13 +258,11 @@ contract CEATest is Test {
         
         TokenSpenderTarget spender = new TokenSpenderTarget();
         bytes32 txID = generateTxID(1);
-        bytes32 universalTxID = generateUniversalTxID(1);
         bytes memory payload = abi.encodeWithSignature("spendTokens(address,uint256)", address(token), 100 ether);
 
         vm.prank(vault);
         ceaInstance.executeUniversalTx(
             txID,
-            universalTxID,
             ueaOnPush,
             address(token),
             address(spender),
@@ -277,7 +275,6 @@ contract CEATest is Test {
         vm.expectRevert(Errors.PayloadExecuted.selector);
         ceaInstance.executeUniversalTx(
             txID,
-            universalTxID,
             ueaOnPush,
             address(token),
             address(spender),
@@ -295,14 +292,12 @@ contract CEATest is Test {
         fundCEAWithTokens(address(token), 1000 ether);
         
         bytes32 txID = generateTxID(1);
-        bytes32 universalTxID = generateUniversalTxID(1);
         bytes memory payload = abi.encodeWithSignature("setMagicNumber(uint256)", 42);
 
         vm.prank(vault);
         vm.expectRevert(Errors.InvalidUEA.selector);
         ceaInstance.executeUniversalTx(
             txID,
-            universalTxID,
             makeAddr("wrongUEA"),
             address(token),
             address(target),
@@ -316,14 +311,12 @@ contract CEATest is Test {
         fundCEAWithTokens(address(token), 1000 ether);
         
         bytes32 txID = generateTxID(1);
-        bytes32 universalTxID = generateUniversalTxID(1);
         bytes memory payload = abi.encodeWithSignature("setMagicNumber(uint256)", 42);
 
         vm.prank(vault);
         vm.expectRevert(Errors.InvalidTarget.selector);
         ceaInstance.executeUniversalTx(
             txID,
-            universalTxID,
             ueaOnPush,
             address(token),
             address(0),
@@ -345,14 +338,12 @@ contract CEATest is Test {
         fundCEAWithTokens(address(token), 100 ether);
         
         bytes32 txID = generateTxID(1);
-        bytes32 universalTxID = generateUniversalTxID(1);
         bytes memory payload = abi.encodeWithSignature("setMagicNumber(uint256)", 42);
 
         vm.prank(vault);
         vm.expectRevert(Errors.InsufficientBalance.selector);
         ceaInstance.executeUniversalTx(
             txID,
-            universalTxID,
             ueaOnPush,
             address(token),
             address(target),
@@ -367,13 +358,11 @@ contract CEATest is Test {
         
         TokenSpenderTarget spender = new TokenSpenderTarget();
         bytes32 txID = generateTxID(1);
-        bytes32 universalTxID = generateUniversalTxID(1);
         bytes memory payload = abi.encodeWithSignature("spendTokens(address,uint256)", address(token), 100 ether);
 
         vm.prank(vault);
         ceaInstance.executeUniversalTx(
             txID,
-            universalTxID,
             ueaOnPush,
             address(token),
             address(spender),
@@ -400,13 +389,11 @@ contract CEATest is Test {
         assertEq(token.allowance(address(ceaInstance), address(spender)), 500 ether, "Initial approval should exist");
 
         bytes32 txID = generateTxID(1);
-        bytes32 universalTxID = generateUniversalTxID(1);
         bytes memory payload = abi.encodeWithSignature("spendTokens(address,uint256)", address(token), 100 ether);
 
         vm.prank(vault);
         ceaInstance.executeUniversalTx(
             txID,
-            universalTxID,
             ueaOnPush,
             address(token),
             address(spender),
@@ -424,14 +411,12 @@ contract CEATest is Test {
         
         TokenSpenderTarget spender = new TokenSpenderTarget();
         bytes32 txID = generateTxID(1);
-        bytes32 universalTxID = generateUniversalTxID(1);
         bytes memory payload = abi.encodeWithSignature("spendTokens(address,uint256)", address(token), 100 ether);
 
         // We can't directly check intermediate approval state, but we verify execution succeeds
         vm.prank(vault);
         ceaInstance.executeUniversalTx(
             txID,
-            universalTxID,
             ueaOnPush,
             address(token),
             address(spender),
@@ -448,13 +433,11 @@ contract CEATest is Test {
         
         TokenSpenderTarget spender = new TokenSpenderTarget();
         bytes32 txID = generateTxID(1);
-        bytes32 universalTxID = generateUniversalTxID(1);
         bytes memory payload = abi.encodeWithSignature("spendTokens(address,uint256)", address(token), 100 ether);
 
         vm.prank(vault);
         ceaInstance.executeUniversalTx(
             txID,
-            universalTxID,
             ueaOnPush,
             address(token),
             address(spender),
@@ -476,14 +459,12 @@ contract CEATest is Test {
         
         TokenSpenderTarget spender = new TokenSpenderTarget();
         bytes32 txID = generateTxID(1);
-        bytes32 universalTxID = generateUniversalTxID(1);
         bytes memory payload = abi.encodeWithSignature("spendTokens(address,uint256)", address(token), 100 ether);
 
         // This should still work - resetApproval handles the revert gracefully
         vm.prank(vault);
         ceaInstance.executeUniversalTx(
             txID,
-            universalTxID,
             ueaOnPush,
             address(token),
             address(spender),
@@ -503,13 +484,11 @@ contract CEATest is Test {
         fundCEAWithTokens(address(token), 1000 ether);
         
         bytes32 txID = generateTxID(1);
-        bytes32 universalTxID = generateUniversalTxID(1);
         bytes memory payload = abi.encodeWithSignature("setMagicNumber(uint256)", 42);
 
         vm.prank(vault);
         ceaInstance.executeUniversalTx(
             txID,
-            universalTxID,
             ueaOnPush,
             address(token),
             address(target),
@@ -526,13 +505,11 @@ contract CEATest is Test {
         
         TokenReceiverTarget receiver = new TokenReceiverTarget();
         bytes32 txID = generateTxID(1);
-        bytes32 universalTxID = generateUniversalTxID(1);
         bytes memory payload = abi.encodeWithSignature("receiveTokens(address,uint256)", address(token), 100 ether);
 
         vm.prank(vault);
         ceaInstance.executeUniversalTx(
             txID,
-            universalTxID,
             ueaOnPush,
             address(token),
             address(receiver),
@@ -550,14 +527,12 @@ contract CEATest is Test {
         
         RevertingTarget reverter = new RevertingTarget();
         bytes32 txID = generateTxID(1);
-        bytes32 universalTxID = generateUniversalTxID(1);
         bytes memory payload = abi.encodeWithSignature("revertWithReason()");
 
         vm.prank(vault);
         vm.expectRevert(Errors.ExecutionFailed.selector);
         ceaInstance.executeUniversalTx(
             txID,
-            universalTxID,
             ueaOnPush,
             address(token),
             address(reverter),
@@ -575,7 +550,6 @@ contract CEATest is Test {
         
         TokenSpenderTarget spender = new TokenSpenderTarget();
         bytes32 txID = generateTxID(1);
-        bytes32 universalTxID = generateUniversalTxID(1);
         bytes memory payload = ""; // Empty payload
 
         // Note: With empty payload, tokens are still approved and can be spent
@@ -585,7 +559,6 @@ contract CEATest is Test {
         vm.prank(vault);
         ceaInstance.executeUniversalTx(
             txID,
-            universalTxID,
             ueaOnPush,
             address(token),
             address(spender),
@@ -601,14 +574,12 @@ contract CEATest is Test {
         fundCEAWithTokens(address(token), 1000 ether);
         
         bytes32 txID = generateTxID(1);
-        bytes32 universalTxID = generateUniversalTxID(1);
         uint256 magicValue = 999;
         bytes memory payload = abi.encodeWithSignature("setMagicNumber(uint256)", magicValue);
 
         vm.prank(vault);
         ceaInstance.executeUniversalTx(
             txID,
-            universalTxID,
             ueaOnPush,
             address(token),
             address(target),
@@ -627,7 +598,6 @@ contract CEATest is Test {
         fundCEAWithNative(1000 ether);
         
         bytes32 txID = generateTxID(1);
-        bytes32 universalTxID = generateUniversalTxID(1);
         bytes memory payload = abi.encodeWithSignature("setMagicNumberWithFee(uint256)", 42);
 
         vm.prank(nonVault);
@@ -635,7 +605,6 @@ contract CEATest is Test {
         vm.expectRevert(Errors.NotVault.selector);
         ceaInstance.executeUniversalTx{value: 0.1 ether}(
             txID,
-            universalTxID,
             ueaOnPush,
             address(target),
             0.1 ether,
@@ -647,7 +616,6 @@ contract CEATest is Test {
         fundCEAWithNative(1000 ether);
         
         bytes32 txID = generateTxID(1);
-        bytes32 universalTxID = generateUniversalTxID(1);
         bytes memory payload = abi.encodeWithSignature("setMagicNumberWithFee(uint256)", 42);
 
         vm.prank(vault);
@@ -655,7 +623,6 @@ contract CEATest is Test {
         vm.expectRevert(Errors.InvalidUEA.selector);
         ceaInstance.executeUniversalTx{value: 0.1 ether}(
             txID,
-            universalTxID,
             makeAddr("wrongUEA"),
             address(target),
             0.1 ether,
@@ -667,7 +634,6 @@ contract CEATest is Test {
         fundCEAWithNative(1000 ether);
         
         bytes32 txID = generateTxID(1);
-        bytes32 universalTxID = generateUniversalTxID(1);
         bytes memory payload = abi.encodeWithSignature("setMagicNumberWithFee(uint256)", 42);
 
         vm.prank(vault);
@@ -675,7 +641,6 @@ contract CEATest is Test {
         vm.expectRevert(Errors.InvalidAmount.selector);
         ceaInstance.executeUniversalTx{value: 0.2 ether}(
             txID,
-            universalTxID,
             ueaOnPush,
             address(target),
             0.1 ether, // Different from msg.value
@@ -687,7 +652,6 @@ contract CEATest is Test {
         fundCEAWithNative(1000 ether);
         
         bytes32 txID = generateTxID(1);
-        bytes32 universalTxID = generateUniversalTxID(1);
         bytes memory payload = abi.encodeWithSignature("setMagicNumberWithFee(uint256)", 42);
         uint256 amount = 0.1 ether;
 
@@ -695,7 +659,6 @@ contract CEATest is Test {
         vm.deal(vault, amount);
         ceaInstance.executeUniversalTx{value: amount}(
             txID,
-            universalTxID,
             ueaOnPush,
             address(target),
             amount,
@@ -714,14 +677,12 @@ contract CEATest is Test {
         fundCEAWithNative(1000 ether);
         
         bytes32 txID = generateTxID(1);
-        bytes32 universalTxID = generateUniversalTxID(1);
         bytes memory payload = abi.encodeWithSignature("setMagicNumberWithFee(uint256)", 42);
 
         vm.prank(vault);
         vm.deal(vault, 0.1 ether);
         ceaInstance.executeUniversalTx{value: 0.1 ether}(
             txID,
-            universalTxID,
             ueaOnPush,
             address(target),
             0.1 ether,
@@ -737,7 +698,6 @@ contract CEATest is Test {
         
         TokenReceiverTarget receiver = new TokenReceiverTarget();
         bytes32 txID = generateTxID(1);
-        bytes32 universalTxID = generateUniversalTxID(1);
         bytes memory payload = abi.encodeWithSignature("receiveNative()");
         uint256 amount = 0.5 ether;
 
@@ -745,7 +705,6 @@ contract CEATest is Test {
         vm.deal(vault, amount);
         ceaInstance.executeUniversalTx{value: amount}(
             txID,
-            universalTxID,
             ueaOnPush,
             address(receiver),
             amount,
@@ -760,7 +719,6 @@ contract CEATest is Test {
         
         RevertingTarget reverter = new RevertingTarget();
         bytes32 txID = generateTxID(1);
-        bytes32 universalTxID = generateUniversalTxID(1);
         bytes memory payload = abi.encodeWithSignature("revertWithReason()");
 
         vm.prank(vault);
@@ -768,7 +726,6 @@ contract CEATest is Test {
         vm.expectRevert(Errors.ExecutionFailed.selector);
         ceaInstance.executeUniversalTx{value: 0.1 ether}(
             txID,
-            universalTxID,
             ueaOnPush,
             address(reverter),
             0.1 ether,
@@ -786,16 +743,14 @@ contract CEATest is Test {
         fundCEAWithTokens(address(token), 1000 ether);
         
         bytes32 txID = generateTxID(1);
-        bytes32 universalTxID = generateUniversalTxID(1);
         bytes memory payload = abi.encodeWithSignature("setMagicNumber(uint256)", 42);
 
         vm.prank(vault);
         vm.expectEmit(true, true, true, true);
-        emit ICEA.UniversalTxExecuted(txID, universalTxID, ueaOnPush, address(target), address(token), 100 ether, payload);
+        emit ICEA.UniversalTxExecuted(txID, ueaOnPush, address(target), address(token), 100 ether, payload);
         
         ceaInstance.executeUniversalTx(
             txID,
-            universalTxID,
             ueaOnPush,
             address(token),
             address(target),
@@ -808,18 +763,16 @@ contract CEATest is Test {
         fundCEAWithNative(1000 ether);
         
         bytes32 txID = generateTxID(1);
-        bytes32 universalTxID = generateUniversalTxID(1);
         bytes memory payload = abi.encodeWithSignature("setMagicNumberWithFee(uint256)", 42);
         uint256 amount = 0.1 ether;
 
         vm.prank(vault);
         vm.deal(vault, amount);
         vm.expectEmit(true, true, true, true);
-        emit ICEA.UniversalTxExecuted(txID, universalTxID, ueaOnPush, address(target), address(0), amount, payload);
+        emit ICEA.UniversalTxExecuted(txID, ueaOnPush, address(target), address(0), amount, payload);
         
         ceaInstance.executeUniversalTx{value: amount}(
             txID,
-            universalTxID,
             ueaOnPush,
             address(target),
             amount,
@@ -840,14 +793,12 @@ contract CEATest is Test {
         fundCEAWithTokens(address(token), 1000 ether);
         
         bytes32 txID = generateTxID(1);
-        bytes32 universalTxID = generateUniversalTxID(1);
         bytes memory payload = buildWithdrawPayload(address(token), 500 ether);
 
         vm.prank(nonVault);
         vm.expectRevert(Errors.NotVault.selector);
         ceaInstance.executeUniversalTx(
             txID,
-            universalTxID,
             ueaOnPush,
             address(token),
             address(ceaInstance),
@@ -861,13 +812,11 @@ contract CEATest is Test {
         fundCEAWithTokens(address(token), 1000 ether);
         
         bytes32 txID = generateTxID(1);
-        bytes32 universalTxID = generateUniversalTxID(1);
         bytes memory payload = buildWithdrawPayload(address(token), 500 ether);
 
         vm.prank(vault);
         ceaInstance.executeUniversalTx(
             txID,
-            universalTxID,
             ueaOnPush,
             address(token),
             address(ceaInstance),
@@ -888,13 +837,11 @@ contract CEATest is Test {
         fundCEAWithTokens(address(token), 1000 ether);
         
         bytes32 txID = generateTxID(1);
-        bytes32 universalTxID = generateUniversalTxID(1);
         bytes memory payload = buildWithdrawPayload(address(token), 500 ether);
 
         vm.prank(vault);
         ceaInstance.executeUniversalTx(
             txID,
-            universalTxID,
             ueaOnPush,
             address(token),
             address(ceaInstance),
@@ -907,7 +854,6 @@ contract CEATest is Test {
         vm.expectRevert(Errors.PayloadExecuted.selector);
         ceaInstance.executeUniversalTx(
             txID,
-            universalTxID,
             ueaOnPush,
             address(token),
             address(ceaInstance),
@@ -921,14 +867,12 @@ contract CEATest is Test {
         fundCEAWithTokens(address(token), 1000 ether);
         
         bytes32 txID = generateTxID(1);
-        bytes32 universalTxID = generateUniversalTxID(1);
         bytes memory payload = buildWithdrawPayload(address(token), 500 ether);
 
         vm.prank(vault);
         vm.expectRevert(Errors.InvalidUEA.selector);
         ceaInstance.executeUniversalTx(
             txID,
-            universalTxID,
             makeAddr("wrongUEA"),
             address(token),
             address(ceaInstance),
@@ -942,14 +886,12 @@ contract CEATest is Test {
         fundCEAWithTokens(address(token), 1000 ether);
         
         bytes32 txID = generateTxID(1);
-        bytes32 universalTxID = generateUniversalTxID(1);
         bytes memory payload = "123"; // Less than 4 bytes
 
         vm.prank(vault);
         vm.expectRevert(Errors.InvalidInput.selector);
         ceaInstance.executeUniversalTx(
             txID,
-            universalTxID,
             ueaOnPush,
             address(token),
             address(ceaInstance),
@@ -963,14 +905,12 @@ contract CEATest is Test {
         fundCEAWithTokens(address(token), 1000 ether);
         
         bytes32 txID = generateTxID(1);
-        bytes32 universalTxID = generateUniversalTxID(1);
         bytes memory payload = abi.encodeWithSignature("wrongFunction(address,uint256)", address(token), 500 ether);
 
         vm.prank(vault);
         vm.expectRevert(Errors.InvalidTarget.selector);
         ceaInstance.executeUniversalTx(
             txID,
-            universalTxID,
             ueaOnPush,
             address(token),
             address(ceaInstance),
@@ -988,14 +928,12 @@ contract CEATest is Test {
         fundCEAWithTokens(address(token), 100 ether);
         
         bytes32 txID = generateTxID(1);
-        bytes32 universalTxID = generateUniversalTxID(1);
         bytes memory payload = buildWithdrawPayload(address(token), 500 ether);
 
         vm.prank(vault);
         vm.expectRevert(Errors.InsufficientBalance.selector);
         ceaInstance.executeUniversalTx(
             txID,
-            universalTxID,
             ueaOnPush,
             address(token),
             address(ceaInstance),
@@ -1009,13 +947,11 @@ contract CEATest is Test {
         fundCEAWithTokens(address(token), 500 ether);
         
         bytes32 txID = generateTxID(1);
-        bytes32 universalTxID = generateUniversalTxID(1);
         bytes memory payload = buildWithdrawPayload(address(token), 500 ether);
 
         vm.prank(vault);
         ceaInstance.executeUniversalTx(
             txID,
-            universalTxID,
             ueaOnPush,
             address(token),
             address(ceaInstance),
@@ -1032,13 +968,11 @@ contract CEATest is Test {
         fundCEAWithTokens(address(token), 1000 ether);
         
         bytes32 txID = generateTxID(1);
-        bytes32 universalTxID = generateUniversalTxID(1);
         bytes memory payload = buildWithdrawPayload(address(token), 500 ether);
 
         vm.prank(vault);
         ceaInstance.executeUniversalTx(
             txID,
-            universalTxID,
             ueaOnPush,
             address(token),
             address(ceaInstance),
@@ -1058,14 +992,12 @@ contract CEATest is Test {
         fundCEAWithTokens(address(token), 1000 ether);
         
         bytes32 txID = generateTxID(1);
-        bytes32 universalTxID = generateUniversalTxID(1);
         uint256 amount = 500 ether;
         bytes memory payload = buildWithdrawPayload(address(token), amount);
 
         vm.prank(vault);
         ceaInstance.executeUniversalTx(
             txID,
-            universalTxID,
             ueaOnPush,
             address(token),
             address(ceaInstance),
@@ -1087,7 +1019,6 @@ contract CEATest is Test {
         fundCEAWithTokens(address(token), 1000 ether);
         
         bytes32 txID = generateTxID(1);
-        bytes32 universalTxID = generateUniversalTxID(1);
         bytes memory payload = buildWithdrawPayload(address(token), 500 ether);
 
         uint256 callCountBefore = mockUniversalGateway.callCount();
@@ -1095,7 +1026,6 @@ contract CEATest is Test {
         vm.prank(vault);
         ceaInstance.executeUniversalTx(
             txID,
-            universalTxID,
             ueaOnPush,
             address(token),
             address(ceaInstance),
@@ -1120,13 +1050,11 @@ contract CEATest is Test {
         assertEq(token.allowance(address(ceaInstance), address(mockUniversalGateway)), 300 ether, "Initial approval should exist");
 
         bytes32 txID = generateTxID(1);
-        bytes32 universalTxID = generateUniversalTxID(1);
         bytes memory payload = buildWithdrawPayload(address(token), 500 ether);
 
         vm.prank(vault);
         ceaInstance.executeUniversalTx(
             txID,
-            universalTxID,
             ueaOnPush,
             address(token),
             address(ceaInstance),
@@ -1143,14 +1071,12 @@ contract CEATest is Test {
         fundCEAWithTokens(address(token), 1000 ether);
         
         bytes32 txID = generateTxID(1);
-        bytes32 universalTxID = generateUniversalTxID(1);
         uint256 amount = 500 ether;
         bytes memory payload = buildWithdrawPayload(address(token), amount);
 
         vm.prank(vault);
         ceaInstance.executeUniversalTx(
             txID,
-            universalTxID,
             ueaOnPush,
             address(token),
             address(ceaInstance),
@@ -1171,7 +1097,6 @@ contract CEATest is Test {
         fundCEAWithTokens(address(token), 1000 ether);
         
         bytes32 txID = generateTxID(1);
-        bytes32 universalTxID = generateUniversalTxID(1);
         bytes memory payload = buildWithdrawPayload(address(token), 500 ether);
 
         assertFalse(CEA(payable(address(ceaInstance))).isExecuted(txID), "txID should not be executed before");
@@ -1179,7 +1104,6 @@ contract CEATest is Test {
         vm.prank(vault);
         ceaInstance.executeUniversalTx(
             txID,
-            universalTxID,
             ueaOnPush,
             address(token),
             address(ceaInstance),
@@ -1196,7 +1120,6 @@ contract CEATest is Test {
         fundCEAWithTokens(address(token), initialBalance);
         
         bytes32 txID = generateTxID(1);
-        bytes32 universalTxID = generateUniversalTxID(1);
         uint256 withdrawAmount = 500 ether;
         bytes memory payload = buildWithdrawPayload(address(token), withdrawAmount);
 
@@ -1205,7 +1128,6 @@ contract CEATest is Test {
         vm.prank(vault);
         ceaInstance.executeUniversalTx(
             txID,
-            universalTxID,
             ueaOnPush,
             address(token),
             address(ceaInstance),
@@ -1229,7 +1151,6 @@ contract CEATest is Test {
         fundCEAWithTokens(address(token), 1000 ether);
         
         bytes32 txID = generateTxID(1);
-        bytes32 universalTxID = generateUniversalTxID(1);
         uint256 amount = 500 ether;
         bytes memory payload = buildWithdrawPayload(address(token), amount);
 
@@ -1239,7 +1160,6 @@ contract CEATest is Test {
         
         ceaInstance.executeUniversalTx(
             txID,
-            universalTxID,
             ueaOnPush,
             address(token),
             address(ceaInstance),
@@ -1253,17 +1173,15 @@ contract CEATest is Test {
         fundCEAWithTokens(address(token), 1000 ether);
         
         bytes32 txID = generateTxID(1);
-        bytes32 universalTxID = generateUniversalTxID(1);
         uint256 amount = 500 ether;
         bytes memory payload = buildWithdrawPayload(address(token), amount);
 
         vm.prank(vault);
         vm.expectEmit(true, true, true, true);
-        emit ICEA.UniversalTxExecuted(txID, universalTxID, ueaOnPush, address(ceaInstance), address(token), amount, payload);
+        emit ICEA.UniversalTxExecuted(txID, ueaOnPush, address(ceaInstance), address(token), amount, payload);
         
         ceaInstance.executeUniversalTx(
             txID,
-            universalTxID,
             ueaOnPush,
             address(token),
             address(ceaInstance),
@@ -1281,13 +1199,11 @@ contract CEATest is Test {
         fundCEAWithTokens(address(token), 1000 ether);
         
         bytes32 txID = generateTxID(1);
-        bytes32 universalTxID = generateUniversalTxID(1);
         bytes memory payload = buildWithdrawPayload(address(token), 0);
 
         vm.prank(vault);
         ceaInstance.executeUniversalTx(
             txID,
-            universalTxID,
             ueaOnPush,
             address(token),
             address(ceaInstance),
@@ -1302,18 +1218,16 @@ contract CEATest is Test {
     function testWithdrawFundsToUEA_MultipleWithdrawalsWithDifferentTxIDs_ERC20() public deployCEA {
         MockGasToken token = new MockGasToken();
         fundCEAWithTokens(address(token), 2000 ether);
-
+        
         uint256 amount = 500 ether;
-
+        
         for (uint256 i = 1; i <= 3; i++) {
             bytes32 txID = generateTxID(i);
-            bytes32 universalTxID = generateUniversalTxID(i);
             bytes memory payload = buildWithdrawPayload(address(token), amount);
 
             vm.prank(vault);
             ceaInstance.executeUniversalTx(
                 txID,
-                universalTxID,
                 ueaOnPush,
                 address(token),
                 address(ceaInstance),
@@ -1336,13 +1250,11 @@ contract CEATest is Test {
         token.approve(address(mockUniversalGateway), 300 ether);
         
         bytes32 txID = generateTxID(1);
-        bytes32 universalTxID = generateUniversalTxID(1);
         bytes memory payload = buildWithdrawPayload(address(token), 500 ether);
 
         vm.prank(vault);
         ceaInstance.executeUniversalTx(
             txID,
-            universalTxID,
             ueaOnPush,
             address(token),
             address(ceaInstance),
@@ -1364,7 +1276,6 @@ contract CEATest is Test {
         fundCEAWithTokens(address(token), initialBalance);
         
         bytes32 txID = generateTxID(1);
-        bytes32 universalTxID = generateUniversalTxID(1);
         uint256 withdrawAmount = 500 ether;
         bytes memory payload = buildWithdrawPayload(address(token), withdrawAmount);
 
@@ -1374,7 +1285,6 @@ contract CEATest is Test {
         vm.prank(vault);
         ceaInstance.executeUniversalTx(
             txID,
-            universalTxID,
             ueaOnPush,
             address(token),
             address(ceaInstance),
@@ -1405,7 +1315,6 @@ contract CEATest is Test {
         fundCEAWithNative(1000 ether);
         
         bytes32 txID = generateTxID(1);
-        bytes32 universalTxID = generateUniversalTxID(1);
         bytes memory payload = buildWithdrawPayload(address(0), 500 ether);
 
         vm.prank(nonVault);
@@ -1413,7 +1322,6 @@ contract CEATest is Test {
         vm.expectRevert(Errors.NotVault.selector);
         ceaInstance.executeUniversalTx{value: 0}(
             txID,
-            universalTxID,
             ueaOnPush,
             address(ceaInstance),
             500 ether,
@@ -1425,13 +1333,11 @@ contract CEATest is Test {
         fundCEAWithNative(1000 ether);
         
         bytes32 txID = generateTxID(1);
-        bytes32 universalTxID = generateUniversalTxID(1);
         bytes memory payload = buildWithdrawPayload(address(0), 500 ether);
 
         vm.prank(vault);
         ceaInstance.executeUniversalTx{value: 0}(
             txID,
-            universalTxID,
             ueaOnPush,
             address(ceaInstance),
             500 ether,
@@ -1446,13 +1352,11 @@ contract CEATest is Test {
         fundCEAWithNative(1000 ether);
         
         bytes32 txID = generateTxID(1);
-        bytes32 universalTxID = generateUniversalTxID(1);
         bytes memory payload = buildWithdrawPayload(address(0), 500 ether);
 
         vm.prank(vault);
         ceaInstance.executeUniversalTx{value: 0}(
             txID,
-            universalTxID,
             ueaOnPush,
             address(ceaInstance),
             500 ether,
@@ -1464,7 +1368,6 @@ contract CEATest is Test {
         vm.expectRevert(Errors.PayloadExecuted.selector);
         ceaInstance.executeUniversalTx{value: 0}(
             txID,
-            universalTxID,
             ueaOnPush,
             address(ceaInstance),
             500 ether,
@@ -1476,14 +1379,12 @@ contract CEATest is Test {
         fundCEAWithNative(1000 ether);
         
         bytes32 txID = generateTxID(1);
-        bytes32 universalTxID = generateUniversalTxID(1);
         bytes memory payload = buildWithdrawPayload(address(0), 500 ether);
 
         vm.prank(vault);
         vm.expectRevert(Errors.InvalidUEA.selector);
         ceaInstance.executeUniversalTx{value: 0}(
             txID,
-            universalTxID,
             makeAddr("wrongUEA"),
             address(ceaInstance),
             500 ether,
@@ -1495,14 +1396,12 @@ contract CEATest is Test {
         fundCEAWithNative(1000 ether);
         
         bytes32 txID = generateTxID(1);
-        bytes32 universalTxID = generateUniversalTxID(1);
         bytes memory payload = "123"; // Less than 4 bytes
 
         vm.prank(vault);
         vm.expectRevert(Errors.InvalidInput.selector);
         ceaInstance.executeUniversalTx{value: 0}(
             txID,
-            universalTxID,
             ueaOnPush,
             address(ceaInstance),
             500 ether,
@@ -1514,14 +1413,12 @@ contract CEATest is Test {
         fundCEAWithNative(1000 ether);
         
         bytes32 txID = generateTxID(1);
-        bytes32 universalTxID = generateUniversalTxID(1);
         bytes memory payload = abi.encodeWithSignature("wrongFunction(address,uint256)", address(0), 500 ether);
 
         vm.prank(vault);
         vm.expectRevert(Errors.InvalidTarget.selector);
         ceaInstance.executeUniversalTx{value: 0}(
             txID,
-            universalTxID,
             ueaOnPush,
             address(ceaInstance),
             500 ether,
@@ -1532,14 +1429,12 @@ contract CEATest is Test {
     function testWithdrawFundsToUEA_RevertWhenInsufficientNativeBalance() public deployCEA {
         // Don't fund CEA
         bytes32 txID = generateTxID(1);
-        bytes32 universalTxID = generateUniversalTxID(1);
         bytes memory payload = buildWithdrawPayload(address(0), 500 ether);
 
         vm.prank(vault);
         vm.expectRevert(Errors.InsufficientBalance.selector);
         ceaInstance.executeUniversalTx{value: 0}(
             txID,
-            universalTxID,
             ueaOnPush,
             address(ceaInstance),
             500 ether,
@@ -1552,13 +1447,11 @@ contract CEATest is Test {
         fundCEAWithNative(balance);
         
         bytes32 txID = generateTxID(1);
-        bytes32 universalTxID = generateUniversalTxID(1);
         bytes memory payload = buildWithdrawPayload(address(0), balance);
 
         vm.prank(vault);
         ceaInstance.executeUniversalTx{value: 0}(
             txID,
-            universalTxID,
             ueaOnPush,
             address(ceaInstance),
             balance,
@@ -1573,13 +1466,11 @@ contract CEATest is Test {
         fundCEAWithNative(1000 ether);
         
         bytes32 txID = generateTxID(1);
-        bytes32 universalTxID = generateUniversalTxID(1);
         bytes memory payload = buildWithdrawPayload(address(0), 500 ether);
 
         vm.prank(vault);
         ceaInstance.executeUniversalTx{value: 0}(
             txID,
-            universalTxID,
             ueaOnPush,
             address(ceaInstance),
             500 ether,
@@ -1593,14 +1484,12 @@ contract CEATest is Test {
         fundCEAWithNative(1000 ether);
         
         bytes32 txID = generateTxID(1);
-        bytes32 universalTxID = generateUniversalTxID(1);
         uint256 amount = 500 ether;
         bytes memory payload = buildWithdrawPayload(address(0), amount);
 
         vm.prank(vault);
         ceaInstance.executeUniversalTx{value: 0}(
             txID,
-            universalTxID,
             ueaOnPush,
             address(ceaInstance),
             amount,
@@ -1619,7 +1508,6 @@ contract CEATest is Test {
         fundCEAWithNative(1000 ether);
         
         bytes32 txID = generateTxID(1);
-        bytes32 universalTxID = generateUniversalTxID(1);
         bytes memory payload = buildWithdrawPayload(address(0), 500 ether);
 
         uint256 callCountBefore = mockUniversalGateway.callCount();
@@ -1627,7 +1515,6 @@ contract CEATest is Test {
         vm.prank(vault);
         ceaInstance.executeUniversalTx{value: 0}(
             txID,
-            universalTxID,
             ueaOnPush,
             address(ceaInstance),
             500 ether,
@@ -1641,7 +1528,6 @@ contract CEATest is Test {
         fundCEAWithNative(1000 ether);
         
         bytes32 txID = generateTxID(1);
-        bytes32 universalTxID = generateUniversalTxID(1);
         bytes memory payload = buildWithdrawPayload(address(0), 500 ether);
 
         assertFalse(CEA(payable(address(ceaInstance))).isExecuted(txID), "txID should not be executed before");
@@ -1649,7 +1535,6 @@ contract CEATest is Test {
         vm.prank(vault);
         ceaInstance.executeUniversalTx{value: 0}(
             txID,
-            universalTxID,
             ueaOnPush,
             address(ceaInstance),
             500 ether,
@@ -1664,7 +1549,6 @@ contract CEATest is Test {
         fundCEAWithNative(initialBalance);
         
         bytes32 txID = generateTxID(1);
-        bytes32 universalTxID = generateUniversalTxID(1);
         uint256 withdrawAmount = 500 ether;
         bytes memory payload = buildWithdrawPayload(address(0), withdrawAmount);
 
@@ -1673,7 +1557,6 @@ contract CEATest is Test {
         vm.prank(vault);
         ceaInstance.executeUniversalTx{value: 0}(
             txID,
-            universalTxID,
             ueaOnPush,
             address(ceaInstance),
             withdrawAmount,
@@ -1689,7 +1572,6 @@ contract CEATest is Test {
         fundCEAWithNative(1000 ether);
         
         bytes32 txID = generateTxID(1);
-        bytes32 universalTxID = generateUniversalTxID(1);
         uint256 amount = 500 ether;
         bytes memory payload = buildWithdrawPayload(address(0), amount);
 
@@ -1699,7 +1581,6 @@ contract CEATest is Test {
         
         ceaInstance.executeUniversalTx{value: 0}(
             txID,
-            universalTxID,
             ueaOnPush,
             address(ceaInstance),
             amount,
@@ -1711,17 +1592,15 @@ contract CEATest is Test {
         fundCEAWithNative(1000 ether);
         
         bytes32 txID = generateTxID(1);
-        bytes32 universalTxID = generateUniversalTxID(1);
         uint256 amount = 500 ether;
         bytes memory payload = buildWithdrawPayload(address(0), amount);
 
         vm.prank(vault);
         vm.expectEmit(true, true, true, true);
-        emit ICEA.UniversalTxExecuted(txID, universalTxID, ueaOnPush, address(ceaInstance), address(0), amount, payload);
+        emit ICEA.UniversalTxExecuted(txID, ueaOnPush, address(ceaInstance), address(0), amount, payload);
         
         ceaInstance.executeUniversalTx{value: 0}(
             txID,
-            universalTxID,
             ueaOnPush,
             address(ceaInstance),
             amount,
@@ -1733,13 +1612,11 @@ contract CEATest is Test {
         fundCEAWithNative(1000 ether);
         
         bytes32 txID = generateTxID(1);
-        bytes32 universalTxID = generateUniversalTxID(1);
         bytes memory payload = buildWithdrawPayload(address(0), 0);
 
         vm.prank(vault);
         ceaInstance.executeUniversalTx{value: 0}(
             txID,
-            universalTxID,
             ueaOnPush,
             address(ceaInstance),
             0,
@@ -1752,18 +1629,16 @@ contract CEATest is Test {
 
     function testWithdrawFundsToUEA_MultipleWithdrawalsWithDifferentTxIDs_Native() public deployCEA {
         fundCEAWithNative(2000 ether);
-
+        
         uint256 amount = 500 ether;
-
+        
         for (uint256 i = 1; i <= 3; i++) {
             bytes32 txID = generateTxID(i);
-            bytes32 universalTxID = generateUniversalTxID(i);
             bytes memory payload = buildWithdrawPayload(address(0), amount);
 
             vm.prank(vault);
             ceaInstance.executeUniversalTx{value: 0}(
                 txID,
-                universalTxID,
                 ueaOnPush,
                 address(ceaInstance),
                 amount,
@@ -1781,7 +1656,6 @@ contract CEATest is Test {
         fundCEAWithNative(initialBalance);
         
         bytes32 txID = generateTxID(1);
-        bytes32 universalTxID = generateUniversalTxID(1);
         uint256 withdrawAmount = 500 ether;
         bytes memory payload = buildWithdrawPayload(address(0), withdrawAmount);
 
@@ -1791,7 +1665,6 @@ contract CEATest is Test {
         vm.prank(vault);
         ceaInstance.executeUniversalTx{value: 0}(
             txID,
-            universalTxID,
             ueaOnPush,
             address(ceaInstance),
             withdrawAmount,
