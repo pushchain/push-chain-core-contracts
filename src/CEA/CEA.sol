@@ -98,7 +98,7 @@ contract CEA is ICEA, ReentrancyGuard {
         address target,
         uint256 amount,
         bytes calldata payload
-        ) external onlyVault nonReentrant {
+    ) external payable onlyVault nonReentrant {
 
         if (target == address(this)) {
             _handleSelfCalls(txID, universalTxID, originCaller, payload);
@@ -109,35 +109,17 @@ contract CEA is ICEA, ReentrancyGuard {
 
         isExecuted[txID] = true;
 
-        _resetApproval(token, target);                // reset approval to zero
-        _safeApprove(token, target, amount);        // approve target to spend amount
-        _executeCall(target, payload, 0);            // execute call with required amount
-        _resetApproval(token, target);               // reset approval back to zero
-
-        emit UniversalTxExecuted(txID, universalTxID, originCaller, target, token, amount, payload);
-    }
-
-    function executeUniversalTx(
-        bytes32 txID,
-        bytes32 universalTxID,
-        address originCaller,
-        address target,
-        uint256 amount,
-        bytes calldata payload
-    ) external payable onlyVault nonReentrant {
-
-        if (target == address(this)) {
-            _handleSelfCalls(txID, universalTxID, originCaller, payload);
-            return;
+        if (isNativeToken(token)) {
+            _executeCall(target, payload, amount);
+        } else {
+            _resetApproval(token, target);
+            _safeApprove(token, target, amount);
+            _executeCall(target, payload, 0);
+            _resetApproval(token, target);
         }
 
-        _validateExecuteUniversalTxParams(txID, originCaller, address(0), target, amount);
+        emit UniversalTxExecuted(txID, universalTxID, originCaller, target, token, amount, payload);
 
-        isExecuted[txID] = true;
-
-        _executeCall(target, payload, amount);
-
-        emit UniversalTxExecuted(txID, universalTxID, originCaller, target, address(0), amount, payload);
     }
 
     function withdrawFundsToUEA(address token, uint256 amount) private {
@@ -173,6 +155,10 @@ contract CEA is ICEA, ReentrancyGuard {
     //========================
     //      Internal Helpers
     //========================
+
+    function isNativeToken(address token) private view returns (bool) {
+        return token == address(0);
+    }
 
     function _validateExecuteUniversalTxParams(
         bytes32 txID,

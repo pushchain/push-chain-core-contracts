@@ -637,6 +637,7 @@ contract CEATest is Test {
             txID,
             universalTxID,
             ueaOnPush,
+            address(0),
             address(target),
             0.1 ether,
             payload
@@ -657,6 +658,7 @@ contract CEATest is Test {
             txID,
             universalTxID,
             makeAddr("wrongUEA"),
+            address(0),
             address(target),
             0.1 ether,
             payload
@@ -677,6 +679,7 @@ contract CEATest is Test {
             txID,
             universalTxID,
             ueaOnPush,
+            address(0),
             address(target),
             0.1 ether, // Different from msg.value
             payload
@@ -697,6 +700,7 @@ contract CEATest is Test {
             txID,
             universalTxID,
             ueaOnPush,
+            address(0),
             address(target),
             amount,
             payload
@@ -723,6 +727,7 @@ contract CEATest is Test {
             txID,
             universalTxID,
             ueaOnPush,
+            address(0),
             address(target),
             0.1 ether,
             payload
@@ -747,6 +752,7 @@ contract CEATest is Test {
             txID,
             universalTxID,
             ueaOnPush,
+            address(0),
             address(receiver),
             amount,
             payload
@@ -770,6 +776,7 @@ contract CEATest is Test {
             txID,
             universalTxID,
             ueaOnPush,
+            address(0),
             address(reverter),
             0.1 ether,
             payload
@@ -821,6 +828,7 @@ contract CEATest is Test {
             txID,
             universalTxID,
             ueaOnPush,
+            address(0),
             address(target),
             amount,
             payload
@@ -1415,6 +1423,7 @@ contract CEATest is Test {
             txID,
             universalTxID,
             ueaOnPush,
+            address(0),
             address(ceaInstance),
             500 ether,
             payload
@@ -1433,6 +1442,7 @@ contract CEATest is Test {
             txID,
             universalTxID,
             ueaOnPush,
+            address(0),
             address(ceaInstance),
             500 ether,
             payload
@@ -1454,6 +1464,7 @@ contract CEATest is Test {
             txID,
             universalTxID,
             ueaOnPush,
+            address(0),
             address(ceaInstance),
             500 ether,
             payload
@@ -1466,6 +1477,7 @@ contract CEATest is Test {
             txID,
             universalTxID,
             ueaOnPush,
+            address(0),
             address(ceaInstance),
             500 ether,
             payload
@@ -1485,6 +1497,7 @@ contract CEATest is Test {
             txID,
             universalTxID,
             makeAddr("wrongUEA"),
+            address(0),
             address(ceaInstance),
             500 ether,
             payload
@@ -1504,6 +1517,7 @@ contract CEATest is Test {
             txID,
             universalTxID,
             ueaOnPush,
+            address(0),
             address(ceaInstance),
             500 ether,
             payload
@@ -1523,6 +1537,7 @@ contract CEATest is Test {
             txID,
             universalTxID,
             ueaOnPush,
+            address(0),
             address(ceaInstance),
             500 ether,
             payload
@@ -1541,6 +1556,7 @@ contract CEATest is Test {
             txID,
             universalTxID,
             ueaOnPush,
+            address(0),
             address(ceaInstance),
             500 ether,
             payload
@@ -1560,6 +1576,7 @@ contract CEATest is Test {
             txID,
             universalTxID,
             ueaOnPush,
+            address(0),
             address(ceaInstance),
             balance,
             payload
@@ -1581,6 +1598,7 @@ contract CEATest is Test {
             txID,
             universalTxID,
             ueaOnPush,
+            address(0),
             address(ceaInstance),
             500 ether,
             payload
@@ -1602,6 +1620,7 @@ contract CEATest is Test {
             txID,
             universalTxID,
             ueaOnPush,
+            address(0),
             address(ceaInstance),
             amount,
             payload
@@ -1629,6 +1648,7 @@ contract CEATest is Test {
             txID,
             universalTxID,
             ueaOnPush,
+            address(0),
             address(ceaInstance),
             500 ether,
             payload
@@ -1651,6 +1671,7 @@ contract CEATest is Test {
             txID,
             universalTxID,
             ueaOnPush,
+            address(0),
             address(ceaInstance),
             500 ether,
             payload
@@ -1675,6 +1696,7 @@ contract CEATest is Test {
             txID,
             universalTxID,
             ueaOnPush,
+            address(0),
             address(ceaInstance),
             withdrawAmount,
             payload
@@ -1701,6 +1723,7 @@ contract CEATest is Test {
             txID,
             universalTxID,
             ueaOnPush,
+            address(0),
             address(ceaInstance),
             amount,
             payload
@@ -1723,6 +1746,7 @@ contract CEATest is Test {
             txID,
             universalTxID,
             ueaOnPush,
+            address(0),
             address(ceaInstance),
             amount,
             payload
@@ -1741,6 +1765,7 @@ contract CEATest is Test {
             txID,
             universalTxID,
             ueaOnPush,
+            address(0),
             address(ceaInstance),
             0,
             payload
@@ -1765,6 +1790,7 @@ contract CEATest is Test {
                 txID,
                 universalTxID,
                 ueaOnPush,
+                address(0),
                 address(ceaInstance),
                 amount,
                 payload
@@ -1779,7 +1805,7 @@ contract CEATest is Test {
     function testWithdrawFundsToUEA_FullFlow_Native() public deployCEA {
         uint256 initialBalance = 1000 ether;
         fundCEAWithNative(initialBalance);
-        
+
         bytes32 txID = generateTxID(1);
         bytes32 universalTxID = generateUniversalTxID(1);
         uint256 withdrawAmount = 500 ether;
@@ -1793,6 +1819,7 @@ contract CEATest is Test {
             txID,
             universalTxID,
             ueaOnPush,
+            address(0),
             address(ceaInstance),
             withdrawAmount,
             payload
@@ -1801,17 +1828,497 @@ contract CEATest is Test {
         // Verify all state changes
         assertTrue(CEA(payable(address(ceaInstance))).isExecuted(txID), "txID should be marked as executed");
         assertEq(mockUniversalGateway.callCount(), gatewayCallCountBefore + 1, "Gateway should be called once");
-        
+
         assertEq(mockUniversalGateway.lastRecipient(), ueaOnPush, "Recipient should be UEA");
         assertEq(mockUniversalGateway.lastToken(), address(0), "Token should be address(0) for native");
         assertEq(mockUniversalGateway.lastAmount(), withdrawAmount, "Amount should match");
         assertEq(mockUniversalGateway.lastValue(), withdrawAmount, "Gateway should receive correct value");
-        
+
         uint256 balanceAfter = address(ceaInstance).balance;
         assertEq(balanceAfter, balanceBefore - withdrawAmount, "Balance should decrease");
     }
-}
 
+
+// NOTE: withdrawTo function will be merged to executeUniversalTx() - for now these tests are to be commented out
+    // =========================================================================
+    // withdrawTo Tests - Access Control + Replay + Auth
+    // =========================================================================
+
+    // function testWithdrawTo_RevertWhenCalledByNonVault() public deployCEA {
+    //     MockGasToken token = new MockGasToken();
+    //     fundCEAWithTokens(address(token), 1000 ether);
+
+    //     vm.prank(nonVault);
+    //     vm.expectRevert(Errors.NotVault.selector);
+    //     ceaInstance.withdrawTo(
+    //         generateTxID(1), generateUniversalTxID(1),
+    //         ueaOnPush, address(token), makeAddr("recipient"), 100 ether
+    //     );
+    // }
+
+    // function testWithdrawTo_RevertWhenTxIDAlreadyExecuted() public deployCEA {
+    //     MockGasToken token = new MockGasToken();
+    //     fundCEAWithTokens(address(token), 1000 ether);
+    //     address recipient = makeAddr("recipient");
+
+    //     bytes32 txID = generateTxID(1);
+    //     vm.prank(vault);
+    //     ceaInstance.withdrawTo(txID, generateUniversalTxID(1), ueaOnPush, address(token), recipient, 100 ether);
+
+    //     vm.prank(vault);
+    //     vm.expectRevert(Errors.PayloadExecuted.selector);
+    //     ceaInstance.withdrawTo(txID, generateUniversalTxID(2), ueaOnPush, address(token), recipient, 100 ether);
+    // }
+
+    // function testWithdrawTo_RevertWhenInvalidUEA() public deployCEA {
+    //     MockGasToken token = new MockGasToken();
+    //     fundCEAWithTokens(address(token), 1000 ether);
+
+    //     vm.prank(vault);
+    //     vm.expectRevert(Errors.InvalidUEA.selector);
+    //     ceaInstance.withdrawTo(
+    //         generateTxID(1), generateUniversalTxID(1),
+    //         makeAddr("wrongUEA"), address(token), makeAddr("recipient"), 100 ether
+    //     );
+    // }
+
+    // function testWithdrawTo_RevertWhenToIsZero() public deployCEA {
+    //     MockGasToken token = new MockGasToken();
+    //     fundCEAWithTokens(address(token), 1000 ether);
+
+    //     vm.prank(vault);
+    //     vm.expectRevert(Errors.InvalidTarget.selector);
+    //     ceaInstance.withdrawTo(
+    //         generateTxID(1), generateUniversalTxID(1),
+    //         ueaOnPush, address(token), address(0), 100 ether
+    //     );
+    // }
+
+    // function testWithdrawTo_RevertWhenAmountIsZero() public deployCEA {
+    //     MockGasToken token = new MockGasToken();
+    //     fundCEAWithTokens(address(token), 1000 ether);
+
+    //     vm.prank(vault);
+    //     vm.expectRevert(Errors.InvalidAmount.selector);
+    //     ceaInstance.withdrawTo(
+    //         generateTxID(1), generateUniversalTxID(1),
+    //         ueaOnPush, address(token), makeAddr("recipient"), 0
+    //     );
+    // }
+
+    // // =========================================================================
+    // // withdrawTo Tests - Native Token Path
+    // // =========================================================================
+
+    // function testWithdrawTo_Native_RevertWhenMsgValueNotMatch() public deployCEA {
+    //     address recipient = makeAddr("recipient");
+    //     vm.deal(vault, 1 ether);
+
+    //     vm.prank(vault);
+    //     vm.expectRevert(Errors.InvalidAmount.selector);
+    //     ceaInstance.withdrawTo{value: 0.5 ether}(
+    //         generateTxID(1), generateUniversalTxID(1),
+    //         ueaOnPush, address(0), recipient, 1 ether
+    //     );
+    // }
+
+    // function testWithdrawTo_Native_SuccessToEOA() public deployCEA {
+    //     address recipient = makeAddr("recipient");
+    //     uint256 amount = 1 ether;
+    //     vm.deal(vault, amount);
+
+    //     uint256 recipientBefore = recipient.balance;
+
+    //     vm.prank(vault);
+    //     ceaInstance.withdrawTo{value: amount}(
+    //         generateTxID(1), generateUniversalTxID(1),
+    //         ueaOnPush, address(0), recipient, amount
+    //     );
+
+    //     assertEq(recipient.balance, recipientBefore + amount, "Recipient should receive ETH");
+    //     assertTrue(CEA(payable(address(ceaInstance))).isExecuted(generateTxID(1)), "txID should be executed");
+    // }
+
+    // function testWithdrawTo_Native_RevertWhenRecipientRejectsETH() public deployCEA {
+    //     RevertingTarget reverter = new RevertingTarget();
+    //     uint256 amount = 1 ether;
+    //     vm.deal(vault, amount);
+
+    //     vm.prank(vault);
+    //     vm.expectRevert(Errors.WithdrawFailed.selector);
+    //     ceaInstance.withdrawTo{value: amount}(
+    //         generateTxID(1), generateUniversalTxID(1),
+    //         ueaOnPush, address(0), address(reverter), amount
+    //     );
+    // }
+
+    // function testWithdrawTo_Native_EmitsEvent() public deployCEA {
+    //     address recipient = makeAddr("recipient");
+    //     uint256 amount = 1 ether;
+    //     bytes32 txID = generateTxID(1);
+    //     bytes32 universalTxID = generateUniversalTxID(1);
+    //     vm.deal(vault, amount);
+
+    //     vm.prank(vault);
+    //     vm.expectEmit(true, true, true, true);
+    //     emit ICEA.UniversalTxExecuted(txID, universalTxID, ueaOnPush, recipient, address(0), amount, bytes(""));
+    //     ceaInstance.withdrawTo{value: amount}(txID, universalTxID, ueaOnPush, address(0), recipient, amount);
+    // }
+
+    // // =========================================================================
+    // // withdrawTo Tests - ERC20 Path
+    // // =========================================================================
+
+    // function testWithdrawTo_ERC20_RevertWhenMsgValueNotZero() public deployCEA {
+    //     MockGasToken token = new MockGasToken();
+    //     fundCEAWithTokens(address(token), 1000 ether);
+    //     address recipient = makeAddr("recipient");
+    //     vm.deal(vault, 1 ether);
+
+    //     vm.prank(vault);
+    //     vm.expectRevert(Errors.InvalidAmount.selector);
+    //     ceaInstance.withdrawTo{value: 1 ether}(
+    //         generateTxID(1), generateUniversalTxID(1),
+    //         ueaOnPush, address(token), recipient, 100 ether
+    //     );
+    // }
+
+    // function testWithdrawTo_ERC20_RevertWhenInsufficientBalance() public deployCEA {
+    //     MockGasToken token = new MockGasToken();
+    //     fundCEAWithTokens(address(token), 50 ether);
+    //     address recipient = makeAddr("recipient");
+
+    //     vm.prank(vault);
+    //     vm.expectRevert(Errors.InsufficientBalance.selector);
+    //     ceaInstance.withdrawTo(
+    //         generateTxID(1), generateUniversalTxID(1),
+    //         ueaOnPush, address(token), recipient, 100 ether
+    //     );
+    // }
+
+    // function testWithdrawTo_ERC20_SuccessToEOA() public deployCEA {
+    //     MockGasToken token = new MockGasToken();
+    //     uint256 amount = 100 ether;
+    //     fundCEAWithTokens(address(token), amount);
+    //     address recipient = makeAddr("recipient");
+
+    //     vm.prank(vault);
+    //     ceaInstance.withdrawTo(
+    //         generateTxID(1), generateUniversalTxID(1),
+    //         ueaOnPush, address(token), recipient, amount
+    //     );
+
+    //     assertEq(token.balanceOf(recipient), amount, "Recipient should receive tokens");
+    //     assertEq(token.balanceOf(address(ceaInstance)), 0, "CEA balance should decrease");
+    //     assertTrue(CEA(payable(address(ceaInstance))).isExecuted(generateTxID(1)), "txID should be executed");
+    // }
+
+    // function testWithdrawTo_ERC20_SuccessToContract() public deployCEA {
+    //     MockGasToken token = new MockGasToken();
+    //     uint256 amount = 100 ether;
+    //     fundCEAWithTokens(address(token), amount);
+
+    //     vm.prank(vault);
+    //     ceaInstance.withdrawTo(
+    //         generateTxID(1), generateUniversalTxID(1),
+    //         ueaOnPush, address(token), address(target), amount
+    //     );
+
+    //     assertEq(token.balanceOf(address(target)), amount, "Contract recipient should receive tokens");
+    //     assertEq(token.balanceOf(address(ceaInstance)), 0, "CEA balance should decrease");
+    // }
+
+    // function testWithdrawTo_ERC20_EmitsEvent() public deployCEA {
+    //     MockGasToken token = new MockGasToken();
+    //     uint256 amount = 100 ether;
+    //     fundCEAWithTokens(address(token), amount);
+    //     address recipient = makeAddr("recipient");
+    //     bytes32 txID = generateTxID(1);
+    //     bytes32 universalTxID = generateUniversalTxID(1);
+
+    //     vm.prank(vault);
+    //     vm.expectEmit(true, true, true, true);
+    //     emit ICEA.UniversalTxExecuted(txID, universalTxID, ueaOnPush, recipient, address(token), amount, bytes(""));
+    //     ceaInstance.withdrawTo(txID, universalTxID, ueaOnPush, address(token), recipient, amount);
+    // }
+
+    // // =========================================================================
+    // // withdrawTo Tests - Token Parking Branch (to == address(this))
+    // // =========================================================================
+
+    // function testWithdrawTo_Park_Native_SuccessWhenBalanceSufficient() public deployCEA {
+    //     uint256 amount = 1 ether;
+    //     fundCEAWithNative(amount);
+    //     bytes32 txID = generateTxID(1);
+
+    //     vm.prank(vault);
+    //     ceaInstance.withdrawTo(
+    //         txID, generateUniversalTxID(1),
+    //         ueaOnPush, address(0), address(ceaInstance), amount
+    //     );
+
+    //     assertTrue(CEA(payable(address(ceaInstance))).isExecuted(txID), "txID should be executed");
+    //     assertEq(address(ceaInstance).balance, amount, "CEA balance should remain unchanged");
+    // }
+
+    // function testWithdrawTo_Park_Native_RevertWhenInsufficientBalance() public deployCEA {
+    //     vm.prank(vault);
+    //     vm.expectRevert(Errors.InsufficientBalance.selector);
+    //     ceaInstance.withdrawTo(
+    //         generateTxID(1), generateUniversalTxID(1),
+    //         ueaOnPush, address(0), address(ceaInstance), 1 ether
+    //     );
+    // }
+
+    // function testWithdrawTo_Park_Native_SuccessWhenFundedViaMsgValue() public deployCEA {
+    //     uint256 amount = 1 ether;
+    //     vm.deal(vault, amount);
+
+    //     vm.prank(vault);
+    //     ceaInstance.withdrawTo{value: amount}(
+    //         generateTxID(1), generateUniversalTxID(1),
+    //         ueaOnPush, address(0), address(ceaInstance), amount
+    //     );
+
+    //     assertEq(address(ceaInstance).balance, amount, "CEA should hold sent ETH");
+    //     assertTrue(CEA(payable(address(ceaInstance))).isExecuted(generateTxID(1)), "txID should be executed");
+    // }
+
+    // function testWithdrawTo_Park_ERC20_SuccessWhenBalanceSufficient() public deployCEA {
+    //     MockGasToken token = new MockGasToken();
+    //     uint256 amount = 100 ether;
+    //     fundCEAWithTokens(address(token), amount);
+    //     bytes32 txID = generateTxID(1);
+
+    //     vm.prank(vault);
+    //     ceaInstance.withdrawTo(
+    //         txID, generateUniversalTxID(1),
+    //         ueaOnPush, address(token), address(ceaInstance), amount
+    //     );
+
+    //     assertTrue(CEA(payable(address(ceaInstance))).isExecuted(txID), "txID should be executed");
+    //     assertEq(token.balanceOf(address(ceaInstance)), amount, "CEA token balance should remain unchanged");
+    // }
+
+    // function testWithdrawTo_Park_ERC20_RevertWhenInsufficientBalance() public deployCEA {
+    //     MockGasToken token = new MockGasToken();
+
+    //     vm.prank(vault);
+    //     vm.expectRevert(Errors.InsufficientBalance.selector);
+    //     ceaInstance.withdrawTo(
+    //         generateTxID(1), generateUniversalTxID(1),
+    //         ueaOnPush, address(token), address(ceaInstance), 100 ether
+    //     );
+    // }
+
+    // function testWithdrawTo_Park_ERC20_RevertWhenMsgValueSent() public deployCEA {
+    //     MockGasToken token = new MockGasToken();
+    //     fundCEAWithTokens(address(token), 100 ether);
+    //     vm.deal(vault, 1 ether);
+
+    //     vm.prank(vault);
+    //     vm.expectRevert(Errors.InvalidAmount.selector);
+    //     ceaInstance.withdrawTo{value: 1 ether}(
+    //         generateTxID(1), generateUniversalTxID(1),
+    //         ueaOnPush, address(token), address(ceaInstance), 100 ether
+    //     );
+    // }
+
+    // function testWithdrawTo_Park_MarksTxIDAsExecutedAndBlocksReplay() public deployCEA {
+    //     MockGasToken token = new MockGasToken();
+    //     fundCEAWithTokens(address(token), 100 ether);
+    //     bytes32 txID = generateTxID(1);
+
+    //     assertFalse(CEA(payable(address(ceaInstance))).isExecuted(txID));
+
+    //     vm.prank(vault);
+    //     ceaInstance.withdrawTo(txID, generateUniversalTxID(1), ueaOnPush, address(token), address(ceaInstance), 100 ether);
+
+    //     assertTrue(CEA(payable(address(ceaInstance))).isExecuted(txID));
+
+    //     vm.prank(vault);
+    //     vm.expectRevert(Errors.PayloadExecuted.selector);
+    //     ceaInstance.withdrawTo(txID, generateUniversalTxID(2), ueaOnPush, address(token), address(ceaInstance), 100 ether);
+    // }
+
+    // function testWithdrawTo_Park_DoesNotMoveFunds() public deployCEA {
+    //     MockGasToken token = new MockGasToken();
+    //     uint256 amount = 100 ether;
+    //     fundCEAWithTokens(address(token), amount);
+
+    //     uint256 ceaBalanceBefore = token.balanceOf(address(ceaInstance));
+
+    //     vm.prank(vault);
+    //     ceaInstance.withdrawTo(
+    //         generateTxID(1), generateUniversalTxID(1),
+    //         ueaOnPush, address(token), address(ceaInstance), amount
+    //     );
+
+    //     assertEq(token.balanceOf(address(ceaInstance)), ceaBalanceBefore, "Tokens should not leave CEA");
+    // }
+
+    // =========================================================================
+    // executeUniversalTx ERC20 Gap Tests
+    // =========================================================================
+
+    function testExecuteUniversalTx_ERC20_RevertWhenMsgValueNotZero() public deployCEA {
+        MockGasToken token = new MockGasToken();
+        fundCEAWithTokens(address(token), 1000 ether);
+        vm.deal(vault, 1 ether);
+
+        bytes memory payload = abi.encodeWithSignature("setMagicNumber(uint256)", 42);
+
+        vm.prank(vault);
+        vm.expectRevert(Errors.InvalidAmount.selector);
+        ceaInstance.executeUniversalTx{value: 1 ether}(
+            generateTxID(1), generateUniversalTxID(1),
+            ueaOnPush, address(token), address(target), 100 ether, payload
+        );
+    }
+
+    function testExecuteUniversalTx_ERC20_AllowanceRemainsZeroAfterRevert() public deployCEA {
+        MockGasToken token = new MockGasToken();
+        fundCEAWithTokens(address(token), 1000 ether);
+
+        RevertingTarget reverter = new RevertingTarget();
+        bytes memory payload = abi.encodeWithSignature("revertWithReason()");
+
+        uint256 allowanceBefore = token.allowance(address(ceaInstance), address(reverter));
+
+        vm.prank(vault);
+        vm.expectRevert(Errors.ExecutionFailed.selector);
+        ceaInstance.executeUniversalTx(
+            generateTxID(1), generateUniversalTxID(1),
+            ueaOnPush, address(token), address(reverter), 100 ether, payload
+        );
+
+        // Whole tx reverts so allowance is unchanged (stays at 0)
+        assertEq(token.allowance(address(ceaInstance), address(reverter)), allowanceBefore, "Allowance should revert to original");
+    }
+
+    // =========================================================================
+    // executeUniversalTx Native Gap Tests
+    // =========================================================================
+
+    function testExecuteUniversalTx_Native_RevertWhenTargetHasNoReceive() public deployCEA {
+        RevertingTarget reverter = new RevertingTarget();
+        uint256 amount = 0.1 ether;
+        vm.deal(vault, amount);
+
+        vm.prank(vault);
+        vm.expectRevert(Errors.ExecutionFailed.selector);
+        ceaInstance.executeUniversalTx{value: amount}(
+            generateTxID(1), generateUniversalTxID(1),
+            ueaOnPush, address(0), address(reverter), amount, bytes("")
+        );
+    }
+
+    function testExecuteUniversalTx_Native_IsExecutedOnlyOnSuccess() public deployCEA {
+        RevertingTarget reverter = new RevertingTarget();
+        uint256 amount = 0.1 ether;
+        bytes32 txID = generateTxID(1);
+        vm.deal(vault, amount);
+
+        vm.prank(vault);
+        vm.expectRevert(Errors.ExecutionFailed.selector);
+        ceaInstance.executeUniversalTx{value: amount}(
+            txID, generateUniversalTxID(1),
+            ueaOnPush, address(0), address(reverter), amount, bytes("")
+        );
+
+        assertFalse(CEA(payable(address(ceaInstance))).isExecuted(txID), "txID should not be marked executed on failure");
+    }
+
+    // =========================================================================
+    // Self-call (_handleSelfCalls) Edge Case Tests
+    // =========================================================================
+
+    function testHandleSelfCalls_AcceptsValueWithSelfCall() public deployCEA {
+        // Fund CEA with native, vault sends extra ETH alongside self-call (intentional protocol flow)
+        fundCEAWithNative(500 ether);
+        uint256 extraValue = 0.1 ether;
+        vm.deal(vault, extraValue);
+
+        bytes memory payload = buildWithdrawPayload(address(0), 500 ether);
+
+        vm.prank(vault);
+        ceaInstance.executeUniversalTx{value: extraValue}(
+            generateTxID(1), generateUniversalTxID(1),
+            ueaOnPush, address(0), address(ceaInstance), 500 ether, payload
+        );
+
+        assertEq(mockUniversalGateway.callCount(), 1, "Gateway should be called once");
+    }
+
+    function testHandleSelfCalls_RevertWhenPayloadExactly4Bytes() public deployCEA {
+        fundCEAWithNative(100 ether);
+
+        // Exactly 4 bytes (selector only) - abi.decode on empty payload[4:] will panic
+        bytes memory selectorOnly = abi.encodePacked(bytes4(keccak256("withdrawFundsToUEA(address,uint256)")));
+
+        vm.prank(vault);
+        vm.expectRevert();
+        ceaInstance.executeUniversalTx(
+            generateTxID(1), generateUniversalTxID(1),
+            ueaOnPush, address(0), address(ceaInstance), 0, selectorOnly
+        );
+    }
+
+    function testHandleSelfCalls_RevertWhenArgsAreMalformed() public deployCEA {
+        fundCEAWithNative(100 ether);
+
+        // Correct selector but truncated args (only 28 bytes instead of 64 needed)
+        bytes4 selector = bytes4(keccak256("withdrawFundsToUEA(address,uint256)"));
+        bytes memory malformed = abi.encodePacked(selector, bytes28(0));
+
+        vm.prank(vault);
+        vm.expectRevert();
+        ceaInstance.executeUniversalTx(
+            generateTxID(1), generateUniversalTxID(1),
+            ueaOnPush, address(0), address(ceaInstance), 0, malformed
+        );
+    }
+
+    // =========================================================================
+    // withdrawFundsToUEA: ERC20 approval failure
+    // =========================================================================
+
+    function testWithdrawFundsToUEA_RevertWhenTokenApprovalFails() public deployCEA {
+        MockGasToken token = new MockGasToken();
+        fundCEAWithTokens(address(token), 1000 ether);
+
+        // Make approve return false (triggers _resetApproval or _safeApprove guard)
+        token.setWillSucceed(false);
+
+        bytes memory payload = buildWithdrawPayload(address(token), 500 ether);
+
+        vm.prank(vault);
+        vm.expectRevert(Errors.InvalidInput.selector);
+        ceaInstance.executeUniversalTx(
+            generateTxID(1), generateUniversalTxID(1),
+            ueaOnPush, address(token), address(ceaInstance), 500 ether, payload
+        );
+    }
+
+    // =========================================================================
+    // General Invariants / Misc
+    // =========================================================================
+
+    function testInitializeCEA_CannotBeCalledAgainAfterProxyDeployment() public deployCEA {
+        vm.expectRevert(Errors.AlreadyInitialized.selector);
+        CEA(payable(address(ceaInstance))).initializeCEA(ueaOnPush, vault, address(mockUniversalGateway));
+    }
+
+    function testReceive_DirectETHTransferSucceeds() public deployCEA {
+        uint256 amount = 1 ether;
+        vm.deal(address(this), amount);
+
+        uint256 balanceBefore = address(ceaInstance).balance;
+        (bool success, ) = address(ceaInstance).call{value: amount}("");
+        assertTrue(success, "Direct ETH transfer should succeed");
+        assertEq(address(ceaInstance).balance, balanceBefore + amount, "CEA balance should increase");
+    }
+}
 
 
 

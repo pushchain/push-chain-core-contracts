@@ -96,25 +96,5 @@ interface ICEA {
         address target, 
         uint256 amount,
         bytes calldata payload
-    ) external;
-
-    /**
-     * @notice Executes a call against an external target on behalf of the UEA,
-     *         using native tokens that are already held by this CEA.
-     *
-     * @dev
-     *  - Only callable by Vault.
-     *  - Typical usage pattern:
-     *      1. Vault transfers `amount` of native tokens into this CEA.
-     *      2. Vault calls executeUniversalTx(txID, uea, target, amount, payload).
-     *      3. CEA calls `target` with `payload` and `amount` of native tokens.
-     */
-    function executeUniversalTx(
-        bytes32 txID,
-        bytes32 universalTxID,
-        address originCaller,
-        address target,
-        uint256 amount,
-        bytes calldata payload
     ) external payable;
 }
