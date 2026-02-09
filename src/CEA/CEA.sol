@@ -149,9 +149,6 @@ contract CEA is ICEA, ReentrancyGuard {
         emit WithdrawalToUEA(address(this), UEA, token, amount);
     }
 
-
-
-
     //========================
     //      Internal Helpers
     //========================
