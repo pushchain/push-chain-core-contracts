@@ -4,6 +4,7 @@ out/
 
 
 # Docs-Internal
+.claude/
 docs-internal/
 
 # Ignores development broadcast logs
