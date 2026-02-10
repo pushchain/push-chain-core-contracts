@@ -477,4 +477,427 @@ contract CEA_NewMulticallTests is CEATest {
 
         assertTrue(malicious.attackAttempted(), "Attack should have been attempted");
     }
+
+    // =========================================================================
+    // 10) msg.value accounting (A - missing tests from TEST_ANALYSIS.md)
+    // =========================================================================
+
+    function test_RevertWhen_MsgValue_MismatchInMultiCall() public deployCEA {
+        bytes32 txID = generateTxID(1);
+        bytes32 universalTxID = generateUniversalTxID(1);
+
+        uint256 value1 = 0.1 ether;
+        uint256 value2 = 0.2 ether;
+        uint256 totalValue = value1 + value2;
+
+        vm.deal(vault, totalValue);
+
+        Multicall[] memory calls = new Multicall[](2);
+        calls[0] = makeCall(address(target), value1, abi.encodeWithSignature("setMagicNumberWithFee(uint256)", 10));
+        calls[1] = makeCall(address(target), value2, abi.encodeWithSignature("setMagicNumberWithFee(uint256)", 20));
+
+        bytes memory payload = encodeCalls(calls);
+
+        // Send wrong amount - less than sum
+        vm.prank(vault);
+        vm.expectRevert(Errors.InvalidAmount.selector);
+        ceaInstance.executeUniversalTx{value: value1}(txID, universalTxID, ueaOnPush, payload);
+    }
+
+    function test_RevertWhen_MsgValue_ExceedsSumInMultiCall() public deployCEA {
+        bytes32 txID = generateTxID(1);
+        bytes32 universalTxID = generateUniversalTxID(1);
+
+        uint256 value1 = 0.1 ether;
+        uint256 value2 = 0.2 ether;
+        uint256 totalValue = value1 + value2;
+
+        vm.deal(vault, totalValue + 1 ether);
+
+        Multicall[] memory calls = new Multicall[](2);
+        calls[0] = makeCall(address(target), value1, abi.encodeWithSignature("setMagicNumberWithFee(uint256)", 10));
+        calls[1] = makeCall(address(target), value2, abi.encodeWithSignature("setMagicNumberWithFee(uint256)", 20));
+
+        bytes memory payload = encodeCalls(calls);
+
+        // Send more than sum - ETH would be trapped
+        vm.prank(vault);
+        vm.expectRevert(Errors.InvalidAmount.selector);
+        ceaInstance.executeUniversalTx{value: totalValue + 0.5 ether}(txID, universalTxID, ueaOnPush, payload);
+    }
+
+    function test_SuccessWhen_MsgValue_MatchesSumExactly() public deployCEA {
+        bytes32 txID = generateTxID(1);
+        bytes32 universalTxID = generateUniversalTxID(1);
+
+        // Both calls require exactly 0.1 ETH each
+        uint256 value1 = 0.1 ether;
+        uint256 value2 = 0.1 ether;
+        uint256 totalValue = value1 + value2;  // 0.2 ether
+
+        vm.deal(vault, totalValue);
+
+        Multicall[] memory calls = new Multicall[](2);
+        calls[0] = makeCall(address(target), value1, abi.encodeWithSignature("setMagicNumberWithFee(uint256)", 10));
+        calls[1] = makeCall(address(target), value2, abi.encodeWithSignature("setMagicNumberWithFee(uint256)", 20));
+
+        bytes memory payload = encodeCalls(calls);
+
+        vm.prank(vault);
+        ceaInstance.executeUniversalTx{value: totalValue}(txID, universalTxID, ueaOnPush, payload);
+
+        assertEq(target.magicNumber(), 20, "Final magic number should be 20");
+        assertEq(address(target).balance, totalValue, "Target should have received all ETH");
+    }
+
+    // =========================================================================
+    // 11) Self-call safety invariants (B - missing tests from TEST_ANALYSIS.md)
+    // =========================================================================
+
+    function test_RevertWhen_SelfCall_WithNonZeroValue() public deployCEA {
+        bytes32 txID = generateTxID(1);
+        bytes32 universalTxID = generateUniversalTxID(1);
+
+        // Try to send value to self-call (not allowed)
+        Multicall[] memory calls = new Multicall[](1);
+        calls[0] = makeCall(
+            address(ceaInstance),
+            0.1 ether,  // Non-zero value to self-call
+            abi.encodeWithSignature("withdrawFundsToUEA(address,uint256)", address(0), 0.1 ether)
+        );
+
+        bytes memory payload = encodeCalls(calls);
+
+        vm.deal(vault, 0.1 ether);
+        vm.prank(vault);
+        vm.expectRevert(Errors.InvalidInput.selector);
+        ceaInstance.executeUniversalTx{value: 0.1 ether}(txID, universalTxID, ueaOnPush, payload);
+    }
+
+    function test_RevertWhen_DirectCallToWithdrawFundsToUEA() public deployCEA {
+        MockGasToken token = new MockGasToken();
+        fundCEAWithTokens(address(token), 1000 ether);
+
+        // Try to call withdrawFundsToUEA directly (not through executeUniversalTx)
+        vm.expectRevert(Errors.NotVault.selector);
+        CEA(payable(address(ceaInstance))).withdrawFundsToUEA(address(token), 100 ether);
+    }
+
+    // =========================================================================
+    // 12) Gateway integration edge cases (C - missing tests from TEST_ANALYSIS.md)
+    // =========================================================================
+
+    function test_RevertWhen_WithdrawNative_InsufficientBalanceInBatch() public deployCEA {
+        // Fund CEA with 0.5 ETH initially
+        fundCEAWithNative(0.5 ether);
+
+        bytes32 txID = generateTxID(1);
+        bytes32 universalTxID = generateUniversalTxID(1);
+
+        // Batch: external call first (uses 0.1 ETH), then withdraw more than remaining balance
+        Multicall[] memory calls = new Multicall[](2);
+        calls[0] = makeCall(address(target), 0.1 ether, abi.encodeWithSignature("setMagicNumberWithFee(uint256)", 42));
+        // After first call, CEA has 0.5 ETH left (0.5 initial + 0.1 msg.value - 0.1 to target)
+        // Try to withdraw 1 ETH - should fail
+        calls[1] = buildSelfWithdrawCall(address(0), 1 ether);
+
+        bytes memory payload = encodeCalls(calls);
+
+        // Give vault ETH to send as msg.value for the external call
+        vm.deal(vault, 0.1 ether);
+
+        vm.prank(vault);
+        vm.expectRevert(Errors.InsufficientBalance.selector);
+        ceaInstance.executeUniversalTx{value: 0.1 ether}(txID, universalTxID, ueaOnPush, payload);
+
+        // Verify rollback - target should not have received ETH
+        assertEq(address(target).balance, 0, "Target balance should be 0 due to rollback");
+    }
+
+    function test_RevertWhen_Gateway_RevertsBubbles() public deployCEA {
+        MockGasToken token = new MockGasToken();
+        fundCEAWithTokens(address(token), 1000 ether);
+
+        // Configure gateway to revert
+        mockUniversalGateway.setWillRevert(true, "Gateway intentionally reverted");
+
+        bytes32 txID = generateTxID(1);
+        bytes32 universalTxID = generateUniversalTxID(1);
+
+        Multicall[] memory calls = new Multicall[](2);
+        // Approve gateway
+        calls[0] = makeCall(
+            address(token),
+            0,
+            abi.encodeWithSelector(IERC20.approve.selector, address(mockUniversalGateway), 100 ether)
+        );
+        // Withdraw (gateway will revert)
+        calls[1] = buildSelfWithdrawCall(address(token), 100 ether);
+
+        bytes memory payload = encodeCalls(calls);
+
+        vm.prank(vault);
+        vm.expectRevert("Gateway intentionally reverted");
+        ceaInstance.executeUniversalTx(txID, universalTxID, ueaOnPush, payload);
+
+        // Verify txID not marked executed
+        assertFalse(CEA(payable(address(ceaInstance))).isExecuted(txID), "txID should not be marked");
+    }
+
+    // =========================================================================
+    // 13) Execution atomicity with token state (D - missing tests from TEST_ANALYSIS.md)
+    // =========================================================================
+
+    function test_RevertWhen_ApprovalThenExternalFails_RollbackAllowance() public deployCEA {
+        MockGasToken token = new MockGasToken();
+        TokenSpenderTarget spender = new TokenSpenderTarget();
+        RevertingTarget reverter = new RevertingTarget();
+
+        fundCEAWithTokens(address(token), 1000 ether);
+
+        bytes32 txID = generateTxID(1);
+        bytes32 universalTxID = generateUniversalTxID(1);
+
+        Multicall[] memory calls = new Multicall[](2);
+        // Approve spender
+        calls[0] = makeCall(
+            address(token),
+            0,
+            abi.encodeWithSelector(IERC20.approve.selector, address(spender), 100 ether)
+        );
+        // External call that fails
+        calls[1] = makeCall(address(reverter), 0, abi.encodeWithSignature("revertWithReason()"));
+
+        bytes memory payload = encodeCalls(calls);
+
+        vm.prank(vault);
+        vm.expectRevert("This function always reverts with reason");
+        ceaInstance.executeUniversalTx(txID, universalTxID, ueaOnPush, payload);
+
+        // Verify allowance rolled back to 0
+        assertEq(token.allowance(address(ceaInstance), address(spender)), 0, "Allowance should be 0");
+    }
+
+    function test_RevertWhen_SelfWithdrawInMiddle_LaterCallFails_NoGatewayCall() public deployCEA {
+        MockGasToken token = new MockGasToken();
+        RevertingTarget reverter = new RevertingTarget();
+
+        fundCEAWithTokens(address(token), 1000 ether);
+
+        bytes32 txID = generateTxID(1);
+        bytes32 universalTxID = generateUniversalTxID(1);
+
+        Multicall[] memory calls = new Multicall[](3);
+        // Approve gateway
+        calls[0] = makeCall(
+            address(token),
+            0,
+            abi.encodeWithSelector(IERC20.approve.selector, address(mockUniversalGateway), 100 ether)
+        );
+        // Self-withdraw
+        calls[1] = buildSelfWithdrawCall(address(token), 100 ether);
+        // Later call fails
+        calls[2] = makeCall(address(reverter), 0, abi.encodeWithSignature("revertWithReason()"));
+
+        bytes memory payload = encodeCalls(calls);
+
+        vm.prank(vault);
+        vm.expectRevert("This function always reverts with reason");
+        ceaInstance.executeUniversalTx(txID, universalTxID, ueaOnPush, payload);
+
+        // Verify gateway was NOT called (entire tx reverted before gateway interaction persisted)
+        assertEq(mockUniversalGateway.callCount(), 0, "Gateway should not be called due to rollback");
+    }
+
+    // =========================================================================
+    // 14) Replay protection edge cases (E - missing tests from TEST_ANALYSIS.md)
+    // =========================================================================
+
+    function test_SuccessWhen_RetrySameTxID_AfterFirstRevert() public deployCEA {
+        RevertingTarget reverter = new RevertingTarget();
+
+        bytes32 txID = generateTxID(1);
+        bytes32 universalTxID = generateUniversalTxID(1);
+
+        bytes memory failingPayload = buildExternalSingleCall(
+            address(reverter),
+            0,
+            abi.encodeWithSignature("revertWithReason()")
+        );
+
+        // First attempt - should revert
+        vm.prank(vault);
+        vm.expectRevert("This function always reverts with reason");
+        ceaInstance.executeUniversalTx(txID, universalTxID, ueaOnPush, failingPayload);
+
+        // Verify not marked executed
+        assertFalse(CEA(payable(address(ceaInstance))).isExecuted(txID), "txID should not be marked");
+
+        // Retry with same txID but different (succeeding) payload
+        bytes memory succeedingPayload = buildExternalSingleCall(
+            address(target),
+            0,
+            abi.encodeWithSignature("setMagicNumber(uint256)", 42)
+        );
+
+        vm.prank(vault);
+        ceaInstance.executeUniversalTx(txID, universalTxID, ueaOnPush, succeedingPayload);
+
+        // Verify now marked executed
+        assertTrue(CEA(payable(address(ceaInstance))).isExecuted(txID), "txID should be marked executed");
+        assertEq(target.magicNumber(), 42, "Target should have been updated");
+    }
+
+    function test_RevertWhen_ReplaySameTxID_WithDifferentMsgValue() public deployCEA {
+        bytes32 txID = generateTxID(1);
+        bytes32 universalTxID = generateUniversalTxID(1);
+
+        uint256 value1 = 0.1 ether;
+        uint256 value2 = 0.2 ether;
+
+        vm.deal(vault, value1 + value2);
+
+        bytes memory payload = buildExternalSingleCall(
+            address(target),
+            value1,
+            abi.encodeWithSignature("setMagicNumberWithFee(uint256)", 42)
+        );
+
+        // First execution with value1
+        vm.prank(vault);
+        ceaInstance.executeUniversalTx{value: value1}(txID, universalTxID, ueaOnPush, payload);
+
+        // Try to replay with different msg.value - should still be blocked
+        vm.prank(vault);
+        vm.expectRevert(Errors.PayloadExecuted.selector);
+        ceaInstance.executeUniversalTx{value: value2}(txID, universalTxID, ueaOnPush, payload);
+    }
+
+    // =========================================================================
+    // 15) Event data validation (G - missing tests from TEST_ANALYSIS.md)
+    // =========================================================================
+
+    function test_Events_DataMatchesEachCall() public deployCEA {
+        bytes32 txID = generateTxID(1);
+        bytes32 universalTxID = generateUniversalTxID(1);
+
+        bytes memory data1 = abi.encodeWithSignature("setMagicNumber(uint256)", 10);
+        bytes memory data2 = abi.encodeWithSignature("setMagicNumber(uint256)", 20);
+
+        Multicall[] memory calls = new Multicall[](2);
+        calls[0] = makeCall(address(target), 0, data1);
+        calls[1] = makeCall(address(target), 0, data2);
+
+        bytes memory payload = encodeCalls(calls);
+
+        vm.prank(vault);
+        vm.recordLogs();
+        ceaInstance.executeUniversalTx(txID, universalTxID, ueaOnPush, payload);
+
+        Vm.Log[] memory logs = vm.getRecordedLogs();
+
+        // Find UniversalTxExecuted events and validate data
+        // Event signature: UniversalTxExecuted(bytes32 indexed txID, bytes32 indexed universalTxID, address indexed originCaller, address target, bytes data)
+        uint256 eventIndex = 0;
+        for (uint256 i = 0; i < logs.length; i++) {
+            if (logs[i].topics[0] == keccak256("UniversalTxExecuted(bytes32,bytes32,address,address,bytes)")) {
+                // Indexed params are in topics, non-indexed in data
+                bytes32 emittedTxID = logs[i].topics[1];
+                bytes32 emittedUniversalTxID = logs[i].topics[2];
+                address emittedOrigin = address(uint160(uint256(logs[i].topics[3])));
+
+                // Decode non-indexed params from data
+                (address emittedTo, bytes memory emittedData) = abi.decode(logs[i].data, (address, bytes));
+
+                // Validate against expected call
+                assertEq(emittedTxID, txID, "Event txID should match");
+                assertEq(emittedUniversalTxID, universalTxID, "Event universalTxID should match");
+                assertEq(emittedOrigin, ueaOnPush, "Event origin should match");
+                assertEq(emittedTo, calls[eventIndex].to, "Event target should match call");
+                assertEq(emittedData, calls[eventIndex].data, "Event data should match call");
+
+                eventIndex++;
+            }
+        }
+
+        assertEq(eventIndex, 2, "Should have validated 2 events");
+    }
+
+    function test_Events_SelfCallWithdraw_EmittedCorrectly() public deployCEA {
+        MockGasToken token = new MockGasToken();
+        fundCEAWithTokens(address(token), 1000 ether);
+
+        bytes32 txID = generateTxID(1);
+        bytes32 universalTxID = generateUniversalTxID(1);
+        uint256 withdrawAmount = 100 ether;
+
+        Multicall[] memory calls = new Multicall[](2);
+        calls[0] = makeCall(
+            address(token),
+            0,
+            abi.encodeWithSelector(IERC20.approve.selector, address(mockUniversalGateway), withdrawAmount)
+        );
+        calls[1] = buildSelfWithdrawCall(address(token), withdrawAmount);
+
+        bytes memory payload = encodeCalls(calls);
+
+        vm.prank(vault);
+        vm.recordLogs();
+        ceaInstance.executeUniversalTx(txID, universalTxID, ueaOnPush, payload);
+
+        Vm.Log[] memory logs = vm.getRecordedLogs();
+
+        // Find the self-call event
+        // Event signature: UniversalTxExecuted(bytes32 indexed txID, bytes32 indexed universalTxID, address indexed originCaller, address target, bytes data)
+        bool foundSelfCallEvent = false;
+        for (uint256 i = 0; i < logs.length; i++) {
+            if (logs[i].topics[0] == keccak256("UniversalTxExecuted(bytes32,bytes32,address,address,bytes)")) {
+                // Extract indexed params from topics
+                address emittedOrigin = address(uint160(uint256(logs[i].topics[3])));
+
+                // Decode non-indexed params from data
+                (address emittedTo, bytes memory emittedData) = abi.decode(logs[i].data, (address, bytes));
+
+                // Check if this is the self-call event
+                if (emittedTo == address(ceaInstance)) {
+                    foundSelfCallEvent = true;
+                    assertEq(emittedOrigin, ueaOnPush, "Self-call event origin should be UEA");
+                    assertEq(emittedData, calls[1].data, "Self-call event data should match");
+                }
+            }
+        }
+
+        assertTrue(foundSelfCallEvent, "Should have found self-call event");
+    }
+
+    // =========================================================================
+    // 16) Native transfer atomicity (H - missing tests from TEST_ANALYSIS.md)
+    // =========================================================================
+
+    function test_RevertWhen_NativeTransfer_LaterRevert_RollbackReceiverBalance() public deployCEA {
+        RevertingTarget reverter = new RevertingTarget();
+
+        bytes32 txID = generateTxID(1);
+        bytes32 universalTxID = generateUniversalTxID(1);
+
+        uint256 transferAmount = 0.1 ether;  // Exact fee required by target
+        vm.deal(vault, transferAmount);
+
+        Multicall[] memory calls = new Multicall[](2);
+        // Send native to target
+        calls[0] = makeCall(address(target), transferAmount, abi.encodeWithSignature("setMagicNumberWithFee(uint256)", 42));
+        // Later call reverts
+        calls[1] = makeCall(address(reverter), 0, abi.encodeWithSignature("revertWithReason()"));
+
+        bytes memory payload = encodeCalls(calls);
+
+        uint256 targetBalanceBefore = address(target).balance;
+
+        vm.prank(vault);
+        vm.expectRevert("This function always reverts with reason");
+        ceaInstance.executeUniversalTx{value: transferAmount}(txID, universalTxID, ueaOnPush, payload);
+
+        // Verify target balance unchanged (rollback)
+        assertEq(address(target).balance, targetBalanceBefore, "Target balance should not change due to rollback");
+    }
 }
