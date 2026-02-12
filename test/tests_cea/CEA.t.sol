@@ -14,7 +14,7 @@ import {CEAProxy} from "../../src/CEA/CEAProxy.sol";
 import "../../src/interfaces/ICEA.sol";
 import {IUniversalGateway, UniversalTxRequest, RevertInstructions} from "../../src/interfaces/IUniversalGateway.sol";
 import {CEAErrors as Errors} from "../../src/libraries/Errors.sol";
-import {Multicall} from "../../src/libraries/Types.sol";
+import {Multicall, MULTICALL_SELECTOR} from "../../src/libraries/Types.sol";
 import {Target} from "../../src/mocks/Target.sol";
 import {MockUniversalGateway} from "../mocks/MockUniversalGateway.sol";
 import {MockGasToken} from "../mocks/MockGasToken.sol";
@@ -118,12 +118,18 @@ contract CEATest is Test {
 
     /// @notice Encode Multicall array into bytes payload
     function encodeCalls(Multicall[] memory calls) internal pure returns (bytes memory) {
-        return abi.encode(calls);
+        return abi.encodePacked(MULTICALL_SELECTOR, abi.encode(calls));
     }
 
-    /// @notice Build payload for withdrawFundsToUEA self-call
+    /// @notice Build payload for sendUniversalTxToUEA self-call
     function buildWithdrawPayload(address token, uint256 amount) internal pure returns (bytes memory) {
-        return abi.encodeWithSignature("withdrawFundsToUEA(address,uint256)", token, amount);
+        return abi.encodeWithSignature(
+            "sendUniversalTxToUEA(address,uint256,bytes,bytes)",
+            token,
+            amount,
+            "",  // empty payload
+            ""   // empty signatureData
+        );
     }
 
     /// @notice Build single external call payload (no approvals)
@@ -736,8 +742,8 @@ contract CEATest is Test {
         vm.prank(vault);
         bytes memory multicallPayload = buildERC20MulticallPayload(address(token), address(reverter), 100 ether, payload);
 
-        // Expect raw revert data bubbled from target (better for debugging)
-        vm.expectRevert("This function always reverts with reason");
+        // Expect ExecutionFailed (revert data no longer bubbled)
+        vm.expectRevert(Errors.ExecutionFailed.selector);
         ceaInstance.executeUniversalTx(
 
             txID,
@@ -1245,9 +1251,9 @@ contract CEATest is Test {
         bytes memory multicallPayload = encodeCalls(calls);
 
         vm.prank(vault);
-        // After removing _handleSelfCall, this will call initializeCEA via .call()
-        // which reverts with AlreadyInitialized since CEA is already initialized
-        vm.expectRevert(Errors.AlreadyInitialized.selector);
+        // Calls initializeCEA via .call() which reverts with AlreadyInitialized
+        // but we now get ExecutionFailed instead of bubbled error
+        vm.expectRevert(Errors.ExecutionFailed.selector);
         ceaInstance.executeUniversalTx(
             txID,
             universalTxID,
@@ -1269,7 +1275,7 @@ contract CEATest is Test {
         bytes memory payload = buildWithdrawPayload(address(token), 500 ether);
 
         vm.prank(vault);
-        vm.expectRevert(Errors.InsufficientBalance.selector);
+        vm.expectRevert(Errors.ExecutionFailed.selector); // Bubbled from sendUniversalTxToUEA's InsufficientBalance
         bytes memory multicallPayload = buildWithdrawMulticallPayload(address(token), 500 ether, true);
 
         ceaInstance.executeUniversalTx(
@@ -1620,8 +1626,8 @@ contract CEATest is Test {
         vm.prank(vault);
         bytes memory multicallPayload = buildWithdrawMulticallPayload(address(token), 0, true);
 
-        // Zero amount withdrawals now revert with InvalidInput
-        vm.expectRevert(Errors.InvalidInput.selector);
+        // Zero amount withdrawals revert with ExecutionFailed (bubbled from sendUniversalTxToUEA's InvalidInput)
+        vm.expectRevert(Errors.ExecutionFailed.selector);
         ceaInstance.executeUniversalTx(
             txID,
             universalTxID,
@@ -1895,9 +1901,9 @@ contract CEATest is Test {
         bytes memory multicallPayload = encodeCalls(calls);
 
         vm.prank(vault);
-        // After removing _handleSelfCall, this will call initializeCEA via .call()
-        // which reverts with AlreadyInitialized since CEA is already initialized
-        vm.expectRevert(Errors.AlreadyInitialized.selector);
+        // Calls initializeCEA via .call() which reverts with AlreadyInitialized
+        // but we now get ExecutionFailed instead of bubbled error
+        vm.expectRevert(Errors.ExecutionFailed.selector);
         ceaInstance.executeUniversalTx{value: 0}(
             txID,
             universalTxID,
@@ -1913,7 +1919,7 @@ contract CEATest is Test {
         bytes memory payload = buildWithdrawPayload(address(0), 500 ether);
 
         vm.prank(vault);
-        vm.expectRevert(Errors.InsufficientBalance.selector);
+        vm.expectRevert(Errors.ExecutionFailed.selector); // Bubbled from sendUniversalTxToUEA's InsufficientBalance
         bytes memory multicallPayload = buildWithdrawMulticallPayload(address(0), 500 ether, false);
 
         ceaInstance.executeUniversalTx{value: 0}(
@@ -2173,8 +2179,8 @@ contract CEATest is Test {
         vm.prank(vault);
         bytes memory multicallPayload = buildWithdrawMulticallPayload(address(0), 0, false);
 
-        // Zero amount withdrawals now revert with InvalidInput
-        vm.expectRevert(Errors.InvalidInput.selector);
+        // Zero amount withdrawals revert with ExecutionFailed (bubbled from sendUniversalTxToUEA's InvalidInput)
+        vm.expectRevert(Errors.ExecutionFailed.selector);
         ceaInstance.executeUniversalTx{value: 0}(
             txID,
             universalTxID,
@@ -2294,8 +2300,8 @@ contract CEATest is Test {
         vm.prank(vault);
         bytes memory multicallPayload = buildERC20MulticallPayload(address(token), address(reverter), 100 ether, payload);
 
-        // Expect raw revert data bubbled from target
-        vm.expectRevert("This function always reverts with reason");
+        // Expect ExecutionFailed (revert data no longer bubbled)
+        vm.expectRevert(Errors.ExecutionFailed.selector);
         ceaInstance.executeUniversalTx(
 
             generateTxID(1),
@@ -2396,7 +2402,7 @@ contract CEATest is Test {
         fundCEAWithNative(100 ether);
 
         // Exactly 4 bytes (selector only) - abi.decode on empty payload[4:] will panic
-        bytes memory selectorOnly = abi.encodePacked(bytes4(keccak256("withdrawFundsToUEA(address,uint256)")));
+        bytes memory selectorOnly = abi.encodePacked(bytes4(keccak256("sendUniversalTxToUEA(address,uint256,bytes,bytes)")));
 
         vm.prank(vault);
         vm.expectRevert();
@@ -2418,8 +2424,8 @@ contract CEATest is Test {
     function testHandleSelfCalls_RevertWhenArgsAreMalformed() public deployCEA {
         fundCEAWithNative(100 ether);
 
-        // Correct selector but truncated args (only 28 bytes instead of 64 needed)
-        bytes4 selector = bytes4(keccak256("withdrawFundsToUEA(address,uint256)"));
+        // Correct selector but truncated args
+        bytes4 selector = bytes4(keccak256("sendUniversalTxToUEA(address,uint256,bytes,bytes)"));
         bytes memory malformed = abi.encodePacked(selector, bytes28(0));
 
         vm.prank(vault);

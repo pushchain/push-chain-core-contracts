@@ -6,7 +6,7 @@ import {CEAErrors} from "../libraries/Errors.sol";
 import {IUniversalGateway,
             UniversalTxRequest,
                 RevertInstructions} from "../interfaces/IUniversalGateway.sol";
-import {Multicall} from "../libraries/Types.sol";
+import {Multicall, MULTICALL_SELECTOR} from "../libraries/Types.sol";
 
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
@@ -89,13 +89,15 @@ contract CEA is ICEA, ReentrancyGuard {
     //      Vault-only ops
     //========================
 
-    /// @notice         Executes a universal transaction using multicall payload.
-    /// @dev            All execution is driven by a standardized Multicall[] payload.
-    ///                 SDK is responsible for crafting correct multicall steps (including ERC20 approvals).
+    /// @notice         Executes a universal transaction.
+    /// @dev            Payload can be either:
+    ///                 - MULTICALL: payload starts with MULTICALL_SELECTOR + ABI-encoded Multicall[]
+    ///                 - SINGLE CALL: raw bytes data for a single call
+    ///                 SDK is responsible for crafting correct payload format.
     /// @param txID             Unique transaction identifier (must not be executed before)
     /// @param universalTxID    Universal transaction identifier for cross-chain tracking
     /// @param originCaller     Address of the origin caller (must be UEA)
-    /// @param payload          ABI-encoded Multicall[] containing execution steps
+    /// @param payload          Either multicall or single call payload
     function executeUniversalTx(
         bytes32 txID,
         bytes32 universalTxID,
@@ -106,39 +108,39 @@ contract CEA is ICEA, ReentrancyGuard {
         if (isExecuted[txID]) revert CEAErrors.PayloadExecuted();
         if (originCaller != UEA) revert CEAErrors.InvalidUEA();
 
-        // Validate msg.value matches sum of all call values
-        Multicall[] memory calls = decodeMulticall(payload);
-        uint256 totalValue = 0;
-        for (uint256 i = 0; i < calls.length; i++) {
-            totalValue += calls[i].value;
-        }
-        if (msg.value != totalValue) revert CEAErrors.InvalidAmount();
-
         isExecuted[txID] = true;
 
-        _handleMulticallDecoded(txID, universalTxID, originCaller, calls);
+        _handleExecution(txID, universalTxID, originCaller, payload);
     }
 
-    /// @notice         Withdraws funds from CEA back to its UEA on Push Chain.
+    /// @notice         Sends a universal transaction from CEA to its UEA on Push Chain.
     /// @dev            Only callable via self-call through multicall execution (msg.sender == address(this)).
     ///                 For ERC20 tokens, SDK must include approval steps in multicall before this call.
-    /// @param token    Token address (address(0) for native)
-    /// @param amount   Amount to withdraw
-    function withdrawFundsToUEA(address token, uint256 amount) external {
+    /// @param token            Token address (address(0) for native)
+    /// @param amount           Amount to send
+    /// @param payload          Optional payload data to send with the transaction (for execution on UEA)
+    /// @param signatureData    Optional signature data to send with the transaction
+    function sendUniversalTxToUEA(
+        address token,
+        uint256 amount,
+        bytes calldata payload,
+        bytes calldata signatureData
+    ) external {
         // Enforce: Only CEA can call this function via self-call
         if (msg.sender != address(this)) revert CEAErrors.NotVault();
 
         if (amount == 0) revert CEAErrors.InvalidInput();
+
         UniversalTxRequest memory req = UniversalTxRequest({
             recipient: UEA,
             token: token,
             amount: amount,
-            payload: "",
+            payload: payload,
             revertInstruction: RevertInstructions({
                 fundRecipient: UEA,
                 revertMsg: ""
             }),
-            signatureData: ""
+            signatureData: signatureData
         });
 
         if (token == address(0)) {
@@ -157,8 +159,30 @@ contract CEA is ICEA, ReentrancyGuard {
     //      Internal Helpers
     //========================
 
+    /// @notice         Routes execution based on payload type (MULTICALL vs SINGLE CALL).
+    /// @dev            Checks if payload starts with MULTICALL_SELECTOR to determine routing.
+    /// @param txID             Transaction identifier for event emission
+    /// @param universalTxID    Universal transaction identifier for event emission
+    /// @param originCaller     Origin caller for event emission
+    /// @param payload          Raw payload bytes (either multicall or single call)
+    function _handleExecution(
+        bytes32 txID,
+        bytes32 universalTxID,
+        address originCaller,
+        bytes calldata payload
+    ) internal {
+        if (isMulticall(payload)) {
+            // New format: decode and route to multicall handler
+            Multicall[] memory calls = decodeCalls(payload);
+            _handleMulticall(txID, universalTxID, originCaller, calls);
+        } else {
+            // Old format: route to backwards-compatible handler
+            _handleSingleCall(txID, universalTxID, originCaller, payload);
+        }
+    }
+
     /// @notice         Internal handler for multicall execution.
-    /// @dev            Executes each call in the decoded Multicall[] array sequentially.
+    /// @dev            Validates msg.value matches total call values, then executes each call sequentially.
     ///                 All calls use the same .call execution path (including self-calls).
     ///                 Self-calls must have value == 0 (enforced here).
     ///                 Reverts if any call fails, bubbling revert data if available.
@@ -166,12 +190,18 @@ contract CEA is ICEA, ReentrancyGuard {
     /// @param universalTxID    Universal transaction identifier for event emission
     /// @param originCaller     Origin caller for event emission
     /// @param calls            Decoded Multicall[] array
-    function _handleMulticallDecoded(
+    function _handleMulticall(
         bytes32 txID,
         bytes32 universalTxID,
         address originCaller,
         Multicall[] memory calls
     ) internal {
+        // Validate msg.value matches sum of all call values
+        uint256 totalValue = 0;
+        for (uint256 i = 0; i < calls.length; i++) {
+            totalValue += calls[i].value;
+        }
+        if (msg.value != totalValue) revert CEAErrors.InvalidAmount();
 
         // Execute each call in sequence
         for (uint256 i = 0; i < calls.length; i++) {
@@ -184,34 +214,59 @@ contract CEA is ICEA, ReentrancyGuard {
 
             (bool success, bytes memory returnData) = calls[i].to.call{value: calls[i].value}(calls[i].data);
 
-            if (!success) {
-                if (returnData.length > 0) {
-                    assembly {
-                        let returnDataSize := mload(returnData)
-                        revert(add(32, returnData), returnDataSize)
-                    }
-                } else {
-                    revert CEAErrors.ExecutionFailed();
-                }
-            }
+            if (!success) revert CEAErrors.ExecutionFailed();
 
             emit UniversalTxExecuted(txID, universalTxID, originCaller, calls[i].to, calls[i].data);
         }
     }
 
-    /// @notice         Decodes bytes into Multicall array (external helper for try/catch).
-    /// @dev            Must be external to use in try/catch pattern for clean error handling.
-    /// @param data     ABI-encoded Multicall[] array
-    /// @return         Decoded Multicall array
-    function decodeMulticall(bytes calldata data) internal pure returns (Multicall[] memory) {
-        return abi.decode(data, (Multicall[]));
+    /// @notice         Internal handler for single call execution.
+    /// @dev            For backwards compatibility, treats payload without MULTICALL_SELECTOR
+    ///                 as direct ABI-encoded Multicall[] (old format).
+    ///                 This allows existing SDKs to continue working.
+    /// @param txID             Transaction identifier for event emission
+    /// @param universalTxID    Universal transaction identifier for event emission
+    /// @param originCaller     Origin caller for event emission
+    /// @param payload          Raw ABI-encoded Multicall[] (old format, no selector prefix)
+    function _handleSingleCall(
+        bytes32 txID,
+        bytes32 universalTxID,
+        address originCaller,
+        bytes calldata payload
+    ) internal {
+        // Backwards compatibility: decode as Multicall[] directly (old format)
+        Multicall[] memory calls = abi.decode(payload, (Multicall[]));
+        _handleMulticall(txID, universalTxID, originCaller, calls);
     }
 
+    //========================
+    //      Private Helpers
+    //========================
+
+    /// @notice         Checks whether the payload uses the multicall format.
+    /// @dev            Determines if payload starts with MULTICALL_SELECTOR.
+    /// @param data     Raw payload bytes
+    /// @return bool    True if payload starts with MULTICALL_SELECTOR
+    function isMulticall(bytes calldata data) private pure returns (bool) {
+        if (data.length < 4) return false;
+        bytes4 selector = bytes4(data[0:4]);
+        return selector == MULTICALL_SELECTOR;
+    }
+
+    /// @notice         Decodes multicall payload into Multicall array.
+    /// @dev            Strips MULTICALL_SELECTOR prefix and decodes remaining data.
+    ///                 Should only be called after isMulticall returns true.
+    /// @param data     Raw payload containing MULTICALL_SELECTOR + ABI-encoded Multicall[]
+    /// @return         Decoded Multicall array
+    function decodeCalls(bytes calldata data) private pure returns (Multicall[] memory) {
+        // Strip the first 4 bytes (MULTICALL_SELECTOR) and decode the rest
+        bytes calldata strippedData = data[4:];
+        return abi.decode(strippedData, (Multicall[]));
+    }
 
     //========================
     //         Receive
     //========================
-
     /**
      * @notice Allow this CEA to receive native tokens if needed for protocol interactions.
      */
