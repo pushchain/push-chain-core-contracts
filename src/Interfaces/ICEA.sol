@@ -19,21 +19,17 @@ interface ICEA {
     //           Events
     //========================
 
-    /// @notice                     Universal tx execution event that is executed on External Chains.
+    /// @notice                     Universal tx execution event emitted for each multicall step.
     /// @param txID                 Unique transaction identifier
     /// @param universalTxID        Unique transaction identifier on Universal Gateway
-    /// @param originCaller         Original caller/user on source chain ( Push Chain)
-    /// @param target               Target contract address to execute call
-    /// @param token                Token address being sent
-    /// @param amount               Amount of token being sent
-    /// @param data                 Calldata to be executed on target contract on external chain
+    /// @param originCaller         Original caller/user on source chain (Push Chain)
+    /// @param target               Target contract address for this call step
+    /// @param data                 Calldata executed on target contract
     event UniversalTxExecuted(
         bytes32 indexed txID,
         bytes32 indexed universalTxID,
         address indexed originCaller,
         address target,
-        address token,
-        uint256 amount,
         bytes data
     );
 
@@ -69,32 +65,27 @@ interface ICEA {
     //========================
 
     /**
-     * @notice Executes a call against an external target on behalf of the UEA,
-     *         using tokens that are already held by this CEA.
+     * @notice Executes a universal transaction using standardized multicall payload.
      *
      * @dev
      *  - Only callable by Vault.
-     *  - Typical usage pattern:
-     *      1. Vault transfers `amount` of `token` into this CEA.
-     *      2. Vault calls executeUniversalTx(txID, uea, token, target, amount, payload).
-     *      3. CEA safe-approves `target` for `amount` and then calls `target` with `data`.
-     *  - This ensures the external protocol sees `msg.sender == CEA`, not Vault.
+     *  - All execution is driven by a Multicall[] payload (similar to UEA multicall).
+     *  - SDK is responsible for crafting correct multicall steps, including:
+     *      * ERC20 approvals before calls that need token spending
+     *      * ERC20 approval resets after operations (if needed)
+     *      * Self-calls to withdrawFundsToUEA for returning funds to UEA
+     *  - CEA no longer performs automatic approval/reset logic.
+     *  - This ensures flexible, composable execution paths.
      *
-     * @param txID    Transaction ID of the UniversalTx to execute.
-     * @param universalTxID    Unique transaction identifier on Universal Gateway
-     * @param originCaller     UEA on Push Chain that this CEA represents.
-     * @param token   ERC20 token to be used for the operation (address(0) if purely native / no-ERC20 op).
-     * @param target  Target protocol contract to call.
-     * @param amount  Amount of `token` to make available to `target` (used for allowance).
-     * @param payload Calldata to forward to `target`.
+     * @param txID              Transaction ID (must not be executed before)
+     * @param universalTxID     Unique transaction identifier on Universal Gateway
+     * @param originCaller      UEA on Push Chain that this CEA represents (verified)
+     * @param payload           ABI-encoded Multicall[] containing execution steps
      */
     function executeUniversalTx(
         bytes32 txID,
         bytes32 universalTxID,
         address originCaller,
-        address token,
-        address target, 
-        uint256 amount,
         bytes calldata payload
     ) external payable;
 }

@@ -3,9 +3,10 @@ pragma solidity 0.8.26;
 
 import {ICEA} from "../interfaces/ICEA.sol";
 import {CEAErrors} from "../libraries/Errors.sol";
-import {IUniversalGateway, 
-            UniversalTxRequest, 
+import {IUniversalGateway,
+            UniversalTxRequest,
                 RevertInstructions} from "../interfaces/IUniversalGateway.sol";
+import {Multicall, MULTICALL_SELECTOR} from "../libraries/Types.sol";
 
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
@@ -43,8 +44,6 @@ contract CEA is ICEA, ReentrancyGuard {
 
     /// @notice Mapping from txID to bool to check if the tx has been executed
     mapping (bytes32 => bool) public isExecuted;
-
-    bytes4 private constant WITHDRAW_FUNDS_SELECTOR = bytes4(keccak256("withdrawFundsToUEA(address,uint256)"));
 
     //========================
     //        Modifiers
@@ -90,59 +89,66 @@ contract CEA is ICEA, ReentrancyGuard {
     //      Vault-only ops
     //========================
 
+    /// @notice         Executes a universal transaction.
+    /// @dev            Payload can be either:
+    ///                 - MULTICALL: payload starts with MULTICALL_SELECTOR + ABI-encoded Multicall[]
+    ///                 - SINGLE CALL: raw bytes data for a single call
+    ///                 SDK is responsible for crafting correct payload format.
+    /// @param txID             Unique transaction identifier (must not be executed before)
+    /// @param universalTxID    Universal transaction identifier for cross-chain tracking
+    /// @param originCaller     Address of the origin caller (must be UEA)
+    /// @param payload          Either multicall or single call payload
     function executeUniversalTx(
         bytes32 txID,
         bytes32 universalTxID,
         address originCaller,
-        address token,
-        address target,
-        uint256 amount,
         bytes calldata payload
     ) external payable onlyVault nonReentrant {
-
-        if (target == address(this)) {
-            _handleSelfCalls(txID, universalTxID, originCaller, payload);
-            return;
-        }
-
-        _validateExecuteUniversalTxParams(txID, originCaller, token, target, amount);
+        // Top-level validation
+        if (isExecuted[txID]) revert CEAErrors.PayloadExecuted();
+        if (originCaller != UEA) revert CEAErrors.InvalidUEA();
 
         isExecuted[txID] = true;
 
-        if (isNativeToken(token)) {
-            _executeCall(target, payload, amount);
-        } else {
-            _resetApproval(token, target);
-            _safeApprove(token, target, amount);
-            _executeCall(target, payload, 0);
-            _resetApproval(token, target);
-        }
-
-        emit UniversalTxExecuted(txID, universalTxID, originCaller, target, token, amount, payload);
-
+        _handleExecution(txID, universalTxID, originCaller, payload);
     }
 
-    function withdrawFundsToUEA(address token, uint256 amount) private {
+    /// @notice         Sends a universal transaction from CEA to its UEA on Push Chain.
+    /// @dev            Only callable via self-call through multicall execution (msg.sender == address(this)).
+    ///                 For ERC20 tokens, SDK must include approval steps in multicall before this call.
+    /// @param token            Token address (address(0) for native)
+    /// @param amount           Amount to send
+    /// @param payload          Optional payload data to send with the transaction (for execution on UEA)
+    /// @param signatureData    Optional signature data to send with the transaction
+    function sendUniversalTxToUEA(
+        address token,
+        uint256 amount,
+        bytes calldata payload,
+        bytes calldata signatureData
+    ) external {
+        // Enforce: Only CEA can call this function via self-call
+        if (msg.sender != address(this)) revert CEAErrors.NotVault();
+
+        if (amount == 0) revert CEAErrors.InvalidInput();
+
         UniversalTxRequest memory req = UniversalTxRequest({
             recipient: UEA,
             token: token,
             amount: amount,
-            payload: "",
+            payload: payload,
             revertInstruction: RevertInstructions({
                 fundRecipient: UEA,
                 revertMsg: ""
             }),
-            signatureData: ""
+            signatureData: signatureData
         });
 
         if (token == address(0)) {
-            if (address(this).balance < amount ) revert CEAErrors.InsufficientBalance();
+            if (address(this).balance < amount) revert CEAErrors.InsufficientBalance();
             IUniversalGateway(UNIVERSAL_GATEWAY).sendUniversalTx{value: amount}(req);
         } else {
             if (IERC20(token).balanceOf(address(this)) < amount) revert CEAErrors.InsufficientBalance();
-
-            _resetApproval(token, UNIVERSAL_GATEWAY);
-            _safeApprove(token, UNIVERSAL_GATEWAY, amount);
+            // Note: SDK must have included ERC20 approval in multicall before this call
             IUniversalGateway(UNIVERSAL_GATEWAY).sendUniversalTx(req);
         }
 
@@ -153,96 +159,114 @@ contract CEA is ICEA, ReentrancyGuard {
     //      Internal Helpers
     //========================
 
-    function isNativeToken(address token) private view returns (bool) {
-        return token == address(0);
-    }
-
-    function _validateExecuteUniversalTxParams(
+    /// @notice         Routes execution based on payload type (MULTICALL vs SINGLE CALL).
+    /// @dev            Checks if payload starts with MULTICALL_SELECTOR to determine routing.
+    /// @param txID             Transaction identifier for event emission
+    /// @param universalTxID    Universal transaction identifier for event emission
+    /// @param originCaller     Origin caller for event emission
+    /// @param payload          Raw payload bytes (either multicall or single call)
+    function _handleExecution(
         bytes32 txID,
+        bytes32 universalTxID,
         address originCaller,
-        address token,
-        address target,
-        uint256 amount
-    ) internal view {
-        if (isExecuted[txID]) revert CEAErrors.PayloadExecuted();
-        if (originCaller != UEA) revert CEAErrors.InvalidUEA();
-        if (target == address(0)) revert CEAErrors.InvalidTarget();
-
-        if (token != address(0)) {
-            if (msg.value != 0) revert CEAErrors.InvalidAmount();
-            if (IERC20(token).balanceOf(address(this)) < amount) revert CEAErrors.InsufficientBalance();
+        bytes calldata payload
+    ) internal {
+        if (isMulticall(payload)) {
+            // New format: decode and route to multicall handler
+            Multicall[] memory calls = decodeCalls(payload);
+            _handleMulticall(txID, universalTxID, originCaller, calls);
         } else {
-            if (msg.value != amount ) revert CEAErrors.InvalidAmount();
-        }
-
-    }
-
-    /// @dev Safely reset approval to zero before granting any new allowance to target contract.
-    function _resetApproval(address token, address spender) internal {
-        (bool success, bytes memory returnData) =
-            token.call(abi.encodeWithSelector(IERC20.approve.selector, spender, 0));
-        if (!success) {
-            // Some non-standard tokens revert on zero-approval; treat as reset-ok to avoid breaking the flow.
-            return;
-        }
-        // If token returns a boolean, ensure it is true; if no return data, assume success (USDT-style).
-        if (returnData.length > 0) {
-            bool approved = abi.decode(returnData, (bool));
-            if (!approved) revert CEAErrors.InvalidInput();
+            // Old format: route to backwards-compatible handler
+            _handleSingleCall(txID, universalTxID, originCaller, payload);
         }
     }
 
-    /// @dev Safely approve ERC20 token spending to a target contract.
-    ///      Low-level call must succeed AND (if returns data) decode to true; otherwise revert.
-    function _safeApprove(address token, address spender, uint256 amount) internal {
-        (bool success, bytes memory returnData) =
-            token.call(abi.encodeWithSelector(IERC20.approve.selector, spender, amount));
-        if (!success) {
-            revert CEAErrors.InvalidInput(); // approval failed
+    /// @notice         Internal handler for multicall execution.
+    /// @dev            Validates msg.value matches total call values, then executes each call sequentially.
+    ///                 All calls use the same .call execution path (including self-calls).
+    ///                 Self-calls must have value == 0 (enforced here).
+    ///                 Reverts if any call fails, bubbling revert data if available.
+    /// @param txID             Transaction identifier for event emission
+    /// @param universalTxID    Universal transaction identifier for event emission
+    /// @param originCaller     Origin caller for event emission
+    /// @param calls            Decoded Multicall[] array
+    function _handleMulticall(
+        bytes32 txID,
+        bytes32 universalTxID,
+        address originCaller,
+        Multicall[] memory calls
+    ) internal {
+        // Validate msg.value matches sum of all call values
+        uint256 totalValue = 0;
+        for (uint256 i = 0; i < calls.length; i++) {
+            totalValue += calls[i].value;
         }
-        if (returnData.length > 0) {
-            bool approved = abi.decode(returnData, (bool));
-            if (!approved) {
-                revert CEAErrors.InvalidInput(); // approval failed
+        if (msg.value != totalValue) revert CEAErrors.InvalidAmount();
+
+        // Execute each call in sequence
+        for (uint256 i = 0; i < calls.length; i++) {
+            if (calls[i].to == address(0)) revert CEAErrors.InvalidTarget();
+
+            // Enforce: self-calls to CEA must not include value
+            if (calls[i].to == address(this) && calls[i].value != 0) {
+                revert CEAErrors.InvalidInput();
             }
+
+            (bool success, bytes memory returnData) = calls[i].to.call{value: calls[i].value}(calls[i].data);
+
+            if (!success) revert CEAErrors.ExecutionFailed();
+
+            emit UniversalTxExecuted(txID, universalTxID, originCaller, calls[i].to, calls[i].data);
         }
     }
 
-    /// @dev Unified helper to execute a low-level call to target
-    ///      Call can be executed with native value or ERC20 token. 
-    ///      Reverts with Errors.ExecutionFailed() if the call fails (no bubbling).
-    function _executeCall(address target, bytes calldata payload, uint256 value) internal returns (bytes memory result) {
-        (bool success, bytes memory ret) = target.call{value: value}(payload);
-        if (!success) revert CEAErrors.ExecutionFailed();
-        return ret;
+    /// @notice         Internal handler for single call execution.
+    /// @dev            For backwards compatibility, treats payload without MULTICALL_SELECTOR
+    ///                 as direct ABI-encoded Multicall[] (old format).
+    ///                 This allows existing SDKs to continue working.
+    /// @param txID             Transaction identifier for event emission
+    /// @param universalTxID    Universal transaction identifier for event emission
+    /// @param originCaller     Origin caller for event emission
+    /// @param payload          Raw ABI-encoded Multicall[] (old format, no selector prefix)
+    function _handleSingleCall(
+        bytes32 txID,
+        bytes32 universalTxID,
+        address originCaller,
+        bytes calldata payload
+    ) internal {
+        // Backwards compatibility: decode as Multicall[] directly (old format)
+        Multicall[] memory calls = abi.decode(payload, (Multicall[]));
+        _handleMulticall(txID, universalTxID, originCaller, calls);
     }
 
-    function _handleSelfCalls(bytes32 txID, bytes32 universalTxID, address originCaller, bytes calldata payload) internal {
-        if (isExecuted[txID]) revert CEAErrors.PayloadExecuted();
-        if (originCaller != UEA) revert CEAErrors.InvalidUEA();
-        // Need at least 4 bytes for selector
-        if (payload.length < 4) revert CEAErrors.InvalidInput();
+    //========================
+    //      Private Helpers
+    //========================
 
-        // Extract function selector from the first 4 bytes of payload
-        bytes4 selector = bytes4(payload);
+    /// @notice         Checks whether the payload uses the multicall format.
+    /// @dev            Determines if payload starts with MULTICALL_SELECTOR.
+    /// @param data     Raw payload bytes
+    /// @return bool    True if payload starts with MULTICALL_SELECTOR
+    function isMulticall(bytes calldata data) private pure returns (bool) {
+        if (data.length < 4) return false;
+        bytes4 selector = bytes4(data[0:4]);
+        return selector == MULTICALL_SELECTOR;
+    }
 
-        // the ONLY allowed self-call is withdrawFundsToUEA(address,uint256)
-        if (selector != WITHDRAW_FUNDS_SELECTOR) {
-            revert CEAErrors.InvalidTarget();
-        }
-
-        (address token, uint256 amount) = abi.decode(payload[4:], (address, uint256));
-
-
-        isExecuted[txID] = true;
-        withdrawFundsToUEA(token, amount);
-        emit UniversalTxExecuted(txID, universalTxID, originCaller, address(this), token, amount, payload);
-}
+    /// @notice         Decodes multicall payload into Multicall array.
+    /// @dev            Strips MULTICALL_SELECTOR prefix and decodes remaining data.
+    ///                 Should only be called after isMulticall returns true.
+    /// @param data     Raw payload containing MULTICALL_SELECTOR + ABI-encoded Multicall[]
+    /// @return         Decoded Multicall array
+    function decodeCalls(bytes calldata data) private pure returns (Multicall[] memory) {
+        // Strip the first 4 bytes (MULTICALL_SELECTOR) and decode the rest
+        bytes calldata strippedData = data[4:];
+        return abi.decode(strippedData, (Multicall[]));
+    }
 
     //========================
     //         Receive
     //========================
-
     /**
      * @notice Allow this CEA to receive native tokens if needed for protocol interactions.
      */

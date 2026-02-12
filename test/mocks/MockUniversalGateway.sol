@@ -10,7 +10,7 @@ contract MockUniversalGateway is IUniversalGateway {
     // Storage to track calls for verification
     uint256 public callCount;
     uint256 public lastValue;
-    
+
     // Store individual fields for easier access
     address public lastRecipient;
     address public lastToken;
@@ -20,7 +20,20 @@ contract MockUniversalGateway is IUniversalGateway {
     bytes public lastRevertMsg;
     bytes public lastSignatureData;
 
+    // Revert control for testing
+    bool private shouldRevert;
+    string private revertMessage;
+
+    function setWillRevert(bool _shouldRevert, string memory _revertMessage) external {
+        shouldRevert = _shouldRevert;
+        revertMessage = _revertMessage;
+    }
+
     function sendUniversalTx(UniversalTxRequest calldata req) external payable {
+        if (shouldRevert) {
+            revert(revertMessage);
+        }
+
         lastRecipient = req.recipient;
         lastToken = req.token;
         lastAmount = req.amount;
