@@ -119,18 +119,15 @@ contract CEA is ICEA, ReentrancyGuard {
         _handleExecution(txID, universalTxID, originCaller, payload);
     }
 
-    /// @notice         Sends a universal transaction from CEA to its UEA on Push Chain.
+    /// @notice         Sends funds from CEA to its UEA on Push Chain.
     /// @dev            Only callable via self-call through multicall execution (msg.sender == address(this)).
     ///                 For ERC20 tokens, SDK must include approval steps in multicall before this call.
+    ///                 This function only transfers funds and does not send payload or signature data.
     /// @param token            Token address (address(0) for native)
     /// @param amount           Amount to send
-    /// @param payload          Optional payload data to send with the transaction (for execution on UEA)
-    /// @param signatureData    Optional signature data to send with the transaction
     function sendUniversalTxToUEA(
         address token,
-        uint256 amount,
-        bytes calldata payload,
-        bytes calldata signatureData
+        uint256 amount
     ) external {
         // Enforce: Only CEA can call this function via self-call
         if (msg.sender != address(this)) revert CEAErrors.NotVault();
@@ -141,12 +138,12 @@ contract CEA is ICEA, ReentrancyGuard {
             recipient: UEA,
             token: token,
             amount: amount,
-            payload: payload,
+            payload: "",
             revertInstruction: RevertInstructions({
                 fundRecipient: UEA,
                 revertMsg: ""
             }),
-            signatureData: signatureData
+            signatureData: ""
         });
 
         if (token == address(0)) {

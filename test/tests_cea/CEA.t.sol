@@ -121,14 +121,12 @@ contract CEATest is Test {
         return abi.encodePacked(MULTICALL_SELECTOR, abi.encode(calls));
     }
 
-    /// @notice Build payload for sendUniversalTxToUEA self-call
+    /// @notice Build payload for sendUniversalTxToUEA self-call (funds only, no payload/signature)
     function buildWithdrawPayload(address token, uint256 amount) internal pure returns (bytes memory) {
         return abi.encodeWithSignature(
-            "sendUniversalTxToUEA(address,uint256,bytes,bytes)",
+            "sendUniversalTxToUEA(address,uint256)",
             token,
-            amount,
-            "",  // empty payload
-            ""   // empty signatureData
+            amount
         );
     }
 

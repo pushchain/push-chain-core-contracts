@@ -580,7 +580,7 @@ contract CEA_NewMulticallTests is CEATest {
 
         // Try to call sendUniversalTxToUEA directly (not through executeUniversalTx)
         vm.expectRevert(Errors.NotVault.selector);
-        CEA(payable(address(ceaInstance))).sendUniversalTxToUEA(address(token), 100 ether, "", "");
+        CEA(payable(address(ceaInstance))).sendUniversalTxToUEA(address(token), 100 ether);
     }
 
     // =========================================================================
@@ -1012,135 +1012,6 @@ contract CEA_NewMulticallTests is CEATest {
     }
 
     // =========================================================================
-    // 2) sendUniversalTxToUEA New Parameters Tests
-    // =========================================================================
-
-    function test_SendUniversalTxToUEA_WithPayloadAndSignature_ERC20() public deployCEA {
-        MockGasToken token = new MockGasToken();
-        fundCEAWithTokens(address(token), 1000 ether);
-
-        bytes memory customPayload = abi.encode("custom data");
-        bytes memory customSignature = abi.encode("signature data");
-
-        // Build multicall with new sendUniversalTxToUEA parameters
-        Multicall[] memory calls = new Multicall[](2);
-        calls[0] = makeCall(
-            address(token),
-            0,
-            abi.encodeWithSignature("approve(address,uint256)", universalGateway, 500 ether)
-        );
-        calls[1] = makeCall(
-            address(ceaInstance),
-            0,
-            abi.encodeWithSignature(
-                "sendUniversalTxToUEA(address,uint256,bytes,bytes)",
-                address(token),
-                500 ether,
-                customPayload,
-                customSignature
-            )
-        );
-
-        bytes memory payload = encodeCalls(calls);
-
-        bytes32 txID = generateTxID(1);
-        bytes32 universalTxID = generateUniversalTxID(1);
-
-        vm.prank(vault);
-        ceaInstance.executeUniversalTx(txID, universalTxID, ueaOnPush, payload);
-
-        // Verify gateway was called
-        // Use mockUniversalGateway from base contract
-        UniversalTxRequest memory lastReq = mockUniversalGateway.getLastRequest();
-
-        assertEq(lastReq.recipient, ueaOnPush);
-        assertEq(lastReq.token, address(token));
-        assertEq(lastReq.amount, 500 ether);
-        assertEq(lastReq.payload, customPayload);
-        assertEq(lastReq.signatureData, customSignature);
-    }
-
-    function test_SendUniversalTxToUEA_WithPayloadAndSignature_Native() public deployCEA {
-        fundCEAWithNative(1 ether);
-
-        bytes memory customPayload = abi.encodeWithSignature("executeOnUEA(uint256)", 123);
-        bytes memory customSignature = hex"1234567890abcdef";
-
-        // Build multicall with new sendUniversalTxToUEA parameters
-        Multicall[] memory calls = new Multicall[](1);
-        calls[0] = makeCall(
-            address(ceaInstance),
-            0,
-            abi.encodeWithSignature(
-                "sendUniversalTxToUEA(address,uint256,bytes,bytes)",
-                address(0),  // native token
-                0.5 ether,
-                customPayload,
-                customSignature
-            )
-        );
-
-        bytes memory payload = encodeCalls(calls);
-
-        bytes32 txID = generateTxID(1);
-        bytes32 universalTxID = generateUniversalTxID(1);
-
-        vm.prank(vault);
-        ceaInstance.executeUniversalTx(txID, universalTxID, ueaOnPush, payload);
-
-        // Verify gateway was called with correct parameters
-        // Use mockUniversalGateway from base contract
-        UniversalTxRequest memory lastReq = mockUniversalGateway.getLastRequest();
-
-        assertEq(lastReq.recipient, ueaOnPush);
-        assertEq(lastReq.token, address(0));
-        assertEq(lastReq.amount, 0.5 ether);
-        assertEq(lastReq.payload, customPayload);
-        assertEq(lastReq.signatureData, customSignature);
-    }
-
-    function test_SendUniversalTxToUEA_WithEmptyPayloadAndSignature() public deployCEA {
-        MockGasToken token = new MockGasToken();
-        fundCEAWithTokens(address(token), 1000 ether);
-
-        // Test with empty payload and signature (backwards compatible)
-        Multicall[] memory calls = new Multicall[](2);
-        calls[0] = makeCall(
-            address(token),
-            0,
-            abi.encodeWithSignature("approve(address,uint256)", universalGateway, 100 ether)
-        );
-        calls[1] = makeCall(
-            address(ceaInstance),
-            0,
-            abi.encodeWithSignature(
-                "sendUniversalTxToUEA(address,uint256,bytes,bytes)",
-                address(token),
-                100 ether,
-                "",  // empty payload
-                ""   // empty signature
-            )
-        );
-
-        bytes memory payload = encodeCalls(calls);
-
-        bytes32 txID = generateTxID(1);
-        bytes32 universalTxID = generateUniversalTxID(1);
-
-        vm.prank(vault);
-        ceaInstance.executeUniversalTx(txID, universalTxID, ueaOnPush, payload);
-
-        // Verify gateway was called
-        // Use mockUniversalGateway from base contract
-        UniversalTxRequest memory lastReq = mockUniversalGateway.getLastRequest();
-
-        assertEq(lastReq.recipient, ueaOnPush);
-        assertEq(lastReq.token, address(token));
-        assertEq(lastReq.amount, 100 ether);
-        assertEq(lastReq.payload.length, 0);
-        assertEq(lastReq.signatureData.length, 0);
-    }
-
     // =========================================================================
     // 3) Edge Cases for MULTICALL_SELECTOR Routing
     // =========================================================================
@@ -1254,11 +1125,9 @@ contract CEA_NewMulticallTests is CEATest {
             address(ceaInstance),
             0,  // Zero value to self-call - OK
             abi.encodeWithSignature(
-                "sendUniversalTxToUEA(address,uint256,bytes,bytes)",
+                "sendUniversalTxToUEA(address,uint256)",
                 address(token),
-                100 ether,
-                "",
-                ""
+                100 ether
             )
         );
 
