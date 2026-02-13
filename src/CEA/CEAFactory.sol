@@ -48,6 +48,9 @@ contract CEAFactory is Initializable, OwnableUpgradeable, ICEAFactory {
     /// @notice CEA logic implementation that all CEA proxies delegate to.
     address public CEA_IMPLEMENTATION;
 
+    /// @notice Address of the CEA migration contract
+    address public CEA_MIGRATION_CONTRACT;
+
     /// @notice Mapping from UEA on Push Chain -> CEA on this chain.
     mapping(address => address) public UEA_to_CEA;
 
@@ -62,6 +65,13 @@ contract CEAFactory is Initializable, OwnableUpgradeable, ICEAFactory {
     error NotVault();
     error InvalidImplementation();
     error CEAAlreadyDeployed();
+
+    //========================
+    //        Events
+    //========================
+
+    /// @notice Emitted when the CEA migration contract is updated
+    event CEAMigrationContractUpdated(address indexed oldContract, address indexed newContract);
 
 
     //========================
@@ -155,6 +165,16 @@ contract CEAFactory is Initializable, OwnableUpgradeable, ICEAFactory {
         UNIVERSAL_GATEWAY = newUG;
     }
 
+    /// @notice Sets the CEA migration contract address
+    /// @dev    Only callable by owner (governance)
+    /// @param  newMigrationContract Address of the CEA migration contract
+    function setCEAMigrationContract(address newMigrationContract) external onlyOwner {
+        if (newMigrationContract == address(0)) revert ZeroAddress();
+        address old = CEA_MIGRATION_CONTRACT;
+        CEA_MIGRATION_CONTRACT = newMigrationContract;
+        emit CEAMigrationContractUpdated(old, newMigrationContract);
+    }
+
     //========================
     //        View helpers
     //========================
@@ -215,8 +235,8 @@ contract CEAFactory is Initializable, OwnableUpgradeable, ICEAFactory {
         // 2. Initialize the proxy with the CEA logic implementation
         ICEAProxy(cea).initializeCEAProxy(CEA_IMPLEMENTATION);
 
-        // 3. Initialize the CEA logic through the proxy
-        ICEA(cea).initializeCEA(ueaOnPush, VAULT, UNIVERSAL_GATEWAY);
+        // 3. Initialize the CEA logic through the proxy (pass factory address)
+        ICEA(cea).initializeCEA(ueaOnPush, VAULT, UNIVERSAL_GATEWAY, address(this));
 
         // 4. Store mappings
         UEA_to_CEA[ueaOnPush] = cea;

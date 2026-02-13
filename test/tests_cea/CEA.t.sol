@@ -307,33 +307,40 @@ contract CEATest is Test {
     function testRevertWhenInitializingTwice() public {
         CEA newCEA = new CEA();
         
-        newCEA.initializeCEA(ueaOnPush, vault, address(mockUniversalGateway));
+        newCEA.initializeCEA(ueaOnPush, vault, address(mockUniversalGateway), address(factory));
         
         vm.expectRevert(Errors.AlreadyInitialized.selector);
-        newCEA.initializeCEA(ueaOnPush, vault, address(mockUniversalGateway));
+        newCEA.initializeCEA(ueaOnPush, vault, address(mockUniversalGateway), address(factory));
     }
     
     function testRevertWhenInitializingWithZeroUEA() public {
         CEA newCEA = new CEA();
         
         vm.expectRevert(Errors.ZeroAddress.selector);
-        newCEA.initializeCEA(address(0), vault, address(mockUniversalGateway));
+        newCEA.initializeCEA(address(0), vault, address(mockUniversalGateway), address(factory));
     }
     
     function testRevertWhenInitializingWithZeroVault() public {
         CEA newCEA = new CEA();
         
         vm.expectRevert(Errors.ZeroAddress.selector);
-        newCEA.initializeCEA(ueaOnPush, address(0), address(mockUniversalGateway));
+        newCEA.initializeCEA(ueaOnPush, address(0), address(mockUniversalGateway), address(factory));
     }
     
     function testRevertWhenInitializingWithZeroUniversalGateway() public {
         CEA newCEA = new CEA();
-        
+
         vm.expectRevert(Errors.ZeroAddress.selector);
-        newCEA.initializeCEA(ueaOnPush, vault, address(0));
+        newCEA.initializeCEA(ueaOnPush, vault, address(0), address(factory));
     }
-    
+
+    function testRevertWhenInitializingWithZeroFactory() public {
+        CEA newCEA = new CEA();
+
+        vm.expectRevert(Errors.ZeroAddress.selector);
+        newCEA.initializeCEA(ueaOnPush, vault, address(mockUniversalGateway), address(0));
+    }
+
     function testIsInitializedBeforeInitialization() public {
         CEA newCEA = new CEA();
         
@@ -1246,7 +1253,7 @@ contract CEATest is Test {
         calls[0] = makeCall(
             address(ceaInstance),
             0,
-            abi.encodeWithSignature("initializeCEA(address,address,address)", address(0), address(0), address(0))
+            abi.encodeWithSignature("initializeCEA(address,address,address,address)", address(0), address(0), address(0), address(0))
         );
         bytes memory multicallPayload = encodeCalls(calls);
 
@@ -1896,7 +1903,7 @@ contract CEATest is Test {
         calls[0] = makeCall(
             address(ceaInstance),
             0,
-            abi.encodeWithSignature("initializeCEA(address,address,address)", address(0), address(0), address(0))
+            abi.encodeWithSignature("initializeCEA(address,address,address,address)", address(0), address(0), address(0), address(0))
         );
         bytes memory multicallPayload = encodeCalls(calls);
 
@@ -2487,7 +2494,7 @@ contract CEATest is Test {
 
     function testInitializeCEA_CannotBeCalledAgainAfterProxyDeployment() public deployCEA {
         vm.expectRevert(Errors.AlreadyInitialized.selector);
-        CEA(payable(address(ceaInstance))).initializeCEA(ueaOnPush, vault, address(mockUniversalGateway));
+        CEA(payable(address(ceaInstance))).initializeCEA(ueaOnPush, vault, address(mockUniversalGateway), address(factory));
     }
 
     function testReceive_DirectETHTransferSucceeds() public deployCEA {

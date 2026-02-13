@@ -60,6 +60,12 @@ interface ICEAFactory {
     function CEA_PROXY_IMPLEMENTATION() external view returns (address);
 
     /**
+     * @notice Returns the address of the CEA migration contract.
+     * @return Address of the CEA migration contract (can be address(0) if not set).
+     */
+    function CEA_MIGRATION_CONTRACT() external view returns (address);
+
+    /**
      * @notice Returns the CEA address and deployment status for a given UEA on Push Chain.
      *
      * @dev
