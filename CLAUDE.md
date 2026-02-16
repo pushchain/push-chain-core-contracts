@@ -120,9 +120,13 @@ Both UEA and CEA use minimal proxy (EIP-1167 clone) architecture:
 - Migration preserves all proxy state while updating logic contract
 
 **CEA Migration:**
-- Template addresses can be updated for new deployments via `CEAFactory.setCEAImplementations`
-- Existing deployed CEAs maintain their configured implementation
-- No in-place upgrade mechanism in v1
+- Mirrors UEA migration pattern for safe proxy upgrades (v1 → v2)
+- `CEAMigration` (src/CEA/CEAMigration.sol) - Slot-writer migration singleton
+- CEA detects `MIGRATION_SELECTOR` and routes to `_handleMigration()`
+- Factory tracks migration contract via `CEA_MIGRATION_CONTRACT` state variable
+- Migration executed via delegatecall (preserves all state and funds)
+- Safety constraints: self-targeted, zero-value, standalone execution only
+- CEA stores factory reference to fetch migration contract at runtime
 
 ### Token Primitives
 
@@ -185,6 +189,42 @@ struct UniversalPayload {
 - `MULTICALL_SELECTOR = bytes4(keccak256("UEA_MULTICALL"))` - Batch multiple calls
 - `MIGRATION_SELECTOR = bytes4(keccak256("UEA_MIGRATION"))` - Trigger migration
 
+### CEA Execution Flow
+
+**CEA uses multicall-based execution (similar to UEA):**
+
+**Payload Format:**
+- New format: `MULTICALL_SELECTOR + abi.encode(Multicall[])`
+- Old format: Direct `abi.encode(Multicall[])` (backwards compatible)
+
+**Multicall Structure (src/libraries/Types.sol:31):**
+```solidity
+struct Multicall {
+    address to;      // Target contract address
+    uint256 value;   // Native token amount
+    bytes data;      // Call data
+}
+```
+
+**Execution Routing (`CEA._handleExecution`):**
+1. Check if payload starts with `MULTICALL_SELECTOR`
+2. If yes, decode as `Multicall[]` and route based on content:
+   - Single-element with `MIGRATION_SELECTOR` → `_handleMigration()`
+   - Otherwise → `_handleMulticall()`
+3. If no, route to `_handleSingleCall()` (backwards compatibility)
+
+**Self-Call Pattern:**
+- `sendUniversalTxToUEA(token, amount)` - Transfer funds from CEA to UEA
+- Only callable via self-call (`msg.sender == address(this)`)
+- Must be included in multicall array for execution
+- Always sends empty payload/signature (funds-only transfer)
+- SDK must include ERC20 approval steps before this call
+
+**Safety Constraints:**
+- Self-calls must have `value == 0`
+- Migration must be standalone (cannot be batched)
+- All calls executed sequentially via `.call()`
+
 ## Key Contracts Reference
 
 ### Core Contracts
@@ -192,9 +232,11 @@ struct UniversalPayload {
 - `UEA_EVM`: src/UEA/UEA_EVM.sol:28 - EVM account implementation
 - `UEA_SVM`: src/UEA/UEA_SVM.sol - Solana account implementation
 - `UEAProxy`: src/UEA/UEAProxy.sol:17 - Minimal proxy for UEAs
+- `UEAMigration`: src/UEA/UEAMigration.sol - UEA migration singleton
 - `CEAFactory`: src/CEA/CEAFactory.sol:32 - Factory for deploying CEAs
 - `CEA`: src/CEA/CEA.sol - External chain account implementation
 - `CEAProxy`: src/CEA/CEAProxy.sol - Minimal proxy for CEAs
+- `CEAMigration`: src/CEA/CEAMigration.sol - CEA migration singleton
 - `UniversalCore`: src/UniversalCore.sol:26 - Protocol coordinator
 - `PRC20`: src/PRC20.sol - Synthetic token standard
 - `WPC`: src/WPC.sol - Wrapped PC token
@@ -217,6 +259,15 @@ struct UniversalPayload {
 Tests are organized by component:
 - `test/tests_uea_and_factory/` - UEA and factory tests
 - `test/tests_cea/` - CEA and factory tests
+  - `CEA.t.sol` - Core CEA tests (82 tests, canonical helpers)
+  - `CEA_multicalls.t.sol` - Multicall execution tests (130 tests)
+  - `CEA_selfCalls.t.sol` - Self-call pattern tests (93 tests)
+  - Total: 418 CEA tests
+- `test/tests_ceaMigration/` - CEA migration tests (42 tests)
+  - `CEAMigration.t.sol` - Unit tests for migration contract
+  - `CEAFactory_Migration.t.sol` - Factory migration management
+  - `CEA_Migration.t.sol` - CEA migration logic tests
+  - `CEAMigration_Integration.t.sol` - End-to-end migration tests
 - `test/tests_token_and_core/` - PRC20, WPC, and UniversalCore tests
 - `test/tests_ueaMigration/` - UEA migration tests
 - `test/tests_utils/` - Utility function tests
@@ -225,11 +276,20 @@ Tests are organized by component:
 
 Test files follow the pattern `ContractName.t.sol` and use Foundry's testing framework with `forge-std/Test.sol`.
 
+**Key Test Helpers (CEA.t.sol):**
+- `makeCall(to, value, data)` - Create Multicall struct
+- `encodeCalls(Multicall[])` - Encode with MULTICALL_SELECTOR
+- `buildWithdrawPayload(token, amount)` - Build sendUniversalTxToUEA payload
+- `buildExternalSingleCall(to, value, data)` - Single external call
+
 ## Important Constants
 
 - **UE_MODULE**: `0x14191Ea54B4c176fCf86f51b0FAc7CB1E71Df7d7` - Universal Executor Module (bypasses signature checks)
 - **UEA_LOGIC_SLOT**: `0x868a771a75a4aa6c2be13e9a9617cb8ea240ed84a3a90c8469537393ec3e115d` - Storage slot for UEA implementation
+- **CEA_LOGIC_SLOT**: `0x8b2ae8ee8c8678fc65d38e03fd33865426627999aa5e8fab985583dec5888813` - Storage slot for CEA implementation
 - **UNIVERSAL_PAYLOAD_TYPEHASH**: `0x102a0b05d0844e7ea580bbdbe2cfe69c4fa4bfac4cf45919f6b24381a1235844` - EIP-712 payload hash
+- **MULTICALL_SELECTOR**: `bytes4(keccak256("UEA_MULTICALL"))` - 0xc25b8d90 - Multicall batch prefix
+- **MIGRATION_SELECTOR**: `bytes4(keccak256("UEA_MIGRATION"))` - 0xb0c47dc5 - Migration request prefix
 - **EVM_HASH**: `keccak256("EVM")` - VM type identifier for EVM chains
 - **SVM_HASH**: `keccak256("SVM")` - VM type identifier for Solana chains
 

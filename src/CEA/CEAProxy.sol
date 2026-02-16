@@ -19,8 +19,8 @@ import {Proxy} from "@openzeppelin/contracts/proxy/Proxy.sol";
  *   3. CEAFactory then calls `CEA.initializeCEA(uea, vault, universalGateway)` THROUGH the proxy.
  *
  *  Notes:
- *   - There is NO upgrade mechanism here: once implementation is set, it cannot be changed.
- *   - All CEA state (UEA, VAULT, UNIVERSAL_GATEWAY, etc.) lives in the proxy’s storage via delegatecall.
+ *   - Implementation can be upgraded via migration flow (CEA → CEAMigration delegatecall)
+ *   - All CEA state (UEA, VAULT, UNIVERSAL_GATEWAY, etc.) lives in the proxy's storage via delegatecall.
  */
 contract CEAProxy is Initializable, Proxy {
     /**

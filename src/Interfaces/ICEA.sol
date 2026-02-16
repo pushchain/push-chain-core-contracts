@@ -58,7 +58,7 @@ interface ICEA {
      */
     function isInitialized() external view returns (bool);
 
-    function initializeCEA(address _uea, address _vault, address _universalGateway) external;
+    function initializeCEA(address _uea, address _vault, address _universalGateway, address _factory) external;
 
     //========================
     //      Vault-only ops

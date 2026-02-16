@@ -3,10 +3,9 @@ pragma solidity 0.8.26;
 
 import {ICEA} from "../interfaces/ICEA.sol";
 import {CEAErrors} from "../libraries/Errors.sol";
-import {IUniversalGateway,
-            UniversalTxRequest,
-                RevertInstructions} from "../interfaces/IUniversalGateway.sol";
-import {Multicall, MULTICALL_SELECTOR} from "../libraries/Types.sol";
+import {IUniversalGateway, UniversalTxRequest, RevertInstructions} from "../interfaces/IUniversalGateway.sol";
+import {Multicall, MULTICALL_SELECTOR, MIGRATION_SELECTOR} from "../libraries/Types.sol";
+import {ICEAFactory} from "../interfaces/ICEAFactory.sol";
 
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
@@ -39,11 +38,13 @@ contract CEA is ICEA, ReentrancyGuard {
     address public VAULT;
     /// @notice Address of the Universal Gateway contract of the respective chain.
     address public UNIVERSAL_GATEWAY;
+    /// @notice Reference to the CEA factory for fetching migration contract
+    ICEAFactory public factory;
 
     bool private _initialized;
 
     /// @notice Mapping from txID to bool to check if the tx has been executed
-    mapping (bytes32 => bool) public isExecuted;
+    mapping(bytes32 => bool) public isExecuted;
 
     //========================
     //        Modifiers
@@ -67,22 +68,23 @@ contract CEA is ICEA, ReentrancyGuard {
     //       Initializer
     //========================
 
-    /// @notice         Initializes this CEA with its UEA identity, Vault and Universal Gateway.
+    /// @notice         Initializes this CEA with its UEA identity, Vault, Universal Gateway and Factory.
     /// @param _uea     Address of the UEA contract on Push Chain.
     /// @param _vault   Address of the Vault contract on this chain.
     /// @param _universalGateway Address of the Universal Gateway contract of the respective chain.
-    function initializeCEA(address _uea, address _vault, address _universalGateway) external {
-            if (_initialized) revert CEAErrors.AlreadyInitialized();
-        if (_uea == address(0) || 
-            _vault == address(0) || 
-                _universalGateway == address(0)) revert CEAErrors.ZeroAddress();
+    /// @param _factory Address of the CEA factory contract.
+    function initializeCEA(address _uea, address _vault, address _universalGateway, address _factory) external {
+        if (_initialized) revert CEAErrors.AlreadyInitialized();
+        if (_uea == address(0) || _vault == address(0) || _universalGateway == address(0) || _factory == address(0)) {
+            revert CEAErrors.ZeroAddress();
+        }
 
         UEA = _uea;
-        VAULT     = _vault;
+        VAULT = _vault;
         UNIVERSAL_GATEWAY = _universalGateway;
+        factory = ICEAFactory(_factory);
 
         _initialized = true;
-
     }
 
     //========================
@@ -98,12 +100,12 @@ contract CEA is ICEA, ReentrancyGuard {
     /// @param universalTxID    Universal transaction identifier for cross-chain tracking
     /// @param originCaller     Address of the origin caller (must be UEA)
     /// @param payload          Either multicall or single call payload
-    function executeUniversalTx(
-        bytes32 txID,
-        bytes32 universalTxID,
-        address originCaller,
-        bytes calldata payload
-    ) external payable onlyVault nonReentrant {
+    function executeUniversalTx(bytes32 txID, bytes32 universalTxID, address originCaller, bytes calldata payload)
+        external
+        payable
+        onlyVault
+        nonReentrant
+    {
         // Top-level validation
         if (isExecuted[txID]) revert CEAErrors.PayloadExecuted();
         if (originCaller != UEA) revert CEAErrors.InvalidUEA();
@@ -113,19 +115,13 @@ contract CEA is ICEA, ReentrancyGuard {
         _handleExecution(txID, universalTxID, originCaller, payload);
     }
 
-    /// @notice         Sends a universal transaction from CEA to its UEA on Push Chain.
+    /// @notice         Sends funds from CEA to its UEA on Push Chain.
     /// @dev            Only callable via self-call through multicall execution (msg.sender == address(this)).
     ///                 For ERC20 tokens, SDK must include approval steps in multicall before this call.
+    ///                 This function only transfers funds and does not send payload or signature data.
     /// @param token            Token address (address(0) for native)
     /// @param amount           Amount to send
-    /// @param payload          Optional payload data to send with the transaction (for execution on UEA)
-    /// @param signatureData    Optional signature data to send with the transaction
-    function sendUniversalTxToUEA(
-        address token,
-        uint256 amount,
-        bytes calldata payload,
-        bytes calldata signatureData
-    ) external {
+    function sendUniversalTxToUEA(address token, uint256 amount) external {
         // Enforce: Only CEA can call this function via self-call
         if (msg.sender != address(this)) revert CEAErrors.NotVault();
 
@@ -135,12 +131,9 @@ contract CEA is ICEA, ReentrancyGuard {
             recipient: UEA,
             token: token,
             amount: amount,
-            payload: payload,
-            revertInstruction: RevertInstructions({
-                fundRecipient: UEA,
-                revertMsg: ""
-            }),
-            signatureData: signatureData
+            payload: "",
+            revertInstruction: RevertInstructions({fundRecipient: UEA, revertMsg: ""}),
+            signatureData: ""
         });
 
         if (token == address(0)) {
@@ -159,21 +152,28 @@ contract CEA is ICEA, ReentrancyGuard {
     //      Internal Helpers
     //========================
 
-    /// @notice         Routes execution based on payload type (MULTICALL vs SINGLE CALL).
+    /// @notice         Routes execution based on payload type (MULTICALL vs SINGLE CALL vs MIGRATION).
     /// @dev            Checks if payload starts with MULTICALL_SELECTOR to determine routing.
+    ///                 Detects standalone migration multicalls and routes to _handleMigration().
     /// @param txID             Transaction identifier for event emission
     /// @param universalTxID    Universal transaction identifier for event emission
     /// @param originCaller     Origin caller for event emission
     /// @param payload          Raw payload bytes (either multicall or single call)
-    function _handleExecution(
-        bytes32 txID,
-        bytes32 universalTxID,
-        address originCaller,
-        bytes calldata payload
-    ) internal {
+    function _handleExecution(bytes32 txID, bytes32 universalTxID, address originCaller, bytes calldata payload)
+        internal
+    {
         if (isMulticall(payload)) {
-            // New format: decode and route to multicall handler
             Multicall[] memory calls = decodeCalls(payload);
+
+            // Detect single-element migration multicall
+            if (calls.length == 1 && isMigration(calls[0].data)) {
+                _handleMigration(calls[0]);
+                // Emit event for migration execution
+                emit UniversalTxExecuted(txID, universalTxID, originCaller, address(this), calls[0].data);
+                return;
+            }
+
+            // Normal multicall execution
             _handleMulticall(txID, universalTxID, originCaller, calls);
         } else {
             // Old format: route to backwards-compatible handler
@@ -190,12 +190,9 @@ contract CEA is ICEA, ReentrancyGuard {
     /// @param universalTxID    Universal transaction identifier for event emission
     /// @param originCaller     Origin caller for event emission
     /// @param calls            Decoded Multicall[] array
-    function _handleMulticall(
-        bytes32 txID,
-        bytes32 universalTxID,
-        address originCaller,
-        Multicall[] memory calls
-    ) internal {
+    function _handleMulticall(bytes32 txID, bytes32 universalTxID, address originCaller, Multicall[] memory calls)
+        internal
+    {
         // Validate msg.value matches sum of all call values
         uint256 totalValue = 0;
         for (uint256 i = 0; i < calls.length; i++) {
@@ -210,6 +207,11 @@ contract CEA is ICEA, ReentrancyGuard {
             // Enforce: self-calls to CEA must not include value
             if (calls[i].to == address(this) && calls[i].value != 0) {
                 revert CEAErrors.InvalidInput();
+            }
+
+            // Prevent migration selector in batched multicalls (must be standalone)
+            if (isMigration(calls[i].data)) {
+                revert CEAErrors.InvalidCall();
             }
 
             (bool success, bytes memory returnData) = calls[i].to.call{value: calls[i].value}(calls[i].data);
@@ -228,15 +230,46 @@ contract CEA is ICEA, ReentrancyGuard {
     /// @param universalTxID    Universal transaction identifier for event emission
     /// @param originCaller     Origin caller for event emission
     /// @param payload          Raw ABI-encoded Multicall[] (old format, no selector prefix)
-    function _handleSingleCall(
-        bytes32 txID,
-        bytes32 universalTxID,
-        address originCaller,
-        bytes calldata payload
-    ) internal {
+    function _handleSingleCall(bytes32 txID, bytes32 universalTxID, address originCaller, bytes calldata payload)
+        internal
+    {
         // Backwards compatibility: decode as Multicall[] directly (old format)
         Multicall[] memory calls = abi.decode(payload, (Multicall[]));
         _handleMulticall(txID, universalTxID, originCaller, calls);
+    }
+
+    /// @notice         Internal handler for migration execution
+    /// @dev            Validates migration constraints and delegates to migration contract
+    /// @dev            SAFETY CONSTRAINTS:
+    ///                 - Must target self (call.to == address(this))
+    ///                 - Must have zero value (call.value == 0)
+    ///                 - Migration contract must be set in factory
+    ///                 - Executed via delegatecall (preserves proxy state)
+    /// @param call     The migration Multicall struct
+    function _handleMigration(Multicall memory call) internal {
+        if (call.to != address(this)) {
+            revert CEAErrors.InvalidTarget();
+        }
+        if (call.value != 0) {
+            revert CEAErrors.InvalidInput();
+        }
+
+        // Fetch migration contract address from factory
+        address migrationContract = factory.CEA_MIGRATION_CONTRACT();
+
+        // CONSTRAINT: Migration contract must be set
+        if (migrationContract == address(0)) {
+            revert CEAErrors.InvalidCall();
+        }
+
+        // Prepare delegatecall to migration contract
+        bytes memory migrateCallData = abi.encodeWithSignature("migrateCEA()");
+
+        // Execute migration via delegatecall (writes to proxy storage)
+        (bool success, bytes memory returnData) = migrationContract.delegatecall(migrateCallData);
+
+        // Bubble revert data on failure
+        if (!success) revert CEAErrors.ExecutionFailed();
     }
 
     //========================
@@ -262,6 +295,20 @@ contract CEA is ICEA, ReentrancyGuard {
         // Strip the first 4 bytes (MULTICALL_SELECTOR) and decode the rest
         bytes calldata strippedData = data[4:];
         return abi.decode(strippedData, (Multicall[]));
+    }
+
+    /// @notice         Checks whether the call data is a migration request.
+    /// @dev            Determines if the data starts with MIGRATION_SELECTOR.
+    ///                 Uses bytes memory because it's called on Multicall.data (memory).
+    /// @param data     Call data bytes
+    /// @return bool    True if data starts with MIGRATION_SELECTOR
+    function isMigration(bytes memory data) private pure returns (bool) {
+        if (data.length < 4) return false;
+        bytes4 selector;
+        assembly {
+            selector := mload(add(data, 32))
+        }
+        return selector == MIGRATION_SELECTOR;
     }
 
     //========================
