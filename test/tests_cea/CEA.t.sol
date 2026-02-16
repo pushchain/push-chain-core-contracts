@@ -121,12 +121,12 @@ contract CEATest is Test {
     }
 
     /// @notice Build payload for sendUniversalTxToUEA self-call (funds only, empty payload)
-    function buildWithdrawPayload(address token, uint256 amount) internal pure returns (bytes memory) {
+    function buildSendToUEAPayload(address token, uint256 amount) internal pure returns (bytes memory) {
         return abi.encodeWithSignature("sendUniversalTxToUEA(address,uint256,bytes)", token, amount, "");
     }
 
     /// @notice Build payload for sendUniversalTxToUEA self-call with payload (FUNDS_AND_PAYLOAD)
-    function buildWithdrawPayloadWithData(address token, uint256 amount, bytes memory payload)
+    function buildSendToUEAPayloadWithData(address token, uint256 amount, bytes memory payload)
         internal
         pure
         returns (bytes memory)
@@ -150,10 +150,10 @@ contract CEATest is Test {
         return encodeCalls(calls);
     }
 
-    /// @notice Build self-call withdraw payload (single step, no approvals)
+    /// @notice Build self-call sendUniversalTxToUEA payload (single step, no approvals)
     /// @dev For ERC20, SDK must include approval steps separately
-    function buildSelfWithdrawCall(address token, uint256 amount) internal view returns (Multicall memory) {
-        return makeCall(address(ceaInstance), 0, buildWithdrawPayload(token, amount));
+    function buildSelfSendToUEACall(address token, uint256 amount) internal view returns (Multicall memory) {
+        return makeCall(address(ceaInstance), 0, buildSendToUEAPayload(token, amount));
     }
 
     /// @notice Build Multicall[] payload for ERC20 operations (with approval flow)
@@ -199,23 +199,23 @@ contract CEATest is Test {
         return abi.encode(calls);
     }
 
-    /// @notice Build Multicall[] payload for self-call (withdrawFundsToUEA)
+    /// @notice Build Multicall[] payload for self-call (sendUniversalTxToUEA)
     /// @param token Token address (address(0) for native)
-    /// @param amount Amount to withdraw
-    /// @param approveGateway Whether to approve gateway for ERC20 (true for ERC20 withdrawals)
+    /// @param amount Amount to send
+    /// @param approveGateway Whether to approve gateway for ERC20 (true for ERC20 sends)
     /// @return Encoded Multicall[] array
-    function buildWithdrawMulticallPayload(address token, uint256 amount, bool approveGateway)
+    function buildSendToUEAMulticallPayload(address token, uint256 amount, bool approveGateway)
         internal
         view
         returns (bytes memory)
     {
         if (!approveGateway || token == address(0)) {
-            // Native token withdrawal or no approval needed
+            // Native token send or no approval needed
             Multicall[] memory calls = new Multicall[](1);
-            calls[0] = Multicall({to: address(ceaInstance), value: 0, data: buildWithdrawPayload(token, amount)});
+            calls[0] = Multicall({to: address(ceaInstance), value: 0, data: buildSendToUEAPayload(token, amount)});
             return abi.encode(calls);
         } else {
-            // ERC20 withdrawal with gateway approval
+            // ERC20 send with gateway approval
             Multicall[] memory calls = new Multicall[](3);
 
             // Step 1: Reset approval to gateway
@@ -232,8 +232,8 @@ contract CEATest is Test {
                 data: abi.encodeWithSelector(IERC20.approve.selector, address(mockUniversalGateway), amount)
             });
 
-            // Step 3: Self-call to withdrawFundsToUEA
-            calls[2] = Multicall({to: address(ceaInstance), value: 0, data: buildWithdrawPayload(token, amount)});
+            // Step 3: Self-call to sendUniversalTxToUEA
+            calls[2] = Multicall({to: address(ceaInstance), value: 0, data: buildSendToUEAPayload(token, amount)});
 
             return abi.encode(calls);
         }
@@ -718,7 +718,7 @@ contract CEATest is Test {
     // Note: Native token balance check doesn't apply here because:
     // - Validation only checks msg.value == amount for native tokens
     // - The CEA receives msg.value, so balance is always sufficient
-    // - Insufficient balance only matters for self-calls (withdrawFundsToUEA)
+    // - Insufficient balance only matters for self-calls (sendUniversalTxToUEA)
 
     function testExecuteUniversalTx_SuccessfulCallToTarget_Native() public deployCEA {
         fundCEAWithNative(1000 ether);
@@ -814,31 +814,31 @@ contract CEATest is Test {
     // 1. ACCESS CONTROL & AUTHORIZATION TESTS
     // -------------------------------------------------------------------------
 
-    function testWithdrawFundsToUEA_RevertWhenCalledByNonVault() public deployCEA {
+    function testSendUniversalTxToUEA_RevertWhenCalledByNonVault() public deployCEA {
         MockGasToken token = new MockGasToken();
         fundCEAWithTokens(address(token), 1000 ether);
 
         bytes32 txID = generateTxID(1);
         bytes32 universalTxID = generateUniversalTxID(1);
-        bytes memory payload = buildWithdrawPayload(address(token), 500 ether);
+        bytes memory payload = buildSendToUEAPayload(address(token), 500 ether);
 
         vm.prank(nonVault);
         vm.expectRevert(Errors.NotVault.selector);
-        bytes memory multicallPayload = buildWithdrawMulticallPayload(address(token), 500 ether, true);
+        bytes memory multicallPayload = buildSendToUEAMulticallPayload(address(token), 500 ether, true);
 
         ceaInstance.executeUniversalTx(txID, universalTxID, ueaOnPush, multicallPayload);
     }
 
-    function testWithdrawFundsToUEA_SuccessWhenCalledByVault() public deployCEA {
+    function testSendUniversalTxToUEA_SuccessWhenCalledByVault() public deployCEA {
         MockGasToken token = new MockGasToken();
         fundCEAWithTokens(address(token), 1000 ether);
 
         bytes32 txID = generateTxID(1);
         bytes32 universalTxID = generateUniversalTxID(1);
-        bytes memory payload = buildWithdrawPayload(address(token), 500 ether);
+        bytes memory payload = buildSendToUEAPayload(address(token), 500 ether);
 
         vm.prank(vault);
-        bytes memory multicallPayload = buildWithdrawMulticallPayload(address(token), 500 ether, true);
+        bytes memory multicallPayload = buildSendToUEAMulticallPayload(address(token), 500 ether, true);
 
         ceaInstance.executeUniversalTx(txID, universalTxID, ueaOnPush, multicallPayload);
 
@@ -850,16 +850,16 @@ contract CEATest is Test {
     // 2. _handleSelfCalls VALIDATION TESTS
     // -------------------------------------------------------------------------
 
-    function testWithdrawFundsToUEA_RevertWhenTxIDAlreadyExecuted() public deployCEA {
+    function testSendUniversalTxToUEA_RevertWhenTxIDAlreadyExecuted() public deployCEA {
         MockGasToken token = new MockGasToken();
         fundCEAWithTokens(address(token), 1000 ether);
 
         bytes32 txID = generateTxID(1);
         bytes32 universalTxID = generateUniversalTxID(1);
-        bytes memory payload = buildWithdrawPayload(address(token), 500 ether);
+        bytes memory payload = buildSendToUEAPayload(address(token), 500 ether);
 
         vm.prank(vault);
-        bytes memory multicallPayload = buildWithdrawMulticallPayload(address(token), 500 ether, true);
+        bytes memory multicallPayload = buildSendToUEAMulticallPayload(address(token), 500 ether, true);
 
         ceaInstance.executeUniversalTx(txID, universalTxID, ueaOnPush, multicallPayload);
 
@@ -869,22 +869,22 @@ contract CEATest is Test {
         ceaInstance.executeUniversalTx(txID, universalTxID, ueaOnPush, multicallPayload);
     }
 
-    function testWithdrawFundsToUEA_RevertWhenInvalidUEA() public deployCEA {
+    function testSendUniversalTxToUEA_RevertWhenInvalidUEA() public deployCEA {
         MockGasToken token = new MockGasToken();
         fundCEAWithTokens(address(token), 1000 ether);
 
         bytes32 txID = generateTxID(1);
         bytes32 universalTxID = generateUniversalTxID(1);
-        bytes memory payload = buildWithdrawPayload(address(token), 500 ether);
+        bytes memory payload = buildSendToUEAPayload(address(token), 500 ether);
 
         vm.prank(vault);
         vm.expectRevert(Errors.InvalidUEA.selector);
-        bytes memory multicallPayload = buildWithdrawMulticallPayload(address(token), 500 ether, true);
+        bytes memory multicallPayload = buildSendToUEAMulticallPayload(address(token), 500 ether, true);
 
         ceaInstance.executeUniversalTx(txID, universalTxID, makeAddr("wrongUEA"), multicallPayload);
     }
 
-    function testWithdrawFundsToUEA_RevertWhenPayloadTooShort() public deployCEA {
+    function testSendUniversalTxToUEA_RevertWhenPayloadTooShort() public deployCEA {
         MockGasToken token = new MockGasToken();
         fundCEAWithTokens(address(token), 1000 ether);
 
@@ -902,7 +902,7 @@ contract CEATest is Test {
         ceaInstance.executeUniversalTx(txID, universalTxID, ueaOnPush, multicallPayload);
     }
 
-    function testWithdrawFundsToUEA_RevertWhenInvalidSelector() public deployCEA {
+    function testSendUniversalTxToUEA_RevertWhenInvalidSelector() public deployCEA {
         MockGasToken token = new MockGasToken();
         fundCEAWithTokens(address(token), 1000 ether);
 
@@ -931,31 +931,31 @@ contract CEATest is Test {
     // 3. BALANCE VALIDATION TESTS
     // -------------------------------------------------------------------------
 
-    function testWithdrawFundsToUEA_RevertWhenInsufficientERC20Balance() public deployCEA {
+    function testSendUniversalTxToUEA_RevertWhenInsufficientERC20Balance() public deployCEA {
         MockGasToken token = new MockGasToken();
         fundCEAWithTokens(address(token), 100 ether);
 
         bytes32 txID = generateTxID(1);
         bytes32 universalTxID = generateUniversalTxID(1);
-        bytes memory payload = buildWithdrawPayload(address(token), 500 ether);
+        bytes memory payload = buildSendToUEAPayload(address(token), 500 ether);
 
         vm.prank(vault);
         vm.expectRevert(Errors.ExecutionFailed.selector); // Bubbled from sendUniversalTxToUEA's InsufficientBalance
-        bytes memory multicallPayload = buildWithdrawMulticallPayload(address(token), 500 ether, true);
+        bytes memory multicallPayload = buildSendToUEAMulticallPayload(address(token), 500 ether, true);
 
         ceaInstance.executeUniversalTx(txID, universalTxID, ueaOnPush, multicallPayload);
     }
 
-    function testWithdrawFundsToUEA_SuccessWithExactERC20Balance() public deployCEA {
+    function testSendUniversalTxToUEA_SuccessWithExactERC20Balance() public deployCEA {
         MockGasToken token = new MockGasToken();
         fundCEAWithTokens(address(token), 500 ether);
 
         bytes32 txID = generateTxID(1);
         bytes32 universalTxID = generateUniversalTxID(1);
-        bytes memory payload = buildWithdrawPayload(address(token), 500 ether);
+        bytes memory payload = buildSendToUEAPayload(address(token), 500 ether);
 
         vm.prank(vault);
-        bytes memory multicallPayload = buildWithdrawMulticallPayload(address(token), 500 ether, true);
+        bytes memory multicallPayload = buildSendToUEAMulticallPayload(address(token), 500 ether, true);
 
         ceaInstance.executeUniversalTx(txID, universalTxID, ueaOnPush, multicallPayload);
 
@@ -963,16 +963,16 @@ contract CEATest is Test {
         assertEq(mockUniversalGateway.callCount(), 1, "Gateway should be called once");
     }
 
-    function testWithdrawFundsToUEA_SuccessWithMoreThanRequiredBalance() public deployCEA {
+    function testSendUniversalTxToUEA_SuccessWithMoreThanRequiredBalance() public deployCEA {
         MockGasToken token = new MockGasToken();
         fundCEAWithTokens(address(token), 1000 ether);
 
         bytes32 txID = generateTxID(1);
         bytes32 universalTxID = generateUniversalTxID(1);
-        bytes memory payload = buildWithdrawPayload(address(token), 500 ether);
+        bytes memory payload = buildSendToUEAPayload(address(token), 500 ether);
 
         vm.prank(vault);
-        bytes memory multicallPayload = buildWithdrawMulticallPayload(address(token), 500 ether, true);
+        bytes memory multicallPayload = buildSendToUEAMulticallPayload(address(token), 500 ether, true);
 
         ceaInstance.executeUniversalTx(txID, universalTxID, ueaOnPush, multicallPayload);
 
@@ -983,17 +983,17 @@ contract CEATest is Test {
     // 4. UNIVERSAL GATEWAY INTERACTION TESTS
     // -------------------------------------------------------------------------
 
-    function testWithdrawFundsToUEA_CallsGatewayWithCorrectParams_ERC20() public deployCEA {
+    function testSendUniversalTxToUEA_CallsGatewayWithCorrectParams_ERC20() public deployCEA {
         MockGasToken token = new MockGasToken();
         fundCEAWithTokens(address(token), 1000 ether);
 
         bytes32 txID = generateTxID(1);
         bytes32 universalTxID = generateUniversalTxID(1);
         uint256 amount = 500 ether;
-        bytes memory payload = buildWithdrawPayload(address(token), amount);
+        bytes memory payload = buildSendToUEAPayload(address(token), amount);
 
         vm.prank(vault);
-        bytes memory multicallPayload = buildWithdrawMulticallPayload(address(token), amount, true);
+        bytes memory multicallPayload = buildSendToUEAMulticallPayload(address(token), amount, true);
 
         ceaInstance.executeUniversalTx(txID, universalTxID, ueaOnPush, multicallPayload);
 
@@ -1006,18 +1006,18 @@ contract CEATest is Test {
         assertEq(mockUniversalGateway.lastValue(), 0, "No native value should be sent");
     }
 
-    function testWithdrawFundsToUEA_CallsGatewayExactlyOnce_ERC20() public deployCEA {
+    function testSendUniversalTxToUEA_CallsGatewayExactlyOnce_ERC20() public deployCEA {
         MockGasToken token = new MockGasToken();
         fundCEAWithTokens(address(token), 1000 ether);
 
         bytes32 txID = generateTxID(1);
         bytes32 universalTxID = generateUniversalTxID(1);
-        bytes memory payload = buildWithdrawPayload(address(token), 500 ether);
+        bytes memory payload = buildSendToUEAPayload(address(token), 500 ether);
 
         uint256 callCountBefore = mockUniversalGateway.callCount();
 
         vm.prank(vault);
-        bytes memory multicallPayload = buildWithdrawMulticallPayload(address(token), 500 ether, true);
+        bytes memory multicallPayload = buildSendToUEAMulticallPayload(address(token), 500 ether, true);
 
         ceaInstance.executeUniversalTx(txID, universalTxID, ueaOnPush, multicallPayload);
 
@@ -1028,7 +1028,7 @@ contract CEATest is Test {
     // 5. ERC20 APPROVAL PATTERN TESTS
     // -------------------------------------------------------------------------
 
-    function testWithdrawFundsToUEA_ResetsApprovalBeforeGranting() public deployCEA {
+    function testSendUniversalTxToUEA_ResetsApprovalBeforeGranting() public deployCEA {
         MockGasToken token = new MockGasToken();
         fundCEAWithTokens(address(token), 1000 ether);
 
@@ -1043,10 +1043,10 @@ contract CEATest is Test {
 
         bytes32 txID = generateTxID(1);
         bytes32 universalTxID = generateUniversalTxID(1);
-        bytes memory payload = buildWithdrawPayload(address(token), 500 ether);
+        bytes memory payload = buildSendToUEAPayload(address(token), 500 ether);
 
         vm.prank(vault);
-        bytes memory multicallPayload = buildWithdrawMulticallPayload(address(token), 500 ether, true);
+        bytes memory multicallPayload = buildSendToUEAMulticallPayload(address(token), 500 ether, true);
 
         ceaInstance.executeUniversalTx(txID, universalTxID, ueaOnPush, multicallPayload);
 
@@ -1058,17 +1058,17 @@ contract CEATest is Test {
         );
     }
 
-    function testWithdrawFundsToUEA_GrantsCorrectApprovalAmount() public deployCEA {
+    function testSendUniversalTxToUEA_GrantsCorrectApprovalAmount() public deployCEA {
         MockGasToken token = new MockGasToken();
         fundCEAWithTokens(address(token), 1000 ether);
 
         bytes32 txID = generateTxID(1);
         bytes32 universalTxID = generateUniversalTxID(1);
         uint256 amount = 500 ether;
-        bytes memory payload = buildWithdrawPayload(address(token), amount);
+        bytes memory payload = buildSendToUEAPayload(address(token), amount);
 
         vm.prank(vault);
-        bytes memory multicallPayload = buildWithdrawMulticallPayload(address(token), amount, true);
+        bytes memory multicallPayload = buildSendToUEAMulticallPayload(address(token), amount, true);
 
         ceaInstance.executeUniversalTx(txID, universalTxID, ueaOnPush, multicallPayload);
 
@@ -1082,38 +1082,38 @@ contract CEATest is Test {
     // 6. STATE CHANGES TESTS
     // -------------------------------------------------------------------------
 
-    function testWithdrawFundsToUEA_MarksTxIDAsExecuted() public deployCEA {
+    function testSendUniversalTxToUEA_MarksTxIDAsExecuted() public deployCEA {
         MockGasToken token = new MockGasToken();
         fundCEAWithTokens(address(token), 1000 ether);
 
         bytes32 txID = generateTxID(1);
         bytes32 universalTxID = generateUniversalTxID(1);
-        bytes memory payload = buildWithdrawPayload(address(token), 500 ether);
+        bytes memory payload = buildSendToUEAPayload(address(token), 500 ether);
 
         assertFalse(CEA(payable(address(ceaInstance))).isExecuted(txID), "txID should not be executed before");
 
         vm.prank(vault);
-        bytes memory multicallPayload = buildWithdrawMulticallPayload(address(token), 500 ether, true);
+        bytes memory multicallPayload = buildSendToUEAMulticallPayload(address(token), 500 ether, true);
 
         ceaInstance.executeUniversalTx(txID, universalTxID, ueaOnPush, multicallPayload);
 
         assertTrue(CEA(payable(address(ceaInstance))).isExecuted(txID), "txID should be marked as executed after");
     }
 
-    function testWithdrawFundsToUEA_ERC20BalanceDecreases() public deployCEA {
+    function testSendUniversalTxToUEA_ERC20BalanceDecreases() public deployCEA {
         MockGasToken token = new MockGasToken();
         uint256 initialBalance = 1000 ether;
         fundCEAWithTokens(address(token), initialBalance);
 
         bytes32 txID = generateTxID(1);
         bytes32 universalTxID = generateUniversalTxID(1);
-        uint256 withdrawAmount = 500 ether;
-        bytes memory payload = buildWithdrawPayload(address(token), withdrawAmount);
+        uint256 sendAmount = 500 ether;
+        bytes memory payload = buildSendToUEAPayload(address(token), sendAmount);
 
         uint256 balanceBefore = token.balanceOf(address(ceaInstance));
 
         vm.prank(vault);
-        bytes memory multicallPayload = buildWithdrawMulticallPayload(address(token), withdrawAmount, true);
+        bytes memory multicallPayload = buildSendToUEAMulticallPayload(address(token), sendAmount, true);
 
         ceaInstance.executeUniversalTx(txID, universalTxID, ueaOnPush, multicallPayload);
 
@@ -1123,7 +1123,7 @@ contract CEATest is Test {
         assertEq(balanceAfter, balanceBefore, "Balance should remain same (mock doesn't transfer)");
         assertEq(
             token.allowance(address(ceaInstance), address(mockUniversalGateway)),
-            withdrawAmount,
+            sendAmount,
             "Gateway should have approval"
         );
     }
@@ -1132,35 +1132,35 @@ contract CEATest is Test {
     // 7. EVENT EMISSION TESTS
     // -------------------------------------------------------------------------
 
-    function testWithdrawFundsToUEA_EmitsWithdrawalToUEAEvent_ERC20() public deployCEA {
+    function testSendUniversalTxToUEA_EmitsUniversalTxToUEAEvent_ERC20() public deployCEA {
         MockGasToken token = new MockGasToken();
         fundCEAWithTokens(address(token), 1000 ether);
 
         bytes32 txID = generateTxID(1);
         bytes32 universalTxID = generateUniversalTxID(1);
         uint256 amount = 500 ether;
-        bytes memory payload = buildWithdrawPayload(address(token), amount);
+        bytes memory payload = buildSendToUEAPayload(address(token), amount);
 
         vm.prank(vault);
         vm.expectEmit(true, true, true, true);
         emit ICEA.UniversalTxToUEA(address(ceaInstance), ueaOnPush, address(token), amount);
 
-        bytes memory multicallPayload = buildWithdrawMulticallPayload(address(token), amount, true);
+        bytes memory multicallPayload = buildSendToUEAMulticallPayload(address(token), amount, true);
 
         ceaInstance.executeUniversalTx(txID, universalTxID, ueaOnPush, multicallPayload);
     }
 
-    function testWithdrawFundsToUEA_EmitsUniversalTxExecutedEvent_ERC20() public deployCEA {
+    function testSendUniversalTxToUEA_EmitsUniversalTxExecutedEvent_ERC20() public deployCEA {
         MockGasToken token = new MockGasToken();
         fundCEAWithTokens(address(token), 1000 ether);
 
         bytes32 txID = generateTxID(1);
         bytes32 universalTxID = generateUniversalTxID(1);
         uint256 amount = 500 ether;
-        bytes memory payload = buildWithdrawPayload(address(token), amount);
+        bytes memory payload = buildSendToUEAPayload(address(token), amount);
 
         vm.prank(vault);
-        bytes memory multicallPayload = buildWithdrawMulticallPayload(address(token), amount, true);
+        bytes memory multicallPayload = buildSendToUEAMulticallPayload(address(token), amount, true);
 
         vm.expectEmit(true, true, true, true);
         emit ICEA.UniversalTxExecuted(txID, universalTxID, ueaOnPush, address(ceaInstance), payload);
@@ -1172,23 +1172,23 @@ contract CEATest is Test {
     // 8. EDGE CASES & SECURITY TESTS
     // -------------------------------------------------------------------------
 
-    function testWithdrawFundsToUEA_HandlesZeroAmount_ERC20() public deployCEA {
+    function testSendUniversalTxToUEA_HandlesZeroAmount_ERC20() public deployCEA {
         MockGasToken token = new MockGasToken();
         fundCEAWithTokens(address(token), 1000 ether);
 
         bytes32 txID = generateTxID(1);
         bytes32 universalTxID = generateUniversalTxID(1);
-        bytes memory payload = buildWithdrawPayload(address(token), 0);
+        bytes memory payload = buildSendToUEAPayload(address(token), 0);
 
         vm.prank(vault);
-        bytes memory multicallPayload = buildWithdrawMulticallPayload(address(token), 0, true);
+        bytes memory multicallPayload = buildSendToUEAMulticallPayload(address(token), 0, true);
 
-        // Zero amount withdrawals revert with ExecutionFailed (bubbled from sendUniversalTxToUEA's InvalidInput)
+        // Zero amount sends revert with ExecutionFailed (bubbled from sendUniversalTxToUEA's InvalidInput)
         vm.expectRevert(Errors.ExecutionFailed.selector);
         ceaInstance.executeUniversalTx(txID, universalTxID, ueaOnPush, multicallPayload);
     }
 
-    function testWithdrawFundsToUEA_MultipleWithdrawalsWithDifferentTxIDs_ERC20() public deployCEA {
+    function testSendUniversalTxToUEA_MultipleSendsWithDifferentTxIDs_ERC20() public deployCEA {
         MockGasToken token = new MockGasToken();
         fundCEAWithTokens(address(token), 2000 ether);
 
@@ -1197,10 +1197,10 @@ contract CEATest is Test {
         for (uint256 i = 1; i <= 3; i++) {
             bytes32 txID = generateTxID(i);
             bytes32 universalTxID = generateUniversalTxID(i);
-            bytes memory payload = buildWithdrawPayload(address(token), amount);
+            bytes memory payload = buildSendToUEAPayload(address(token), amount);
 
             vm.prank(vault);
-            bytes memory multicallPayload = buildWithdrawMulticallPayload(address(token), amount, true);
+            bytes memory multicallPayload = buildSendToUEAMulticallPayload(address(token), amount, true);
 
             ceaInstance.executeUniversalTx(txID, universalTxID, ueaOnPush, multicallPayload);
 
@@ -1214,21 +1214,21 @@ contract CEATest is Test {
     // 9. INTEGRATION TESTS
     // -------------------------------------------------------------------------
 
-    function testWithdrawFundsToUEA_FullFlow_ERC20() public deployCEA {
+    function testSendUniversalTxToUEA_FullFlow_ERC20() public deployCEA {
         MockGasToken token = new MockGasToken();
         uint256 initialBalance = 1000 ether;
         fundCEAWithTokens(address(token), initialBalance);
 
         bytes32 txID = generateTxID(1);
         bytes32 universalTxID = generateUniversalTxID(1);
-        uint256 withdrawAmount = 500 ether;
-        bytes memory payload = buildWithdrawPayload(address(token), withdrawAmount);
+        uint256 sendAmount = 500 ether;
+        bytes memory payload = buildSendToUEAPayload(address(token), sendAmount);
 
         uint256 balanceBefore = token.balanceOf(address(ceaInstance));
         uint256 gatewayCallCountBefore = mockUniversalGateway.callCount();
 
         vm.prank(vault);
-        bytes memory multicallPayload = buildWithdrawMulticallPayload(address(token), withdrawAmount, true);
+        bytes memory multicallPayload = buildSendToUEAMulticallPayload(address(token), sendAmount, true);
 
         ceaInstance.executeUniversalTx(txID, universalTxID, ueaOnPush, multicallPayload);
 
@@ -1238,7 +1238,7 @@ contract CEATest is Test {
 
         assertEq(mockUniversalGateway.lastRecipient(), ueaOnPush, "Recipient should be UEA");
         assertEq(mockUniversalGateway.lastToken(), address(token), "Token should match");
-        assertEq(mockUniversalGateway.lastAmount(), withdrawAmount, "Amount should match");
+        assertEq(mockUniversalGateway.lastAmount(), sendAmount, "Amount should match");
 
         // Gateway receives approval but mock doesn't transfer tokens
         // So balance remains the same, but approval should be granted
@@ -1246,39 +1246,39 @@ contract CEATest is Test {
         assertEq(balanceAfter, balanceBefore, "Balance should remain same (mock doesn't transfer)");
         assertEq(
             token.allowance(address(ceaInstance), address(mockUniversalGateway)),
-            withdrawAmount,
+            sendAmount,
             "Gateway should have approval"
         );
     }
 
     // =========================================================================
-    // withdrawFundsToUEA Tests - Native Token Version
+    // sendUniversalTxToUEA Tests - Native Token Version
     // =========================================================================
 
-    function testWithdrawFundsToUEA_RevertWhenCalledByNonVault_Native() public deployCEA {
+    function testSendUniversalTxToUEA_RevertWhenCalledByNonVault_Native() public deployCEA {
         fundCEAWithNative(1000 ether);
 
         bytes32 txID = generateTxID(1);
         bytes32 universalTxID = generateUniversalTxID(1);
-        bytes memory payload = buildWithdrawPayload(address(0), 500 ether);
+        bytes memory payload = buildSendToUEAPayload(address(0), 500 ether);
 
         vm.prank(nonVault);
         vm.deal(nonVault, 0.1 ether);
         vm.expectRevert(Errors.NotVault.selector);
-        bytes memory multicallPayload = buildWithdrawMulticallPayload(address(0), 500 ether, false);
+        bytes memory multicallPayload = buildSendToUEAMulticallPayload(address(0), 500 ether, false);
 
         ceaInstance.executeUniversalTx{value: 0}(txID, universalTxID, ueaOnPush, multicallPayload);
     }
 
-    function testWithdrawFundsToUEA_SuccessWhenCalledByVault_Native() public deployCEA {
+    function testSendUniversalTxToUEA_SuccessWhenCalledByVault_Native() public deployCEA {
         fundCEAWithNative(1000 ether);
 
         bytes32 txID = generateTxID(1);
         bytes32 universalTxID = generateUniversalTxID(1);
-        bytes memory payload = buildWithdrawPayload(address(0), 500 ether);
+        bytes memory payload = buildSendToUEAPayload(address(0), 500 ether);
 
         vm.prank(vault);
-        bytes memory multicallPayload = buildWithdrawMulticallPayload(address(0), 500 ether, false);
+        bytes memory multicallPayload = buildSendToUEAMulticallPayload(address(0), 500 ether, false);
 
         ceaInstance.executeUniversalTx{value: 0}(txID, universalTxID, ueaOnPush, multicallPayload);
 
@@ -1286,15 +1286,15 @@ contract CEATest is Test {
         assertEq(mockUniversalGateway.callCount(), 1, "Gateway should be called once");
     }
 
-    function testWithdrawFundsToUEA_RevertWhenTxIDAlreadyExecuted_Native() public deployCEA {
+    function testSendUniversalTxToUEA_RevertWhenTxIDAlreadyExecuted_Native() public deployCEA {
         fundCEAWithNative(1000 ether);
 
         bytes32 txID = generateTxID(1);
         bytes32 universalTxID = generateUniversalTxID(1);
-        bytes memory payload = buildWithdrawPayload(address(0), 500 ether);
+        bytes memory payload = buildSendToUEAPayload(address(0), 500 ether);
 
         vm.prank(vault);
-        bytes memory multicallPayload = buildWithdrawMulticallPayload(address(0), 500 ether, false);
+        bytes memory multicallPayload = buildSendToUEAMulticallPayload(address(0), 500 ether, false);
 
         ceaInstance.executeUniversalTx{value: 0}(txID, universalTxID, ueaOnPush, multicallPayload);
 
@@ -1304,21 +1304,21 @@ contract CEATest is Test {
         ceaInstance.executeUniversalTx{value: 0}(txID, universalTxID, ueaOnPush, multicallPayload);
     }
 
-    function testWithdrawFundsToUEA_RevertWhenInvalidUEA_Native() public deployCEA {
+    function testSendUniversalTxToUEA_RevertWhenInvalidUEA_Native() public deployCEA {
         fundCEAWithNative(1000 ether);
 
         bytes32 txID = generateTxID(1);
         bytes32 universalTxID = generateUniversalTxID(1);
-        bytes memory payload = buildWithdrawPayload(address(0), 500 ether);
+        bytes memory payload = buildSendToUEAPayload(address(0), 500 ether);
 
         vm.prank(vault);
         vm.expectRevert(Errors.InvalidUEA.selector);
-        bytes memory multicallPayload = buildWithdrawMulticallPayload(address(0), 500 ether, false);
+        bytes memory multicallPayload = buildSendToUEAMulticallPayload(address(0), 500 ether, false);
 
         ceaInstance.executeUniversalTx{value: 0}(txID, universalTxID, makeAddr("wrongUEA"), multicallPayload);
     }
 
-    function testWithdrawFundsToUEA_RevertWhenPayloadTooShort_Native() public deployCEA {
+    function testSendUniversalTxToUEA_RevertWhenPayloadTooShort_Native() public deployCEA {
         fundCEAWithNative(1000 ether);
 
         bytes32 txID = generateTxID(1);
@@ -1335,7 +1335,7 @@ contract CEATest is Test {
         ceaInstance.executeUniversalTx{value: 0}(txID, universalTxID, ueaOnPush, multicallPayload);
     }
 
-    function testWithdrawFundsToUEA_RevertWhenInvalidSelector_Native() public deployCEA {
+    function testSendUniversalTxToUEA_RevertWhenInvalidSelector_Native() public deployCEA {
         fundCEAWithNative(1000 ether);
 
         bytes32 txID = generateTxID(1);
@@ -1359,29 +1359,29 @@ contract CEATest is Test {
         ceaInstance.executeUniversalTx{value: 0}(txID, universalTxID, ueaOnPush, multicallPayload);
     }
 
-    function testWithdrawFundsToUEA_RevertWhenInsufficientNativeBalance() public deployCEA {
+    function testSendUniversalTxToUEA_RevertWhenInsufficientNativeBalance() public deployCEA {
         // Don't fund CEA
         bytes32 txID = generateTxID(1);
         bytes32 universalTxID = generateUniversalTxID(1);
-        bytes memory payload = buildWithdrawPayload(address(0), 500 ether);
+        bytes memory payload = buildSendToUEAPayload(address(0), 500 ether);
 
         vm.prank(vault);
         vm.expectRevert(Errors.ExecutionFailed.selector); // Bubbled from sendUniversalTxToUEA's InsufficientBalance
-        bytes memory multicallPayload = buildWithdrawMulticallPayload(address(0), 500 ether, false);
+        bytes memory multicallPayload = buildSendToUEAMulticallPayload(address(0), 500 ether, false);
 
         ceaInstance.executeUniversalTx{value: 0}(txID, universalTxID, ueaOnPush, multicallPayload);
     }
 
-    function testWithdrawFundsToUEA_SuccessWithExactNativeBalance() public deployCEA {
+    function testSendUniversalTxToUEA_SuccessWithExactNativeBalance() public deployCEA {
         uint256 balance = 500 ether;
         fundCEAWithNative(balance);
 
         bytes32 txID = generateTxID(1);
         bytes32 universalTxID = generateUniversalTxID(1);
-        bytes memory payload = buildWithdrawPayload(address(0), balance);
+        bytes memory payload = buildSendToUEAPayload(address(0), balance);
 
         vm.prank(vault);
-        bytes memory multicallPayload = buildWithdrawMulticallPayload(address(0), balance, false);
+        bytes memory multicallPayload = buildSendToUEAMulticallPayload(address(0), balance, false);
 
         ceaInstance.executeUniversalTx{value: 0}(txID, universalTxID, ueaOnPush, multicallPayload);
 
@@ -1389,31 +1389,31 @@ contract CEATest is Test {
         assertEq(mockUniversalGateway.callCount(), 1, "Gateway should be called once");
     }
 
-    function testWithdrawFundsToUEA_SuccessWithMoreThanRequiredBalance_Native() public deployCEA {
+    function testSendUniversalTxToUEA_SuccessWithMoreThanRequiredBalance_Native() public deployCEA {
         fundCEAWithNative(1000 ether);
 
         bytes32 txID = generateTxID(1);
         bytes32 universalTxID = generateUniversalTxID(1);
-        bytes memory payload = buildWithdrawPayload(address(0), 500 ether);
+        bytes memory payload = buildSendToUEAPayload(address(0), 500 ether);
 
         vm.prank(vault);
-        bytes memory multicallPayload = buildWithdrawMulticallPayload(address(0), 500 ether, false);
+        bytes memory multicallPayload = buildSendToUEAMulticallPayload(address(0), 500 ether, false);
 
         ceaInstance.executeUniversalTx{value: 0}(txID, universalTxID, ueaOnPush, multicallPayload);
 
         assertTrue(CEA(payable(address(ceaInstance))).isExecuted(txID), "txID should be marked as executed");
     }
 
-    function testWithdrawFundsToUEA_CallsGatewayWithCorrectParams_Native() public deployCEA {
+    function testSendUniversalTxToUEA_CallsGatewayWithCorrectParams_Native() public deployCEA {
         fundCEAWithNative(1000 ether);
 
         bytes32 txID = generateTxID(1);
         bytes32 universalTxID = generateUniversalTxID(1);
         uint256 amount = 500 ether;
-        bytes memory payload = buildWithdrawPayload(address(0), amount);
+        bytes memory payload = buildSendToUEAPayload(address(0), amount);
 
         vm.prank(vault);
-        bytes memory multicallPayload = buildWithdrawMulticallPayload(address(0), amount, false);
+        bytes memory multicallPayload = buildSendToUEAMulticallPayload(address(0), amount, false);
 
         ceaInstance.executeUniversalTx{value: 0}(txID, universalTxID, ueaOnPush, multicallPayload);
 
@@ -1425,88 +1425,88 @@ contract CEATest is Test {
         assertEq(mockUniversalGateway.lastValue(), amount, "Native value should match amount");
     }
 
-    function testWithdrawFundsToUEA_CallsGatewayExactlyOnce_Native() public deployCEA {
+    function testSendUniversalTxToUEA_CallsGatewayExactlyOnce_Native() public deployCEA {
         fundCEAWithNative(1000 ether);
 
         bytes32 txID = generateTxID(1);
         bytes32 universalTxID = generateUniversalTxID(1);
-        bytes memory payload = buildWithdrawPayload(address(0), 500 ether);
+        bytes memory payload = buildSendToUEAPayload(address(0), 500 ether);
 
         uint256 callCountBefore = mockUniversalGateway.callCount();
 
         vm.prank(vault);
-        bytes memory multicallPayload = buildWithdrawMulticallPayload(address(0), 500 ether, false);
+        bytes memory multicallPayload = buildSendToUEAMulticallPayload(address(0), 500 ether, false);
 
         ceaInstance.executeUniversalTx{value: 0}(txID, universalTxID, ueaOnPush, multicallPayload);
 
         assertEq(mockUniversalGateway.callCount(), callCountBefore + 1, "Gateway should be called exactly once");
     }
 
-    function testWithdrawFundsToUEA_MarksTxIDAsExecuted_Native() public deployCEA {
+    function testSendUniversalTxToUEA_MarksTxIDAsExecuted_Native() public deployCEA {
         fundCEAWithNative(1000 ether);
 
         bytes32 txID = generateTxID(1);
         bytes32 universalTxID = generateUniversalTxID(1);
-        bytes memory payload = buildWithdrawPayload(address(0), 500 ether);
+        bytes memory payload = buildSendToUEAPayload(address(0), 500 ether);
 
         assertFalse(CEA(payable(address(ceaInstance))).isExecuted(txID), "txID should not be executed before");
 
         vm.prank(vault);
-        bytes memory multicallPayload = buildWithdrawMulticallPayload(address(0), 500 ether, false);
+        bytes memory multicallPayload = buildSendToUEAMulticallPayload(address(0), 500 ether, false);
 
         ceaInstance.executeUniversalTx{value: 0}(txID, universalTxID, ueaOnPush, multicallPayload);
 
         assertTrue(CEA(payable(address(ceaInstance))).isExecuted(txID), "txID should be marked as executed after");
     }
 
-    function testWithdrawFundsToUEA_NativeBalanceDecreases() public deployCEA {
+    function testSendUniversalTxToUEA_NativeBalanceDecreases() public deployCEA {
         uint256 initialBalance = 1000 ether;
         fundCEAWithNative(initialBalance);
 
         bytes32 txID = generateTxID(1);
         bytes32 universalTxID = generateUniversalTxID(1);
-        uint256 withdrawAmount = 500 ether;
-        bytes memory payload = buildWithdrawPayload(address(0), withdrawAmount);
+        uint256 sendAmount = 500 ether;
+        bytes memory payload = buildSendToUEAPayload(address(0), sendAmount);
 
         uint256 balanceBefore = address(ceaInstance).balance;
 
         vm.prank(vault);
-        bytes memory multicallPayload = buildWithdrawMulticallPayload(address(0), withdrawAmount, false);
+        bytes memory multicallPayload = buildSendToUEAMulticallPayload(address(0), sendAmount, false);
 
         ceaInstance.executeUniversalTx{value: 0}(txID, universalTxID, ueaOnPush, multicallPayload);
 
         uint256 balanceAfter = address(ceaInstance).balance;
-        assertEq(balanceAfter, balanceBefore - withdrawAmount, "Balance should decrease by exact amount");
-        assertEq(mockUniversalGateway.lastValue(), withdrawAmount, "Gateway should receive correct value");
+        assertEq(balanceAfter, balanceBefore - sendAmount, "Balance should decrease by exact amount");
+        assertEq(mockUniversalGateway.lastValue(), sendAmount, "Gateway should receive correct value");
     }
 
-    function testWithdrawFundsToUEA_EmitsWithdrawalToUEAEvent_Native() public deployCEA {
+    function testSendUniversalTxToUEA_EmitsUniversalTxToUEAEvent_Native() public deployCEA {
         fundCEAWithNative(1000 ether);
 
         bytes32 txID = generateTxID(1);
         bytes32 universalTxID = generateUniversalTxID(1);
         uint256 amount = 500 ether;
-        bytes memory payload = buildWithdrawPayload(address(0), amount);
+        bytes memory payload = buildSendToUEAPayload(address(0), amount);
 
         vm.prank(vault);
         vm.expectEmit(true, true, true, true);
         emit ICEA.UniversalTxToUEA(address(ceaInstance), ueaOnPush, address(0), amount);
 
-        bytes memory multicallPayload = buildWithdrawMulticallPayload(address(0), amount, false);
+        bytes memory multicallPayload = buildSendToUEAMulticallPayload(address(0), amount, false);
 
         ceaInstance.executeUniversalTx{value: 0}(txID, universalTxID, ueaOnPush, multicallPayload);
     }
 
-    function testWithdrawFundsToUEA_EmitsUniversalTxExecutedEvent_Native() public deployCEA {
+    function testSendUniversalTxToUEA_EmitsUniversalTxExecutedEvent_Native() public deployCEA {
         fundCEAWithNative(1000 ether);
 
         bytes32 txID = generateTxID(1);
         bytes32 universalTxID = generateUniversalTxID(1);
         uint256 amount = 500 ether;
-        bytes memory payload = buildWithdrawPayload(address(0), amount);
+        bytes memory payload = buildSendToUEAPayload(address(0), amount);
 
         vm.prank(vault);
-        bytes memory multicallPayload = buildWithdrawMulticallPayload(address(0), amount, false);
+        bytes memory multicallPayload = buildSendToUEAMulticallPayload(address(0), amount, false);
 
         vm.expectEmit(true, true, true, true);
         emit ICEA.UniversalTxExecuted(txID, universalTxID, ueaOnPush, address(ceaInstance), payload);
@@ -1514,22 +1514,22 @@ contract CEATest is Test {
         ceaInstance.executeUniversalTx{value: 0}(txID, universalTxID, ueaOnPush, multicallPayload);
     }
 
-    function testWithdrawFundsToUEA_HandlesZeroAmount_Native() public deployCEA {
+    function testSendUniversalTxToUEA_HandlesZeroAmount_Native() public deployCEA {
         fundCEAWithNative(1000 ether);
 
         bytes32 txID = generateTxID(1);
         bytes32 universalTxID = generateUniversalTxID(1);
-        bytes memory payload = buildWithdrawPayload(address(0), 0);
+        bytes memory payload = buildSendToUEAPayload(address(0), 0);
 
         vm.prank(vault);
-        bytes memory multicallPayload = buildWithdrawMulticallPayload(address(0), 0, false);
+        bytes memory multicallPayload = buildSendToUEAMulticallPayload(address(0), 0, false);
 
-        // Zero amount withdrawals revert with ExecutionFailed (bubbled from sendUniversalTxToUEA's InvalidInput)
+        // Zero amount sends revert with ExecutionFailed (bubbled from sendUniversalTxToUEA's InvalidInput)
         vm.expectRevert(Errors.ExecutionFailed.selector);
         ceaInstance.executeUniversalTx{value: 0}(txID, universalTxID, ueaOnPush, multicallPayload);
     }
 
-    function testWithdrawFundsToUEA_MultipleWithdrawalsWithDifferentTxIDs_Native() public deployCEA {
+    function testSendUniversalTxToUEA_MultipleSendsWithDifferentTxIDs_Native() public deployCEA {
         fundCEAWithNative(2000 ether);
 
         uint256 amount = 500 ether;
@@ -1537,10 +1537,10 @@ contract CEATest is Test {
         for (uint256 i = 1; i <= 3; i++) {
             bytes32 txID = generateTxID(i);
             bytes32 universalTxID = generateUniversalTxID(i);
-            bytes memory payload = buildWithdrawPayload(address(0), amount);
+            bytes memory payload = buildSendToUEAPayload(address(0), amount);
 
             vm.prank(vault);
-            bytes memory multicallPayload = buildWithdrawMulticallPayload(address(0), amount, false);
+            bytes memory multicallPayload = buildSendToUEAMulticallPayload(address(0), amount, false);
 
             ceaInstance.executeUniversalTx{value: 0}(txID, universalTxID, ueaOnPush, multicallPayload);
 
@@ -1550,20 +1550,20 @@ contract CEATest is Test {
         assertEq(mockUniversalGateway.callCount(), 3, "Gateway should be called 3 times");
     }
 
-    function testWithdrawFundsToUEA_FullFlow_Native() public deployCEA {
+    function testSendUniversalTxToUEA_FullFlow_Native() public deployCEA {
         uint256 initialBalance = 1000 ether;
         fundCEAWithNative(initialBalance);
 
         bytes32 txID = generateTxID(1);
         bytes32 universalTxID = generateUniversalTxID(1);
-        uint256 withdrawAmount = 500 ether;
-        bytes memory payload = buildWithdrawPayload(address(0), withdrawAmount);
+        uint256 sendAmount = 500 ether;
+        bytes memory payload = buildSendToUEAPayload(address(0), sendAmount);
 
         uint256 balanceBefore = address(ceaInstance).balance;
         uint256 gatewayCallCountBefore = mockUniversalGateway.callCount();
 
         vm.prank(vault);
-        bytes memory multicallPayload = buildWithdrawMulticallPayload(address(0), withdrawAmount, false);
+        bytes memory multicallPayload = buildSendToUEAMulticallPayload(address(0), sendAmount, false);
 
         ceaInstance.executeUniversalTx{value: 0}(txID, universalTxID, ueaOnPush, multicallPayload);
 
@@ -1573,11 +1573,11 @@ contract CEATest is Test {
 
         assertEq(mockUniversalGateway.lastRecipient(), ueaOnPush, "Recipient should be UEA");
         assertEq(mockUniversalGateway.lastToken(), address(0), "Token should be address(0) for native");
-        assertEq(mockUniversalGateway.lastAmount(), withdrawAmount, "Amount should match");
-        assertEq(mockUniversalGateway.lastValue(), withdrawAmount, "Gateway should receive correct value");
+        assertEq(mockUniversalGateway.lastAmount(), sendAmount, "Amount should match");
+        assertEq(mockUniversalGateway.lastValue(), sendAmount, "Gateway should receive correct value");
 
         uint256 balanceAfter = address(ceaInstance).balance;
-        assertEq(balanceAfter, balanceBefore - withdrawAmount, "Balance should decrease");
+        assertEq(balanceAfter, balanceBefore - sendAmount, "Balance should decrease");
     }
 
     // =========================================================================
@@ -1665,13 +1665,13 @@ contract CEATest is Test {
     // =========================================================================
 
     function testHandleSelfCalls_AcceptsValueWithSelfCall() public deployCEA {
-        // Fund CEA with native, execute self-call withdrawal
+        // Fund CEA with native, execute self-call sendUniversalTxToUEA
         fundCEAWithNative(500 ether);
 
-        bytes memory payload = buildWithdrawPayload(address(0), 500 ether);
+        bytes memory payload = buildSendToUEAPayload(address(0), 500 ether);
 
         vm.prank(vault);
-        bytes memory multicallPayload = buildWithdrawMulticallPayload(address(0), 500 ether, false);
+        bytes memory multicallPayload = buildSendToUEAMulticallPayload(address(0), 500 ether, false);
 
         // Note: msg.value must match total multicall values (0 in this case, as self-call doesn't need value)
         ceaInstance.executeUniversalTx{value: 0}(generateTxID(1), generateUniversalTxID(1), ueaOnPush, multicallPayload);
@@ -1687,7 +1687,7 @@ contract CEATest is Test {
 
         vm.prank(vault);
         vm.expectRevert();
-        bytes memory multicallPayload = buildWithdrawMulticallPayload(address(0), 0, false);
+        bytes memory multicallPayload = buildSendToUEAMulticallPayload(address(0), 0, false);
 
         ceaInstance.executeUniversalTx(generateTxID(1), generateUniversalTxID(1), ueaOnPush, multicallPayload);
     }
@@ -1701,7 +1701,7 @@ contract CEATest is Test {
 
         vm.prank(vault);
         vm.expectRevert();
-        bytes memory multicallPayload = buildWithdrawMulticallPayload(address(0), 0, false);
+        bytes memory multicallPayload = buildSendToUEAMulticallPayload(address(0), 0, false);
 
         ceaInstance.executeUniversalTx(generateTxID(1), generateUniversalTxID(1), ueaOnPush, multicallPayload);
     }

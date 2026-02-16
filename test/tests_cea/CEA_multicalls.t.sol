@@ -215,7 +215,7 @@ contract CEA_NewMulticallTests is CEATest {
         ceaInstance.executeUniversalTx(txID, universalTxID, ueaOnPush, payload);
     }
 
-    function test_RevertWhen_SelfCallSelectorNotWithdraw() public deployCEA {
+    function test_RevertWhen_SelfCallSelectorNotSendToUEA() public deployCEA {
         bytes32 txID = generateTxID(1);
         bytes32 universalTxID = generateUniversalTxID(1);
 
@@ -236,15 +236,15 @@ contract CEA_NewMulticallTests is CEATest {
         ceaInstance.executeUniversalTx(txID, universalTxID, ueaOnPush, payload);
     }
 
-    function test_SelfCallWithdraw_ERC20_Success() public deployCEA {
+    function test_SelfCallSendToUEA_ERC20_Success() public deployCEA {
         MockGasToken token = new MockGasToken();
         fundCEAWithTokens(address(token), 1000 ether);
 
         bytes32 txID = generateTxID(1);
         bytes32 universalTxID = generateUniversalTxID(1);
-        uint256 withdrawAmount = 500 ether;
+        uint256 sendAmount = 500 ether;
 
-        // Build multicall with approval + withdraw
+        // Build multicall with approval + sendToUEA
         Multicall[] memory calls = new Multicall[](3);
         calls[0] = makeCall(
             address(token), 0, abi.encodeWithSelector(IERC20.approve.selector, address(mockUniversalGateway), 0)
@@ -252,9 +252,9 @@ contract CEA_NewMulticallTests is CEATest {
         calls[1] = makeCall(
             address(token),
             0,
-            abi.encodeWithSelector(IERC20.approve.selector, address(mockUniversalGateway), withdrawAmount)
+            abi.encodeWithSelector(IERC20.approve.selector, address(mockUniversalGateway), sendAmount)
         );
-        calls[2] = buildSelfWithdrawCall(address(token), withdrawAmount);
+        calls[2] = buildSelfSendToUEACall(address(token), sendAmount);
 
         bytes memory payload = encodeCalls(calls);
 
@@ -264,16 +264,16 @@ contract CEA_NewMulticallTests is CEATest {
         assertEq(mockUniversalGateway.callCount(), 1, "Gateway should be called once");
     }
 
-    function test_RevertWhen_SelfCallWithdraw_InsufficientERC20Balance() public deployCEA {
+    function test_RevertWhen_SelfCallSendToUEA_InsufficientERC20Balance() public deployCEA {
         MockGasToken token = new MockGasToken();
         fundCEAWithTokens(address(token), 100 ether);
 
         bytes32 txID = generateTxID(1);
         bytes32 universalTxID = generateUniversalTxID(1);
-        uint256 withdrawAmount = 500 ether; // More than balance
+        uint256 sendAmount = 500 ether; // More than balance
 
         Multicall[] memory calls = new Multicall[](1);
-        calls[0] = buildSelfWithdrawCall(address(token), withdrawAmount);
+        calls[0] = buildSelfSendToUEACall(address(token), sendAmount);
 
         bytes memory payload = encodeCalls(calls);
 
@@ -282,15 +282,15 @@ contract CEA_NewMulticallTests is CEATest {
         ceaInstance.executeUniversalTx(txID, universalTxID, ueaOnPush, payload);
     }
 
-    function test_SelfCallWithdraw_Native_Success() public deployCEA {
+    function test_SelfCallSendToUEA_Native_Success() public deployCEA {
         fundCEAWithNative(1000 ether);
 
         bytes32 txID = generateTxID(1);
         bytes32 universalTxID = generateUniversalTxID(1);
-        uint256 withdrawAmount = 500 ether;
+        uint256 sendAmount = 500 ether;
 
         Multicall[] memory calls = new Multicall[](1);
-        calls[0] = buildSelfWithdrawCall(address(0), withdrawAmount);
+        calls[0] = buildSelfSendToUEACall(address(0), sendAmount);
 
         bytes memory payload = encodeCalls(calls);
 
@@ -300,15 +300,15 @@ contract CEA_NewMulticallTests is CEATest {
         assertEq(mockUniversalGateway.callCount(), 1, "Gateway should be called once");
     }
 
-    function test_RevertWhen_SelfCallWithdraw_InsufficientNativeBalance() public deployCEA {
+    function test_RevertWhen_SelfCallSendToUEA_InsufficientNativeBalance() public deployCEA {
         fundCEAWithNative(100 ether);
 
         bytes32 txID = generateTxID(1);
         bytes32 universalTxID = generateUniversalTxID(1);
-        uint256 withdrawAmount = 500 ether; // More than balance
+        uint256 sendAmount = 500 ether; // More than balance
 
         Multicall[] memory calls = new Multicall[](1);
-        calls[0] = buildSelfWithdrawCall(address(0), withdrawAmount);
+        calls[0] = buildSelfSendToUEACall(address(0), sendAmount);
 
         bytes memory payload = encodeCalls(calls);
 
@@ -331,12 +331,12 @@ contract CEA_NewMulticallTests is CEATest {
         Multicall[] memory calls = new Multicall[](4);
         // External call
         calls[0] = makeCall(address(target), 0, abi.encodeWithSignature("setMagicNumber(uint256)", 42));
-        // Approve for withdraw
+        // Approve for sendToUEA
         calls[1] = makeCall(
             address(token), 0, abi.encodeWithSelector(IERC20.approve.selector, address(mockUniversalGateway), 100 ether)
         );
-        // Self-call withdraw
-        calls[2] = buildSelfWithdrawCall(address(token), 100 ether);
+        // Self-call sendToUEA
+        calls[2] = buildSelfSendToUEACall(address(token), 100 ether);
         // Another external call
         calls[3] = makeCall(address(target), 0, abi.encodeWithSignature("setMagicNumber(uint256)", 99));
 
@@ -556,19 +556,19 @@ contract CEA_NewMulticallTests is CEATest {
     // 12) Gateway integration edge cases (C - missing tests from TEST_ANALYSIS.md)
     // =========================================================================
 
-    function test_RevertWhen_WithdrawNative_InsufficientBalanceInBatch() public deployCEA {
+    function test_RevertWhen_SendNativeToUEA_InsufficientBalanceInBatch() public deployCEA {
         // Fund CEA with 0.5 ETH initially
         fundCEAWithNative(0.5 ether);
 
         bytes32 txID = generateTxID(1);
         bytes32 universalTxID = generateUniversalTxID(1);
 
-        // Batch: external call first (uses 0.1 ETH), then withdraw more than remaining balance
+        // Batch: external call first (uses 0.1 ETH), then send more than remaining balance
         Multicall[] memory calls = new Multicall[](2);
         calls[0] = makeCall(address(target), 0.1 ether, abi.encodeWithSignature("setMagicNumberWithFee(uint256)", 42));
         // After first call, CEA has 0.5 ETH left (0.5 initial + 0.1 msg.value - 0.1 to target)
-        // Try to withdraw 1 ETH - should fail
-        calls[1] = buildSelfWithdrawCall(address(0), 1 ether);
+        // Try to send 1 ETH - should fail
+        calls[1] = buildSelfSendToUEACall(address(0), 1 ether);
 
         bytes memory payload = encodeCalls(calls);
 
@@ -598,8 +598,8 @@ contract CEA_NewMulticallTests is CEATest {
         calls[0] = makeCall(
             address(token), 0, abi.encodeWithSelector(IERC20.approve.selector, address(mockUniversalGateway), 100 ether)
         );
-        // Withdraw (gateway will revert)
-        calls[1] = buildSelfWithdrawCall(address(token), 100 ether);
+        // SendToUEA (gateway will revert)
+        calls[1] = buildSelfSendToUEACall(address(token), 100 ether);
 
         bytes memory payload = encodeCalls(calls);
 
@@ -642,7 +642,7 @@ contract CEA_NewMulticallTests is CEATest {
         assertEq(token.allowance(address(ceaInstance), address(spender)), 0, "Allowance should be 0");
     }
 
-    function test_RevertWhen_SelfWithdrawInMiddle_LaterCallFails_NoGatewayCall() public deployCEA {
+    function test_RevertWhen_SelfSendToUEAInMiddle_LaterCallFails_NoGatewayCall() public deployCEA {
         MockGasToken token = new MockGasToken();
         RevertingTarget reverter = new RevertingTarget();
 
@@ -656,8 +656,8 @@ contract CEA_NewMulticallTests is CEATest {
         calls[0] = makeCall(
             address(token), 0, abi.encodeWithSelector(IERC20.approve.selector, address(mockUniversalGateway), 100 ether)
         );
-        // Self-withdraw
-        calls[1] = buildSelfWithdrawCall(address(token), 100 ether);
+        // Self-call sendToUEA
+        calls[1] = buildSelfSendToUEACall(address(token), 100 ether);
         // Later call fails
         calls[2] = makeCall(address(reverter), 0, abi.encodeWithSignature("revertWithReason()"));
 
@@ -777,21 +777,21 @@ contract CEA_NewMulticallTests is CEATest {
         assertEq(eventIndex, 2, "Should have validated 2 events");
     }
 
-    function test_Events_SelfCallWithdraw_EmittedCorrectly() public deployCEA {
+    function test_Events_SelfCallSendToUEA_EmittedCorrectly() public deployCEA {
         MockGasToken token = new MockGasToken();
         fundCEAWithTokens(address(token), 1000 ether);
 
         bytes32 txID = generateTxID(1);
         bytes32 universalTxID = generateUniversalTxID(1);
-        uint256 withdrawAmount = 100 ether;
+        uint256 sendAmount = 100 ether;
 
         Multicall[] memory calls = new Multicall[](2);
         calls[0] = makeCall(
             address(token),
             0,
-            abi.encodeWithSelector(IERC20.approve.selector, address(mockUniversalGateway), withdrawAmount)
+            abi.encodeWithSelector(IERC20.approve.selector, address(mockUniversalGateway), sendAmount)
         );
-        calls[1] = buildSelfWithdrawCall(address(token), withdrawAmount);
+        calls[1] = buildSelfSendToUEACall(address(token), sendAmount);
 
         bytes memory payload = encodeCalls(calls);
 

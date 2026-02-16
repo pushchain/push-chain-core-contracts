@@ -32,7 +32,7 @@ contract CEA_ComprehensiveTests is CEATest {
             0,
             abi.encodeWithSignature("approve(address,uint256)", universalGateway, amount)
         );
-        calls[1] = buildSelfWithdrawCall(address(token), amount);
+        calls[1] = buildSelfSendToUEACall(address(token), amount);
 
         bytes memory payload = encodeCalls(calls);
 
@@ -52,7 +52,7 @@ contract CEA_ComprehensiveTests is CEATest {
         uint256 amount = 500 ether;
 
         Multicall[] memory calls = new Multicall[](1);
-        calls[0] = buildSelfWithdrawCall(address(0), amount);
+        calls[0] = buildSelfSendToUEACall(address(0), amount);
 
         bytes memory payload = encodeCalls(calls);
 
@@ -78,7 +78,7 @@ contract CEA_ComprehensiveTests is CEATest {
             0,
             abi.encodeWithSignature("approve(address,uint256)", universalGateway, amount)
         );
-        calls[1] = buildSelfWithdrawCall(address(token), amount);
+        calls[1] = buildSelfSendToUEACall(address(token), amount);
 
         bytes memory payload = encodeCalls(calls);
 
@@ -104,7 +104,7 @@ contract CEA_ComprehensiveTests is CEATest {
             0,
             abi.encodeWithSignature("approve(address,uint256)", universalGateway, amount)
         );
-        calls[1] = buildSelfWithdrawCall(address(token), amount);
+        calls[1] = buildSelfSendToUEACall(address(token), amount);
 
         bytes memory payload = encodeCalls(calls);
 
@@ -135,7 +135,7 @@ contract CEA_ComprehensiveTests is CEATest {
             0,
             abi.encodeWithSignature("approve(address,uint256)", universalGateway, totalBalance)
         );
-        calls[1] = buildSelfWithdrawCall(address(token), totalBalance);
+        calls[1] = buildSelfSendToUEACall(address(token), totalBalance);
 
         bytes memory payload = encodeCalls(calls);
 
@@ -162,7 +162,7 @@ contract CEA_ComprehensiveTests is CEATest {
         bytes32 universalTxID = generateUniversalTxID(1);
 
         Multicall[] memory calls = new Multicall[](1);
-        calls[0] = buildSelfWithdrawCall(address(0), totalBalance);
+        calls[0] = buildSelfSendToUEACall(address(0), totalBalance);
 
         bytes memory payload = encodeCalls(calls);
 
@@ -199,7 +199,7 @@ contract CEA_ComprehensiveTests is CEATest {
             0,
             abi.encodeWithSignature("approve(address,uint256)", universalGateway, minAmount)
         );
-        calls[1] = buildSelfWithdrawCall(address(token), minAmount);
+        calls[1] = buildSelfSendToUEACall(address(token), minAmount);
 
         bytes memory payload = encodeCalls(calls);
 
@@ -218,7 +218,7 @@ contract CEA_ComprehensiveTests is CEATest {
         uint256 minAmount = 1 wei;
 
         Multicall[] memory calls = new Multicall[](1);
-        calls[0] = buildSelfWithdrawCall(address(0), minAmount);
+        calls[0] = buildSelfSendToUEACall(address(0), minAmount);
 
         bytes memory payload = encodeCalls(calls);
 
@@ -241,21 +241,21 @@ contract CEA_ComprehensiveTests is CEATest {
         bytes32 universalTxID = generateUniversalTxID(1);
 
         Multicall[] memory calls = new Multicall[](4);
-        // First withdrawal
+        // First send
         calls[0] = makeCall(
             address(token),
             0,
             abi.encodeWithSignature("approve(address,uint256)", universalGateway, 500 ether)
         );
-        calls[1] = buildSelfWithdrawCall(address(token), 500 ether);
+        calls[1] = buildSelfSendToUEACall(address(token), 500 ether);
 
-        // Second withdrawal
+        // Second send
         calls[2] = makeCall(
             address(token),
             0,
             abi.encodeWithSignature("approve(address,uint256)", universalGateway, 300 ether)
         );
-        calls[3] = buildSelfWithdrawCall(address(token), 300 ether);
+        calls[3] = buildSelfSendToUEACall(address(token), 300 ether);
 
         bytes memory payload = encodeCalls(calls);
 
@@ -287,7 +287,7 @@ contract CEA_ComprehensiveTests is CEATest {
             abi.encodeWithSignature("setMagicNumberWithFee(uint256)", 42)
         );
         // Second call: Send 0.4 ETH to UEA (0.4 initial balance remains after first call)
-        calls[1] = buildSelfWithdrawCall(address(0), 0.4 ether);
+        calls[1] = buildSelfSendToUEACall(address(0), 0.4 ether);
 
         bytes memory payload = encodeCalls(calls);
 
@@ -316,7 +316,7 @@ contract CEA_ComprehensiveTests is CEATest {
         bytes32 universalTxID = generateUniversalTxID(1);
 
         Multicall[] memory calls = new Multicall[](1);
-        calls[0] = buildSelfWithdrawCall(address(token), type(uint256).max);
+        calls[0] = buildSelfSendToUEACall(address(token), type(uint256).max);
 
         bytes memory payload = encodeCalls(calls);
 
@@ -383,7 +383,7 @@ contract CEA_ComprehensiveTests is CEATest {
         Multicall[] memory calls = new Multicall[](1);
         calls[0] = makeCall(
             address(ceaInstance), 0,
-            buildWithdrawPayloadWithData(address(token), 0, ueaPayload)
+            buildSendToUEAPayloadWithData(address(token), 0, ueaPayload)
         );
 
         vm.prank(vault);
@@ -401,7 +401,7 @@ contract CEA_ComprehensiveTests is CEATest {
         Multicall[] memory calls = new Multicall[](1);
         calls[0] = makeCall(
             address(ceaInstance), 0,
-            buildWithdrawPayloadWithData(address(0), 0, ueaPayload)
+            buildSendToUEAPayloadWithData(address(0), 0, ueaPayload)
         );
 
         vm.prank(vault);
@@ -419,7 +419,7 @@ contract CEA_ComprehensiveTests is CEATest {
         Multicall[] memory calls = new Multicall[](1);
         calls[0] = makeCall(
             address(ceaInstance), 0,
-            buildWithdrawPayloadWithData(address(0), 1 ether, ueaPayload)
+            buildSendToUEAPayloadWithData(address(0), 1 ether, ueaPayload)
         );
 
         vm.prank(vault);
@@ -442,7 +442,7 @@ contract CEA_ComprehensiveTests is CEATest {
         );
         calls[1] = makeCall(
             address(ceaInstance), 0,
-            buildWithdrawPayloadWithData(address(token), 500 ether, ueaPayload)
+            buildSendToUEAPayloadWithData(address(token), 500 ether, ueaPayload)
         );
 
         vm.prank(vault);
@@ -464,7 +464,7 @@ contract CEA_ComprehensiveTests is CEATest {
         Multicall[] memory calls = new Multicall[](1);
         calls[0] = makeCall(
             address(ceaInstance), 0,
-            buildWithdrawPayloadWithData(address(0), amount, ueaPayload)
+            buildSendToUEAPayloadWithData(address(0), amount, ueaPayload)
         );
 
         vm.prank(vault);
@@ -489,7 +489,7 @@ contract CEA_ComprehensiveTests is CEATest {
         );
         calls[1] = makeCall(
             address(ceaInstance), 0,
-            buildWithdrawPayloadWithData(address(token), amount, ueaPayload)
+            buildSendToUEAPayloadWithData(address(token), amount, ueaPayload)
         );
 
         vm.prank(vault);
@@ -505,7 +505,7 @@ contract CEA_ComprehensiveTests is CEATest {
         uint256 amount = 5 ether;
 
         Multicall[] memory calls = new Multicall[](1);
-        calls[0] = buildSelfWithdrawCall(address(0), amount);
+        calls[0] = buildSelfSendToUEACall(address(0), amount);
 
         vm.prank(vault);
         ceaInstance.executeUniversalTx{value: 0}(
@@ -526,7 +526,7 @@ contract CEA_ComprehensiveTests is CEATest {
             address(token), 0,
             abi.encodeWithSignature("approve(address,uint256)", address(mockUniversalGateway), amount)
         );
-        calls[1] = buildSelfWithdrawCall(address(token), amount);
+        calls[1] = buildSelfSendToUEACall(address(token), amount);
 
         vm.prank(vault);
         ceaInstance.executeUniversalTx(
@@ -548,7 +548,7 @@ contract CEA_ComprehensiveTests is CEATest {
         Multicall[] memory calls = new Multicall[](1);
         calls[0] = makeCall(
             address(ceaInstance), 0,
-            buildWithdrawPayloadWithData(address(0), amount, ueaPayload)
+            buildSendToUEAPayloadWithData(address(0), amount, ueaPayload)
         );
 
         vm.prank(vault);
@@ -579,7 +579,7 @@ contract CEA_ComprehensiveTests is CEATest {
         );
         calls[1] = makeCall(
             address(ceaInstance), 0,
-            buildWithdrawPayloadWithData(address(token), amount, ueaPayload)
+            buildSendToUEAPayloadWithData(address(token), amount, ueaPayload)
         );
 
         vm.prank(vault);
@@ -601,7 +601,7 @@ contract CEA_ComprehensiveTests is CEATest {
         uint256 amount = 5 ether;
 
         Multicall[] memory calls = new Multicall[](1);
-        calls[0] = buildSelfWithdrawCall(address(0), amount);
+        calls[0] = buildSelfSendToUEACall(address(0), amount);
 
         vm.prank(vault);
         ceaInstance.executeUniversalTx{value: 0}(
@@ -624,7 +624,7 @@ contract CEA_ComprehensiveTests is CEATest {
         Multicall[] memory calls = new Multicall[](1);
         calls[0] = makeCall(
             address(ceaInstance), 0,
-            buildWithdrawPayloadWithData(address(0), amount, ueaPayload)
+            buildSendToUEAPayloadWithData(address(0), amount, ueaPayload)
         );
 
         vm.prank(vault);
@@ -648,7 +648,7 @@ contract CEA_ComprehensiveTests is CEATest {
         );
         calls[1] = makeCall(
             address(ceaInstance), 0,
-            buildWithdrawPayloadWithData(address(token), amount, ueaPayload)
+            buildSendToUEAPayloadWithData(address(token), amount, ueaPayload)
         );
 
         vm.prank(vault);
@@ -667,7 +667,7 @@ contract CEA_ComprehensiveTests is CEATest {
         calls[0] = makeCall(
             address(ceaInstance),
             1 ether, // Non-zero value to self-call
-            buildWithdrawPayloadWithData(address(0), 5 ether, ueaPayload)
+            buildSendToUEAPayloadWithData(address(0), 5 ether, ueaPayload)
         );
 
         vm.deal(vault, 1 ether);
@@ -695,7 +695,7 @@ contract CEA_ComprehensiveTests is CEATest {
         );
         calls[1] = makeCall(
             address(ceaInstance), 0,
-            buildWithdrawPayloadWithData(address(token), amount, ueaPayload)
+            buildSendToUEAPayloadWithData(address(token), amount, ueaPayload)
         );
 
         vm.prank(vault);
@@ -722,7 +722,7 @@ contract CEA_ComprehensiveTests is CEATest {
         // Send funds + payload
         calls[1] = makeCall(
             address(ceaInstance), 0,
-            buildWithdrawPayloadWithData(address(token), amount, ueaPayload)
+            buildSendToUEAPayloadWithData(address(token), amount, ueaPayload)
         );
         // Reset allowance to 0
         calls[2] = makeCall(
@@ -754,7 +754,7 @@ contract CEA_ComprehensiveTests is CEATest {
         Multicall[] memory calls = new Multicall[](1);
         calls[0] = makeCall(
             address(ceaInstance), 0,
-            buildWithdrawPayloadWithData(address(0), amount, ueaPayload)
+            buildSendToUEAPayloadWithData(address(0), amount, ueaPayload)
         );
 
         vm.prank(vault);
@@ -779,7 +779,7 @@ contract CEA_ComprehensiveTests is CEATest {
         );
         calls[1] = makeCall(
             address(ceaInstance), 0,
-            buildWithdrawPayloadWithData(address(token), amount, ueaPayload)
+            buildSendToUEAPayloadWithData(address(token), amount, ueaPayload)
         );
 
         vm.prank(vault);
@@ -804,7 +804,7 @@ contract CEA_ComprehensiveTests is CEATest {
         Multicall[] memory calls = new Multicall[](1);
         calls[0] = makeCall(
             address(ceaInstance), 0,
-            buildWithdrawPayloadWithData(address(0), 5 ether, ueaPayload)
+            buildSendToUEAPayloadWithData(address(0), 5 ether, ueaPayload)
         );
 
         bytes32 txID = generateTxID(1);
@@ -841,7 +841,7 @@ contract CEA_ComprehensiveTests is CEATest {
         // Second call: sendUniversalTxToUEA with payload (gateway will revert)
         calls[1] = makeCall(
             address(ceaInstance), 0,
-            buildWithdrawPayloadWithData(address(0), 5 ether, ueaPayload)
+            buildSendToUEAPayloadWithData(address(0), 5 ether, ueaPayload)
         );
 
         vm.prank(vault);
@@ -863,7 +863,7 @@ contract CEA_ComprehensiveTests is CEATest {
         uint256 amount = 5 ether;
 
         Multicall[] memory calls = new Multicall[](1);
-        calls[0] = buildSelfWithdrawCall(address(0), amount);
+        calls[0] = buildSelfSendToUEACall(address(0), amount);
 
         bytes32 txID = generateTxID(1);
         bytes32 universalTxID = generateUniversalTxID(1);
@@ -897,7 +897,7 @@ contract CEA_ComprehensiveTests is CEATest {
             address(token), 0,
             abi.encodeWithSignature("approve(address,uint256)", address(mockUniversalGateway), amount)
         );
-        calls[1] = buildSelfWithdrawCall(address(token), amount);
+        calls[1] = buildSelfSendToUEACall(address(token), amount);
 
         bytes32 txID = generateTxID(1);
 
@@ -923,7 +923,7 @@ contract CEA_ComprehensiveTests is CEATest {
         Multicall[] memory calls = new Multicall[](1);
         calls[0] = makeCall(
             address(ceaInstance), 0,
-            buildWithdrawPayloadWithData(address(0), amount, ueaPayload)
+            buildSendToUEAPayloadWithData(address(0), amount, ueaPayload)
         );
 
         bytes32 txID = generateTxID(1);
@@ -958,7 +958,7 @@ contract CEA_ComprehensiveTests is CEATest {
         );
         calls[1] = makeCall(
             address(ceaInstance), 0,
-            buildWithdrawPayloadWithData(address(token), amount, ueaPayload)
+            buildSendToUEAPayloadWithData(address(token), amount, ueaPayload)
         );
 
         bytes32 txID = generateTxID(1);
