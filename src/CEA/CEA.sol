@@ -2,7 +2,7 @@
 pragma solidity 0.8.26;
 
 import {ICEA} from "../interfaces/ICEA.sol";
-import {CEAErrors} from "../libraries/Errors.sol";
+import {CEAErrors, CommonErrors} from "../libraries/Errors.sol";
 import {IUniversalGateway, UniversalTxRequest, RevertInstructions} from "../interfaces/IUniversalGateway.sol";
 import {Multicall, MULTICALL_SELECTOR, MIGRATION_SELECTOR} from "../libraries/Types.sol";
 import {ICEAFactory} from "../interfaces/ICEAFactory.sol";
@@ -115,15 +115,18 @@ contract CEA is ICEA, ReentrancyGuard {
         _handleExecution(txID, universalTxID, originCaller, payload);
     }
 
-    /// @notice         Sends funds from CEA to its UEA on Push Chain.
+    /// @notice         Sends funds (and optionally a payload) from CEA to its UEA on Push Chain.
     /// @dev            Only callable via self-call through multicall execution (msg.sender == address(this)).
     ///                 For ERC20 tokens, SDK must include approval steps in multicall before this call.
-    ///                 This function only transfers funds and does not send payload or signature data.
+    ///                 Routes to different gateway functions based on payload:
+    ///                 - FUNDS (payload empty)          → sendUniversalTx
+    ///                 - FUNDS_AND_PAYLOAD (non-empty)   → sendUniversalTxViaCEA
     /// @param token            Token address (address(0) for native)
     /// @param amount           Amount to send
-    function sendUniversalTxToUEA(address token, uint256 amount) external {
+    /// @param payload          Payload bytes for UEA execution (empty for funds-only)
+    function sendUniversalTxToUEA(address token, uint256 amount, bytes calldata payload) external {
         // Enforce: Only CEA can call this function via self-call
-        if (msg.sender != address(this)) revert CEAErrors.NotVault();
+        if (msg.sender != address(this)) revert CommonErrors.Unauthorized();
 
         if (amount == 0) revert CEAErrors.InvalidInput();
 
@@ -131,21 +134,28 @@ contract CEA is ICEA, ReentrancyGuard {
             recipient: UEA,
             token: token,
             amount: amount,
-            payload: "",
+            payload: payload,
             revertInstruction: RevertInstructions({fundRecipient: UEA, revertMsg: ""}),
             signatureData: ""
         });
 
         if (token == address(0)) {
             if (address(this).balance < amount) revert CEAErrors.InsufficientBalance();
-            IUniversalGateway(UNIVERSAL_GATEWAY).sendUniversalTx{value: amount}(req);
+            if (payload.length == 0) {
+                IUniversalGateway(UNIVERSAL_GATEWAY).sendUniversalTx{value: amount}(req);
+            } else {
+                IUniversalGateway(UNIVERSAL_GATEWAY).sendUniversalTxViaCEA{value: amount}(req);
+            }
         } else {
             if (IERC20(token).balanceOf(address(this)) < amount) revert CEAErrors.InsufficientBalance();
-            // Note: SDK must have included ERC20 approval in multicall before this call
-            IUniversalGateway(UNIVERSAL_GATEWAY).sendUniversalTx(req);
+            if (payload.length == 0) {
+                IUniversalGateway(UNIVERSAL_GATEWAY).sendUniversalTx(req);
+            } else {
+                IUniversalGateway(UNIVERSAL_GATEWAY).sendUniversalTxViaCEA(req);
+            }
         }
 
-        emit WithdrawalToUEA(address(this), UEA, token, amount);
+        emit UniversalTxToUEA(address(this), UEA, token, amount);
     }
 
     //========================

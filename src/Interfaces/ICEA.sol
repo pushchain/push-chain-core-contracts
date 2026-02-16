@@ -33,12 +33,12 @@ interface ICEA {
         bytes data
     );
 
-    /// @notice                     Emitted when funds are withdrawn to the UEA on Push Chain.
-    /// @param _cea                Address of the CEA that is withdrawing funds
+    /// @notice                     Emitted when a universal tx is sent from CEA to UEA on Push Chain.
+    /// @param _cea                Address of the CEA sending the tx
     /// @param _uea                Address of the UEA on Push Chain that this CEA represents.
-    /// @param token                Token address being withdrawn
-    /// @param amount               Amount of token being withdrawn
-    event WithdrawalToUEA(address indexed _cea, address indexed _uea, address indexed token, uint256 amount);
+    /// @param token                Token address being sent
+    /// @param amount               Amount of token being sent
+    event UniversalTxToUEA(address indexed _cea, address indexed _uea, address indexed token, uint256 amount);
     //========================
     //           Views
     //========================

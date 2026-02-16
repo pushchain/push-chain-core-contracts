@@ -20,6 +20,10 @@ contract MockUniversalGateway is IUniversalGateway {
     bytes public lastRevertMsg;
     bytes public lastSignatureData;
 
+    // Track which gateway function was called
+    bool public lastCallWasViaCEA;
+    uint256 public viaCEACallCount;
+
     // Revert control for testing
     bool private shouldRevert;
     string private revertMessage;
@@ -34,6 +38,21 @@ contract MockUniversalGateway is IUniversalGateway {
             revert(revertMessage);
         }
 
+        _storeRequest(req);
+        lastCallWasViaCEA = false;
+    }
+
+    function sendUniversalTxViaCEA(UniversalTxRequest calldata req) external payable {
+        if (shouldRevert) {
+            revert(revertMessage);
+        }
+
+        _storeRequest(req);
+        lastCallWasViaCEA = true;
+        viaCEACallCount++;
+    }
+
+    function _storeRequest(UniversalTxRequest calldata req) private {
         lastRecipient = req.recipient;
         lastToken = req.token;
         lastAmount = req.amount;
@@ -44,7 +63,7 @@ contract MockUniversalGateway is IUniversalGateway {
         lastValue = msg.value;
         callCount++;
     }
-    
+
     // Helper to get full request struct (for event verification)
     function getLastRequest() external view returns (UniversalTxRequest memory) {
         return UniversalTxRequest({
@@ -60,4 +79,3 @@ contract MockUniversalGateway is IUniversalGateway {
         });
     }
 }
-
