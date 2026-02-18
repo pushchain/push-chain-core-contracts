@@ -26,7 +26,7 @@ import {ProxyAdmin} from "@openzeppelin/contracts/proxy/transparent/ProxyAdmin.s
  */
 contract DeployCEAFactoryScript is Script {
     // ============================================================================
-    // DEPLOYMENT PARAMETERS - Pre-Deployement Checklist 
+    // DEPLOYMENT PARAMETERS - Pre-Deployement Checklist
     // ============================================================================
 
     // Owner of the CEAFactory (can update implementations, pause, etc.)
@@ -36,13 +36,13 @@ contract DeployCEAFactoryScript is Script {
     address public VAULT_ADDRESS = 0x0000000000000000000000000000000000000001;
 
     // UniversalGateway contract address on this chain (handles cross-chain messages)
-    address public UNIVERSAL_GATEWAY_ADDRESS = 0x0000000000000000000000000000000000000002;
-
+    address public UNIVERSAL_GATEWAY_ADDRESS = 0x4DCab975cDe839632db6695e2e936A29ce3e325E;
 
     function run() external {
         // Get chain ID and deployer info
         uint256 chainId = block.chainid;
-        address deployer = vm.addr(vm.envUint("KEY"));
+        uint256 deployerKey = vm.envUint("KEY");
+        address deployer = vm.addr(deployerKey);
 
         console.log("=== CEAFactory Deployment Configuration ===");
         console.log("Chain ID:", chainId);
@@ -63,7 +63,7 @@ contract DeployCEAFactoryScript is Script {
         console.log("Universal Gateway:", universalGateway);
         console.log("");
 
-        vm.startBroadcast();
+        vm.startBroadcast(deployerKey);
 
         // 1. Deploy CEA implementation (logic contract)
         CEA ceaImplementation = new CEA();
@@ -84,19 +84,16 @@ contract DeployCEAFactoryScript is Script {
         // 5. Prepare initialization data for CEAFactory
         bytes memory initData = abi.encodeWithSelector(
             CEAFactory.initialize.selector,
-            owner,                              // initialOwner
-            vault,                              // initialVault
-            address(ceaProxyImplementation),    // ceaProxyImplementation
-            address(ceaImplementation),         // ceaImplementation
-            universalGateway                    // universalGateway
+            owner, // initialOwner
+            vault, // initialVault
+            address(ceaProxyImplementation), // ceaProxyImplementation
+            address(ceaImplementation), // ceaImplementation
+            universalGateway // universalGateway
         );
 
         // 6. Deploy TransparentUpgradeableProxy wrapping CEAFactory
-        TransparentUpgradeableProxy proxy = new TransparentUpgradeableProxy(
-            address(ceaFactoryImplementation),
-            address(proxyAdmin),
-            initData
-        );
+        TransparentUpgradeableProxy proxy =
+            new TransparentUpgradeableProxy(address(ceaFactoryImplementation), address(proxyAdmin), initData);
         console.log("[5/7] CEAFactory Proxy (CANONICAL):", address(proxy));
 
         // 7. Wrap proxy in CEAFactory interface for verification
@@ -124,7 +121,11 @@ contract DeployCEAFactoryScript is Script {
 
         console.log("Factory Owner:", verifiedOwner, verifiedOwner == owner ? "[OK]" : "[MISMATCH]");
         console.log("Vault:", verifiedVault, verifiedVault == vault ? "[OK]" : "[MISMATCH]");
-        console.log("CEA Proxy Impl:", verifiedCEAProxy, verifiedCEAProxy == address(ceaProxyImplementation) ? "[OK]" : "[MISMATCH]");
+        console.log(
+            "CEA Proxy Impl:",
+            verifiedCEAProxy,
+            verifiedCEAProxy == address(ceaProxyImplementation) ? "[OK]" : "[MISMATCH]"
+        );
         console.log("CEA Impl:", verifiedCEA, verifiedCEA == address(ceaImplementation) ? "[OK]" : "[MISMATCH]");
         console.log("Gateway:", verifiedGateway, verifiedGateway == universalGateway ? "[OK]" : "[MISMATCH]");
         console.log("ProxyAdmin:", verifiedProxyAdmin);
@@ -137,20 +138,42 @@ contract DeployCEAFactoryScript is Script {
 
         // 10. Generate JSON output for deployment tracking
         console.log("\n=== Deployment Addresses (JSON) ===");
-        string memory json = string(abi.encodePacked(
-            '{\n',
-            '  "chainId": ', vm.toString(chainId), ',\n',
-            '  "deployer": "', vm.toString(deployer), '",\n',
-            '  "ceaImplementation": "', vm.toString(address(ceaImplementation)), '",\n',
-            '  "ceaProxyImplementation": "', vm.toString(address(ceaProxyImplementation)), '",\n',
-            '  "ceaFactoryImplementation": "', vm.toString(address(ceaFactoryImplementation)), '",\n',
-            '  "proxyAdmin": "', vm.toString(address(proxyAdmin)), '",\n',
-            '  "ceaFactoryProxy": "', vm.toString(address(proxy)), '",\n',
-            '  "owner": "', vm.toString(owner), '",\n',
-            '  "vault": "', vm.toString(vault), '",\n',
-            '  "universalGateway": "', vm.toString(universalGateway), '"\n',
-            '}'
-        ));
+        string memory json = string(
+            abi.encodePacked(
+                "{\n",
+                '  "chainId": ',
+                vm.toString(chainId),
+                ",\n",
+                '  "deployer": "',
+                vm.toString(deployer),
+                '",\n',
+                '  "ceaImplementation": "',
+                vm.toString(address(ceaImplementation)),
+                '",\n',
+                '  "ceaProxyImplementation": "',
+                vm.toString(address(ceaProxyImplementation)),
+                '",\n',
+                '  "ceaFactoryImplementation": "',
+                vm.toString(address(ceaFactoryImplementation)),
+                '",\n',
+                '  "proxyAdmin": "',
+                vm.toString(address(proxyAdmin)),
+                '",\n',
+                '  "ceaFactoryProxy": "',
+                vm.toString(address(proxy)),
+                '",\n',
+                '  "owner": "',
+                vm.toString(owner),
+                '",\n',
+                '  "vault": "',
+                vm.toString(vault),
+                '",\n',
+                '  "universalGateway": "',
+                vm.toString(universalGateway),
+                '"\n',
+                "}"
+            )
+        );
         console.log(json);
 
         // Write to file

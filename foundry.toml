@@ -14,3 +14,6 @@ optimizer = true
 optimizer_runs = 99999
 auto_detect_solc = false
 evm_version = "shanghai"
+via_ir = true
+
+fs_permissions = [{ access = "read-write", path = "deployments/" }]
