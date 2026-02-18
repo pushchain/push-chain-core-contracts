@@ -109,5 +109,5 @@ interface IUEA {
      * 
      *                          Note: A migration payload execution cannot be part of subcall in Multicall. Migration must be standalone payload execution.
      */
-    function executePayload(bytes calldata payload, bytes calldata verificationData) external;
+    function executePayload(UniversalPayload calldata payload, bytes calldata verificationData) external;
 }

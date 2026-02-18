@@ -288,7 +288,7 @@ contract BaseTest is Test {
         );
         
         // Call executePayload instead of migrateUEA
-        IUEA(ueaAddress).executePayload(abi.encode(payload), signature);
+        IUEA(ueaAddress).executePayload(payload, signature);
     }
 
     function getCurrentImplementation(address ueaProxy) public view returns (address impl) {

@@ -247,7 +247,7 @@ contract UEASVMTest is Test {
         emit IUEA.PayloadExecuted(ownerBytes, 1);
 
         // Execute the payload
-        svmSmartAccountInstance.executePayload(abi.encode(payload), signature);
+        svmSmartAccountInstance.executePayload(payload, signature);
 
         // Verify state changes
         uint256 magicValueAfter = target.getMagicNumber();
@@ -300,7 +300,7 @@ contract UEASVMTest is Test {
         );
 
         // Execute the payload
-        svmSmartAccountInstance.executePayload(abi.encode(payload), signature);
+        svmSmartAccountInstance.executePayload(payload, signature);
 
         // Check both calls executed
         uint256 magic = target.getMagicNumber();
@@ -346,7 +346,7 @@ contract UEASVMTest is Test {
 
         // Should bubble up revert reason from revertingTarget
         vm.expectRevert("This function always reverts with reason");
-        svmSmartAccountInstance.executePayload(abi.encode(payload), signature);
+        svmSmartAccountInstance.executePayload(payload, signature);
     }
 
     function testExecuteMulticallSuccessWithPayload() public deploySvmSmartAccount {
@@ -404,7 +404,7 @@ contract UEASVMTest is Test {
         emit IUEA.PayloadExecuted(ownerBytes, 1);
 
         // Execute
-        svmSmartAccountInstance.executePayload(abi.encode(payload), signature);
+        svmSmartAccountInstance.executePayload(payload, signature);
 
         // Check all calls executed
         uint256 magic = target.getMagicNumber();
@@ -461,7 +461,7 @@ contract UEASVMTest is Test {
         emit IUEA.PayloadExecuted(ownerBytes, 1);
 
         // Execute
-        svmSmartAccountInstance.executePayload(abi.encode(payload), signature);
+        svmSmartAccountInstance.executePayload(payload, signature);
 
         // Check both targets were called correctly
         uint256 magic1 = target.getMagicNumber();
@@ -528,7 +528,7 @@ contract UEASVMTest is Test {
         emit IUEA.PayloadExecuted(ownerBytes, 1);
 
         // Execute
-        svmSmartAccountInstance.executePayload(abi.encode(payload), signature);
+        svmSmartAccountInstance.executePayload(payload, signature);
 
         // Check both targets were called correctly and received the right amounts
         uint256 magic1 = target.getMagicNumber();
@@ -566,7 +566,7 @@ contract UEASVMTest is Test {
         );
 
         // Execute the payload
-        svmSmartAccountInstance.executePayload(abi.encode(payload), signature);
+        svmSmartAccountInstance.executePayload(payload, signature);
 
         // Verify state changes
         uint256 magicValueAfter = target.getMagicNumber();
@@ -599,7 +599,7 @@ contract UEASVMTest is Test {
 
         // Should revert with InvalidSVMSignature
         vm.expectRevert(Errors.InvalidSVMSignature.selector);
-        svmSmartAccountInstance.executePayload(abi.encode(payload), signature);
+        svmSmartAccountInstance.executePayload(payload, signature);
     }
 
     function testExecutionWithExpiredDeadline() public deploySvmSmartAccount {
@@ -631,7 +631,7 @@ contract UEASVMTest is Test {
 
         // Should revert with ExpiredDeadline
         vm.expectRevert(Errors.ExpiredDeadline.selector);
-        svmSmartAccountInstance.executePayload(abi.encode(payload), signature);
+        svmSmartAccountInstance.executePayload(payload, signature);
     }
 
     function testReceiveFunction() public {
@@ -690,7 +690,7 @@ contract UEASVMTest is Test {
         );
 
         vm.expectRevert(Errors.InvalidSVMSignature.selector);
-        svmSmartAccountInstance.executePayload(abi.encode(universalPayload), signature);
+        svmSmartAccountInstance.executePayload(universalPayload, signature);
     }
 
     function test_RevertWhen_ExpiredDeadlineOnMigration() public deploySvmSmartAccount {
@@ -725,7 +725,7 @@ contract UEASVMTest is Test {
         );
 
         vm.expectRevert(Errors.ExpiredDeadline.selector);
-        svmSmartAccountInstance.executePayload(abi.encode(universalPayload), signature);
+        svmSmartAccountInstance.executePayload(universalPayload, signature);
     }
 
     function test_SuccessfulMigrationUpdatesImplementation() public deploySvmSmartAccount {
@@ -759,7 +759,7 @@ contract UEASVMTest is Test {
         );
 
         // Call migrateUEA
-        svmSmartAccountInstance.executePayload(abi.encode(universalPayload), signature);
+        svmSmartAccountInstance.executePayload(universalPayload, signature);
 
         // Verify proxy’s storage slot now updated
         bytes32 slot = UEA_LOGIC_SLOT;
@@ -935,7 +935,7 @@ contract UEASVMTest is Test {
 
         // Should revert with the target's revert reason
         vm.expectRevert("This function always reverts with reason");
-        svmSmartAccountInstance.executePayload(abi.encode(payload), signature);
+        svmSmartAccountInstance.executePayload(payload, signature);
     }
 
     // Add a test for execution that fails without a revert reason
@@ -967,7 +967,7 @@ contract UEASVMTest is Test {
 
         // Should revert with ExecutionFailed error
         vm.expectRevert(Errors.ExecutionFailed.selector);
-        svmSmartAccountInstance.executePayload(abi.encode(payload), signature);
+        svmSmartAccountInstance.executePayload(payload, signature);
     }
 
     // Add a test for execution with empty calldata
@@ -997,7 +997,7 @@ contract UEASVMTest is Test {
 
         // Expect the ExecutionFailed error when sending empty calldata
         vm.expectRevert(Errors.ExecutionFailed.selector);
-        svmSmartAccountInstance.executePayload(abi.encode(payload), signature);
+        svmSmartAccountInstance.executePayload(payload, signature);
     }
 
     // Tests for UEModule caller-based verification
@@ -1018,7 +1018,7 @@ contract UEASVMTest is Test {
         
         // Prank as UE_MODULE
         vm.prank(svmSmartAccountInstance.UE_MODULE());
-        svmSmartAccountInstance.executePayload(abi.encode(payload), "");
+        svmSmartAccountInstance.executePayload(payload, "");
         
         // Verify execution succeeded
         assertEq(target.getMagicNumber(), 999, "Execution should succeed for UE_MODULE");
@@ -1052,7 +1052,7 @@ contract UEASVMTest is Test {
         );
         
         vm.expectRevert(Errors.InvalidSVMSignature.selector);
-        svmSmartAccountInstance.executePayload(abi.encode(payload), invalidSignature);
+        svmSmartAccountInstance.executePayload(payload, invalidSignature);
     }
 
     function testExecutePayloadAsUserWithValidSignature() public deploySvmSmartAccount {
@@ -1082,7 +1082,7 @@ contract UEASVMTest is Test {
         );
         
         // Execute with valid signature
-        svmSmartAccountInstance.executePayload(abi.encode(payload), signature);
+        svmSmartAccountInstance.executePayload(payload, signature);
         
         // Verify execution succeeded
         assertEq(target.getMagicNumber(), 999, "Execution should succeed with valid signature");

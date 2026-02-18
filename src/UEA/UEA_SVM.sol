@@ -103,8 +103,7 @@ contract UEA_SVM is ReentrancyGuard, IUEA {
     /**
      * @inheritdoc IUEA
      */
-    function executePayload(bytes calldata rawPayload, bytes calldata verificationData) external nonReentrant {
-        UniversalPayload memory payload = abi.decode(rawPayload, (UniversalPayload));
+    function executePayload(UniversalPayload calldata payload, bytes calldata verificationData) external nonReentrant {
         
         if (msg.sender != UE_MODULE) {
             bytes32 payloadHash = getPayloadHash(payload);

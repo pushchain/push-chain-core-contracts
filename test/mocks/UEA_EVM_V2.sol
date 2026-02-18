@@ -206,9 +206,7 @@ contract UEA_EVM_V2 is ReentrancyGuard, IUEA {
     /**
      * @inheritdoc IUEA
      */
-    function executePayload(bytes calldata rawPayload, bytes calldata verificationData) external nonReentrant {
-        // Decode the raw bytes payload into UniversalPayload struct
-        UniversalPayload memory payload = abi.decode(rawPayload, (UniversalPayload));
+    function executePayload(UniversalPayload calldata payload, bytes calldata verificationData) external nonReentrant {
         
         // Caller-based verification: UEModule can execute without signature, others need signature
         if (msg.sender != UE_MODULE) {
