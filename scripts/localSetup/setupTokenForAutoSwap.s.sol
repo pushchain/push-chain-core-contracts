@@ -10,26 +10,33 @@ contract SetupTokenForAutoSwapScript is Script {
 
 	function run() external {
 		address universalCore = 0x00000000000000000000000000000000000000C0;
-		address token1 = vm.envAddress("TOKEN1"); // USDT token
-		address token2 = vm.envAddress("TOKEN2");
 
 		vm.startBroadcast();
 
 		UniversalCoreV0 core = UniversalCoreV0(payable(universalCore));
 
-		// 1. Set auto-swap support for tokens
-		console.log("Configuring auto-swap support...");
-		core.setAutoSwapSupported(token1, true);
-		console.log("  Token 1 auto-swap enabled:", token1);
-		core.setAutoSwapSupported(token2, true);
-		console.log("  Token 2 auto-swap enabled:", token2);
+		// 1. Configure auto-swap + default fee tiers for TOKEN1..TOKENn
+		console.log("Configuring tokens from .env...");
+		uint256 tokenCount;
+		for (uint256 index = 1; ; index++) {
+			string memory tokenKey = string.concat("TOKEN", vm.toString(index));
+			address token = vm.envOr(tokenKey, address(0));
 
-		// 2. Set default fee tier for tokens
-		console.log("\nSetting default fee tiers...");
-		core.setDefaultFeeTier(token1, FEE_TIER_LOW); // 0.05%
-		console.log("  Token 1 fee tier set to:", FEE_TIER_LOW);
-		core.setDefaultFeeTier(token2, FEE_TIER_LOW); // 0.05%
-		console.log("  Token 2 fee tier set to:", FEE_TIER_LOW);
+			if (token == address(0)) {
+				break;
+			}
+
+			core.setAutoSwapSupported(token, true);
+			console.log("  Token auto-swap enabled:", token);
+
+			core.setDefaultFeeTier(token, FEE_TIER_LOW); // 0.05%
+			console.log("  Token fee tier set to:", FEE_TIER_LOW);
+
+			tokenCount++;
+		}
+
+		require(tokenCount > 0, "No TOKEN{i} found in .env");
+		console.log("  Total tokens configured:", tokenCount);
 
 		console.log("\nUniversalCore token setup complete!");
 
