@@ -18,7 +18,8 @@ contract ConfigureUniversalCoreScript is Script {
         address uniswapV3Router = vm.envAddress("UNISWAP_V3_ROUTER");
         address uniswapV3Quoter = vm.envAddress("UNISWAP_V3_QUOTER");
         address wpc = vm.envAddress("WPC");
-        address token1 = vm.envAddress("TOKEN1"); // WETH token
+        address token1 = vm.envAddress("TOKEN1"); // PETH token
+        address token2 = vm.envAddress("TOKEN2");
 
         vm.startBroadcast();
 
@@ -44,11 +45,15 @@ contract ConfigureUniversalCoreScript is Script {
         console.log("\nConfiguring auto-swap support...");
         core.setAutoSwapSupported(token1, true);
         console.log("  Token 1 auto-swap enabled:", token1);
+        core.setAutoSwapSupported(token2, true);
+        console.log("  Token 2 auto-swap enabled:", token2);
 
         // 4. Set default fee tiers for tokens
         console.log("\nSetting default fee tiers...");
         core.setDefaultFeeTier(token1, FEE_TIER_LOW);  // 0.05%
         console.log("  Token 1 fee tier set to:", FEE_TIER_LOW);
+        core.setDefaultFeeTier(token2, FEE_TIER_LOW);  // 0.05%
+        console.log("  Token 2 fee tier set to:", FEE_TIER_LOW);
 
         console.log("\nUniversalCore configuration complete!");
 

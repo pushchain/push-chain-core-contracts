@@ -40,14 +40,26 @@ contract LocalSetupScript is Script {
         // First PRC20 (WETH)
         configs.push(
             PRC20Config({
-                name: "WETH.eth",
-                symbol: "WETH",
+                name: "pETH.eth",
+                symbol: "pETH",
                 decimals: 18,
                 sourceChainId: "eip155:11155111",
                 tokenType: IPRC20.TokenType.ERC20,
                 gasLimit: 21000,
                 fee: 0,
-                sourceERC20: "0xfFf9976782d46CC05630D1f6eBAb18b2324d6B14"
+                sourceERC20: "0x0000000000000000000000000000000000000000"
+            })
+        );
+        configs.push(
+            PRC20Config({
+                name: "USDT.eth",
+                symbol: "USDT.eth",
+                decimals: 6,
+                sourceChainId: "eip155:11155111",
+                tokenType: IPRC20.TokenType.ERC20,
+                gasLimit: 21000,
+                fee: 0,
+                sourceERC20: "0x7169D38820dfd117C3FA1f22a697dBA58d90BA06"
             })
         );
     }
