@@ -86,15 +86,8 @@ contract CEAMigration_IntegrationTest is Test {
         return keccak256(abi.encodePacked("universalTxID", nonce));
     }
 
-    function buildMigrationPayload(address ceaProxy) internal pure returns (bytes memory) {
-        Multicall[] memory calls = new Multicall[](1);
-        calls[0] = Multicall({
-            to: ceaProxy,
-            value: 0,
-            data: abi.encodePacked(MIGRATION_SELECTOR)
-        });
-
-        return abi.encodePacked(MULTICALL_SELECTOR, abi.encode(calls));
+    function buildMigrationPayload(address) internal pure returns (bytes memory) {
+        return abi.encodePacked(MIGRATION_SELECTOR);
     }
 
     function executeMigration() internal {

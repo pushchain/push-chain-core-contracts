@@ -500,7 +500,7 @@ contract CEA_ComprehensiveTests is CEATest {
         assertTrue(mockUniversalGateway.lastCallWasViaCEA(), "Should call sendUniversalTxViaCEA for non-empty payload");
     }
 
-    function test_FundsOnly_Native_CallsSendUniversalTx_NotViaCEA() public deployCEA {
+    function test_FundsOnly_Native_CallsSendUniversalTxViaCEA() public deployCEA {
         fundCEAWithNative(10 ether);
         uint256 amount = 5 ether;
 
@@ -512,11 +512,11 @@ contract CEA_ComprehensiveTests is CEATest {
             generateTxID(1), generateUniversalTxID(1), ueaOnPush, encodeCalls(calls)
         );
 
-        assertFalse(mockUniversalGateway.lastCallWasViaCEA(), "Should call sendUniversalTx for empty payload");
-        assertEq(mockUniversalGateway.viaCEACallCount(), 0, "viaCEA should not be called");
+        assertTrue(mockUniversalGateway.lastCallWasViaCEA(), "Should call sendUniversalTxViaCEA for all tx types");
+        assertEq(mockUniversalGateway.viaCEACallCount(), 1, "viaCEA call count should be 1");
     }
 
-    function test_FundsOnly_ERC20_CallsSendUniversalTx_NotViaCEA() public deployCEA {
+    function test_FundsOnly_ERC20_CallsSendUniversalTxViaCEA() public deployCEA {
         MockGasToken token = new MockGasToken();
         fundCEAWithTokens(address(token), 1000 ether);
         uint256 amount = 500 ether;
@@ -533,7 +533,7 @@ contract CEA_ComprehensiveTests is CEATest {
             generateTxID(1), generateUniversalTxID(1), ueaOnPush, encodeCalls(calls)
         );
 
-        assertFalse(mockUniversalGateway.lastCallWasViaCEA(), "Should call sendUniversalTx for empty payload");
+        assertTrue(mockUniversalGateway.lastCallWasViaCEA(), "Should call sendUniversalTxViaCEA for all tx types");
     }
 
     // =========================================================================
@@ -874,7 +874,7 @@ contract CEA_ComprehensiveTests is CEATest {
         );
 
         // Assertions
-        assertFalse(mockUniversalGateway.lastCallWasViaCEA(), "FUNDS-only should use sendUniversalTx");
+        assertTrue(mockUniversalGateway.lastCallWasViaCEA(), "FUNDS-only should use sendUniversalTxViaCEA");
         assertEq(mockUniversalGateway.lastValue(), amount, "msg.value should match amount");
 
         UniversalTxRequest memory req = mockUniversalGateway.getLastRequest();
@@ -906,7 +906,7 @@ contract CEA_ComprehensiveTests is CEATest {
             txID, generateUniversalTxID(1), ueaOnPush, encodeCalls(calls)
         );
 
-        assertFalse(mockUniversalGateway.lastCallWasViaCEA(), "FUNDS-only should use sendUniversalTx");
+        assertTrue(mockUniversalGateway.lastCallWasViaCEA(), "FUNDS-only should use sendUniversalTxViaCEA");
         assertEq(mockUniversalGateway.lastValue(), 0, "msg.value should be 0 for ERC20");
 
         UniversalTxRequest memory req = mockUniversalGateway.getLastRequest();

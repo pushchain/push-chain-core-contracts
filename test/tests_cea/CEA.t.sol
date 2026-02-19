@@ -679,7 +679,7 @@ contract CEATest is Test {
         ceaInstance.executeUniversalTx{value: 0.1 ether}(txID, universalTxID, makeAddr("wrongUEA"), multicallPayload);
     }
 
-    function testExecuteUniversalTx_RevertWhenMsgValueDoesNotMatchAmount_Native() public deployCEA {
+    function testExecuteUniversalTx_MsgValueExceedsCallValue_Native_Succeeds() public deployCEA {
         fundCEAWithNative(1000 ether);
 
         bytes32 txID = generateTxID(1);
@@ -688,14 +688,16 @@ contract CEATest is Test {
 
         vm.prank(vault);
         vm.deal(vault, 0.2 ether);
-        vm.expectRevert(Errors.InvalidAmount.selector);
         bytes memory multicallPayload = buildNativeMulticallPayload(
             address(target),
-            0.1 ether, // Different from msg.value
+            0.1 ether,
             payload
         );
 
+        // Excess msg.value stays in CEA — no strict equality check
         ceaInstance.executeUniversalTx{value: 0.2 ether}(txID, universalTxID, ueaOnPush, multicallPayload);
+
+        assertEq(target.getMagicNumber(), 42, "Target should execute correctly");
     }
 
     function testExecuteUniversalTx_SuccessWhenMsgValueEqualsAmount_Native() public deployCEA {
@@ -1584,20 +1586,25 @@ contract CEATest is Test {
     // executeUniversalTx ERC20 Gap Tests
     // =========================================================================
 
-    function testExecuteUniversalTx_ERC20_RevertWhenMsgValueNotZero() public deployCEA {
+    function testExecuteUniversalTx_ERC20_MsgValueNonZero_ExcessStaysInCEA() public deployCEA {
         MockGasToken token = new MockGasToken();
         fundCEAWithTokens(address(token), 1000 ether);
         vm.deal(vault, 1 ether);
 
-        bytes memory payload = abi.encodeWithSignature("setMagicNumber(uint256)", 42);
+        TokenSpenderTarget spender = new TokenSpenderTarget();
+        bytes memory payload = abi.encodeWithSignature("spendTokens(address,uint256)", address(token), 100 ether);
 
         vm.prank(vault);
-        vm.expectRevert(Errors.InvalidAmount.selector);
-        bytes memory multicallPayload = buildERC20MulticallPayload(address(token), address(target), 100 ether, payload);
+        bytes memory multicallPayload = buildERC20MulticallPayload(address(token), address(spender), 100 ether, payload);
+
+        uint256 ceaBalanceBefore = address(ceaInstance).balance;
 
         ceaInstance.executeUniversalTx{value: 1 ether}(
             generateTxID(1), generateUniversalTxID(1), ueaOnPush, multicallPayload
         );
+
+        // Excess ETH stays in CEA
+        assertEq(address(ceaInstance).balance, ceaBalanceBefore + 1 ether, "Excess msg.value stays in CEA");
     }
 
     function testExecuteUniversalTx_ERC20_AllowanceRemainsZeroAfterRevert() public deployCEA {

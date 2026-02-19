@@ -93,6 +93,7 @@ forge fmt --check
 - Implementation: `CEA` (src/CEA/CEA.sol)
 - Deployment: Deterministic via `CEAFactory` using CREATE2 (src/CEA/CEAFactory.sol:32)
 - Identity: One UEA → one CEA per external chain
+- Gateway integration: Routes CEA→UEA transfers through `IUniversalGateway.sendUniversalTxViaCEA()` for FUNDS and FUNDS_AND_PAYLOAD tx types
 
 ### Proxy Pattern Architecture
 
@@ -122,10 +123,11 @@ Both UEA and CEA use minimal proxy (EIP-1167 clone) architecture:
 **CEA Migration:**
 - Mirrors UEA migration pattern for safe proxy upgrades (v1 → v2)
 - `CEAMigration` (src/CEA/CEAMigration.sol) - Slot-writer migration singleton
-- CEA detects `MIGRATION_SELECTOR` and routes to `_handleMigration()`
+- CEA detects `MIGRATION_SELECTOR` at top-level payload (three-way branch in `_handleExecution`, aligned with UEA_EVM pattern)
+- Migration payload format: `MIGRATION_SELECTOR` directly (no Multicall wrapper)
 - Factory tracks migration contract via `CEA_MIGRATION_CONTRACT` state variable
 - Migration executed via delegatecall (preserves all state and funds)
-- Safety constraints: self-targeted, zero-value, standalone execution only
+- Explicit prevention: `MIGRATION_SELECTOR` inside a Multicall array reverts with `InvalidCall`
 - CEA stores factory reference to fetch migration contract at runtime
 
 ### Token Primitives
@@ -186,8 +188,16 @@ struct UniversalPayload {
 ```
 
 **Special Selectors:**
-- `MULTICALL_SELECTOR = bytes4(keccak256("UEA_MULTICALL"))` - Batch multiple calls
-- `MIGRATION_SELECTOR = bytes4(keccak256("UEA_MIGRATION"))` - Trigger migration
+- `MULTICALL_SELECTOR = bytes4(keccak256("UEA_MULTICALL"))` - Batch multiple calls (0xc25b8d90)
+- `MIGRATION_SELECTOR = bytes4(keccak256("UEA_MIGRATION"))` - Trigger migration (0xb0c47dc5)
+
+**UEA_EVM Execution Routing (`UEA_EVM._handleExecution`):**
+- Three-way dispatch based on `payload.data`:
+  1. `isMulticall(payload.data)` → `_handleMulticall(payload)` — batch execution
+  2. `isMigration(payload.data)` → `_handleMigration(payload)` — delegatecall to factory's migration contract
+  3. else → `_handleSingleCall(payload)` — single target call
+- `UE_MODULE` (0x14191Ea54B4c176fCf86f51b0FAc7CB1E71Df7d7) can execute without signature verification
+- Factory reference stored for fetching migration contract at runtime
 
 ### CEA Execution Flow
 
@@ -196,6 +206,7 @@ struct UniversalPayload {
 **Payload Format:**
 - New format: `MULTICALL_SELECTOR + abi.encode(Multicall[])`
 - Old format: Direct `abi.encode(Multicall[])` (backwards compatible)
+- Migration format: `MIGRATION_SELECTOR` at top level (no Multicall wrapper)
 
 **Multicall Structure (src/libraries/Types.sol:31):**
 ```solidity
@@ -207,23 +218,26 @@ struct Multicall {
 ```
 
 **Execution Routing (`CEA._handleExecution`):**
-1. Check if payload starts with `MULTICALL_SELECTOR`
-2. If yes, decode as `Multicall[]` and route based on content:
-   - Single-element with `MIGRATION_SELECTOR` → `_handleMigration()`
-   - Otherwise → `_handleMulticall()`
-3. If no, route to `_handleSingleCall()` (backwards compatibility)
+1. Check if payload starts with `MULTICALL_SELECTOR` → decode as `Multicall[]`, route to `_handleMulticall()`
+2. Check if payload starts with `MIGRATION_SELECTOR` → route to `_handleMigration()` (no params, top-level)
+3. Otherwise → route to `_handleSingleCall()` (backwards compatibility)
 
 **Self-Call Pattern:**
-- `sendUniversalTxToUEA(token, amount)` - Transfer funds from CEA to UEA
+- `sendUniversalTxToUEA(token, amount, payload)` - Transfer funds/payload from CEA to UEA via gateway
 - Only callable via self-call (`msg.sender == address(this)`)
 - Must be included in multicall array for execution
-- Always sends empty payload/signature (funds-only transfer)
+- Supports two tx types:
+  - **FUNDS**: amount > 0, payload empty
+  - **FUNDS_AND_PAYLOAD**: amount > 0, payload non-empty
+- Both tx types route through `IUniversalGateway.sendUniversalTxViaCEA()`
 - SDK must include ERC20 approval steps before this call
 
 **Safety Constraints:**
-- Self-calls must have `value == 0`
-- Migration must be standalone (cannot be batched)
+- Self-calls must have `value == 0` (enforced in `_handleMulticall`)
+- Migration must be standalone (cannot appear inside multicall arrays — `isMigrationCall` check)
+- Migration rejects `msg.value > 0` (logic upgrade, not value transfer)
 - All calls executed sequentially via `.call()`
+- No strict `msg.value == totalValue` enforcement (CEA can spend pre-existing balance)
 
 ## Key Contracts Reference
 
@@ -252,6 +266,7 @@ struct Multicall {
 - `ICEA`: src/Interfaces/ICEA.sol
 - `ICEAFactory`: src/Interfaces/ICEAFactory.sol
 - `IUniversalCore`: src/Interfaces/IUniversalCore.sol
+- `IUniversalGateway`: src/Interfaces/IUniversalGateway.sol - UniversalTxRequest struct, sendUniversalTx/sendUniversalTxViaCEA
 - `IPRC20`: src/Interfaces/IPRC20.sol
 
 ## Test Structure
@@ -260,10 +275,11 @@ Tests are organized by component:
 - `test/tests_uea_and_factory/` - UEA and factory tests
 - `test/tests_cea/` - CEA and factory tests
   - `CEA.t.sol` - Core CEA tests (82 tests, canonical helpers)
-  - `CEA_multicalls.t.sol` - Multicall execution tests (130 tests)
-  - `CEA_selfCalls.t.sol` - Self-call pattern tests (93 tests)
-  - Total: 418 CEA tests
-- `test/tests_ceaMigration/` - CEA migration tests (42 tests)
+  - `CEA_multicalls.t.sol` - Multicall execution tests (132 tests)
+  - `CEA_selfCalls.t.sol` - Self-call pattern tests (120 tests)
+  - `CEAFactory.t.sol` - Factory tests (116 tests)
+  - Total: 450 CEA tests
+- `test/tests_ceaMigration/` - CEA migration tests (43 tests)
   - `CEAMigration.t.sol` - Unit tests for migration contract
   - `CEAFactory_Migration.t.sol` - Factory migration management
   - `CEA_Migration.t.sol` - CEA migration logic tests
@@ -279,8 +295,11 @@ Test files follow the pattern `ContractName.t.sol` and use Foundry's testing fra
 **Key Test Helpers (CEA.t.sol):**
 - `makeCall(to, value, data)` - Create Multicall struct
 - `encodeCalls(Multicall[])` - Encode with MULTICALL_SELECTOR
-- `buildWithdrawPayload(token, amount)` - Build sendUniversalTxToUEA payload
+- `buildSendToUEAPayload(token, amount)` - Build sendUniversalTxToUEA payload (funds-only, empty payload)
+- `buildSendToUEAPayloadWithData(token, amount, payload)` - Build sendUniversalTxToUEA with UEA payload (FUNDS_AND_PAYLOAD)
 - `buildExternalSingleCall(to, value, data)` - Single external call
+- `buildSelfSendToUEACall(token, amount)` - Self-call Multicall with value=0
+- `buildSendToUEAMulticallPayload(token, amount, approveGateway)` - Full multicall with optional ERC20 approval
 
 ## Important Constants
 
