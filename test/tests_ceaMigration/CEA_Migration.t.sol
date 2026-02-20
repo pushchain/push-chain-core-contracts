@@ -75,15 +75,8 @@ contract CEA_MigrationTest is Test {
         return keccak256(abi.encodePacked("universalTxID", nonce));
     }
 
-    function buildMigrationPayload(address ceaProxy) internal pure returns (bytes memory) {
-        Multicall[] memory calls = new Multicall[](1);
-        calls[0] = Multicall({
-            to: ceaProxy,
-            value: 0,
-            data: abi.encodePacked(MIGRATION_SELECTOR)
-        });
-
-        return abi.encodePacked(MULTICALL_SELECTOR, abi.encode(calls));
+    function buildMigrationPayload(address) internal pure returns (bytes memory) {
+        return abi.encodePacked(MIGRATION_SELECTOR);
     }
 
     // =========================================================================
@@ -132,52 +125,58 @@ contract CEA_MigrationTest is Test {
     // _handleMigration Validation Tests
     // =========================================================================
 
-    function test_handleMigration_WrongTarget() public {
+    function test_handleMigration_TopLevelFormat_Succeeds() public {
         // Set migration contract
         factory.setCEAMigrationContract(address(migration));
 
         bytes32 txID = generateTxID(1);
         bytes32 universalTxID = generateUniversalTxID(1);
 
-        // Build payload targeting wrong address
-        address wrongTarget = makeAddr("wrongTarget");
+        // Top-level MIGRATION_SELECTOR (no Multicall wrapper)
+        bytes memory payload = abi.encodePacked(MIGRATION_SELECTOR);
+
+        vm.prank(vault);
+        ceaInstance.executeUniversalTx(txID, universalTxID, ueaOnPush, payload);
+
+        // Verify implementation changed
+        address implAfter = CEAProxy(payable(address(ceaInstance))).getImplementation();
+        assertEq(implAfter, migration.CEA_IMPLEMENTATION(), "Implementation should be CEA v2");
+    }
+
+    function test_handleMigration_NonZeroMsgValue_Reverts() public {
+        factory.setCEAMigrationContract(address(migration));
+
+        bytes32 txID = generateTxID(1);
+        bytes32 universalTxID = generateUniversalTxID(1);
+        bytes memory payload = abi.encodePacked(MIGRATION_SELECTOR);
+
+        vm.deal(vault, 1 ether);
+
+        vm.prank(vault);
+        vm.expectRevert(Errors.InvalidInput.selector);
+        ceaInstance.executeUniversalTx{value: 1 ether}(txID, universalTxID, ueaOnPush, payload);
+    }
+
+    function test_handleMigration_MigrationInsideMulticall_Reverts() public {
+        // Set migration contract
+        factory.setCEAMigrationContract(address(migration));
+
+        bytes32 txID = generateTxID(1);
+        bytes32 universalTxID = generateUniversalTxID(1);
+
+        // MIGRATION_SELECTOR wrapped in multicall fails as generic execution failure
+        // (CEA has no function matching the migration selector, so .call() reverts)
         Multicall[] memory calls = new Multicall[](1);
         calls[0] = Multicall({
-            to: wrongTarget,  // Wrong target!
+            to: address(ceaInstance),
             value: 0,
             data: abi.encodePacked(MIGRATION_SELECTOR)
         });
         bytes memory payload = abi.encodePacked(MULTICALL_SELECTOR, abi.encode(calls));
 
-        // Expect InvalidTarget revert
         vm.prank(vault);
-        vm.expectRevert(Errors.InvalidTarget.selector);
+        vm.expectRevert(Errors.ExecutionFailed.selector);
         ceaInstance.executeUniversalTx(txID, universalTxID, ueaOnPush, payload);
-    }
-
-    function test_handleMigration_NonZeroValue() public {
-        // Set migration contract
-        factory.setCEAMigrationContract(address(migration));
-
-        bytes32 txID = generateTxID(1);
-        bytes32 universalTxID = generateUniversalTxID(1);
-
-        // Build payload with non-zero value
-        Multicall[] memory calls = new Multicall[](1);
-        calls[0] = Multicall({
-            to: address(ceaInstance),
-            value: 1 ether,  // Non-zero value!
-            data: abi.encodePacked(MIGRATION_SELECTOR)
-        });
-        bytes memory payload = abi.encodePacked(MULTICALL_SELECTOR, abi.encode(calls));
-
-        // Fund vault with ether to send
-        vm.deal(vault, 10 ether);
-
-        // Expect InvalidInput revert
-        vm.prank(vault);
-        vm.expectRevert(Errors.InvalidInput.selector);
-        ceaInstance.executeUniversalTx{value: 1 ether}(txID, universalTxID, ueaOnPush, payload);
     }
 
     function test_handleMigration_NoMigrationContract() public {
@@ -220,9 +219,9 @@ contract CEA_MigrationTest is Test {
         });
         bytes memory payload = abi.encodePacked(MULTICALL_SELECTOR, abi.encode(calls));
 
-        // Expect InvalidCall revert (migration must be standalone)
+        // Migration selector in multicall fails as generic execution failure
         vm.prank(vault);
-        vm.expectRevert(Errors.InvalidCall.selector);
+        vm.expectRevert(Errors.ExecutionFailed.selector);
         ceaInstance.executeUniversalTx(txID, universalTxID, ueaOnPush, payload);
     }
 
@@ -247,9 +246,9 @@ contract CEA_MigrationTest is Test {
         });
         bytes memory payload = abi.encodePacked(MULTICALL_SELECTOR, abi.encode(calls));
 
-        // Expect InvalidCall revert (migration must be standalone)
+        // Migration selector in multicall fails as generic execution failure
         vm.prank(vault);
-        vm.expectRevert(Errors.InvalidCall.selector);
+        vm.expectRevert(Errors.ExecutionFailed.selector);
         ceaInstance.executeUniversalTx(txID, universalTxID, ueaOnPush, payload);
     }
 

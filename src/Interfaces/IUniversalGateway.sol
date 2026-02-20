@@ -22,4 +22,6 @@ interface IUniversalGateway {
 
     function sendUniversalTx(UniversalTxRequest calldata req) external payable;
 
+    function sendUniversalTxViaCEA(UniversalTxRequest calldata req) external payable;
+
 }

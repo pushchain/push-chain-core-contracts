@@ -10,9 +10,9 @@ pragma solidity 0.8.26;
  *  - CEAs are NOT user-owned wallets in v1. They are system-controlled accounts:
  *      * Only the external-chain Vault may call state-changing functions.
  *      * CEAs hold user positions and balances on external chains.
- *  - CEAs preserve the identity of a UEA on the external chains. 
+ *  - CEAs preserve the identity of a UEA on the external chains.
  *  - Any action requested by UEA ( from Push Chain ) is executed by the CEA on the external chain.
- * 
+ *
  */
 interface ICEA {
     //========================
@@ -26,19 +26,15 @@ interface ICEA {
     /// @param target               Target contract address for this call step
     /// @param data                 Calldata executed on target contract
     event UniversalTxExecuted(
-        bytes32 indexed txID,
-        bytes32 indexed universalTxID,
-        address indexed originCaller,
-        address target,
-        bytes data
+        bytes32 indexed txID, bytes32 indexed universalTxID, address indexed originCaller, address target, bytes data
     );
 
-    /// @notice                     Emitted when funds are withdrawn to the UEA on Push Chain.
-    /// @param _cea                Address of the CEA that is withdrawing funds
+    /// @notice                     Emitted when a universal tx is sent from CEA to UEA on Push Chain.
+    /// @param _cea                Address of the CEA sending the tx
     /// @param _uea                Address of the UEA on Push Chain that this CEA represents.
-    /// @param token                Token address being withdrawn
-    /// @param amount               Amount of token being withdrawn
-    event WithdrawalToUEA(address indexed _cea, address indexed _uea, address indexed token, uint256 amount);
+    /// @param token                Token address being sent
+    /// @param amount               Amount of token being sent
+    event UniversalTxToUEA(address indexed _cea, address indexed _uea, address indexed token, uint256 amount);
     //========================
     //           Views
     //========================
@@ -73,7 +69,6 @@ interface ICEA {
      *  - SDK is responsible for crafting correct multicall steps, including:
      *      * ERC20 approvals before calls that need token spending
      *      * ERC20 approval resets after operations (if needed)
-     *      * Self-calls to withdrawFundsToUEA for returning funds to UEA
      *  - CEA no longer performs automatic approval/reset logic.
      *  - This ensures flexible, composable execution paths.
      *
@@ -82,10 +77,7 @@ interface ICEA {
      * @param originCaller      UEA on Push Chain that this CEA represents (verified)
      * @param payload           ABI-encoded Multicall[] containing execution steps
      */
-    function executeUniversalTx(
-        bytes32 txID,
-        bytes32 universalTxID,
-        address originCaller,
-        bytes calldata payload
-    ) external payable;
+    function executeUniversalTx(bytes32 txID, bytes32 universalTxID, address originCaller, bytes calldata payload)
+        external
+        payable;
 }

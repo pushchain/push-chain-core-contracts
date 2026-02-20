@@ -2,6 +2,7 @@
 pragma solidity 0.8.26;
 
 import "./CEA.t.sol";
+import {MIGRATION_SELECTOR} from "../../src/libraries/Types.sol";
 
 /**
  * @title CEA_NewMulticallTests
@@ -9,7 +10,6 @@ import "./CEA.t.sol";
  * @dev Tests organized per CEA_MULTICALL_TESTS.md requirements
  */
 contract CEA_NewMulticallTests is CEATest {
-
     // =========================================================================
     // 1) Top-level executeUniversalTx validation cases
     // =========================================================================
@@ -22,7 +22,7 @@ contract CEA_NewMulticallTests is CEATest {
         bytes memory invalidPayload = "not a valid multicall";
 
         vm.prank(vault);
-        vm.expectRevert();  // Will revert during abi.decode
+        vm.expectRevert(); // Will revert during abi.decode
         ceaInstance.executeUniversalTx(txID, universalTxID, ueaOnPush, invalidPayload);
     }
 
@@ -63,7 +63,7 @@ contract CEA_NewMulticallTests is CEATest {
         bytes32 txID = generateTxID(1);
         bytes32 universalTxID = generateUniversalTxID(1);
 
-        uint256 value = 0.1 ether;  // Target requires exactly 0.1 ETH fee
+        uint256 value = 0.1 ether; // Target requires exactly 0.1 ETH fee
         vm.deal(vault, value);
 
         bytes memory targetCalldata = abi.encodeWithSignature("setMagicNumberWithFee(uint256)", 42);
@@ -106,16 +106,11 @@ contract CEA_NewMulticallTests is CEATest {
 
         Multicall[] memory calls = new Multicall[](2);
         // Step 1: Approve spender
-        calls[0] = makeCall(
-            address(token),
-            0,
-            abi.encodeWithSelector(IERC20.approve.selector, address(spender), 100 ether)
-        );
+        calls[0] =
+            makeCall(address(token), 0, abi.encodeWithSelector(IERC20.approve.selector, address(spender), 100 ether));
         // Step 2: Call spender which uses the approval
         calls[1] = makeCall(
-            address(spender),
-            0,
-            abi.encodeWithSignature("spendTokens(address,uint256)", address(token), 100 ether)
+            address(spender), 0, abi.encodeWithSignature("spendTokens(address,uint256)", address(token), 100 ether)
         );
 
         bytes memory payload = buildExternalBatch(calls);
@@ -136,11 +131,8 @@ contract CEA_NewMulticallTests is CEATest {
         bytes32 txID = generateTxID(1);
         bytes32 universalTxID = generateUniversalTxID(1);
 
-        bytes memory payload = buildExternalSingleCall(
-            address(reverter),
-            0,
-            abi.encodeWithSignature("revertWithReason()")
-        );
+        bytes memory payload =
+            buildExternalSingleCall(address(reverter), 0, abi.encodeWithSignature("revertWithReason()"));
 
         vm.prank(vault);
         vm.expectRevert(Errors.ExecutionFailed.selector); // Bubbled error no longer shown
@@ -175,11 +167,8 @@ contract CEA_NewMulticallTests is CEATest {
         bytes32 txID = generateTxID(1);
         bytes32 universalTxID = generateUniversalTxID(1);
 
-        bytes memory payload = buildExternalSingleCall(
-            address(reverter),
-            0,
-            abi.encodeWithSignature("revertWithReason()")
-        );
+        bytes memory payload =
+            buildExternalSingleCall(address(reverter), 0, abi.encodeWithSignature("revertWithReason()"));
 
         vm.prank(vault);
         vm.expectRevert(Errors.ExecutionFailed.selector); // Bubbled error no longer shown
@@ -195,11 +184,8 @@ contract CEA_NewMulticallTests is CEATest {
         bytes32 txID = generateTxID(1);
         bytes32 universalTxID = generateUniversalTxID(1);
 
-        bytes memory payload = buildExternalSingleCall(
-            address(reverter),
-            0,
-            abi.encodeWithSignature("revertWithReason()")
-        );
+        bytes memory payload =
+            buildExternalSingleCall(address(reverter), 0, abi.encodeWithSignature("revertWithReason()"));
 
         vm.prank(vault);
         vm.recordLogs();
@@ -220,7 +206,7 @@ contract CEA_NewMulticallTests is CEATest {
         bytes32 universalTxID = generateUniversalTxID(1);
 
         Multicall[] memory calls = new Multicall[](1);
-        calls[0] = makeCall(address(ceaInstance), 0, "123");  // Only 3 bytes
+        calls[0] = makeCall(address(ceaInstance), 0, "123"); // Only 3 bytes
 
         bytes memory payload = encodeCalls(calls);
 
@@ -230,7 +216,7 @@ contract CEA_NewMulticallTests is CEATest {
         ceaInstance.executeUniversalTx(txID, universalTxID, ueaOnPush, payload);
     }
 
-    function test_RevertWhen_SelfCallSelectorNotWithdraw() public deployCEA {
+    function test_RevertWhen_SelfCallSelectorNotSendToUEA() public deployCEA {
         bytes32 txID = generateTxID(1);
         bytes32 universalTxID = generateUniversalTxID(1);
 
@@ -251,27 +237,25 @@ contract CEA_NewMulticallTests is CEATest {
         ceaInstance.executeUniversalTx(txID, universalTxID, ueaOnPush, payload);
     }
 
-    function test_SelfCallWithdraw_ERC20_Success() public deployCEA {
+    function test_SelfCallSendToUEA_ERC20_Success() public deployCEA {
         MockGasToken token = new MockGasToken();
         fundCEAWithTokens(address(token), 1000 ether);
 
         bytes32 txID = generateTxID(1);
         bytes32 universalTxID = generateUniversalTxID(1);
-        uint256 withdrawAmount = 500 ether;
+        uint256 sendAmount = 500 ether;
 
-        // Build multicall with approval + withdraw
+        // Build multicall with approval + sendToUEA
         Multicall[] memory calls = new Multicall[](3);
         calls[0] = makeCall(
-            address(token),
-            0,
-            abi.encodeWithSelector(IERC20.approve.selector, address(mockUniversalGateway), 0)
+            address(token), 0, abi.encodeWithSelector(IERC20.approve.selector, address(mockUniversalGateway), 0)
         );
         calls[1] = makeCall(
             address(token),
             0,
-            abi.encodeWithSelector(IERC20.approve.selector, address(mockUniversalGateway), withdrawAmount)
+            abi.encodeWithSelector(IERC20.approve.selector, address(mockUniversalGateway), sendAmount)
         );
-        calls[2] = buildSelfWithdrawCall(address(token), withdrawAmount);
+        calls[2] = buildSelfSendToUEACall(address(token), sendAmount);
 
         bytes memory payload = encodeCalls(calls);
 
@@ -281,16 +265,16 @@ contract CEA_NewMulticallTests is CEATest {
         assertEq(mockUniversalGateway.callCount(), 1, "Gateway should be called once");
     }
 
-    function test_RevertWhen_SelfCallWithdraw_InsufficientERC20Balance() public deployCEA {
+    function test_RevertWhen_SelfCallSendToUEA_InsufficientERC20Balance() public deployCEA {
         MockGasToken token = new MockGasToken();
         fundCEAWithTokens(address(token), 100 ether);
 
         bytes32 txID = generateTxID(1);
         bytes32 universalTxID = generateUniversalTxID(1);
-        uint256 withdrawAmount = 500 ether;  // More than balance
+        uint256 sendAmount = 500 ether; // More than balance
 
         Multicall[] memory calls = new Multicall[](1);
-        calls[0] = buildSelfWithdrawCall(address(token), withdrawAmount);
+        calls[0] = buildSelfSendToUEACall(address(token), sendAmount);
 
         bytes memory payload = encodeCalls(calls);
 
@@ -299,15 +283,15 @@ contract CEA_NewMulticallTests is CEATest {
         ceaInstance.executeUniversalTx(txID, universalTxID, ueaOnPush, payload);
     }
 
-    function test_SelfCallWithdraw_Native_Success() public deployCEA {
+    function test_SelfCallSendToUEA_Native_Success() public deployCEA {
         fundCEAWithNative(1000 ether);
 
         bytes32 txID = generateTxID(1);
         bytes32 universalTxID = generateUniversalTxID(1);
-        uint256 withdrawAmount = 500 ether;
+        uint256 sendAmount = 500 ether;
 
         Multicall[] memory calls = new Multicall[](1);
-        calls[0] = buildSelfWithdrawCall(address(0), withdrawAmount);
+        calls[0] = buildSelfSendToUEACall(address(0), sendAmount);
 
         bytes memory payload = encodeCalls(calls);
 
@@ -317,15 +301,15 @@ contract CEA_NewMulticallTests is CEATest {
         assertEq(mockUniversalGateway.callCount(), 1, "Gateway should be called once");
     }
 
-    function test_RevertWhen_SelfCallWithdraw_InsufficientNativeBalance() public deployCEA {
+    function test_RevertWhen_SelfCallSendToUEA_InsufficientNativeBalance() public deployCEA {
         fundCEAWithNative(100 ether);
 
         bytes32 txID = generateTxID(1);
         bytes32 universalTxID = generateUniversalTxID(1);
-        uint256 withdrawAmount = 500 ether;  // More than balance
+        uint256 sendAmount = 500 ether; // More than balance
 
         Multicall[] memory calls = new Multicall[](1);
-        calls[0] = buildSelfWithdrawCall(address(0), withdrawAmount);
+        calls[0] = buildSelfSendToUEACall(address(0), sendAmount);
 
         bytes memory payload = encodeCalls(calls);
 
@@ -348,14 +332,12 @@ contract CEA_NewMulticallTests is CEATest {
         Multicall[] memory calls = new Multicall[](4);
         // External call
         calls[0] = makeCall(address(target), 0, abi.encodeWithSignature("setMagicNumber(uint256)", 42));
-        // Approve for withdraw
+        // Approve for sendToUEA
         calls[1] = makeCall(
-            address(token),
-            0,
-            abi.encodeWithSelector(IERC20.approve.selector, address(mockUniversalGateway), 100 ether)
+            address(token), 0, abi.encodeWithSelector(IERC20.approve.selector, address(mockUniversalGateway), 100 ether)
         );
-        // Self-call withdraw
-        calls[2] = buildSelfWithdrawCall(address(token), 100 ether);
+        // Self-call sendToUEA
+        calls[2] = buildSelfSendToUEACall(address(token), 100 ether);
         // Another external call
         calls[3] = makeCall(address(target), 0, abi.encodeWithSignature("setMagicNumber(uint256)", 99));
 
@@ -376,17 +358,11 @@ contract CEA_NewMulticallTests is CEATest {
         bytes32 txID = generateTxID(1);
         bytes32 universalTxID = generateUniversalTxID(1);
 
-        bytes memory payload1 = buildExternalSingleCall(
-            address(target),
-            0,
-            abi.encodeWithSignature("setMagicNumber(uint256)", 42)
-        );
+        bytes memory payload1 =
+            buildExternalSingleCall(address(target), 0, abi.encodeWithSignature("setMagicNumber(uint256)", 42));
 
-        bytes memory payload2 = buildExternalSingleCall(
-            address(target),
-            0,
-            abi.encodeWithSignature("setMagicNumber(uint256)", 99)
-        );
+        bytes memory payload2 =
+            buildExternalSingleCall(address(target), 0, abi.encodeWithSignature("setMagicNumber(uint256)", 99));
 
         // First execution succeeds
         vm.prank(vault);
@@ -403,11 +379,8 @@ contract CEA_NewMulticallTests is CEATest {
         bytes32 txID2 = generateTxID(2);
         bytes32 universalTxID = generateUniversalTxID(1);
 
-        bytes memory payload = buildExternalSingleCall(
-            address(target),
-            0,
-            abi.encodeWithSignature("setMagicNumber(uint256)", 42)
-        );
+        bytes memory payload =
+            buildExternalSingleCall(address(target), 0, abi.encodeWithSignature("setMagicNumber(uint256)", 42));
 
         // First execution
         vm.prank(vault);
@@ -463,11 +436,8 @@ contract CEA_NewMulticallTests is CEATest {
         bytes32 txID = generateTxID(1);
         bytes32 universalTxID = generateUniversalTxID(1);
 
-        bytes memory payload = buildExternalSingleCall(
-            address(malicious),
-            0,
-            abi.encodeWithSignature("execute(bytes)", "")
-        );
+        bytes memory payload =
+            buildExternalSingleCall(address(malicious), 0, abi.encodeWithSignature("execute(bytes)", ""));
 
         vm.prank(vault);
         // The malicious contract will try to reenter but should be blocked
@@ -482,48 +452,52 @@ contract CEA_NewMulticallTests is CEATest {
     // 10) msg.value accounting (A - missing tests from TEST_ANALYSIS.md)
     // =========================================================================
 
-    function test_RevertWhen_MsgValue_MismatchInMultiCall() public deployCEA {
+    function test_MsgValueLessThanSum_CEAHasPreExistingBalance_Succeeds() public deployCEA {
         bytes32 txID = generateTxID(1);
         bytes32 universalTxID = generateUniversalTxID(1);
 
-        uint256 value1 = 0.1 ether;
-        uint256 value2 = 0.2 ether;
-        uint256 totalValue = value1 + value2;
+        uint256 feePerCall = 0.1 ether;
 
-        vm.deal(vault, totalValue);
+        // Pre-fund CEA so it can cover the shortfall
+        fundCEAWithNative(0.1 ether);
+
+        vm.deal(vault, 0.1 ether);
 
         Multicall[] memory calls = new Multicall[](2);
-        calls[0] = makeCall(address(target), value1, abi.encodeWithSignature("setMagicNumberWithFee(uint256)", 10));
-        calls[1] = makeCall(address(target), value2, abi.encodeWithSignature("setMagicNumberWithFee(uint256)", 20));
+        calls[0] = makeCall(address(target), feePerCall, abi.encodeWithSignature("setMagicNumberWithFee(uint256)", 10));
+        calls[1] = makeCall(address(target), feePerCall, abi.encodeWithSignature("setMagicNumberWithFee(uint256)", 20));
 
         bytes memory payload = encodeCalls(calls);
 
-        // Send wrong amount - less than sum
+        // msg.value (0.1) < sum of call values (0.2), but CEA has pre-existing 0.1 balance
         vm.prank(vault);
-        vm.expectRevert(Errors.InvalidAmount.selector);
-        ceaInstance.executeUniversalTx{value: value1}(txID, universalTxID, ueaOnPush, payload);
+        ceaInstance.executeUniversalTx{value: 0.1 ether}(txID, universalTxID, ueaOnPush, payload);
+
+        assertEq(target.magicNumber(), 20, "Final magic number should be 20");
     }
 
-    function test_RevertWhen_MsgValue_ExceedsSumInMultiCall() public deployCEA {
+    function test_MsgValueExceedsSum_ExcessStaysInCEA() public deployCEA {
         bytes32 txID = generateTxID(1);
         bytes32 universalTxID = generateUniversalTxID(1);
 
-        uint256 value1 = 0.1 ether;
-        uint256 value2 = 0.2 ether;
-        uint256 totalValue = value1 + value2;
+        uint256 feePerCall = 0.1 ether;
+        uint256 totalValue = feePerCall * 2;
+        uint256 excess = 0.5 ether;
 
-        vm.deal(vault, totalValue + 1 ether);
+        vm.deal(vault, totalValue + excess);
 
         Multicall[] memory calls = new Multicall[](2);
-        calls[0] = makeCall(address(target), value1, abi.encodeWithSignature("setMagicNumberWithFee(uint256)", 10));
-        calls[1] = makeCall(address(target), value2, abi.encodeWithSignature("setMagicNumberWithFee(uint256)", 20));
+        calls[0] = makeCall(address(target), feePerCall, abi.encodeWithSignature("setMagicNumberWithFee(uint256)", 10));
+        calls[1] = makeCall(address(target), feePerCall, abi.encodeWithSignature("setMagicNumberWithFee(uint256)", 20));
 
         bytes memory payload = encodeCalls(calls);
 
-        // Send more than sum - ETH would be trapped
+        // Excess ETH stays in CEA (belongs to user's UEA)
         vm.prank(vault);
-        vm.expectRevert(Errors.InvalidAmount.selector);
-        ceaInstance.executeUniversalTx{value: totalValue + 0.5 ether}(txID, universalTxID, ueaOnPush, payload);
+        ceaInstance.executeUniversalTx{value: totalValue + excess}(txID, universalTxID, ueaOnPush, payload);
+
+        assertEq(target.magicNumber(), 20, "Final magic number should be 20");
+        assertEq(address(ceaInstance).balance, excess, "Excess ETH should remain in CEA");
     }
 
     function test_SuccessWhen_MsgValue_MatchesSumExactly() public deployCEA {
@@ -533,7 +507,7 @@ contract CEA_NewMulticallTests is CEATest {
         // Both calls require exactly 0.1 ETH each
         uint256 value1 = 0.1 ether;
         uint256 value2 = 0.1 ether;
-        uint256 totalValue = value1 + value2;  // 0.2 ether
+        uint256 totalValue = value1 + value2; // 0.2 ether
 
         vm.deal(vault, totalValue);
 
@@ -562,8 +536,8 @@ contract CEA_NewMulticallTests is CEATest {
         Multicall[] memory calls = new Multicall[](1);
         calls[0] = makeCall(
             address(ceaInstance),
-            0.1 ether,  // Non-zero value to self-call
-            abi.encodeWithSignature("sendUniversalTxToUEA(address,uint256,bytes,bytes)", address(0), 0.1 ether, "", "")
+            0.1 ether, // Non-zero value to self-call
+            abi.encodeWithSignature("sendUniversalTxToUEA(address,uint256,bytes)", address(0), 0.1 ether, "")
         );
 
         bytes memory payload = encodeCalls(calls);
@@ -579,27 +553,27 @@ contract CEA_NewMulticallTests is CEATest {
         fundCEAWithTokens(address(token), 1000 ether);
 
         // Try to call sendUniversalTxToUEA directly (not through executeUniversalTx)
-        vm.expectRevert(Errors.NotVault.selector);
-        CEA(payable(address(ceaInstance))).sendUniversalTxToUEA(address(token), 100 ether);
+        vm.expectRevert(CommonErrors.Unauthorized.selector);
+        CEA(payable(address(ceaInstance))).sendUniversalTxToUEA(address(token), 100 ether, "");
     }
 
     // =========================================================================
     // 12) Gateway integration edge cases (C - missing tests from TEST_ANALYSIS.md)
     // =========================================================================
 
-    function test_RevertWhen_WithdrawNative_InsufficientBalanceInBatch() public deployCEA {
+    function test_RevertWhen_SendNativeToUEA_InsufficientBalanceInBatch() public deployCEA {
         // Fund CEA with 0.5 ETH initially
         fundCEAWithNative(0.5 ether);
 
         bytes32 txID = generateTxID(1);
         bytes32 universalTxID = generateUniversalTxID(1);
 
-        // Batch: external call first (uses 0.1 ETH), then withdraw more than remaining balance
+        // Batch: external call first (uses 0.1 ETH), then send more than remaining balance
         Multicall[] memory calls = new Multicall[](2);
         calls[0] = makeCall(address(target), 0.1 ether, abi.encodeWithSignature("setMagicNumberWithFee(uint256)", 42));
         // After first call, CEA has 0.5 ETH left (0.5 initial + 0.1 msg.value - 0.1 to target)
-        // Try to withdraw 1 ETH - should fail
-        calls[1] = buildSelfWithdrawCall(address(0), 1 ether);
+        // Try to send 1 ETH - should fail
+        calls[1] = buildSelfSendToUEACall(address(0), 1 ether);
 
         bytes memory payload = encodeCalls(calls);
 
@@ -627,12 +601,10 @@ contract CEA_NewMulticallTests is CEATest {
         Multicall[] memory calls = new Multicall[](2);
         // Approve gateway
         calls[0] = makeCall(
-            address(token),
-            0,
-            abi.encodeWithSelector(IERC20.approve.selector, address(mockUniversalGateway), 100 ether)
+            address(token), 0, abi.encodeWithSelector(IERC20.approve.selector, address(mockUniversalGateway), 100 ether)
         );
-        // Withdraw (gateway will revert)
-        calls[1] = buildSelfWithdrawCall(address(token), 100 ether);
+        // SendToUEA (gateway will revert)
+        calls[1] = buildSelfSendToUEACall(address(token), 100 ether);
 
         bytes memory payload = encodeCalls(calls);
 
@@ -660,11 +632,8 @@ contract CEA_NewMulticallTests is CEATest {
 
         Multicall[] memory calls = new Multicall[](2);
         // Approve spender
-        calls[0] = makeCall(
-            address(token),
-            0,
-            abi.encodeWithSelector(IERC20.approve.selector, address(spender), 100 ether)
-        );
+        calls[0] =
+            makeCall(address(token), 0, abi.encodeWithSelector(IERC20.approve.selector, address(spender), 100 ether));
         // External call that fails
         calls[1] = makeCall(address(reverter), 0, abi.encodeWithSignature("revertWithReason()"));
 
@@ -678,7 +647,7 @@ contract CEA_NewMulticallTests is CEATest {
         assertEq(token.allowance(address(ceaInstance), address(spender)), 0, "Allowance should be 0");
     }
 
-    function test_RevertWhen_SelfWithdrawInMiddle_LaterCallFails_NoGatewayCall() public deployCEA {
+    function test_RevertWhen_SelfSendToUEAInMiddle_LaterCallFails_NoGatewayCall() public deployCEA {
         MockGasToken token = new MockGasToken();
         RevertingTarget reverter = new RevertingTarget();
 
@@ -690,12 +659,10 @@ contract CEA_NewMulticallTests is CEATest {
         Multicall[] memory calls = new Multicall[](3);
         // Approve gateway
         calls[0] = makeCall(
-            address(token),
-            0,
-            abi.encodeWithSelector(IERC20.approve.selector, address(mockUniversalGateway), 100 ether)
+            address(token), 0, abi.encodeWithSelector(IERC20.approve.selector, address(mockUniversalGateway), 100 ether)
         );
-        // Self-withdraw
-        calls[1] = buildSelfWithdrawCall(address(token), 100 ether);
+        // Self-call sendToUEA
+        calls[1] = buildSelfSendToUEACall(address(token), 100 ether);
         // Later call fails
         calls[2] = makeCall(address(reverter), 0, abi.encodeWithSignature("revertWithReason()"));
 
@@ -719,11 +686,8 @@ contract CEA_NewMulticallTests is CEATest {
         bytes32 txID = generateTxID(1);
         bytes32 universalTxID = generateUniversalTxID(1);
 
-        bytes memory failingPayload = buildExternalSingleCall(
-            address(reverter),
-            0,
-            abi.encodeWithSignature("revertWithReason()")
-        );
+        bytes memory failingPayload =
+            buildExternalSingleCall(address(reverter), 0, abi.encodeWithSignature("revertWithReason()"));
 
         // First attempt - should revert
         vm.prank(vault);
@@ -734,11 +698,8 @@ contract CEA_NewMulticallTests is CEATest {
         assertFalse(CEA(payable(address(ceaInstance))).isExecuted(txID), "txID should not be marked");
 
         // Retry with same txID but different (succeeding) payload
-        bytes memory succeedingPayload = buildExternalSingleCall(
-            address(target),
-            0,
-            abi.encodeWithSignature("setMagicNumber(uint256)", 42)
-        );
+        bytes memory succeedingPayload =
+            buildExternalSingleCall(address(target), 0, abi.encodeWithSignature("setMagicNumber(uint256)", 42));
 
         vm.prank(vault);
         ceaInstance.executeUniversalTx(txID, universalTxID, ueaOnPush, succeedingPayload);
@@ -758,9 +719,7 @@ contract CEA_NewMulticallTests is CEATest {
         vm.deal(vault, value1 + value2);
 
         bytes memory payload = buildExternalSingleCall(
-            address(target),
-            value1,
-            abi.encodeWithSignature("setMagicNumberWithFee(uint256)", 42)
+            address(target), value1, abi.encodeWithSignature("setMagicNumberWithFee(uint256)", 42)
         );
 
         // First execution with value1
@@ -823,21 +782,21 @@ contract CEA_NewMulticallTests is CEATest {
         assertEq(eventIndex, 2, "Should have validated 2 events");
     }
 
-    function test_Events_SelfCallWithdraw_EmittedCorrectly() public deployCEA {
+    function test_Events_SelfCallSendToUEA_EmittedCorrectly() public deployCEA {
         MockGasToken token = new MockGasToken();
         fundCEAWithTokens(address(token), 1000 ether);
 
         bytes32 txID = generateTxID(1);
         bytes32 universalTxID = generateUniversalTxID(1);
-        uint256 withdrawAmount = 100 ether;
+        uint256 sendAmount = 100 ether;
 
         Multicall[] memory calls = new Multicall[](2);
         calls[0] = makeCall(
             address(token),
             0,
-            abi.encodeWithSelector(IERC20.approve.selector, address(mockUniversalGateway), withdrawAmount)
+            abi.encodeWithSelector(IERC20.approve.selector, address(mockUniversalGateway), sendAmount)
         );
-        calls[1] = buildSelfWithdrawCall(address(token), withdrawAmount);
+        calls[1] = buildSelfSendToUEACall(address(token), sendAmount);
 
         bytes memory payload = encodeCalls(calls);
 
@@ -880,12 +839,13 @@ contract CEA_NewMulticallTests is CEATest {
         bytes32 txID = generateTxID(1);
         bytes32 universalTxID = generateUniversalTxID(1);
 
-        uint256 transferAmount = 0.1 ether;  // Exact fee required by target
+        uint256 transferAmount = 0.1 ether; // Exact fee required by target
         vm.deal(vault, transferAmount);
 
         Multicall[] memory calls = new Multicall[](2);
         // Send native to target
-        calls[0] = makeCall(address(target), transferAmount, abi.encodeWithSignature("setMagicNumberWithFee(uint256)", 42));
+        calls[0] =
+            makeCall(address(target), transferAmount, abi.encodeWithSignature("setMagicNumberWithFee(uint256)", 42));
         // Later call reverts
         calls[1] = makeCall(address(reverter), 0, abi.encodeWithSignature("revertWithReason()"));
 
@@ -901,7 +861,6 @@ contract CEA_NewMulticallTests is CEATest {
         assertEq(address(target).balance, targetBalanceBefore, "Target balance should not change due to rollback");
     }
 
-
     // =========================================================================
     // 1) MULTICALL_SELECTOR Flow Tests
     // =========================================================================
@@ -914,15 +873,9 @@ contract CEA_NewMulticallTests is CEATest {
         // Create multicall with MULTICALL_SELECTOR prefix
         Multicall[] memory calls = new Multicall[](2);
         calls[0] = makeCall(
-            address(token),
-            0,
-            abi.encodeWithSignature("approve(address,uint256)", address(testTarget), 100 ether)
+            address(token), 0, abi.encodeWithSignature("approve(address,uint256)", address(testTarget), 100 ether)
         );
-        calls[1] = makeCall(
-            address(testTarget),
-            0,
-            abi.encodeWithSignature("setMagicNumber(uint256)", 42)
-        );
+        calls[1] = makeCall(address(testTarget), 0, abi.encodeWithSignature("setMagicNumber(uint256)", 42));
 
         bytes memory payload = encodeCalls(calls); // This now includes MULTICALL_SELECTOR
 
@@ -945,15 +898,9 @@ contract CEA_NewMulticallTests is CEATest {
         // Create multicall WITHOUT MULTICALL_SELECTOR (old format)
         Multicall[] memory calls = new Multicall[](2);
         calls[0] = makeCall(
-            address(token),
-            0,
-            abi.encodeWithSignature("approve(address,uint256)", address(testTarget), 100 ether)
+            address(token), 0, abi.encodeWithSignature("approve(address,uint256)", address(testTarget), 100 ether)
         );
-        calls[1] = makeCall(
-            address(testTarget),
-            0,
-            abi.encodeWithSignature("setMagicNumber(uint256)", 123)
-        );
+        calls[1] = makeCall(address(testTarget), 0, abi.encodeWithSignature("setMagicNumber(uint256)", 123));
 
         // Encode without MULTICALL_SELECTOR (old way - direct abi.encode)
         bytes memory payload = abi.encode(calls);
@@ -969,34 +916,31 @@ contract CEA_NewMulticallTests is CEATest {
         assertTrue(CEA(payable(address(ceaInstance))).isExecuted(txID));
     }
 
-    function test_MulticallSelector_ValidatesMsgValue() public deployCEA {
-        Multicall[] memory calls = new Multicall[](1);
-        calls[0] = makeCall(
-            address(0x123),
-            1 ether,
-            ""
-        );
+    function test_MulticallSelector_MsgValueExceeds_NoRevert() public deployCEA {
+        Target testTarget = new Target();
 
-        bytes memory payload = encodeCalls(calls); // Includes MULTICALL_SELECTOR
+        Multicall[] memory calls = new Multicall[](1);
+        calls[0] = makeCall(address(testTarget), 0.1 ether, abi.encodeWithSignature("setMagicNumberWithFee(uint256)", 42));
+
+        bytes memory payload = encodeCalls(calls);
 
         bytes32 txID = generateTxID(1);
         bytes32 universalTxID = generateUniversalTxID(1);
 
         vm.deal(vault, 2 ether);
         vm.prank(vault);
-        vm.expectRevert(Errors.InvalidAmount.selector);
         ceaInstance.executeUniversalTx{value: 2 ether}(txID, universalTxID, ueaOnPush, payload);
+
+        assertEq(testTarget.magicNumber(), 42, "Target should have magic number set");
+        assertEq(address(ceaInstance).balance, 1.9 ether, "Excess should stay in CEA");
     }
 
     function test_MulticallSelector_CorrectMsgValuePasses() public deployCEA {
         Target testTarget = new Target();
 
         Multicall[] memory calls = new Multicall[](1);
-        calls[0] = makeCall(
-            address(testTarget),
-            0.1 ether,
-            abi.encodeWithSignature("setMagicNumberWithFee(uint256)", 999)
-        );
+        calls[0] =
+            makeCall(address(testTarget), 0.1 ether, abi.encodeWithSignature("setMagicNumberWithFee(uint256)", 999));
 
         bytes memory payload = encodeCalls(calls); // Includes MULTICALL_SELECTOR
 
@@ -1018,10 +962,7 @@ contract CEA_NewMulticallTests is CEATest {
 
     function test_InvalidPayload_WithMulticallSelector_ButMalformedData() public deployCEA {
         // Payload with MULTICALL_SELECTOR but malformed data after it
-        bytes memory invalidPayload = abi.encodePacked(
-            MULTICALL_SELECTOR,
-            bytes("malformed data")
-        );
+        bytes memory invalidPayload = abi.encodePacked(MULTICALL_SELECTOR, bytes("malformed data"));
 
         bytes32 txID = generateTxID(1);
         bytes32 universalTxID = generateUniversalTxID(1);
@@ -1090,13 +1031,9 @@ contract CEA_NewMulticallTests is CEATest {
         Multicall[] memory calls = new Multicall[](1);
         calls[0] = makeCall(
             address(ceaInstance),
-            0.1 ether,  // Non-zero value to self-call - should revert
+            0.1 ether, // Non-zero value to self-call - should revert
             abi.encodeWithSignature(
-                "sendUniversalTxToUEA(address,uint256,bytes,bytes)",
-                address(token),
-                100 ether,
-                "",
-                ""
+                "sendUniversalTxToUEA(address,uint256,bytes)", address(token), 100 ether, ""
             )
         );
 
@@ -1117,18 +1054,12 @@ contract CEA_NewMulticallTests is CEATest {
 
         Multicall[] memory calls = new Multicall[](2);
         calls[0] = makeCall(
-            address(token),
-            0,
-            abi.encodeWithSignature("approve(address,uint256)", universalGateway, 100 ether)
+            address(token), 0, abi.encodeWithSignature("approve(address,uint256)", universalGateway, 100 ether)
         );
         calls[1] = makeCall(
             address(ceaInstance),
-            0,  // Zero value to self-call - OK
-            abi.encodeWithSignature(
-                "sendUniversalTxToUEA(address,uint256)",
-                address(token),
-                100 ether
-            )
+            0, // Zero value to self-call - OK
+            abi.encodeWithSignature("sendUniversalTxToUEA(address,uint256,bytes)", address(token), 100 ether, "")
         );
 
         bytes memory payload = encodeCalls(calls);
@@ -1140,5 +1071,90 @@ contract CEA_NewMulticallTests is CEATest {
         ceaInstance.executeUniversalTx(txID, universalTxID, ueaOnPush, payload);
 
         assertTrue(CEA(payable(address(ceaInstance))).isExecuted(txID));
+    }
+
+    // =========================================================================
+    // msg.value relaxation tests (CEA can spend pre-existing balance)
+    // =========================================================================
+
+    function test_MsgValueZero_CEAPreExistingBalance_Succeeds() public deployCEA {
+        // CEA has pre-existing ETH, Vault sends msg.value=0
+        fundCEAWithNative(1 ether);
+
+        Multicall[] memory calls = new Multicall[](1);
+        calls[0] = makeCall(address(target), 0.1 ether, abi.encodeWithSignature("setMagicNumberWithFee(uint256)", 42));
+
+        bytes memory payload = encodeCalls(calls);
+
+        vm.prank(vault);
+        ceaInstance.executeUniversalTx{value: 0}(
+            generateTxID(1), generateUniversalTxID(1), ueaOnPush, payload
+        );
+
+        assertEq(target.magicNumber(), 42, "Target should have magic number set");
+        assertEq(address(ceaInstance).balance, 0.9 ether, "CEA should have 0.9 ETH remaining");
+    }
+
+    function test_MsgValueGtTotalCallValues_ExcessStaysInCEA() public deployCEA {
+        Multicall[] memory calls = new Multicall[](1);
+        calls[0] = makeCall(address(target), 0.1 ether, abi.encodeWithSignature("setMagicNumberWithFee(uint256)", 42));
+
+        bytes memory payload = encodeCalls(calls);
+
+        vm.deal(vault, 1 ether);
+        vm.prank(vault);
+        ceaInstance.executeUniversalTx{value: 1 ether}(
+            generateTxID(1), generateUniversalTxID(1), ueaOnPush, payload
+        );
+
+        assertEq(target.magicNumber(), 42, "Target should have magic number set");
+        assertEq(address(ceaInstance).balance, 0.9 ether, "Excess ETH should stay in CEA");
+    }
+
+    // =========================================================================
+    // Migration-in-multicall prevention tests
+    // =========================================================================
+
+    function test_MigrationSelectorInMulticall_Reverts() public deployCEA {
+        Multicall[] memory calls = new Multicall[](2);
+        calls[0] = makeCall(address(target), 0, abi.encodeWithSignature("setMagicNumber(uint256)", 42));
+        calls[1] = makeCall(address(ceaInstance), 0, abi.encodePacked(MIGRATION_SELECTOR));
+
+        bytes memory payload = encodeCalls(calls);
+
+        vm.prank(vault);
+        vm.expectRevert(Errors.ExecutionFailed.selector);
+        ceaInstance.executeUniversalTx(
+            generateTxID(1), generateUniversalTxID(1), ueaOnPush, payload
+        );
+    }
+
+    function test_MigrationSelectorAtPositionZero_Reverts() public deployCEA {
+        Multicall[] memory calls = new Multicall[](2);
+        calls[0] = makeCall(address(ceaInstance), 0, abi.encodePacked(MIGRATION_SELECTOR));
+        calls[1] = makeCall(address(target), 0, abi.encodeWithSignature("setMagicNumber(uint256)", 42));
+
+        bytes memory payload = encodeCalls(calls);
+
+        vm.prank(vault);
+        vm.expectRevert(Errors.ExecutionFailed.selector);
+        ceaInstance.executeUniversalTx(
+            generateTxID(1), generateUniversalTxID(1), ueaOnPush, payload
+        );
+    }
+
+    function test_MigrationSelectorAtLastPosition_Reverts() public deployCEA {
+        Multicall[] memory calls = new Multicall[](3);
+        calls[0] = makeCall(address(target), 0, abi.encodeWithSignature("setMagicNumber(uint256)", 10));
+        calls[1] = makeCall(address(target), 0, abi.encodeWithSignature("setMagicNumber(uint256)", 20));
+        calls[2] = makeCall(address(ceaInstance), 0, abi.encodePacked(MIGRATION_SELECTOR));
+
+        bytes memory payload = encodeCalls(calls);
+
+        vm.prank(vault);
+        vm.expectRevert(Errors.ExecutionFailed.selector);
+        ceaInstance.executeUniversalTx(
+            generateTxID(1), generateUniversalTxID(1), ueaOnPush, payload
+        );
     }
 }

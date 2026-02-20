@@ -7,6 +7,9 @@ out/
 .claude/
 docs-internal/
 
+# Deployments
+deployments
+
 # Ignores development broadcast logs
 !/broadcast
 /broadcast/*/31337/
@@ -19,3 +22,4 @@ docs-internal/
 # Safe to ignore
 .wake/
 .vscode/
+foundry.lock
