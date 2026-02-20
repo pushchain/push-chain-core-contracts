@@ -38,7 +38,7 @@ Consider Bob, who has pETH on Push Chain and wants to execute a function on Ethe
    - On Ethereum, the TSS triggers the Vault, which is the single on-chain entrypoint for outbound executions.
 
 5. **Vault ensures Bob's CEA exists**
-   - The Vault queries `CEAFactory` for Bob's CEA address. If not deployed, the Vault deploys it deterministically via `CEAFactory.deployCEA(ueaOnPush)`.
+   - The Vault queries `CEAFactory` for Bob's CEA address. If not deployed, the Vault deploys it deterministically via `CEAFactory.deployCEA(pushAccount)`.
 
 6. **Vault funds the CEA (if needed)**
    - For ERC20: Vault transfers tokens into the CEA.
@@ -88,14 +88,14 @@ State updated / action performed
 
 Each user has exactly one CEA per external chain (v1). A CEA is deployed via `CEAFactory` using deterministic deployment (CREATE2-style semantics through deterministic cloning via OpenZeppelin's `Clones.cloneDeterministic`). The CEA address is derived from the user's UEA identity (on Push Chain) in a way that guarantees:
 
-- The same UEA always maps to the same CEA address on that chain.
-- The mapping is stable and predictable (can be computed ahead of time using `CEAFactory.computeCEA(ueaOnPush)`).
+- The same push account (UEA) always maps to the same CEA address on that chain.
+- The mapping is stable and predictable (can be computed ahead of time using `CEAFactory.computeCEA(pushAccount)`).
 - The Vault is the only allowed deployer (via `onlyVault` modifier), preventing unauthorized creation or spoofing.
 
 **Deployment flow:**
-1. `CEAFactory` clones `CEAProxy` template using `cloneDeterministic(salt)` where `salt = keccak256(abi.encode(ueaOnPush))`.
+1. `CEAFactory` clones `CEAProxy` template using `cloneDeterministic(salt)` where `salt = keccak256(abi.encode(pushAccount))`.
 2. `CEAFactory` calls `CEAProxy.initializeCEAProxy(CEA_IMPLEMENTATION)` to set the implementation.
-3. `CEAFactory` calls `CEA.initializeCEA(ueaOnPush, VAULT, UNIVERSAL_GATEWAY)` through the proxy.
+3. `CEAFactory` calls `CEA.initializeCEA(pushAccount, VAULT, UNIVERSAL_GATEWAY)` through the proxy.
 
 In practice:
 ```

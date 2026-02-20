@@ -23,11 +23,18 @@ interface ICEAFactory {
     //========================
 
     /**
-     * @notice           Emitted when a new CEA is deployed for a given UEA on Push Chain.
-     * @param _uea       Address of the UEA on Push Chain that this CEA represents.
-     * @param cea        Address of the deployed CEA on the external chain.
+     * @notice               Emitted when a new CEA is deployed for a given push account on Push Chain.
+     * @param pushAccount    Address of the push account (UEA on Push Chain) that this CEA represents.
+     * @param cea            Address of the deployed CEA on the external chain.
      */
-    event CEADeployed(address indexed _uea, address indexed cea);
+    event CEADeployed(address indexed pushAccount, address indexed cea);
+
+    /**
+     * @notice              Emitted when the Universal Gateway address is updated.
+     * @param oldGateway    Previous Universal Gateway address.
+     * @param newGateway    New Universal Gateway address.
+     */
+    event UniversalGatewayUpdated(address indexed oldGateway, address indexed newGateway);
 
     /**
      * @notice           Emitted when the Vault address is updated.
@@ -66,32 +73,33 @@ interface ICEAFactory {
     function CEA_MIGRATION_CONTRACT() external view returns (address);
 
     /**
-     * @notice Returns the CEA address and deployment status for a given UEA on Push Chain.
+     * @notice Returns the CEA address and deployment status for a given push account on Push Chain.
      *
      * @dev
      *  - If the CEA has been deployed, returns (cea, true).
      *  - If the CEA has not been deployed, returns (predictedAddress, false).
      *
-     * @param _uea       Address of the UEA contract on Push Chain.
-     * @return cea       Address of the CEA (deployed or predicted via CREATE2).
+     * @param pushAccount Address of the push account (UEA) contract on Push Chain.
+     * @return cea        Address of the CEA (deployed or predicted via CREATE2).
      * @return isDeployed True if the CEA has code deployed at that address.
      */
-    function getCEAForUEA(address _uea) external view returns (address cea, bool isDeployed);
-    /**
-     * @notice            Returns the UEA address on Push Chain that a given CEA represents.
-     *
-     * @param _cea       Address of a CEA.
-     * @return _uea      Address of the UEA on Push Chain.
-     */
-    function getUEAForCEA(address _cea) external view returns (address _uea);
+    function getCEAForPushAccount(address pushAccount) external view returns (address cea, bool isDeployed);
 
     /**
-     * @notice          Computes the deterministic CEA address for a given UEA on Push Chain.
+     * @notice              Returns the push account address on Push Chain that a given CEA represents.
      *
-     * @param _uea       Address of the UEA contract on Push Chain.
-     * @return cea       Predicted address of the CEA clone.
+     * @param _cea          Address of a CEA.
+     * @return pushAccount  Address of the push account (UEA) on Push Chain.
      */
-    function computeCEA(address _uea) external view returns (address cea);
+    function getPushAccountForCEA(address _cea) external view returns (address pushAccount);
+
+    /**
+     * @notice              Computes the deterministic CEA address for a given push account on Push Chain.
+     *
+     * @param pushAccount   Address of the push account (UEA) contract on Push Chain.
+     * @return cea          Predicted address of the CEA clone.
+     */
+    function computeCEA(address pushAccount) external view returns (address cea);
 
     /**
      * @notice Returns whether a given address is recognized as a CEA.
@@ -114,8 +122,8 @@ interface ICEAFactory {
      *  - If the mapping exists but the code at the address is missing (e.g. selfdestruct),
      *    the factory MAY re-deploy at the same address using the same salt.
      *
-     * @param _uea  Address of the UEA on Push Chain.
-     * @return cea       Address of the deployed CEA on the external chain.
+     * @param pushAccount  Address of the push account (UEA) on Push Chain.
+     * @return cea         Address of the deployed CEA on the external chain.
      */
-    function deployCEA(address _uea) external returns (address cea);
+    function deployCEA(address pushAccount) external returns (address cea);
 }

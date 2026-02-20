@@ -26,7 +26,7 @@ import {
 
 contract UEA_SVM is ReentrancyGuard, IUEA {
     /// @notice The Universal Account information
-    UniversalAccountId internal id;
+    UniversalAccountId internal universalAccountId;
     /// @notice Flag to track initialization status
     bool private initialized;
     /// @notice The nonce for the UEA
@@ -35,13 +35,13 @@ contract UEA_SVM is ReentrancyGuard, IUEA {
     string public constant VERSION = "1.0.0";
     /// @notice The verifier precompile address
     address public constant VERIFIER_PRECOMPILE = 0x00000000000000000000000000000000000000ca;
-    /// @notice UEModule address - authorized to execute without signature verification
-    address public constant UE_MODULE = 0x14191Ea54B4c176fCf86f51b0FAc7CB1E71Df7d7;
+    /// @notice Universal Executor Module address - authorized to execute without signature verification
+    address public constant UNIVERSAL_EXECUTOR_MODULE = 0x14191Ea54B4c176fCf86f51b0FAc7CB1E71Df7d7;
     /// @notice Hash of keccak256("EIP712Domain_SVM(string version,string chainId,address verifyingContract)")
     bytes32 public constant DOMAIN_SEPARATOR_TYPEHASH_SVM =
         0x3aefc31558906b9b2c54de94f82a9b2455c24b4ba2b642ebb545ea2cc64a1e4b;
-    /// @notice Factory address to fetch migration contract
-    IUEAFactory public factory;
+    /// @notice UEAFactory address to fetch migration contract
+    IUEAFactory public ueaFactory;
 
     /**
      * @dev Returns the domain separator for EIP-712 signing.
@@ -49,7 +49,7 @@ contract UEA_SVM is ReentrancyGuard, IUEA {
      */
     function domainSeparator() public view returns (bytes32) {
         return
-            keccak256(abi.encode(DOMAIN_SEPARATOR_TYPEHASH_SVM, keccak256(bytes(VERSION)), id.chainId, address(this)));
+            keccak256(abi.encode(DOMAIN_SEPARATOR_TYPEHASH_SVM, keccak256(bytes(VERSION)), universalAccountId.chainId, address(this)));
     }
 
     /**
@@ -61,8 +61,8 @@ contract UEA_SVM is ReentrancyGuard, IUEA {
         }
         initialized = true;
 
-        id = _id;
-        factory = IUEAFactory(_factory);
+        universalAccountId = _id;
+        ueaFactory = IUEAFactory(_factory);
     }
 
     // =========================
@@ -73,13 +73,13 @@ contract UEA_SVM is ReentrancyGuard, IUEA {
      * @inheritdoc IUEA
      */
     function universalAccount() public view returns (UniversalAccountId memory) {
-        return id;
+        return universalAccountId;
     }
 
     /**
      * @inheritdoc IUEA
      */
-    function verifyPayloadSignature(bytes32 payloadHash, bytes memory signature) public view returns (bool) {
+    function verifyUniversalPayloadSignature(bytes32 payloadHash, bytes memory signature) public view returns (bool) {
         return _verifySignatureSVM(payloadHash, signature);
     }
 
@@ -91,7 +91,7 @@ contract UEA_SVM is ReentrancyGuard, IUEA {
      */
     function _verifySignatureSVM(bytes32 payloadHash, bytes memory signature) internal view returns (bool) {
         (bool success, bytes memory result) = VERIFIER_PRECOMPILE.staticcall(
-            abi.encodeWithSignature("verifyEd25519(bytes,bytes32,bytes)", id.owner, payloadHash, signature)
+            abi.encodeWithSignature("verifyEd25519(bytes,bytes32,bytes)", universalAccountId.owner, payloadHash, signature)
         );
         if (!success) {
             revert Errors.PrecompileCallFailed();
@@ -107,17 +107,17 @@ contract UEA_SVM is ReentrancyGuard, IUEA {
     /**
      * @inheritdoc IUEA
      */
-    function executePayload(bytes calldata rawPayload, bytes calldata verificationData) external nonReentrant {
-        UniversalPayload memory payload = abi.decode(rawPayload, (UniversalPayload));
-        
-        if (msg.sender != UE_MODULE) {
-            bytes32 payloadHash = getPayloadHash(payload);
-            if (!verifyPayloadSignature(payloadHash, verificationData)) {
+    function executeUniversalTx(bytes calldata payload, bytes calldata signature) external nonReentrant {
+        UniversalPayload memory decodedPayload = abi.decode(payload, (UniversalPayload));
+
+        if (msg.sender != UNIVERSAL_EXECUTOR_MODULE) {
+            bytes32 payloadHash = getUniversalPayloadHash(decodedPayload);
+            if (!verifyUniversalPayloadSignature(payloadHash, signature)) {
                 revert Errors.InvalidSVMSignature();
             }
         }
 
-        _handleExecution(payload);
+        _handleExecution(decodedPayload);
     }
 
     // =========================
@@ -160,7 +160,7 @@ contract UEA_SVM is ReentrancyGuard, IUEA {
             }
         }
 
-        emit PayloadExecuted(id.owner, nonce);
+        emit PayloadExecuted(universalAccountId.owner, nonce);
     }
 
     /**
@@ -210,7 +210,7 @@ contract UEA_SVM is ReentrancyGuard, IUEA {
 
         // Fetch migration contract address from factory
         // Note: payload.data should only contain MIGRATION_SELECTOR (no additional data needed)
-        address migrationContract = factory.UEA_MIGRATION_CONTRACT();
+        address migrationContract = ueaFactory.UEA_MIGRATION_CONTRACT();
         
         if (migrationContract == address(0)) {
             revert Errors.InvalidCall();
@@ -293,7 +293,7 @@ contract UEA_SVM is ReentrancyGuard, IUEA {
      * @param payload   payload to calculate the hash for.
      * @return bytes32  transaction hash.
      */
-    function getPayloadHash(UniversalPayload memory payload) public view returns (bytes32) {
+    function getUniversalPayloadHash(UniversalPayload memory payload) public view returns (bytes32) {
         bytes32 structHash = keccak256(
             abi.encode(
                 UNIVERSAL_PAYLOAD_TYPEHASH,

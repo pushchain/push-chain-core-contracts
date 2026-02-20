@@ -121,11 +121,11 @@ contract CEAMigration_IntegrationTest is Test {
     // =========================================================================
 
     function test_StatePersistence_UEA() public {
-        address ueaBefore = ceaInstance.UEA();
+        address ueaBefore = ceaInstance.pushAccount();
 
         executeMigration();
 
-        address ueaAfter = ceaInstance.UEA();
+        address ueaAfter = ceaInstance.pushAccount();
         assertEq(ueaAfter, ueaBefore, "UEA should be preserved");
         assertEq(ueaAfter, ueaOnPush, "UEA should match original");
     }
@@ -383,7 +383,7 @@ contract CEAMigration_IntegrationTest is Test {
         );
 
         // Verify state still preserved
-        assertEq(ceaInstance.UEA(), ueaOnPush, "UEA should still be preserved");
+        assertEq(ceaInstance.pushAccount(), ueaOnPush, "UEA should still be preserved");
         assertEq(ceaInstance.VAULT(), vault, "VAULT should still be preserved");
     }
 

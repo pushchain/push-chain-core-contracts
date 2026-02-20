@@ -2,7 +2,7 @@
 pragma solidity ^0.8.20;
 
 import "forge-std/Script.sol";
-import {UEAFactoryV1} from "../../src/UEA/UEAFactoryV1.sol";
+import {UEAFactory} from "../../src/UEA/UEAFactory.sol";
 import {ProxyAdmin} from "@openzeppelin/contracts/proxy/transparent/ProxyAdmin.sol";
 import {TransparentUpgradeableProxy, ITransparentUpgradeableProxy} from "@openzeppelin/contracts/proxy/transparent/TransparentUpgradeableProxy.sol";
 
@@ -35,8 +35,8 @@ contract UpgradeUEAFactoryScript is Script {
         console.log("Factory Proxy:", FACTORY_PROXY_ADDRESS);
 
         // 1. Deploy new implementation
-        UEAFactoryV1 newImplementation = new UEAFactoryV1();
-        console.log("New UEAFactoryV1 implementation deployed at:", address(newImplementation));
+        UEAFactory newImplementation = new UEAFactory();
+        console.log("New UEAFactory implementation deployed at:", address(newImplementation));
 
         // 2. Connect to deployed ProxyAdmin
         ProxyAdmin proxyAdmin = ProxyAdmin(PROXY_ADMIN_ADDRESS);

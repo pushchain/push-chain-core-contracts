@@ -14,7 +14,6 @@ import {ERC1967Proxy} from "@openzeppelin/contracts/proxy/ERC1967/ERC1967Proxy.s
 import {OwnableUpgradeable} from "@openzeppelin/contracts-upgradeable/access/OwnableUpgradeable.sol";
 import {ICEAFactory} from "../../src/interfaces/ICEAFactory.sol";
 
-
 contract CEAFactoryTest is Test {
     // Core contracts
     CEAFactory public factory;
@@ -52,11 +51,11 @@ contract CEAFactoryTest is Test {
         // Deploy and initialize the factory proxy
         bytes memory initData = abi.encodeWithSelector(
             CEAFactory.initialize.selector,
-            owner,                              // initialOwner
-            vault,                              // initialVault
-            address(ceaProxyImplementation),   // ceaProxyImplementation
-            address(ceaImplementation),          // ceaImplementation
-            address(mockUniversalGateway)        // universalGateway
+            owner, // initialOwner
+            vault, // initialVault
+            address(ceaProxyImplementation), // ceaProxyImplementation
+            address(ceaImplementation), // ceaImplementation
+            address(mockUniversalGateway) // universalGateway
         );
         ERC1967Proxy proxy = new ERC1967Proxy(address(factoryImpl), initData);
         factory = CEAFactory(address(proxy));
@@ -83,13 +82,14 @@ contract CEAFactoryTest is Test {
         ERC1967Proxy newProxy = new ERC1967Proxy(address(newFactoryImpl), "");
 
         vm.expectRevert(CEAFactory.ZeroAddress.selector);
-        CEAFactory(address(newProxy)).initialize(
-            address(0),                          
-            vault,
-            address(ceaProxyImplementation),
-            address(ceaImplementation),
-            address(mockUniversalGateway)
-        );
+        CEAFactory(address(newProxy))
+            .initialize(
+                address(0),
+                vault,
+                address(ceaProxyImplementation),
+                address(ceaImplementation),
+                address(mockUniversalGateway)
+            );
     }
 
     function testRevertWhenInitializingWithZeroVault() public {
@@ -97,13 +97,14 @@ contract CEAFactoryTest is Test {
         ERC1967Proxy newProxy = new ERC1967Proxy(address(newFactoryImpl), "");
 
         vm.expectRevert(CEAFactory.ZeroAddress.selector);
-        CEAFactory(address(newProxy)).initialize(
-            owner,
-            address(0),                         
-            address(ceaProxyImplementation),
-            address(ceaImplementation),
-            address(mockUniversalGateway)
-        );
+        CEAFactory(address(newProxy))
+            .initialize(
+                owner,
+                address(0),
+                address(ceaProxyImplementation),
+                address(ceaImplementation),
+                address(mockUniversalGateway)
+            );
     }
 
     function testRevertWhenInitializingWithZeroCEAProxyImplementation() public {
@@ -111,13 +112,8 @@ contract CEAFactoryTest is Test {
         ERC1967Proxy newProxy = new ERC1967Proxy(address(newFactoryImpl), "");
 
         vm.expectRevert(CEAFactory.ZeroAddress.selector);
-        CEAFactory(address(newProxy)).initialize(
-            owner,
-            vault,
-            address(0), 
-            address(ceaImplementation),
-            address(mockUniversalGateway)
-        );
+        CEAFactory(address(newProxy))
+            .initialize(owner, vault, address(0), address(ceaImplementation), address(mockUniversalGateway));
     }
 
     function testRevertWhenInitializingWithZeroCEAImplementation() public {
@@ -125,13 +121,8 @@ contract CEAFactoryTest is Test {
         ERC1967Proxy newProxy = new ERC1967Proxy(address(newFactoryImpl), "");
 
         vm.expectRevert(CEAFactory.ZeroAddress.selector);
-        CEAFactory(address(newProxy)).initialize(
-            owner,
-            vault,
-            address(ceaProxyImplementation),
-            address(0), 
-            address(mockUniversalGateway)
-        );
+        CEAFactory(address(newProxy))
+            .initialize(owner, vault, address(ceaProxyImplementation), address(0), address(mockUniversalGateway));
     }
 
     function testRevertWhenInitializingWithZeroUniversalGateway() public {
@@ -139,35 +130,24 @@ contract CEAFactoryTest is Test {
         ERC1967Proxy newProxy = new ERC1967Proxy(address(newFactoryImpl), "");
 
         vm.expectRevert(CEAFactory.ZeroAddress.selector);
-        CEAFactory(address(newProxy)).initialize(
-            owner,
-            vault,
-            address(ceaProxyImplementation),
-            address(ceaImplementation),
-            address(0) 
-        );
+        CEAFactory(address(newProxy))
+            .initialize(owner, vault, address(ceaProxyImplementation), address(ceaImplementation), address(0));
     }
 
     function testRevertWhenInitializingTwice() public {
         CEAFactory newFactoryImpl = new CEAFactory();
         ERC1967Proxy newProxy = new ERC1967Proxy(address(newFactoryImpl), "");
 
-        CEAFactory(address(newProxy)).initialize(
-            owner,
-            vault,
-            address(ceaProxyImplementation),
-            address(ceaImplementation),
-            address(mockUniversalGateway)
-        );
+        CEAFactory(address(newProxy))
+            .initialize(
+                owner, vault, address(ceaProxyImplementation), address(ceaImplementation), address(mockUniversalGateway)
+            );
 
         vm.expectRevert();
-        CEAFactory(address(newProxy)).initialize(
-            owner,
-            vault,
-            address(ceaProxyImplementation),
-            address(ceaImplementation),
-            address(mockUniversalGateway)
-        );
+        CEAFactory(address(newProxy))
+            .initialize(
+                owner, vault, address(ceaProxyImplementation), address(ceaImplementation), address(mockUniversalGateway)
+            );
     }
 
     // =========================================================================
@@ -178,12 +158,10 @@ contract CEAFactoryTest is Test {
         address newVault = makeAddr("newVault");
 
         vm.prank(nonOwner);
-        vm.expectRevert(
-            abi.encodeWithSelector(OwnableUpgradeable.OwnableUnauthorizedAccount.selector, nonOwner)
-        );
+        vm.expectRevert(abi.encodeWithSelector(OwnableUpgradeable.OwnableUnauthorizedAccount.selector, nonOwner));
         factory.setVault(newVault);
 
-        vm.prank(owner);    
+        vm.prank(owner);
         factory.setVault(newVault);
         assertEq(factory.VAULT(), newVault, "Vault should be updated");
     }
@@ -250,7 +228,7 @@ contract CEAFactoryTest is Test {
         factory.setVault(newVault);
 
         assertTrue(hasCode(cea), "CEA should still have code");
-        assertEq(factory.getUEAForCEA(cea), ueaOnPush, "Mapping should persist");
+        assertEq(factory.getPushAccountForCEA(cea), ueaOnPush, "Mapping should persist");
     }
 
     function testSetVaultToContractAddress() public {
@@ -267,9 +245,7 @@ contract CEAFactoryTest is Test {
         CEAProxy newProxyImpl = new CEAProxy();
 
         vm.prank(nonOwner);
-        vm.expectRevert(
-            abi.encodeWithSelector(OwnableUpgradeable.OwnableUnauthorizedAccount.selector, nonOwner)
-        );
+        vm.expectRevert(abi.encodeWithSelector(OwnableUpgradeable.OwnableUnauthorizedAccount.selector, nonOwner));
         factory.setCEAProxyImplementation(address(newProxyImpl));
 
         vm.prank(owner);
@@ -333,7 +309,7 @@ contract CEAFactoryTest is Test {
 
         // Existing CEA should still work
         assertTrue(hasCode(cea), "Existing CEA should still have code");
-        assertEq(factory.getUEAForCEA(cea), ueaOnPush, "Mapping should persist");
+        assertEq(factory.getPushAccountForCEA(cea), ueaOnPush, "Mapping should persist");
     }
 
     function testSetCEAProxyImplementationToInvalidContract() public {
@@ -345,7 +321,7 @@ contract CEAFactoryTest is Test {
 
         address newUEA = makeAddr("newUEA");
         vm.prank(vault);
-        vm.expectRevert(); 
+        vm.expectRevert();
         factory.deployCEA(newUEA);
     }
 
@@ -353,9 +329,7 @@ contract CEAFactoryTest is Test {
         CEA newCEAImpl = new CEA();
 
         vm.prank(nonOwner);
-        vm.expectRevert(
-            abi.encodeWithSelector(OwnableUpgradeable.OwnableUnauthorizedAccount.selector, nonOwner)
-        );
+        vm.expectRevert(abi.encodeWithSelector(OwnableUpgradeable.OwnableUnauthorizedAccount.selector, nonOwner));
         factory.setCEAImplementation(address(newCEAImpl));
 
         vm.prank(owner);
@@ -416,7 +390,7 @@ contract CEAFactoryTest is Test {
 
         // Existing CEA should still work (proxy delegates to same implementation)
         assertTrue(hasCode(cea), "Existing CEA should still have code");
-        assertEq(factory.getUEAForCEA(cea), ueaOnPush, "Mapping should persist");
+        assertEq(factory.getPushAccountForCEA(cea), ueaOnPush, "Mapping should persist");
     }
 
     function testSetCEAImplementationToNonICEAContract() public {
@@ -441,9 +415,7 @@ contract CEAFactoryTest is Test {
         MockUniversalGateway newGateway = new MockUniversalGateway();
 
         vm.prank(nonOwner);
-        vm.expectRevert(
-            abi.encodeWithSelector(OwnableUpgradeable.OwnableUnauthorizedAccount.selector, nonOwner)
-        );
+        vm.expectRevert(abi.encodeWithSelector(OwnableUpgradeable.OwnableUnauthorizedAccount.selector, nonOwner));
         factory.setUniversalGateway(address(newGateway));
 
         vm.prank(owner);
@@ -469,13 +441,13 @@ contract CEAFactoryTest is Test {
     }
 
     // =========================================================================
-    // View Functions - getCEAForUEA
+    // View Functions - getCEAForPushAccount
     // =========================================================================
 
     function testGetCEAForUEAWhenNotDeployed() public {
         address testUEA = makeAddr("testUEA");
 
-        (address cea, bool isDeployed) = factory.getCEAForUEA(testUEA);
+        (address cea, bool isDeployed) = factory.getCEAForPushAccount(testUEA);
 
         assertTrue(cea != address(0), "Should return computed address");
         assertFalse(isDeployed, "Should return false for isDeployed");
@@ -485,7 +457,7 @@ contract CEAFactoryTest is Test {
     function testGetCEAForUEAWhenDeployed() public {
         address cea = deployCEAHelper(ueaOnPush);
 
-        (address returnedCEA, bool isDeployed) = factory.getCEAForUEA(ueaOnPush);
+        (address returnedCEA, bool isDeployed) = factory.getCEAForPushAccount(ueaOnPush);
 
         assertEq(returnedCEA, cea, "Should return deployed address");
         assertTrue(isDeployed, "Should return true for isDeployed");
@@ -494,7 +466,7 @@ contract CEAFactoryTest is Test {
     function testGetCEAForUEAWithZeroAddress() public {
         // Zero address should compute to a deterministic address
         // Note: But, as a safety measure, Vault contract's _validateExecutionParams function ensures ueaAddress must NOT be zero address.
-        (address cea, bool isDeployed) = factory.getCEAForUEA(address(0));
+        (address cea, bool isDeployed) = factory.getCEAForPushAccount(address(0));
 
         assertTrue(cea != address(0), "Should return computed address");
         assertFalse(isDeployed, "Should return false for isDeployed");
@@ -509,8 +481,8 @@ contract CEAFactoryTest is Test {
         selfdestructCEA(cea);
         assertFalse(hasCode(cea), "CEA should not have code after selfdestruct");
 
-        // getCEAForUEA should detect no code
-        (address returnedCEA, bool isDeployed) = factory.getCEAForUEA(ueaOnPush);
+        // getCEAForPushAccount should detect no code
+        (address returnedCEA, bool isDeployed) = factory.getCEAForPushAccount(ueaOnPush);
         assertEq(returnedCEA, cea, "Should return mapped address");
         assertFalse(isDeployed, "Should return false when code is gone");
     }
@@ -524,9 +496,9 @@ contract CEAFactoryTest is Test {
         address cea2 = deployCEAHelper(uea2);
         address cea3 = deployCEAHelper(uea3);
 
-        (address returnedCEA1, bool isDeployed1) = factory.getCEAForUEA(uea1);
-        (address returnedCEA2, bool isDeployed2) = factory.getCEAForUEA(uea2);
-        (address returnedCEA3, bool isDeployed3) = factory.getCEAForUEA(uea3);
+        (address returnedCEA1, bool isDeployed1) = factory.getCEAForPushAccount(uea1);
+        (address returnedCEA2, bool isDeployed2) = factory.getCEAForPushAccount(uea2);
+        (address returnedCEA3, bool isDeployed3) = factory.getCEAForPushAccount(uea3);
 
         assertEq(returnedCEA1, cea1, "CEA1 should match");
         assertEq(returnedCEA2, cea2, "CEA2 should match");
@@ -545,7 +517,7 @@ contract CEAFactoryTest is Test {
         address deployed = deployCEAHelper(testUEA);
 
         // Get after deployment
-        (address returned, bool isDeployed) = factory.getCEAForUEA(testUEA);
+        (address returned, bool isDeployed) = factory.getCEAForPushAccount(testUEA);
 
         assertEq(computed, deployed, "Computed should match deployed");
         assertEq(returned, deployed, "Returned should match deployed");
@@ -553,7 +525,6 @@ contract CEAFactoryTest is Test {
     }
 
     function testGetCEAForUEAWhenImplementationNotSet() public {
-
         vm.prank(owner);
         vm.expectRevert(CEAFactory.ZeroAddress.selector);
         factory.setCEAProxyImplementation(address(0));
@@ -689,46 +660,46 @@ contract CEAFactoryTest is Test {
     }
 
     // =========================================================================
-    // View Functions - getUEAForCEA
+    // View Functions - getPushAccountForCEA
     // =========================================================================
 
-    function testGetUEAForCEAWithDeployedCEA() public {
+    function testgetPushAccountForCEAWithDeployedCEA() public {
         address cea = deployCEAHelper(ueaOnPush);
 
-        address returnedUEA = factory.getUEAForCEA(cea);
+        address returnedUEA = factory.getPushAccountForCEA(cea);
         assertEq(returnedUEA, ueaOnPush, "Should return correct UEA");
     }
 
-    function testGetUEAForCEAWithNonCEAAddress() public {
+    function testgetPushAccountForCEAWithNonCEAAddress() public {
         address nonCEA = makeAddr("nonCEA");
-        address returnedUEA = factory.getUEAForCEA(nonCEA);
+        address returnedUEA = factory.getPushAccountForCEA(nonCEA);
 
         assertEq(returnedUEA, address(0), "Should return zero for non-CEA");
     }
 
-    function testGetUEAForCEAWithZeroAddress() public {
-        address returnedUEA = factory.getUEAForCEA(address(0));
+    function testgetPushAccountForCEAWithZeroAddress() public {
+        address returnedUEA = factory.getPushAccountForCEA(address(0));
         assertEq(returnedUEA, address(0), "Should return zero for zero address");
     }
 
-    function testGetUEAForCEAWithSelfdestructedCEA() public {
+    function testgetPushAccountForCEAWithSelfdestructedCEA() public {
         address cea = deployCEAHelper(ueaOnPush);
         selfdestructCEA(cea);
 
         // Mapping should still exist
-        address returnedUEA = factory.getUEAForCEA(cea);
+        address returnedUEA = factory.getPushAccountForCEA(cea);
         assertEq(returnedUEA, ueaOnPush, "Should still return UEA if mapping exists");
     }
 
-    function testGetUEAForCEAReverseMapping() public {
+    function testgetPushAccountForCEAReverseMapping() public {
         address cea = deployCEAHelper(ueaOnPush);
 
         // Verify bidirectional mapping
-        assertEq(factory.getUEAForCEA(cea), ueaOnPush, "CEA -> UEA");
-        assertEq(factory.UEA_to_CEA(ueaOnPush), cea, "UEA -> CEA");
+        assertEq(factory.getPushAccountForCEA(cea), ueaOnPush, "CEA -> UEA");
+        assertEq(factory.pushAccountToCEA(ueaOnPush), cea, "UEA -> CEA");
     }
 
-    function testGetUEAForCEAWithMultipleCEAs() public {
+    function testgetPushAccountForCEAWithMultipleCEAs() public {
         address uea1 = makeAddr("uea1");
         address uea2 = makeAddr("uea2");
         address uea3 = makeAddr("uea3");
@@ -737,9 +708,9 @@ contract CEAFactoryTest is Test {
         address cea2 = deployCEAHelper(uea2);
         address cea3 = deployCEAHelper(uea3);
 
-        assertEq(factory.getUEAForCEA(cea1), uea1, "CEA1 should map to UEA1");
-        assertEq(factory.getUEAForCEA(cea2), uea2, "CEA2 should map to UEA2");
-        assertEq(factory.getUEAForCEA(cea3), uea3, "CEA3 should map to UEA3");
+        assertEq(factory.getPushAccountForCEA(cea1), uea1, "CEA1 should map to UEA1");
+        assertEq(factory.getPushAccountForCEA(cea2), uea2, "CEA2 should map to UEA2");
+        assertEq(factory.getPushAccountForCEA(cea3), uea3, "CEA3 should map to UEA3");
     }
 
     // =========================================================================
@@ -896,7 +867,7 @@ contract CEAFactoryTest is Test {
         CEA ceaInstance = CEA(payable(cea));
 
         assertTrue(ceaInstance.isInitialized(), "CEA should be initialized");
-        assertEq(ceaInstance.UEA(), ueaOnPush, "UEA should be set");
+        assertEq(ceaInstance.pushAccount(), ueaOnPush, "UEA should be set");
         assertEq(ceaInstance.VAULT(), vault, "Vault should be set");
     }
 
@@ -981,7 +952,7 @@ contract CEAFactoryTest is Test {
     function testDeployCEAThenGetCEAForUEA() public {
         address cea = deployCEAHelper(ueaOnPush);
 
-        (address returnedCEA, bool isDeployed) = factory.getCEAForUEA(ueaOnPush);
+        (address returnedCEA, bool isDeployed) = factory.getCEAForPushAccount(ueaOnPush);
         assertEq(returnedCEA, cea, "Should return deployed CEA");
         assertTrue(isDeployed, "Should return true for isDeployed");
     }
@@ -993,10 +964,10 @@ contract CEAFactoryTest is Test {
         assertTrue(isCea, "Should return true for deployed CEA");
     }
 
-    function testDeployCEAThenGetUEAForCEA() public {
+    function testDeployCEAThengetPushAccountForCEA() public {
         address cea = deployCEAHelper(ueaOnPush);
 
-        address returnedUEA = factory.getUEAForCEA(cea);
+        address returnedUEA = factory.getPushAccountForCEA(cea);
         assertEq(returnedUEA, ueaOnPush, "Should return correct UEA");
     }
 
@@ -1041,7 +1012,7 @@ contract CEAFactoryTest is Test {
         address cea = deployCEAHelper(address(contractUEA));
 
         assertTrue(hasCode(cea), "Should deploy successfully");
-        assertEq(factory.getUEAForCEA(cea), address(contractUEA), "Mapping should be correct");
+        assertEq(factory.getPushAccountForCEA(cea), address(contractUEA), "Mapping should be correct");
     }
 
     function testDeployCEAWithEOAAsUEA() public {
@@ -1049,7 +1020,7 @@ contract CEAFactoryTest is Test {
         address cea = deployCEAHelper(eoaUEA);
 
         assertTrue(hasCode(cea), "Should deploy successfully");
-        assertEq(factory.getUEAForCEA(cea), eoaUEA, "Mapping should be correct");
+        assertEq(factory.getPushAccountForCEA(cea), eoaUEA, "Mapping should be correct");
     }
 
     function testDeployCEAMultipleDeploymentsSameSalt() public {
@@ -1104,8 +1075,8 @@ contract CEAFactoryTest is Test {
         // Verify all are deployed and mapped correctly
         for (uint256 i = 0; i < 10; i++) {
             assertTrue(hasCode(ceas[i]), "CEA should have code");
-            assertEq(factory.getUEAForCEA(ceas[i]), ueas[i], "Mapping should be correct");
-            assertEq(factory.UEA_to_CEA(ueas[i]), ceas[i], "Reverse mapping should be correct");
+            assertEq(factory.getPushAccountForCEA(ceas[i]), ueas[i], "Mapping should be correct");
+            assertEq(factory.pushAccountToCEA(ueas[i]), ceas[i], "Reverse mapping should be correct");
         }
     }
 
@@ -1121,8 +1092,8 @@ contract CEAFactoryTest is Test {
         verifyMappings(uea2, cea2);
 
         // Verify no cross-mapping
-        assertNotEq(factory.getUEAForCEA(cea1), uea2, "No cross-mapping");
-        assertNotEq(factory.getUEAForCEA(cea2), uea1, "No cross-mapping");
+        assertNotEq(factory.getPushAccountForCEA(cea1), uea2, "No cross-mapping");
+        assertNotEq(factory.getPushAccountForCEA(cea2), uea1, "No cross-mapping");
     }
 
     function testFactoryAfterImplementationUpdate() public {
@@ -1149,8 +1120,8 @@ contract CEAFactoryTest is Test {
         address cea1 = deployCEAHelper(uea1);
         address cea2 = deployCEAHelper(uea2);
 
-        assertEq(factory.UEA_to_CEA(uea1), cea1, "UEA1 -> CEA1");
-        assertEq(factory.UEA_to_CEA(uea2), cea2, "UEA2 -> CEA2");
+        assertEq(factory.pushAccountToCEA(uea1), cea1, "UEA1 -> CEA1");
+        assertEq(factory.pushAccountToCEA(uea2), cea2, "UEA2 -> CEA2");
     }
 
     function testMappingConsistencyCEAToUEA() public {
@@ -1160,8 +1131,8 @@ contract CEAFactoryTest is Test {
         address cea1 = deployCEAHelper(uea1);
         address cea2 = deployCEAHelper(uea2);
 
-        assertEq(factory.CEA_to_UEA(cea1), uea1, "CEA1 -> UEA1");
-        assertEq(factory.CEA_to_UEA(cea2), uea2, "CEA2 -> UEA2");
+        assertEq(factory.ceaToPushAccount(cea1), uea1, "CEA1 -> UEA1");
+        assertEq(factory.ceaToPushAccount(cea2), uea2, "CEA2 -> UEA2");
     }
 
     function testMappingBidirectionalConsistency() public {
@@ -1169,14 +1140,14 @@ contract CEAFactoryTest is Test {
         address cea = deployCEAHelper(uea);
 
         // Forward mapping
-        assertEq(factory.UEA_to_CEA(uea), cea, "Forward mapping");
+        assertEq(factory.pushAccountToCEA(uea), cea, "Forward mapping");
 
         // Reverse mapping
-        assertEq(factory.CEA_to_UEA(cea), uea, "Reverse mapping");
+        assertEq(factory.ceaToPushAccount(cea), uea, "Reverse mapping");
 
         // Consistency check
-        assertEq(factory.UEA_to_CEA(factory.CEA_to_UEA(cea)), cea, "Bidirectional consistency");
-        assertEq(factory.CEA_to_UEA(factory.UEA_to_CEA(uea)), uea, "Bidirectional consistency");
+        assertEq(factory.pushAccountToCEA(factory.ceaToPushAccount(cea)), cea, "Bidirectional consistency");
+        assertEq(factory.ceaToPushAccount(factory.pushAccountToCEA(uea)), uea, "Bidirectional consistency");
     }
 
     function testMappingAfterSelfdestruct() public {
@@ -1187,8 +1158,8 @@ contract CEAFactoryTest is Test {
         selfdestructCEA(cea);
 
         // Mappings should persist
-        assertEq(factory.UEA_to_CEA(ueaOnPush), cea, "Mapping should persist");
-        assertEq(factory.CEA_to_UEA(cea), ueaOnPush, "Mapping should persist");
+        assertEq(factory.pushAccountToCEA(ueaOnPush), cea, "Mapping should persist");
+        assertEq(factory.ceaToPushAccount(cea), ueaOnPush, "Mapping should persist");
     }
 
     function testUpdateProxyImplementationBeforeDeployment() public {
@@ -1254,16 +1225,12 @@ contract CEAFactoryTest is Test {
 
         // Vault cannot change itself
         vm.prank(vault);
-        vm.expectRevert(
-            abi.encodeWithSelector(OwnableUpgradeable.OwnableUnauthorizedAccount.selector, vault)
-        );
+        vm.expectRevert(abi.encodeWithSelector(OwnableUpgradeable.OwnableUnauthorizedAccount.selector, vault));
         factory.setVault(newVault);
 
         // Non-owner cannot change
         vm.prank(nonOwner);
-        vm.expectRevert(
-            abi.encodeWithSelector(OwnableUpgradeable.OwnableUnauthorizedAccount.selector, nonOwner)
-        );
+        vm.expectRevert(abi.encodeWithSelector(OwnableUpgradeable.OwnableUnauthorizedAccount.selector, nonOwner));
         factory.setVault(newVault);
     }
 
@@ -1272,16 +1239,12 @@ contract CEAFactoryTest is Test {
 
         // Vault cannot change
         vm.prank(vault);
-        vm.expectRevert(
-            abi.encodeWithSelector(OwnableUpgradeable.OwnableUnauthorizedAccount.selector, vault)
-        );
+        vm.expectRevert(abi.encodeWithSelector(OwnableUpgradeable.OwnableUnauthorizedAccount.selector, vault));
         factory.setCEAImplementation(address(newImpl));
 
         // Non-owner cannot change
         vm.prank(nonOwner);
-        vm.expectRevert(
-            abi.encodeWithSelector(OwnableUpgradeable.OwnableUnauthorizedAccount.selector, nonOwner)
-        );
+        vm.expectRevert(abi.encodeWithSelector(OwnableUpgradeable.OwnableUnauthorizedAccount.selector, nonOwner));
         factory.setCEAImplementation(address(newImpl));
     }
 
@@ -1290,9 +1253,7 @@ contract CEAFactoryTest is Test {
         address newOwner = makeAddr("newOwner");
 
         vm.prank(vault);
-        vm.expectRevert(
-            abi.encodeWithSelector(OwnableUpgradeable.OwnableUnauthorizedAccount.selector, vault)
-        );
+        vm.expectRevert(abi.encodeWithSelector(OwnableUpgradeable.OwnableUnauthorizedAccount.selector, vault));
         factory.transferOwnership(newOwner);
     }
 
@@ -1322,7 +1283,7 @@ contract CEAFactoryTest is Test {
         address cea = deployCEAHelper(ueaOnPush);
         selfdestructCEA(cea);
 
-        (address returnedCEA, bool isDeployed) = factory.getCEAForUEA(ueaOnPush);
+        (address returnedCEA, bool isDeployed) = factory.getCEAForPushAccount(ueaOnPush);
         assertEq(returnedCEA, cea, "Should return mapped address");
         assertFalse(isDeployed, "Should detect selfdestruct");
     }
@@ -1342,7 +1303,7 @@ contract CEAFactoryTest is Test {
         address cea = deployCEAHelper(maxAddress);
 
         assertTrue(hasCode(cea), "Should handle edge case address");
-        assertEq(factory.getUEAForCEA(cea), maxAddress, "Mapping should work");
+        assertEq(factory.getPushAccountForCEA(cea), maxAddress, "Mapping should work");
     }
 
     function testFactoryCannotBeInitializedTwice() public {
@@ -1350,15 +1311,11 @@ contract CEAFactoryTest is Test {
         // But verify it's protected at the proxy level
         vm.expectRevert();
         factory.initialize(
-            owner,
-            vault,
-            address(ceaProxyImplementation),
-            address(ceaImplementation),
-            address(mockUniversalGateway)
+            owner, vault, address(ceaProxyImplementation), address(ceaImplementation), address(mockUniversalGateway)
         );
     }
 
-        // =========================================================================
+    // =========================================================================
     // Helper Functions
     // =========================================================================
 
@@ -1376,8 +1333,8 @@ contract CEAFactoryTest is Test {
 
     /// @notice Helper to verify bidirectional mappings
     function verifyMappings(address uea, address cea) internal {
-        assertEq(factory.UEA_to_CEA(uea), cea, "UEA_to_CEA mapping should be correct");
-        assertEq(factory.CEA_to_UEA(cea), uea, "CEA_to_UEA mapping should be correct");
+        assertEq(factory.pushAccountToCEA(uea), cea, "pushAccountToCEA mapping should be correct");
+        assertEq(factory.ceaToPushAccount(cea), uea, "ceaToPushAccount mapping should be correct");
     }
 
     /// @notice Helper to check if address has code

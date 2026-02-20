@@ -260,14 +260,14 @@ contract CEATest is Test {
 
     function testInitializeCEA() public deployCEA {
         assertTrue(ceaInstance.isInitialized(), "CEA should be initialized");
-        assertEq(ceaInstance.UEA(), ueaOnPush, "UEA should match");
+        assertEq(ceaInstance.pushAccount(), ueaOnPush, "UEA should match");
         assertEq(ceaInstance.VAULT(), vault, "VAULT should match");
 
         // Verify event was emitted during deployment (factory calls initializeCEA)
         // Note: The event is emitted during factory.deployCEA, so we verify via state
         address cea = address(ceaInstance);
-        assertEq(factory.getUEAForCEA(cea), ueaOnPush, "Factory mapping should be correct");
-        (address returnedCEA, bool isDeployed) = factory.getCEAForUEA(ueaOnPush);
+        assertEq(factory.getPushAccountForCEA(cea), ueaOnPush, "Factory mapping should be correct");
+        (address returnedCEA, bool isDeployed) = factory.getCEAForPushAccount(ueaOnPush);
         assertEq(returnedCEA, cea, "Factory reverse mapping should be correct");
         assertTrue(isDeployed, "CEA should be marked as deployed");
     }
@@ -320,8 +320,8 @@ contract CEATest is Test {
         address ceaAddress = factory.deployCEA(ueaOnPush);
 
         assertTrue(factory.isCEA(ceaAddress), "Factory should recognize deployed CEA");
-        assertEq(factory.getUEAForCEA(ceaAddress), ueaOnPush, "Factory should map CEA to UEA");
-        (address mappedCEA, bool isDeployed) = factory.getCEAForUEA(ueaOnPush);
+        assertEq(factory.getPushAccountForCEA(ceaAddress), ueaOnPush, "Factory should map CEA to UEA");
+        (address mappedCEA, bool isDeployed) = factory.getCEAForPushAccount(ueaOnPush);
         assertEq(mappedCEA, ceaAddress, "Factory should map UEA to CEA");
         assertTrue(isDeployed, "Factory should mark CEA as deployed");
     }
@@ -688,11 +688,7 @@ contract CEATest is Test {
 
         vm.prank(vault);
         vm.deal(vault, 0.2 ether);
-        bytes memory multicallPayload = buildNativeMulticallPayload(
-            address(target),
-            0.1 ether,
-            payload
-        );
+        bytes memory multicallPayload = buildNativeMulticallPayload(address(target), 0.1 ether, payload);
 
         // Excess msg.value stays in CEA — no strict equality check
         ceaInstance.executeUniversalTx{value: 0.2 ether}(txID, universalTxID, ueaOnPush, multicallPayload);

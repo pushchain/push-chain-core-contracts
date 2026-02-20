@@ -5,7 +5,7 @@ import "forge-std/Test.sol";
 import "forge-std/console.sol";
 
 import "../../src/libraries/Types.sol";
-import {UEAFactoryV1} from "../../src/uea/UEAFactoryV1.sol";
+import {UEAFactory} from "../../src/uea/UEAFactory.sol";
 import {UEA_EVM} from "../../src/uea/UEA_EVM.sol";
 import {UEA_SVM} from "../../src/uea/UEA_SVM.sol";
 import {UEAMigration} from "../../src/uea/UEAMigration.sol";
@@ -16,7 +16,7 @@ import {ERC1967Proxy} from "@openzeppelin/contracts/proxy/ERC1967/ERC1967Proxy.s
 import {UEAProxy} from "../../src/uea/UEAProxy.sol";
 
 contract UEAFactoryTest is Test {
-    UEAFactoryV1 factory;
+    UEAFactory factory;
     UEA_EVM ueaEVMImpl;
     UEA_SVM ueaSVMImpl;
     address ueaProxyImpl;
@@ -53,12 +53,12 @@ contract UEAFactoryTest is Test {
         ueaProxyImpl = address(_ueaProxyImpl);
 
         // Deploy the factory implementation
-        UEAFactoryV1 factoryImpl = new UEAFactoryV1();
+        UEAFactory factoryImpl = new UEAFactory();
 
         // Deploy and initialize the proxy with initialOwner
-        bytes memory initData = abi.encodeWithSelector(UEAFactoryV1.initialize.selector, deployer);
+        bytes memory initData = abi.encodeWithSelector(UEAFactory.initialize.selector, deployer);
         ERC1967Proxy proxy = new ERC1967Proxy(address(factoryImpl), initData);
-        factory = UEAFactoryV1(address(proxy));
+        factory = UEAFactory(address(proxy));
 
         // Set UEAProxy implementation after initialization
         factory.setUEAProxyImplementation(ueaProxyImpl);
