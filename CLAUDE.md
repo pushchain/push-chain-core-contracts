@@ -234,8 +234,7 @@ struct Multicall {
 
 **Safety Constraints:**
 - Self-calls must have `value == 0` (enforced in `_handleMulticall`)
-- Migration must be standalone (cannot appear inside multicall arrays — `isMigrationCall` check)
-- Migration rejects `msg.value > 0` (logic upgrade, not value transfer)
+- Migration must be standalone (cannot appear inside multicall arrays — `isMigration` check in loop)
 - All calls executed sequentially via `.call()`
 - No strict `msg.value == totalValue` enforcement (CEA can spend pre-existing balance)
 
