@@ -1123,7 +1123,7 @@ contract CEA_NewMulticallTests is CEATest {
         bytes memory payload = encodeCalls(calls);
 
         vm.prank(vault);
-        vm.expectRevert(Errors.InvalidCall.selector);
+        vm.expectRevert(Errors.ExecutionFailed.selector);
         ceaInstance.executeUniversalTx(
             generateTxID(1), generateUniversalTxID(1), ueaOnPush, payload
         );
@@ -1137,7 +1137,7 @@ contract CEA_NewMulticallTests is CEATest {
         bytes memory payload = encodeCalls(calls);
 
         vm.prank(vault);
-        vm.expectRevert(Errors.InvalidCall.selector);
+        vm.expectRevert(Errors.ExecutionFailed.selector);
         ceaInstance.executeUniversalTx(
             generateTxID(1), generateUniversalTxID(1), ueaOnPush, payload
         );
@@ -1152,7 +1152,7 @@ contract CEA_NewMulticallTests is CEATest {
         bytes memory payload = encodeCalls(calls);
 
         vm.prank(vault);
-        vm.expectRevert(Errors.InvalidCall.selector);
+        vm.expectRevert(Errors.ExecutionFailed.selector);
         ceaInstance.executeUniversalTx(
             generateTxID(1), generateUniversalTxID(1), ueaOnPush, payload
         );

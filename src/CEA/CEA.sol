@@ -180,7 +180,6 @@ contract CEA is ICEA, ReentrancyGuard {
     /// @dev            Executes each call sequentially. No strict msg.value == totalValue enforcement;
     ///                 CEA can spend pre-existing balance in addition to Vault-provided msg.value.
     ///                 Self-calls must have value == 0 (enforced here).
-    ///                 Migration selector inside multicall is rejected with InvalidCall.
     /// @param txID             Transaction identifier for event emission
     /// @param universalTxID    Universal transaction identifier for event emission
     /// @param originCaller     Origin caller for event emission
@@ -190,9 +189,6 @@ contract CEA is ICEA, ReentrancyGuard {
     {
         for (uint256 i = 0; i < calls.length; i++) {
             if (calls[i].to == address(0)) revert CEAErrors.InvalidTarget();
-
-            // Migration selector must be top-level, never inside multicall
-            if (isMigrationCall(calls[i].data)) revert CEAErrors.InvalidCall();
 
             // Self-calls to CEA must not include value
             if (calls[i].to == address(this) && calls[i].value != 0) {
@@ -270,19 +266,6 @@ contract CEA is ICEA, ReentrancyGuard {
     function isMigration(bytes calldata data) private pure returns (bool) {
         if (data.length < 4) return false;
         return bytes4(data[0:4]) == MIGRATION_SELECTOR;
-    }
-
-    /// @notice         Checks whether a Multicall entry's data is a migration request.
-    /// @dev            Uses bytes memory because it's called on Multicall.data (memory).
-    /// @param data     Call data bytes
-    /// @return bool    True if data starts with MIGRATION_SELECTOR
-    function isMigrationCall(bytes memory data) private pure returns (bool) {
-        if (data.length < 4) return false;
-        bytes4 selector;
-        assembly {
-            selector := mload(add(data, 32))
-        }
-        return selector == MIGRATION_SELECTOR;
     }
 
     //========================

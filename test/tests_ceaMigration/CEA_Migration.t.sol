@@ -164,7 +164,8 @@ contract CEA_MigrationTest is Test {
         bytes32 txID = generateTxID(1);
         bytes32 universalTxID = generateUniversalTxID(1);
 
-        // MIGRATION_SELECTOR wrapped in multicall should be rejected
+        // MIGRATION_SELECTOR wrapped in multicall fails as generic execution failure
+        // (CEA has no function matching the migration selector, so .call() reverts)
         Multicall[] memory calls = new Multicall[](1);
         calls[0] = Multicall({
             to: address(ceaInstance),
@@ -174,7 +175,7 @@ contract CEA_MigrationTest is Test {
         bytes memory payload = abi.encodePacked(MULTICALL_SELECTOR, abi.encode(calls));
 
         vm.prank(vault);
-        vm.expectRevert(Errors.InvalidCall.selector);
+        vm.expectRevert(Errors.ExecutionFailed.selector);
         ceaInstance.executeUniversalTx(txID, universalTxID, ueaOnPush, payload);
     }
 
@@ -218,9 +219,9 @@ contract CEA_MigrationTest is Test {
         });
         bytes memory payload = abi.encodePacked(MULTICALL_SELECTOR, abi.encode(calls));
 
-        // Expect InvalidCall revert (migration must be standalone)
+        // Migration selector in multicall fails as generic execution failure
         vm.prank(vault);
-        vm.expectRevert(Errors.InvalidCall.selector);
+        vm.expectRevert(Errors.ExecutionFailed.selector);
         ceaInstance.executeUniversalTx(txID, universalTxID, ueaOnPush, payload);
     }
 
@@ -245,9 +246,9 @@ contract CEA_MigrationTest is Test {
         });
         bytes memory payload = abi.encodePacked(MULTICALL_SELECTOR, abi.encode(calls));
 
-        // Expect InvalidCall revert (migration must be standalone)
+        // Migration selector in multicall fails as generic execution failure
         vm.prank(vault);
-        vm.expectRevert(Errors.InvalidCall.selector);
+        vm.expectRevert(Errors.ExecutionFailed.selector);
         ceaInstance.executeUniversalTx(txID, universalTxID, ueaOnPush, payload);
     }
 
