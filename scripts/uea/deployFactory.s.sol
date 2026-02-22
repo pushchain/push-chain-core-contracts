@@ -2,7 +2,7 @@
 pragma solidity ^0.8.20;
 
 import "forge-std/Script.sol";
-import {UEAFactoryV1} from "../../src/UEA/UEAFactoryV1.sol";
+import {UEAFactory} from "../../src/UEA/UEAFactory.sol";
 import {UEA_EVM} from "../../src/UEA/UEA_EVM.sol";
 import {UEA_SVM} from "../../src/UEA/UEA_SVM.sol";
 import {UEAProxy} from "../../src/UEA/UEAProxy.sol";
@@ -51,7 +51,7 @@ contract DeployUEAFactoryScript is Script {
         bytes32 solanaDevnetHash = keccak256(abi.encode(SVM_CHAIN_NAMESPACE, SVM_CHAIN_ID));
 
         // Initialize the factory with the initial owner
-        UEAFactoryV1 factory = UEAFactoryV1(FACTORY_ADDRESS);
+        UEAFactory factory = UEAFactory(FACTORY_ADDRESS);
         console.log("UEAFactory address:", address(factory));
         address(factory).call(
             abi.encodeWithSignature(

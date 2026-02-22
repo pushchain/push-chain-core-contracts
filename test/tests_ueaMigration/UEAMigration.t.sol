@@ -152,8 +152,8 @@ contract UEAMigrationTest is BaseTest {
             deadline: migrationPayload.deadline
         });
         
-        // Get the payload hash using getPayloadHash
-        bytes32 payloadHash = UEA_EVM(payable(address(ueaProxy))).getPayloadHash(universalPayload);
+        // Get the payload hash using getUniversalPayloadHash
+        bytes32 payloadHash = UEA_EVM(payable(address(ueaProxy))).getUniversalPayloadHash(universalPayload);
 
         // Create a valid signature using the owner's private key
         (uint8 v, bytes32 r, bytes32 s) = vm.sign(ownerPK, payloadHash);
@@ -288,8 +288,8 @@ contract UEAMigrationTest is BaseTest {
             deadline: migrationPayload.deadline
         });
         
-        // Get the payload hash using getPayloadHash
-        bytes32 payloadHash = UEA_EVM(payable(address(ueaProxy))).getPayloadHash(universalPayload);
+        // Get the payload hash using getUniversalPayloadHash
+        bytes32 payloadHash = UEA_EVM(payable(address(ueaProxy))).getUniversalPayloadHash(universalPayload);
 
         // Create a valid signature using the owner's private key
         (uint8 v, bytes32 r, bytes32 s) = vm.sign(ownerPK, payloadHash);
@@ -307,7 +307,7 @@ contract UEAMigrationTest is BaseTest {
         // Need to update nonce for second migration
         migrationPayload.nonce = 1;
         universalPayload.nonce = 1;
-        payloadHash = UEA_EVM(payable(address(ueaProxy))).getPayloadHash(universalPayload);
+        payloadHash = UEA_EVM(payable(address(ueaProxy))).getUniversalPayloadHash(universalPayload);
         (v, r, s) = vm.sign(ownerPK, payloadHash);
         signature = abi.encodePacked(r, s, v);
 
@@ -342,8 +342,8 @@ contract UEAMigrationTest is BaseTest {
             deadline: migrationPayload.deadline
         });
         
-        // Get the payload hash using getPayloadHash
-        bytes32 payloadHash = UEA_EVM(payable(address(ueaProxy))).getPayloadHash(universalPayload);
+        // Get the payload hash using getUniversalPayloadHash
+        bytes32 payloadHash = UEA_EVM(payable(address(ueaProxy))).getUniversalPayloadHash(universalPayload);
 
         // Create a valid signature using the owner's private key
         (uint8 v, bytes32 r, bytes32 s) = vm.sign(ownerPK, payloadHash);
@@ -385,7 +385,7 @@ contract UEAMigrationTest is BaseTest {
             deadline: migrationPayload.deadline
         });
         
-        bytes32 payloadHash = UEA_EVM(payable(address(ueaProxy))).getPayloadHash(universalPayload);
+        bytes32 payloadHash = UEA_EVM(payable(address(ueaProxy))).getUniversalPayloadHash(universalPayload);
 
         (uint8 v, bytes32 r, bytes32 s) = vm.sign(ownerPK, payloadHash);
         bytes memory signature = abi.encodePacked(r, s, v);

@@ -9,7 +9,7 @@ struct UniversalAccountId {
 }
 
 // UniversalPayload struct used internally by UEAs
-// When calling executePayload, callers must encode this struct as: abi.encode(UniversalPayload({...}))
+// When calling executeUniversalTx, callers must encode this struct as: abi.encode(UniversalPayload({...}))
 // The encoding layout is: (address, uint256, bytes, uint256, uint256, uint256, uint256, uint256)
 struct UniversalPayload {
     address to;                     // Target contract address to call

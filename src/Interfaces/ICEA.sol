@@ -20,29 +20,29 @@ interface ICEA {
     //========================
 
     /// @notice                     Universal tx execution event emitted for each multicall step.
-    /// @param txID                 Unique transaction identifier
-    /// @param universalTxID        Unique transaction identifier on Universal Gateway
+    /// @param txId                 Unique transaction identifier
+    /// @param universalTxId        Unique transaction identifier on Universal Gateway
     /// @param originCaller         Original caller/user on source chain (Push Chain)
     /// @param target               Target contract address for this call step
     /// @param data                 Calldata executed on target contract
     event UniversalTxExecuted(
-        bytes32 indexed txID, bytes32 indexed universalTxID, address indexed originCaller, address target, bytes data
+        bytes32 indexed txId, bytes32 indexed universalTxId, address indexed originCaller, address target, bytes data
     );
 
     /// @notice                     Emitted when a universal tx is sent from CEA to UEA on Push Chain.
-    /// @param _cea                Address of the CEA sending the tx
-    /// @param _uea                Address of the UEA on Push Chain that this CEA represents.
+    /// @param _cea                 Address of the CEA sending the tx
+    /// @param pushAccount          Address of the push account (UEA on Push Chain) that this CEA represents.
     /// @param token                Token address being sent
     /// @param amount               Amount of token being sent
-    event UniversalTxToUEA(address indexed _cea, address indexed _uea, address indexed token, uint256 amount);
+    event UniversalTxToUEA(address indexed _cea, address indexed pushAccount, address indexed token, uint256 amount);
     //========================
     //           Views
     //========================
 
     /**
-     * @notice Returns the UEA on Push Chain that this CEA represents.
+     * @notice Returns the push account (UEA on Push Chain) that this CEA represents.
      */
-    function UEA() external view returns (address);
+    function pushAccount() external view returns (address);
 
     /**
      * @notice Returns the Vault on this chain that is allowed to drive this CEA.
@@ -54,7 +54,7 @@ interface ICEA {
      */
     function isInitialized() external view returns (bool);
 
-    function initializeCEA(address _uea, address _vault, address _universalGateway, address _factory) external;
+    function initializeCEA(address _pushAccount, address _vault, address _universalGateway, address _factory) external;
 
     //========================
     //      Vault-only ops
@@ -72,12 +72,12 @@ interface ICEA {
      *  - CEA no longer performs automatic approval/reset logic.
      *  - This ensures flexible, composable execution paths.
      *
-     * @param txID              Transaction ID (must not be executed before)
-     * @param universalTxID     Unique transaction identifier on Universal Gateway
-     * @param originCaller      UEA on Push Chain that this CEA represents (verified)
+     * @param txId       Transaction ID (must not be executed before)
+     * @param universalTxId     Unique transaction identifier on Universal Gateway
+     * @param originCaller      Push account (UEA on Push Chain) that this CEA represents (verified)
      * @param payload           ABI-encoded Multicall[] containing execution steps
      */
-    function executeUniversalTx(bytes32 txID, bytes32 universalTxID, address originCaller, bytes calldata payload)
+    function executeUniversalTx(bytes32 txId, bytes32 universalTxId, address originCaller, bytes calldata payload)
         external
         payable;
 }

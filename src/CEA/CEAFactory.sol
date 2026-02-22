@@ -27,7 +27,7 @@ import {OwnableUpgradeable} from "@openzeppelin/contracts-upgradeable/access/Own
  *  - deployCEA flow:
  *      * cloneDeterministic(CEA_PROXY_IMPLEMENTATION)
  *      * CEAProxy(cea).initializeCEAProxy(CEA_IMPLEMENTATION)
- *      * ICEA(cea).initializeCEA(ueaOnPush, VAULT, UNIVERSAL_GATEWAY)
+ *      * ICEA(cea).initializeCEA(pushAccount, VAULT, UNIVERSAL_GATEWAY)
  */
 contract CEAFactory is Initializable, OwnableUpgradeable, ICEAFactory {
     using Clones for address;
@@ -51,11 +51,11 @@ contract CEAFactory is Initializable, OwnableUpgradeable, ICEAFactory {
     /// @notice Address of the CEA migration contract
     address public CEA_MIGRATION_CONTRACT;
 
-    /// @notice Mapping from UEA on Push Chain -> CEA on this chain.
-    mapping(address => address) public UEA_to_CEA;
+    /// @notice Mapping from push account (UEA on Push Chain) -> CEA on this chain.
+    mapping(address => address) public pushAccountToCEA;
 
-    /// @notice Mapping from CEA on this chain -> UEA on Push Chain.
-    mapping(address => address) public CEA_to_UEA;
+    /// @notice Mapping from CEA on this chain -> push account (UEA on Push Chain).
+    mapping(address => address) public ceaToPushAccount;
 
     //========================
     //          Errors
@@ -72,7 +72,6 @@ contract CEAFactory is Initializable, OwnableUpgradeable, ICEAFactory {
 
     /// @notice Emitted when the CEA migration contract is updated
     event CEAMigrationContractUpdated(address indexed oldContract, address indexed newContract);
-
 
     //========================
     //        Modifiers
@@ -109,11 +108,8 @@ contract CEAFactory is Initializable, OwnableUpgradeable, ICEAFactory {
         address universalGateway
     ) external initializer {
         if (
-            initialOwner == address(0) ||
-            initialVault == address(0) ||
-            ceaProxyImplementation == address(0) ||
-            ceaImplementation == address(0) ||
-            universalGateway == address(0)
+            initialOwner == address(0) || initialVault == address(0) || ceaProxyImplementation == address(0)
+                || ceaImplementation == address(0) || universalGateway == address(0)
         ) {
             revert ZeroAddress();
         }
@@ -163,6 +159,7 @@ contract CEAFactory is Initializable, OwnableUpgradeable, ICEAFactory {
         if (newUG == address(0)) revert ZeroAddress();
         address old = UNIVERSAL_GATEWAY;
         UNIVERSAL_GATEWAY = newUG;
+        emit UniversalGatewayUpdated(old, newUG);
     }
 
     /// @notice Sets the CEA migration contract address
@@ -180,31 +177,31 @@ contract CEAFactory is Initializable, OwnableUpgradeable, ICEAFactory {
     //========================
 
     /// @inheritdoc ICEAFactory
-    function getCEAForUEA(address ueaOnPush) external view override returns (address cea, bool isDeployed) {
-        address mapped = UEA_to_CEA[ueaOnPush];
+    function getCEAForPushAccount(address pushAccount) external view override returns (address cea, bool isDeployed) {
+        address mapped = pushAccountToCEA[pushAccount];
 
         if (mapped != address(0)) {
             cea = mapped;
         } else {
-            cea = _computeCEAInternal(ueaOnPush);
+            cea = _computeCEAInternal(pushAccount);
         }
 
         isDeployed = _hasCode(cea);
     }
 
     /// @inheritdoc ICEAFactory
-    function computeCEA(address ueaOnPush) external view override returns (address cea) {
-        return _computeCEAInternal(ueaOnPush);
+    function computeCEA(address pushAccount) external view override returns (address cea) {
+        return _computeCEAInternal(pushAccount);
     }
 
     /// @inheritdoc ICEAFactory
     function isCEA(address addr) external view override returns (bool isCea) {
-        return CEA_to_UEA[addr] != address(0);
+        return ceaToPushAccount[addr] != address(0);
     }
 
     /// @inheritdoc ICEAFactory
-    function getUEAForCEA(address cea) external view override returns (address ueaOnPush) {
-        return CEA_to_UEA[cea];
+    function getPushAccountForCEA(address cea) external view override returns (address pushAccount) {
+        return ceaToPushAccount[cea];
     }
 
     //========================
@@ -212,8 +209,8 @@ contract CEAFactory is Initializable, OwnableUpgradeable, ICEAFactory {
     //========================
 
     /// @inheritdoc ICEAFactory
-    function deployCEA(address ueaOnPush) external override onlyVault returns (address cea) {
-        if (ueaOnPush == address(0)) revert ZeroAddress();
+    function deployCEA(address pushAccount) external override onlyVault returns (address cea) {
+        if (pushAccount == address(0)) revert ZeroAddress();
         if (CEA_PROXY_IMPLEMENTATION == address(0) || CEA_IMPLEMENTATION == address(0)) {
             revert InvalidImplementation();
         }
@@ -222,12 +219,12 @@ contract CEAFactory is Initializable, OwnableUpgradeable, ICEAFactory {
         }
 
         // If a mapping already exists and code is present, treat as already deployed.
-        address existing = UEA_to_CEA[ueaOnPush];
+        address existing = pushAccountToCEA[pushAccount];
         if (existing != address(0) && _hasCode(existing)) {
             revert CEAAlreadyDeployed();
         }
 
-        bytes32 salt = _generateSalt(ueaOnPush);
+        bytes32 salt = _generateSalt(pushAccount);
 
         // 1. Clone the CEAProxy (template)
         cea = CEA_PROXY_IMPLEMENTATION.cloneDeterministic(salt);
@@ -236,28 +233,28 @@ contract CEAFactory is Initializable, OwnableUpgradeable, ICEAFactory {
         ICEAProxy(cea).initializeCEAProxy(CEA_IMPLEMENTATION);
 
         // 3. Initialize the CEA logic through the proxy (pass factory address)
-        ICEA(cea).initializeCEA(ueaOnPush, VAULT, UNIVERSAL_GATEWAY, address(this));
+        ICEA(cea).initializeCEA(pushAccount, VAULT, UNIVERSAL_GATEWAY, address(this));
 
         // 4. Store mappings
-        UEA_to_CEA[ueaOnPush] = cea;
-        CEA_to_UEA[cea] = ueaOnPush;
+        pushAccountToCEA[pushAccount] = cea;
+        ceaToPushAccount[cea] = pushAccount;
 
-        emit CEADeployed(ueaOnPush, cea);
+        emit CEADeployed(pushAccount, cea);
     }
 
     //========================
     //          Internals
     //========================
 
-    function _computeCEAInternal(address ueaOnPush) internal view returns (address) {
+    function _computeCEAInternal(address pushAccount) internal view returns (address) {
         if (CEA_PROXY_IMPLEMENTATION == address(0)) revert InvalidImplementation();
-        bytes32 salt = _generateSalt(ueaOnPush);
+        bytes32 salt = _generateSalt(pushAccount);
         return CEA_PROXY_IMPLEMENTATION.predictDeterministicAddress(salt, address(this));
     }
 
-    function _generateSalt(address ueaOnPush) internal pure returns (bytes32) {
+    function _generateSalt(address pushAccount) internal pure returns (bytes32) {
         // v1: 1 CEA per (UEA, chain). Factory address + chainId differentiate across chains.
-        return keccak256(abi.encode(ueaOnPush));
+        return keccak256(abi.encode(pushAccount));
     }
 
     function _hasCode(address addr) internal view returns (bool) {

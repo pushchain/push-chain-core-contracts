@@ -16,10 +16,10 @@ import "@openzeppelin/contracts-upgradeable/utils/PausableUpgradeable.sol";
  * @title   UniversalCore
  * @notice  The UniversalCore acts as the core contract for all functionalities needed by the interoperability feature of Push Chain.
  * @dev     The UniversalCore primarily handles the following functionalities:
- *           - Generation of supported PRC20 tokens, and transfering it to accurate recipients.
+ *           - Generation of supported PRC-20 tokens, and transferring it to accurate recipients.
  *           - Setting up the gas tokens for each chain.
  *           - Setting up the gas price for each chain.
- *           - Maintaining a registry of uniswap v3 pools for each token pair.
+ *           - Maintaining a registry of Uniswap V3 pools for each token pair.
  * @dev    All imperative functionalities are handled by the Universal Executor Module.
  */
 
@@ -78,8 +78,8 @@ contract UniversalCore is
         _;
     }
 
-    modifier onlyOwner() {
-        if (!hasRole(DEFAULT_ADMIN_ROLE, msg.sender)) revert CommonErrors.InvalidOwner();   
+    modifier onlyAdmin() {
+        if (!hasRole(DEFAULT_ADMIN_ROLE, msg.sender)) revert CommonErrors.InvalidOwner();
         _;
     }
     constructor() {
@@ -244,7 +244,7 @@ contract UniversalCore is
      * @param token Token address
      * @param supported Whether the token supports auto-swap
      */
-    function setAutoSwapSupported(address token, bool supported) external onlyOwner {
+    function setAutoSwapSupported(address token, bool supported) external onlyAdmin {
         isAutoSwapSupported[token] = supported;
     }
 
@@ -252,7 +252,7 @@ contract UniversalCore is
      * @dev Setter for wrapped PC address.
      * @param addr WPC new address
      */
-    function setWPCContractAddress(address addr) external onlyOwner {
+    function setWPCContractAddress(address addr) external onlyAdmin {
         if (addr == address(0)) revert CommonErrors.ZeroAddress();
         wPCContractAddress = addr;
     }
@@ -263,7 +263,7 @@ contract UniversalCore is
      * @param swapRouter Uniswap V3 SwapRouter address
      * @param quoter Uniswap V3 Quoter address
      */
-    function setUniswapV3Addresses(address factory, address swapRouter, address quoter) external onlyOwner {
+    function setUniswapV3Addresses(address factory, address swapRouter, address quoter) external onlyAdmin {
         if (factory == address(0) || swapRouter == address(0) || quoter == address(0)) {
             revert CommonErrors.ZeroAddress();
         }
@@ -277,7 +277,7 @@ contract UniversalCore is
      * @param token Token address
      * @param feeTier Fee tier (500, 3000, 10000)
      */
-    function setDefaultFeeTier(address token, uint24 feeTier) external onlyOwner {
+    function setDefaultFeeTier(address token, uint24 feeTier) external onlyAdmin {
         if (token == address(0)) revert CommonErrors.ZeroAddress();
         if (feeTier != 500 && feeTier != 3000 && feeTier != 10000) {
             revert UniversalCoreErrors.InvalidFeeTier();
@@ -290,7 +290,7 @@ contract UniversalCore is
      * @param token Token address
      * @param tolerance Slippage tolerance in basis points (e.g., 300 = 3%)
      */
-    function setSlippageTolerance(address token, uint256 tolerance) external onlyOwner {
+    function setSlippageTolerance(address token, uint256 tolerance) external onlyAdmin {
         if (token == address(0)) revert CommonErrors.ZeroAddress();
         if (tolerance > 5000) revert UniversalCoreErrors.InvalidSlippageTolerance(); // Max 50%
         slippageTolerance[token] = tolerance;
@@ -300,14 +300,14 @@ contract UniversalCore is
      * @notice Set default deadline in minutes
      * @param minutesValue Default deadline in minutes
      */
-    function setDefaultDeadlineMins(uint256 minutesValue) external onlyOwner {
+    function setDefaultDeadlineMins(uint256 minutesValue) external onlyAdmin {
         defaultDeadlineMins = minutesValue;
         emit SetDefaultDeadlineMins(minutesValue);
     }
 
     /// @notice Update the base gas limit for the cross-chain outbound transactions.
     /// @param  gasLimit New base gas limit
-    function updateBaseGasLimit(uint256 gasLimit) external onlyOwner {
+    function updateBaseGasLimit(uint256 gasLimit) external onlyAdmin {
         BASE_GAS_LIMIT = gasLimit;
     }
 
@@ -316,7 +316,7 @@ contract UniversalCore is
      * @notice Pause the contract - stops all deposit functions
      * @dev Can only be called by the owner
      */
-    function pause() external onlyOwner {
+    function pause() external onlyAdmin {
         _pause();
     }
 
@@ -324,7 +324,7 @@ contract UniversalCore is
      * @notice Unpause the contract - resumes all deposit functions
      * @dev Can only be called by the owner
      */
-    function unpause() external onlyOwner {
+    function unpause() external onlyAdmin {
         _unpause();
     }
 

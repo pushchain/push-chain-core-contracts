@@ -41,7 +41,7 @@ forge test --match-path test/tests_uea_and_factory/UEA_EVM.t.sol
 forge test --match-contract UEA_EVMTest
 
 # Run specific test function
-forge test --match-test testExecutePayload
+forge test --match-test testExecuteUniversalTx
 
 # Run tests with gas reporting
 forge test --gas-report
@@ -83,7 +83,7 @@ forge fmt --check
 - Purpose: Represents external-chain users on Push Chain
 - Control: User-authenticated via native signatures (ECDSA for EVM, Ed25519 for Solana)
 - Implementations: `UEA_EVM` (src/UEA/UEA_EVM.sol:28) and `UEA_SVM` (src/UEA/UEA_SVM.sol)
-- Deployment: Deterministic via `UEAFactoryV1` using CREATE2 (src/UEA/UEAFactoryV1.sol:35)
+- Deployment: Deterministic via `UEAFactory` using CREATE2 (src/UEA/UEAFactory.sol:35)
 - Identity: One external identity → one stable UEA address
 
 **Chain Executor Account (CEA)**
@@ -100,7 +100,7 @@ forge fmt --check
 Both UEA and CEA use minimal proxy (EIP-1167 clone) architecture:
 
 **UEA Proxy Flow:**
-1. `UEAFactoryV1` clones `UEAProxy` template using `Clones.cloneDeterministic(salt)`
+1. `UEAFactory` clones `UEAProxy` template using `Clones.cloneDeterministic(salt)`
 2. Salt = `keccak256(abi.encode(chainNamespace, chainId, owner))`
 3. `UEAProxy.initializeUEA(UEA_IMPLEMENTATION)` sets implementation in custom slot `UEA_LOGIC_SLOT` (src/UEA/UEAProxy.sol:20)
 4. Implementation is either `UEA_EVM` or `UEA_SVM` based on VM type
@@ -109,7 +109,7 @@ Both UEA and CEA use minimal proxy (EIP-1167 clone) architecture:
 **CEA Proxy Flow:**
 1. `CEAFactory` clones `CEAProxy` template using `Clones.cloneDeterministic(salt)`
 2. `CEAProxy.initializeCEAProxy(CEA_IMPLEMENTATION)` sets implementation
-3. `CEA.initializeCEA(ueaOnPush, VAULT, UNIVERSAL_GATEWAY)` initializes CEA state
+3. `CEA.initializeCEA(pushAccount, VAULT, UNIVERSAL_GATEWAY)` initializes CEA state
 4. All state lives in the proxy, logic is delegatecalled
 
 ### Migration System
@@ -154,7 +154,7 @@ Uses CAIP-2 standard for chain identifiers:
 - Format: `{chainNamespace}:{chainId}`
 - Examples: `eip155:1` (Ethereum mainnet), `eip155:8453` (Base), `solana:mainnet`
 - Internally hashed: `chainHash = keccak256(abi.encode(chainNamespace, chainId))`
-- VM types mapped via `CHAIN_to_VM` in UEAFactoryV1
+- VM types mapped via `CHAIN_to_VM` in UEAFactory
 
 ### Signature Verification
 
@@ -163,13 +163,13 @@ Uses CAIP-2 standard for chain identifiers:
 - Payload hash: `UNIVERSAL_PAYLOAD_TYPEHASH` (src/libraries/Types.sol:48)
 - Domain separator includes version, chainId, and verifying contract
 - Recovery via ECDSA `ecrecover`
-- Special case: `UE_MODULE` (0x14191Ea54B4c176fCf86f51b0FAc7CB1E71Df7d7) can execute without signature
+- Special case: `UNIVERSAL_EXECUTOR_MODULE` (0x14191Ea54B4c176fCf86f51b0FAc7CB1E71Df7d7) can execute without signature
 
 **UEA_SVM Signatures:**
 - Uses Ed25519 signature verification
 - Verified via precompile at `0x00000000000000000000000000000000000000ca`
 - Payload hash: Same `UNIVERSAL_PAYLOAD_TYPEHASH` for consistency
-- Special case: Same `UE_MODULE` bypass
+- Special case: Same `UNIVERSAL_EXECUTOR_MODULE` bypass
 
 ### Payload Execution
 
@@ -196,8 +196,8 @@ struct UniversalPayload {
   1. `isMulticall(payload.data)` → `_handleMulticall(payload)` — batch execution
   2. `isMigration(payload.data)` → `_handleMigration(payload)` — delegatecall to factory's migration contract
   3. else → `_handleSingleCall(payload)` — single target call
-- `UE_MODULE` (0x14191Ea54B4c176fCf86f51b0FAc7CB1E71Df7d7) can execute without signature verification
-- Factory reference stored for fetching migration contract at runtime
+- `UNIVERSAL_EXECUTOR_MODULE` (0x14191Ea54B4c176fCf86f51b0FAc7CB1E71Df7d7) can execute without signature verification
+- `ueaFactory` reference stored for fetching migration contract at runtime
 
 ### CEA Execution Flow
 
@@ -234,15 +234,14 @@ struct Multicall {
 
 **Safety Constraints:**
 - Self-calls must have `value == 0` (enforced in `_handleMulticall`)
-- Migration must be standalone (cannot appear inside multicall arrays — `isMigrationCall` check)
-- Migration rejects `msg.value > 0` (logic upgrade, not value transfer)
+- Migration must be standalone (cannot appear inside multicall arrays — `isMigration` check in loop)
 - All calls executed sequentially via `.call()`
 - No strict `msg.value == totalValue` enforcement (CEA can spend pre-existing balance)
 
 ## Key Contracts Reference
 
 ### Core Contracts
-- `UEAFactoryV1`: src/UEA/UEAFactoryV1.sol:35 - Factory for deploying UEAs
+- `UEAFactory`: src/UEA/UEAFactory.sol:35 - Factory for deploying UEAs
 - `UEA_EVM`: src/UEA/UEA_EVM.sol:28 - EVM account implementation
 - `UEA_SVM`: src/UEA/UEA_SVM.sol - Solana account implementation
 - `UEAProxy`: src/UEA/UEAProxy.sol:17 - Minimal proxy for UEAs
@@ -303,7 +302,7 @@ Test files follow the pattern `ContractName.t.sol` and use Foundry's testing fra
 
 ## Important Constants
 
-- **UE_MODULE**: `0x14191Ea54B4c176fCf86f51b0FAc7CB1E71Df7d7` - Universal Executor Module (bypasses signature checks)
+- **UNIVERSAL_EXECUTOR_MODULE**: `0x14191Ea54B4c176fCf86f51b0FAc7CB1E71Df7d7` - Universal Executor Module (bypasses signature checks)
 - **UEA_LOGIC_SLOT**: `0x868a771a75a4aa6c2be13e9a9617cb8ea240ed84a3a90c8469537393ec3e115d` - Storage slot for UEA implementation
 - **CEA_LOGIC_SLOT**: `0x8b2ae8ee8c8678fc65d38e03fd33865426627999aa5e8fab985583dec5888813` - Storage slot for CEA implementation
 - **UNIVERSAL_PAYLOAD_TYPEHASH**: `0x102a0b05d0844e7ea580bbdbe2cfe69c4fa4bfac4cf45919f6b24381a1235844` - EIP-712 payload hash
@@ -321,7 +320,7 @@ Test files follow the pattern `ContractName.t.sol` and use Foundry's testing fra
 
 ## Working with Upgradeable Contracts
 
-Most core contracts (`UEAFactoryV1`, `CEAFactory`, `UniversalCore`) use OpenZeppelin's upgradeable proxy pattern:
+Most core contracts (`UEAFactory`, `CEAFactory`, `UniversalCore`) use OpenZeppelin's upgradeable proxy pattern:
 
 - Inherit from `Initializable`, `OwnableUpgradeable`, etc.
 - Use `initialize()` instead of `constructor()`

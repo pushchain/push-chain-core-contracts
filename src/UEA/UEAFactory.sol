@@ -12,7 +12,7 @@ import {UniversalAccountId} from "../libraries/Types.sol";
 import {UEAProxy} from "./UEAProxy.sol";
 
 /**
- * @title UEAFactoryV1
+ * @title UEAFactory
  * @dev A factory contract for deploying and managing Universal Executor Accounts (UEA) instances.
  *
  *      - UEA (Universal Executor Account) : Smart contract deployed for external chain users to interact with PUSH chain.
@@ -32,7 +32,7 @@ import {UEAProxy} from "./UEAProxy.sol";
  *
  * @notice Use this contract to deploy new UEA instances and compute their addresses deterministically.
  */
-contract UEAFactoryV1 is Initializable, OwnableUpgradeable, IUEAFactory {
+contract UEAFactory is Initializable, OwnableUpgradeable, IUEAFactory {
     using Clones for address;
 
     /// @notice Maps VM type hashes to their corresponding UEA implementation addresses

@@ -75,10 +75,10 @@ interface IUEA {
      * @param signature     The signature to verify.
      * @return              A boolean indicating whether the signature is valid.
      */
-    function verifyPayloadSignature(bytes32 payloadHash, bytes memory signature) external view returns (bool);
+    function verifyUniversalPayloadSignature(bytes32 payloadHash, bytes memory signature) external view returns (bool);
 
     /**
-     * @notice                  Executes a cross-chain payload with the provided verification data.
+     * @notice                  Executes a cross-chain payload with the provided signature.
      * @param payload           The ABI-encoded UniversalPayload struct. Callers must encode the payload as:
      *                          `abi.encode(UniversalPayload({...}))` with the following fields in order:
      *                          - to: Target contract address to call (address)
@@ -89,26 +89,26 @@ interface IUEA {
      *                          - maxPriorityFeePerGas: Maximum priority fee per gas unit (uint256)
      *                          - nonce: Used to prevent replay attacks (uint256)
      *                          - deadline: Timestamp after which the payload is invalid (uint256)
-     * 
+     *
      *                          The function will revert with decoding errors if the payload is not properly encoded.
-     * 
-     * @param verificationData The verificationData is the signature bytes for verification.
+     *
+     * @param signature         The signature bytes for verification.
      *                          The signature format differs based on UEA type:
      *                          - For UEA_EVM: ECDSA signature (r, s, v) - 65 bytes
      *                          - For UEA_SVM: Ed25519 signature - 64 bytes
-     * 
-     *                          Note: If the caller is UE_MODULE, signature verification is skipped.
+     *
+     *                          Note: If the caller is UNIVERSAL_EXECUTOR_MODULE, signature verification is skipped.
      *
      * @dev                     Verification behavior:
-     *                          - If caller is UE_MODULE: No signature verification required
-     *                          - If caller is not UE_MODULE: Signature verification required
-     * 
-     *                          Function allows 3 payload executon options: 
+     *                          - If caller is UNIVERSAL_EXECUTOR_MODULE: No signature verification required
+     *                          - If caller is not UNIVERSAL_EXECUTOR_MODULE: Signature verification required
+     *
+     *                          Function allows 3 payload executon options:
      *                          - SINGLE Payload execution               -> using _handleSingleCall()
      *                          - MULTIPLE Payload execution (Multicall) -> using _handleMulticall()
      *                          - Migration execution                    -> using _handleMigration()
-     * 
+     *
      *                          Note: A migration payload execution cannot be part of subcall in Multicall. Migration must be standalone payload execution.
      */
-    function executePayload(bytes calldata payload, bytes calldata verificationData) external;
+    function executeUniversalTx(bytes calldata payload, bytes calldata signature) external;
 }
