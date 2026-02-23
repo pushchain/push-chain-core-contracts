@@ -30,10 +30,10 @@ contract DeployCEAFactoryScript is Script {
     // ============================================================================
 
     // Owner of the CEAFactory (can update implementations, pause, etc.)
-    address public OWNER_ADDRESS = 0x778D3206374f8AC265728E18E3fE2Ae6b93E4ce4;
+    address public OWNER_ADDRESS = 0xe520d4A985A2356Fa615935a822Ce4eFAcA24aB6;
 
     // Vault contract address on this chain (handles cross-chain funds)
-    address public VAULT_ADDRESS = 0x0000000000000000000000000000000000000001;
+    address public VAULT_ADDRESS = 0xe8D77b8BC708aeA8E3735f686DcD33004a7Cd294;
 
     // UniversalGateway contract address on this chain (handles cross-chain messages)
     address public UNIVERSAL_GATEWAY_ADDRESS = 0x4DCab975cDe839632db6695e2e936A29ce3e325E;
