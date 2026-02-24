@@ -12,7 +12,7 @@ import {ICEAProxy} from "../../src/interfaces/ICEAProxy.sol";
 // CEAProxy uses non-upgradeable Initializable, CEAFactory uses upgradeable
 import {CEAProxy} from "../../src/CEA/CEAProxy.sol";
 import "../../src/interfaces/ICEA.sol";
-import {IUniversalGateway, UniversalTxRequest, RevertInstructions} from "../../src/interfaces/IUniversalGateway.sol";
+import {IUniversalGateway, UniversalTxRequest} from "../../src/interfaces/IUniversalGateway.sol";
 import {CEAErrors as Errors, CommonErrors} from "../../src/libraries/Errors.sol";
 import {Multicall, MULTICALL_SELECTOR} from "../../src/libraries/Types.sol";
 import {Target} from "../../src/mocks/Target.sol";
