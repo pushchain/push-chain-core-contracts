@@ -42,7 +42,7 @@ contract MockUniversalGateway is IUniversalGateway {
         lastCallWasViaCEA = false;
     }
 
-    function sendUniversalTxViaCEA(UniversalTxRequest calldata req) external payable {
+    function sendUniversalTxFromCEA(UniversalTxRequest calldata req) external payable {
         if (shouldRevert) {
             revert(revertMessage);
         }
@@ -57,8 +57,8 @@ contract MockUniversalGateway is IUniversalGateway {
         lastToken = req.token;
         lastAmount = req.amount;
         lastPayload = req.payload;
-        lastFundRecipient = req.revertInstruction.fundRecipient;
-        lastRevertMsg = req.revertInstruction.revertMsg;
+        lastFundRecipient = req.revertRecipient;
+        lastRevertMsg = "";
         lastSignatureData = req.signatureData;
         lastValue = msg.value;
         callCount++;
@@ -71,10 +71,7 @@ contract MockUniversalGateway is IUniversalGateway {
             token: lastToken,
             amount: lastAmount,
             payload: lastPayload,
-            revertInstruction: RevertInstructions({
-                fundRecipient: lastFundRecipient,
-                revertMsg: lastRevertMsg
-            }),
+            revertRecipient: lastFundRecipient,
             signatureData: lastSignatureData
         });
     }

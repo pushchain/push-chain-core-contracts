@@ -3,7 +3,7 @@ pragma solidity 0.8.26;
 
 import {ICEA} from "../interfaces/ICEA.sol";
 import {CEAErrors, CommonErrors} from "../libraries/Errors.sol";
-import {IUniversalGateway, UniversalTxRequest, RevertInstructions} from "../interfaces/IUniversalGateway.sol";
+import {IUniversalGateway, UniversalTxRequest} from "../interfaces/IUniversalGateway.sol";
 import {Multicall, MULTICALL_SELECTOR, MIGRATION_SELECTOR} from "../libraries/Types.sol";
 import {ICEAFactory} from "../interfaces/ICEAFactory.sol";
 
@@ -137,16 +137,16 @@ contract CEA is ICEA, ReentrancyGuard {
             token: token,
             amount: amount,
             payload: payload,
-            revertInstruction: RevertInstructions({fundRecipient: pushAccount, revertMsg: ""}),
+            revertRecipient: pushAccount,
             signatureData: ""
         });
 
         if (token == address(0)) {
             if (address(this).balance < amount) revert CEAErrors.InsufficientBalance();
-            IUniversalGateway(UNIVERSAL_GATEWAY).sendUniversalTxViaCEA{value: amount}(req);
+            IUniversalGateway(UNIVERSAL_GATEWAY).sendUniversalTxFromCEA{value: amount}(req);
         } else {
             if (IERC20(token).balanceOf(address(this)) < amount) revert CEAErrors.InsufficientBalance();
-            IUniversalGateway(UNIVERSAL_GATEWAY).sendUniversalTxViaCEA(req);
+            IUniversalGateway(UNIVERSAL_GATEWAY).sendUniversalTxFromCEA(req);
         }
 
         emit UniversalTxToUEA(address(this), pushAccount, token, amount);
