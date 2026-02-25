@@ -30,18 +30,18 @@ contract DeployCEAFactoryScript is Script {
     // ============================================================================
 
     // Owner of the CEAFactory (can update implementations, pause, etc.)
-    address public OWNER_ADDRESS = 0xe520d4A985A2356Fa615935a822Ce4eFAcA24aB6;
+    address public OWNER_ADDRESS = 0x6dD2cA20ec82E819541EB43e1925DbE46a441970;
 
     // Vault contract address on this chain (handles cross-chain funds)
-    address public VAULT_ADDRESS = 0xe8D77b8BC708aeA8E3735f686DcD33004a7Cd294;
+    address public VAULT_ADDRESS = 0xE52AC4f8DD3e0263bDF748F3390cdFA1f02be881;
 
     // UniversalGateway contract address on this chain (handles cross-chain messages)
-    address public UNIVERSAL_GATEWAY_ADDRESS = 0x4DCab975cDe839632db6695e2e936A29ce3e325E;
+    address public UNIVERSAL_GATEWAY_ADDRESS = 0x44aFFC61983F4348DdddB886349eb992C061EaC0;
 
     function run() external {
         // Get chain ID and deployer info
         uint256 chainId = block.chainid;
-        uint256 deployerKey = vm.envUint("KEY");
+        uint256 deployerKey = uint256(vm.envBytes32("KEY"));
         address deployer = vm.addr(deployerKey);
 
         console.log("=== CEAFactory Deployment Configuration ===");
