@@ -332,7 +332,8 @@ contract BaseTest is Test {
             maxFeePerGas: 0,
             maxPriorityFeePerGas: 0,
             nonce: nonce,
-            deadline: deadline
+            deadline: deadline,
+            vType: VerificationType(0)
         });
     }
 
@@ -363,7 +364,8 @@ contract BaseTest is Test {
             maxFeePerGas: 0,
             maxPriorityFeePerGas: 0,
             nonce: nonce,
-            deadline: deadline
+            deadline: deadline,
+            vType: VerificationType(0)
         });
     }
 

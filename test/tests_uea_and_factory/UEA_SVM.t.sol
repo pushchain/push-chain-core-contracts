@@ -229,7 +229,8 @@ contract UEASVMTest is Test {
             maxFeePerGas: 0,
             nonce: 0,
             deadline: block.timestamp + 1000,
-            maxPriorityFeePerGas: 0
+            maxPriorityFeePerGas: 0,
+            vType: VerificationType(0)
         });
 
         bytes32 txHash = getCrosschainTxhash(svmSmartAccountInstance, payload);
@@ -284,7 +285,8 @@ contract UEASVMTest is Test {
             maxFeePerGas: 0,
             nonce: 0,
             deadline: block.timestamp + 1000,
-            maxPriorityFeePerGas: 0
+            maxPriorityFeePerGas: 0,
+            vType: VerificationType(0)
         });
 
         // Sign the payload
@@ -329,7 +331,8 @@ contract UEASVMTest is Test {
             maxFeePerGas: 0,
             nonce: 0,
             deadline: block.timestamp + 1000,
-            maxPriorityFeePerGas: 0
+            maxPriorityFeePerGas: 0,
+            vType: VerificationType(0)
         });
 
         // Sign the payload
@@ -384,7 +387,8 @@ contract UEASVMTest is Test {
             maxFeePerGas: 0,
             nonce: 0,
             deadline: block.timestamp + 1000,
-            maxPriorityFeePerGas: 0
+            maxPriorityFeePerGas: 0,
+            vType: VerificationType(0)
         });
 
         // Sign the payload
@@ -441,7 +445,8 @@ contract UEASVMTest is Test {
             maxFeePerGas: 0,
             nonce: 0,
             deadline: block.timestamp + 1000,
-            maxPriorityFeePerGas: 0
+            maxPriorityFeePerGas: 0,
+            vType: VerificationType(0)
         });
 
         // Sign the payload
@@ -508,7 +513,8 @@ contract UEASVMTest is Test {
             maxFeePerGas: 0,
             nonce: 0,
             deadline: block.timestamp + 1000,
-            maxPriorityFeePerGas: 0
+            maxPriorityFeePerGas: 0,
+            vType: VerificationType(0)
         });
 
         // Sign the payload
@@ -551,7 +557,8 @@ contract UEASVMTest is Test {
             maxFeePerGas: 0,
             nonce: 0,
             deadline: block.timestamp + 1000,
-            maxPriorityFeePerGas: 0
+            maxPriorityFeePerGas: 0,
+            vType: VerificationType(0)
         });
 
         bytes32 txHash = getCrosschainTxhash(svmSmartAccountInstance, payload);
@@ -583,7 +590,8 @@ contract UEASVMTest is Test {
             maxFeePerGas: 0,
             nonce: 0,
             deadline: block.timestamp + 1000,
-            maxPriorityFeePerGas: 0
+            maxPriorityFeePerGas: 0,
+            vType: VerificationType(0)
         });
 
         bytes32 txHash = getCrosschainTxhash(svmSmartAccountInstance, payload);
@@ -615,7 +623,8 @@ contract UEASVMTest is Test {
             maxFeePerGas: 0,
             nonce: 0,
             deadline: deadline,
-            maxPriorityFeePerGas: 0
+            maxPriorityFeePerGas: 0,
+            vType: VerificationType(0)
         });
 
         bytes32 txHash = getCrosschainTxhash(svmSmartAccountInstance, payload);
@@ -674,7 +683,8 @@ contract UEASVMTest is Test {
             maxFeePerGas: 0,
             maxPriorityFeePerGas: 0,
             nonce: payload.nonce,
-            deadline: payload.deadline
+            deadline: payload.deadline,
+            vType: VerificationType(0)
         });
         bytes32 payloadHash = svmSmartAccountInstance.getUniversalPayloadHash(universalPayload);
 
@@ -707,7 +717,8 @@ contract UEASVMTest is Test {
             maxFeePerGas: 0,
             maxPriorityFeePerGas: 0,
             nonce: payload.nonce,
-            deadline: payload.deadline
+            deadline: payload.deadline,
+            vType: VerificationType(0)
         });
         bytes32 payloadHash = svmSmartAccountInstance.getUniversalPayloadHash(universalPayload);
 
@@ -745,7 +756,8 @@ contract UEASVMTest is Test {
             maxFeePerGas: 0,
             maxPriorityFeePerGas: 0,
             nonce: payload.nonce,
-            deadline: payload.deadline
+            deadline: payload.deadline,
+            vType: VerificationType(0)
         });
         bytes32 payloadHash = svmSmartAccountInstance.getUniversalPayloadHash(universalPayload);
 
@@ -814,7 +826,8 @@ contract UEASVMTest is Test {
             maxFeePerGas: 0,
             nonce: 0,
             deadline: block.timestamp + 1000,
-            maxPriorityFeePerGas: 0
+            maxPriorityFeePerGas: 0,
+            vType: VerificationType(0)
         });
 
         // Get the transaction hash directly
@@ -831,7 +844,8 @@ contract UEASVMTest is Test {
                 payload.maxFeePerGas,
                 payload.maxPriorityFeePerGas,
                 svmSmartAccountInstance.nonce(),
-                payload.deadline
+                payload.deadline,
+                uint8(payload.vType)
             )
         );
 
@@ -854,7 +868,8 @@ contract UEASVMTest is Test {
             maxFeePerGas: 0,
             nonce: 0,
             deadline: deadline,
-            maxPriorityFeePerGas: 0
+            maxPriorityFeePerGas: 0,
+            vType: VerificationType(0)
         });
 
         // Warp to after the deadline
@@ -870,7 +885,7 @@ contract UEASVMTest is Test {
         // If the UniversalPayload struct definition changes, this test will fail
 
         bytes32 expectedHash = keccak256(
-            "UniversalPayload(address to,uint256 value,bytes data,uint256 gasLimit,uint256 maxFeePerGas,uint256 maxPriorityFeePerGas,uint256 nonce,uint256 deadline)"
+            "UniversalPayload(address to,uint256 value,bytes data,uint256 gasLimit,uint256 maxFeePerGas,uint256 maxPriorityFeePerGas,uint256 nonce,uint256 deadline,uint8 vType)"
         );
 
         // Access the actual hash from the imported constant
@@ -899,7 +914,8 @@ contract UEASVMTest is Test {
                 payload.maxFeePerGas,
                 payload.maxPriorityFeePerGas,
                 _smartAccountInstance.nonce(),
-                payload.deadline
+                payload.deadline,
+                uint8(payload.vType)
             )
         );
 
@@ -922,7 +938,8 @@ contract UEASVMTest is Test {
             maxFeePerGas: 0,
             nonce: 0,
             deadline: block.timestamp + 1000,
-            maxPriorityFeePerGas: 0
+            maxPriorityFeePerGas: 0,
+            vType: VerificationType(0)
         });
 
         bytes32 txHash = getCrosschainTxhash(svmSmartAccountInstance, payload);
@@ -954,7 +971,8 @@ contract UEASVMTest is Test {
             maxFeePerGas: 0,
             nonce: 0,
             deadline: block.timestamp + 1000,
-            maxPriorityFeePerGas: 0
+            maxPriorityFeePerGas: 0,
+            vType: VerificationType(0)
         });
 
         bytes32 txHash = getCrosschainTxhash(svmSmartAccountInstance, payload);
@@ -984,7 +1002,8 @@ contract UEASVMTest is Test {
             maxFeePerGas: 0,
             nonce: 0,
             deadline: block.timestamp + 1000,
-            maxPriorityFeePerGas: 0
+            maxPriorityFeePerGas: 0,
+            vType: VerificationType(0)
         });
 
         bytes32 txHash = getCrosschainTxhash(svmSmartAccountInstance, payload);
@@ -1016,7 +1035,8 @@ contract UEASVMTest is Test {
             maxFeePerGas: 0,
             nonce: 0,
             deadline: block.timestamp + 1000,
-            maxPriorityFeePerGas: 0
+            maxPriorityFeePerGas: 0,
+            vType: VerificationType(0)
         });
         
         // Prank as UNIVERSAL_EXECUTOR_MODULE
@@ -1039,7 +1059,8 @@ contract UEASVMTest is Test {
             maxFeePerGas: 0,
             nonce: 0,
             deadline: block.timestamp + 1000,
-            maxPriorityFeePerGas: 0
+            maxPriorityFeePerGas: 0,
+            vType: VerificationType(0)
         });
         
         // Try to execute with invalid signature as regular user
@@ -1070,7 +1091,8 @@ contract UEASVMTest is Test {
             maxFeePerGas: 0,
             nonce: 0,
             deadline: block.timestamp + 1000,
-            maxPriorityFeePerGas: 0
+            maxPriorityFeePerGas: 0,
+            vType: VerificationType(0)
         });
         
         bytes32 txHash = getCrosschainTxhash(svmSmartAccountInstance, payload);

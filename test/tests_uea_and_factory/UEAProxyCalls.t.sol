@@ -101,7 +101,8 @@ contract ProxyCallTest is Test {
             maxFeePerGas: 0,
             nonce: 0,
             deadline: block.timestamp + 1000,
-            maxPriorityFeePerGas: 0
+            maxPriorityFeePerGas: 0,
+            vType: VerificationType(0)
         });
 
         bytes32 txHash = getCrosschainTxhash(user1UEAInstance, payload);
@@ -126,7 +127,8 @@ contract ProxyCallTest is Test {
             maxFeePerGas: 0,
             nonce: 0,
             deadline: block.timestamp + 1000,
-            maxPriorityFeePerGas: 0
+            maxPriorityFeePerGas: 0,
+            vType: VerificationType(0)
         });
 
         bytes32 txHash = getCrosschainTxhash(user2UEAInstance, payload);
@@ -151,7 +153,8 @@ contract ProxyCallTest is Test {
             maxFeePerGas: 0,
             nonce: 0,
             deadline: block.timestamp + 1000,
-            maxPriorityFeePerGas: 0
+            maxPriorityFeePerGas: 0,
+            vType: VerificationType(0)
         });
 
         bytes32 txHash = getCrosschainTxhash(user1UEAInstance, payload);
@@ -177,7 +180,8 @@ contract ProxyCallTest is Test {
             maxFeePerGas: 0,
             nonce: 0,
             deadline: block.timestamp + 1000,
-            maxPriorityFeePerGas: 0
+            maxPriorityFeePerGas: 0,
+            vType: VerificationType(0)
         });
 
         bytes32 txHash = getCrosschainTxhash(user1UEAInstance, payload);
@@ -201,7 +205,8 @@ contract ProxyCallTest is Test {
             maxFeePerGas: 0,
             nonce: 0,
             deadline: 500, // Expired deadline
-            maxPriorityFeePerGas: 0
+            maxPriorityFeePerGas: 0,
+            vType: VerificationType(0)
         });
 
         bytes32 txHash = getCrosschainTxhash(user1UEAInstance, payload);
@@ -226,7 +231,8 @@ contract ProxyCallTest is Test {
             maxFeePerGas: 0,
             nonce: 0,
             deadline: block.timestamp + 1000,
-            maxPriorityFeePerGas: 0
+            maxPriorityFeePerGas: 0,
+            vType: VerificationType(0)
         });
 
         bytes32 txHash = getCrosschainTxhash(user1UEAInstance, payload);
@@ -249,7 +255,8 @@ contract ProxyCallTest is Test {
             maxFeePerGas: 0,
             nonce: 0,
             deadline: block.timestamp + 1000,
-            maxPriorityFeePerGas: 0
+            maxPriorityFeePerGas: 0,
+            vType: VerificationType(0)
         });
 
         bytes32 txHash = getCrosschainTxhash(user1UEAInstance, payload);
@@ -275,7 +282,8 @@ contract ProxyCallTest is Test {
             maxFeePerGas: 0,
             nonce: 0,
             deadline: block.timestamp + 1000,
-            maxPriorityFeePerGas: 0
+            maxPriorityFeePerGas: 0,
+            vType: VerificationType(0)
         });
 
         bytes32 txHash = getCrosschainTxhash(user1UEAInstance, payload);
@@ -303,7 +311,8 @@ contract ProxyCallTest is Test {
                 payload.maxFeePerGas,
                 payload.maxPriorityFeePerGas,
                 _smartAccountInstance.nonce(),
-                payload.deadline
+                payload.deadline,
+                uint8(payload.vType)
             )
         );
 

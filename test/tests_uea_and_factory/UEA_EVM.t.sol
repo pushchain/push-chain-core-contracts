@@ -167,7 +167,8 @@ contract UEA_EVMTest is Test {
             maxFeePerGas: 0,
             nonce: 0,
             deadline: block.timestamp + 1000,
-            maxPriorityFeePerGas: 0
+            maxPriorityFeePerGas: 0,
+            vType: VerificationType(0)
         });
 
         bytes32 txHash = getCrosschainTxhash(evmSmartAccountInstance, payload);
@@ -200,7 +201,8 @@ contract UEA_EVMTest is Test {
             maxFeePerGas: 0,
             nonce: 0,
             deadline: block.timestamp + 1000,
-            maxPriorityFeePerGas: 0
+            maxPriorityFeePerGas: 0,
+            vType: VerificationType(0)
         });
 
         bytes32 txHash = getCrosschainTxhash(evmSmartAccountInstance, payload);
@@ -226,7 +228,8 @@ contract UEA_EVMTest is Test {
             maxFeePerGas: 0,
             nonce: 0,
             deadline: 0, // Zero deadline - should not check timestamp
-            maxPriorityFeePerGas: 0
+            maxPriorityFeePerGas: 0,
+            vType: VerificationType(0)
         });
 
         bytes32 txHash = getCrosschainTxhash(evmSmartAccountInstance, payload);
@@ -259,7 +262,8 @@ contract UEA_EVMTest is Test {
             maxFeePerGas: 0,
             nonce: 0,
             deadline: block.timestamp + 1000,
-            maxPriorityFeePerGas: 0
+            maxPriorityFeePerGas: 0,
+            vType: VerificationType(0)
         });
 
         bytes32 txHash = getCrosschainTxhash(evmSmartAccountInstance, payload);
@@ -286,7 +290,8 @@ contract UEA_EVMTest is Test {
             maxFeePerGas: 0,
             nonce: 0,
             deadline: block.timestamp + 1000,
-            maxPriorityFeePerGas: 0
+            maxPriorityFeePerGas: 0,
+            vType: VerificationType(0)
         });
 
         bytes32 txHash = getCrosschainTxhash(evmSmartAccountInstance, payload);
@@ -311,7 +316,8 @@ contract UEA_EVMTest is Test {
             maxFeePerGas: 0,
             nonce: 0,
             deadline: block.timestamp + 1000,
-            maxPriorityFeePerGas: 0
+            maxPriorityFeePerGas: 0,
+            vType: VerificationType(0)
         });
 
         bytes32 txHash = getCrosschainTxhash(evmSmartAccountInstance, payload);
@@ -352,7 +358,8 @@ contract UEA_EVMTest is Test {
             maxFeePerGas: 0,
             nonce: 0,
             deadline: block.timestamp + 1000,
-            maxPriorityFeePerGas: 0
+            maxPriorityFeePerGas: 0,
+            vType: VerificationType(0)
         });
 
         // Sign the payload
@@ -393,7 +400,8 @@ contract UEA_EVMTest is Test {
             maxFeePerGas: 0,
             nonce: 0,
             deadline: block.timestamp + 1000,
-            maxPriorityFeePerGas: 0
+            maxPriorityFeePerGas: 0,
+            vType: VerificationType(0)
         });
 
         bytes32 txHash = getCrosschainTxhash(evmSmartAccountInstance, payload);
@@ -440,7 +448,8 @@ contract UEA_EVMTest is Test {
             maxFeePerGas: 0,
             nonce: 0,
             deadline: block.timestamp + 1000,
-            maxPriorityFeePerGas: 0
+            maxPriorityFeePerGas: 0,
+            vType: VerificationType(0)
         });
 
         // Sign the payload
@@ -490,7 +499,8 @@ contract UEA_EVMTest is Test {
             maxFeePerGas: 0,
             nonce: 0,
             deadline: block.timestamp + 1000,
-            maxPriorityFeePerGas: 0
+            maxPriorityFeePerGas: 0,
+            vType: VerificationType(0)
         });
 
         // Sign the payload
@@ -550,7 +560,8 @@ contract UEA_EVMTest is Test {
             maxFeePerGas: 0,
             nonce: 0,
             deadline: block.timestamp + 1000,
-            maxPriorityFeePerGas: 0
+            maxPriorityFeePerGas: 0,
+            vType: VerificationType(0)
         });
 
         // Sign the payload
@@ -586,7 +597,8 @@ contract UEA_EVMTest is Test {
             maxFeePerGas: 0,
             nonce: 100, // Incorrect nonce
             deadline: block.timestamp + 1000,
-            maxPriorityFeePerGas: 0
+            maxPriorityFeePerGas: 0,
+            vType: VerificationType(0)
         });
 
         // Create a signature - Note: The nonce in the payload and the nonce used in getUniversalPayloadHash need to match
@@ -605,7 +617,8 @@ contract UEA_EVMTest is Test {
                         payload.maxFeePerGas,
                         payload.maxPriorityFeePerGas,
                         payload.nonce, // Using payload nonce, not account nonce
-                        payload.deadline
+                        payload.deadline,
+                        uint8(payload.vType)
                     )
                 )
             )
@@ -634,7 +647,8 @@ contract UEA_EVMTest is Test {
             maxFeePerGas: 0,
             nonce: 0,
             deadline: block.timestamp + 1000,
-            maxPriorityFeePerGas: 0
+            maxPriorityFeePerGas: 0,
+            vType: VerificationType(0)
         });
 
         bytes32 txHash = getCrosschainTxhash(evmSmartAccountInstance, payload);
@@ -666,7 +680,8 @@ contract UEA_EVMTest is Test {
             maxFeePerGas: 0,
             nonce: 0,
             deadline: block.timestamp - 1, // Expired deadline
-            maxPriorityFeePerGas: 0
+            maxPriorityFeePerGas: 0,
+            vType: VerificationType(0)
         });
 
         bytes32 txHash = getCrosschainTxhash(evmSmartAccountInstance, payload);
@@ -686,7 +701,8 @@ contract UEA_EVMTest is Test {
             maxFeePerGas: 0,
             nonce: 0,
             deadline: block.timestamp + 1000,
-            maxPriorityFeePerGas: 0
+            maxPriorityFeePerGas: 0,
+            vType: VerificationType(0)
         });
 
         // Create an invalid signature
@@ -705,7 +721,8 @@ contract UEA_EVMTest is Test {
             maxFeePerGas: 0,
             nonce: 0,
             deadline: block.timestamp + 1000,
-            maxPriorityFeePerGas: 0
+            maxPriorityFeePerGas: 0,
+            vType: VerificationType(0)
         });
 
         // Create a malformed signature (too short)
@@ -753,7 +770,8 @@ contract UEA_EVMTest is Test {
             maxFeePerGas: 0,
             maxPriorityFeePerGas: 0,
             nonce: payload.nonce,
-            deadline: payload.deadline
+            deadline: payload.deadline,
+            vType: VerificationType(0)
         });
 
         // Create an invalid signature (wrong private key)
@@ -780,7 +798,8 @@ contract UEA_EVMTest is Test {
             maxFeePerGas: 0,
             maxPriorityFeePerGas: 0,
             nonce: payload.nonce,
-            deadline: payload.deadline
+            deadline: payload.deadline,
+            vType: VerificationType(0)
         });
         bytes32 payloadHash = evmSmartAccountInstance.getUniversalPayloadHash(universalPayload);
 
@@ -812,7 +831,8 @@ contract UEA_EVMTest is Test {
             maxFeePerGas: 0,
             maxPriorityFeePerGas: 0,
             nonce: payload.nonce,
-            deadline: payload.deadline
+            deadline: payload.deadline,
+            vType: VerificationType(0)
         });
         bytes32 payloadHash = evmSmartAccountInstance.getUniversalPayloadHash(universalPayload);
 
@@ -858,7 +878,7 @@ contract UEA_EVMTest is Test {
         // If the UniversalPayload struct definition changes, this test will fail
 
         bytes32 expectedHash = keccak256(
-            "UniversalPayload(address to,uint256 value,bytes data,uint256 gasLimit,uint256 maxFeePerGas,uint256 maxPriorityFeePerGas,uint256 nonce,uint256 deadline)"
+            "UniversalPayload(address to,uint256 value,bytes data,uint256 gasLimit,uint256 maxFeePerGas,uint256 maxPriorityFeePerGas,uint256 nonce,uint256 deadline,uint8 vType)"
         );
 
         // Access the actual hash from the imported constant
@@ -907,7 +927,8 @@ contract UEA_EVMTest is Test {
             maxFeePerGas: 0,
             nonce: 0,
             deadline: block.timestamp + 1000,
-            maxPriorityFeePerGas: 0
+            maxPriorityFeePerGas: 0,
+            vType: VerificationType(0)
         });
 
         // Get the transaction hash directly
@@ -924,7 +945,8 @@ contract UEA_EVMTest is Test {
                 payload.maxFeePerGas,
                 payload.maxPriorityFeePerGas,
                 evmSmartAccountInstance.nonce(),
-                payload.deadline
+                payload.deadline,
+                uint8(payload.vType)
             )
         );
 
@@ -955,7 +977,8 @@ contract UEA_EVMTest is Test {
                 payload.maxFeePerGas,
                 payload.maxPriorityFeePerGas,
                 _smartAccountInstance.nonce(),
-                payload.deadline
+                payload.deadline,
+                uint8(payload.vType)
             )
         );
 
@@ -978,7 +1001,8 @@ contract UEA_EVMTest is Test {
             maxFeePerGas: 0,
             nonce: 0,
             deadline: block.timestamp + 1000,
-            maxPriorityFeePerGas: 0
+            maxPriorityFeePerGas: 0,
+            vType: VerificationType(0)
         });
         
         // Prank as UNIVERSAL_EXECUTOR_MODULE
@@ -1001,7 +1025,8 @@ contract UEA_EVMTest is Test {
             maxFeePerGas: 0,
             nonce: 0,
             deadline: block.timestamp + 1000,
-            maxPriorityFeePerGas: 0
+            maxPriorityFeePerGas: 0,
+            vType: VerificationType(0)
         });
         
         // Try to execute with wrong signer's signature as regular user
@@ -1026,7 +1051,8 @@ contract UEA_EVMTest is Test {
             maxFeePerGas: 0,
             nonce: 0,
             deadline: block.timestamp + 1000,
-            maxPriorityFeePerGas: 0
+            maxPriorityFeePerGas: 0,
+            vType: VerificationType(0)
         });
         
         bytes32 txHash = getCrosschainTxhash(evmSmartAccountInstance, payload);
