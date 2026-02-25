@@ -291,7 +291,7 @@ contract BaseTest is Test {
         );
         
         // Call executeUniversalTx instead of migrateUEA
-        IUEA(ueaAddress).executeUniversalTx(abi.encode(payload), signature);
+        IUEA(ueaAddress).executeUniversalTx(payload, signature);
     }
 
     function getCurrentImplementation(address ueaProxy) public view returns (address impl) {

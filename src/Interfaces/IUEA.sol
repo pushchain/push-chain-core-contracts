@@ -79,19 +79,7 @@ interface IUEA {
 
     /**
      * @notice                  Executes a cross-chain payload with the provided signature.
-     * @param payload           The ABI-encoded UniversalPayload struct. Callers must encode the payload as:
-     *                          `abi.encode(UniversalPayload({...}))` with the following fields in order:
-     *                          - to: Target contract address to call (address)
-     *                          - value: Native token amount to send (uint256)
-     *                          - data: Calldata for the function execution (bytes)
-     *                          - gasLimit: Maximum gas to be used for this transaction (uint256)
-     *                          - maxFeePerGas: Maximum fee per gas unit (uint256)
-     *                          - maxPriorityFeePerGas: Maximum priority fee per gas unit (uint256)
-     *                          - nonce: Used to prevent replay attacks (uint256)
-     *                          - deadline: Timestamp after which the payload is invalid (uint256)
-     *
-     *                          The function will revert with decoding errors if the payload is not properly encoded.
-     *
+     * @param payload           The UniversalPayload struct (fields defined in Types.sol).
      * @param signature         The signature bytes for verification.
      *                          The signature format differs based on UEA type:
      *                          - For UEA_EVM: ECDSA signature (r, s, v) - 65 bytes
@@ -110,5 +98,5 @@ interface IUEA {
      *
      *                          Note: A migration payload execution cannot be part of subcall in Multicall. Migration must be standalone payload execution.
      */
-    function executeUniversalTx(bytes calldata payload, bytes calldata signature) external;
+    function executeUniversalTx(UniversalPayload calldata payload, bytes calldata signature) external;
 }

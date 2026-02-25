@@ -180,7 +180,7 @@ contract UEA_EVMTest is Test {
         emit IUEA.PayloadExecuted(ownerBytes, 1);
 
         // Execute the payload
-        evmSmartAccountInstance.executeUniversalTx(abi.encode(payload), signature);
+        evmSmartAccountInstance.executeUniversalTx(payload, signature);
 
         // Verify state changes
         uint256 magicValueAfter = target.getMagicNumber();
@@ -208,7 +208,7 @@ contract UEA_EVMTest is Test {
         bytes memory signature = abi.encodePacked(r, s, v);
 
         // Execute the payload
-        evmSmartAccountInstance.executeUniversalTx(abi.encode(payload), signature);
+        evmSmartAccountInstance.executeUniversalTx(payload, signature);
 
         // Verify state changes
         uint256 magicValueAfter = target.getMagicNumber();
@@ -235,7 +235,7 @@ contract UEA_EVMTest is Test {
 
         // Execute the payload - should work even if we warp far into the future
         vm.warp(block.timestamp + 1000000);
-        evmSmartAccountInstance.executeUniversalTx(abi.encode(payload), signature);
+        evmSmartAccountInstance.executeUniversalTx(payload, signature);
 
         // Verify state changes
         uint256 magicValueAfter = target.getMagicNumber();
@@ -267,7 +267,7 @@ contract UEA_EVMTest is Test {
         bytes memory signature = abi.encodePacked(r, s, v);
 
         // Execute the payload
-        evmSmartAccountInstance.executeUniversalTx(abi.encode(payload), signature);
+        evmSmartAccountInstance.executeUniversalTx(payload, signature);
 
         // Verify ETH was transferred
         assertEq(recipient.balance - initialBalance, 0.05 ether, "Recipient should have received 0.05 ETH");
@@ -295,7 +295,7 @@ contract UEA_EVMTest is Test {
 
         // Execute the payload - should revert with the target's revert message
         vm.expectRevert("This function always reverts with reason");
-        evmSmartAccountInstance.executeUniversalTx(abi.encode(payload), signature);
+        evmSmartAccountInstance.executeUniversalTx(payload, signature);
     }
 
     function testExecutionWithSilentRevertingTarget() public deployEvmSmartAccount {
@@ -320,7 +320,7 @@ contract UEA_EVMTest is Test {
 
         // Execute the payload - should revert with ExecutionFailed
         vm.expectRevert(Errors.ExecutionFailed.selector);
-        evmSmartAccountInstance.executeUniversalTx(abi.encode(payload), signature);
+        evmSmartAccountInstance.executeUniversalTx(payload, signature);
     }
 
     function testExecuteMulticallSuccess() public deployEvmSmartAccount {
@@ -365,7 +365,7 @@ contract UEA_EVMTest is Test {
         emit IUEA.PayloadExecuted(ownerBytes, 1);
 
         // Execute
-        evmSmartAccountInstance.executeUniversalTx(abi.encode(payload), signature);
+        evmSmartAccountInstance.executeUniversalTx(payload, signature);
 
         // Check both calls executed
         uint256 magic = target.getMagicNumber();
@@ -402,7 +402,7 @@ contract UEA_EVMTest is Test {
 
         // Should bubble up revert reason from revertingTarget
         vm.expectRevert("This function always reverts with reason");
-        evmSmartAccountInstance.executeUniversalTx(abi.encode(payload), signature);
+        evmSmartAccountInstance.executeUniversalTx(payload, signature);
     }
 
     function testExecuteMulticallSuccessWithPayload() public deployEvmSmartAccount {
@@ -453,7 +453,7 @@ contract UEA_EVMTest is Test {
         emit IUEA.PayloadExecuted(ownerBytes, 1);
 
         // Execute
-        evmSmartAccountInstance.executeUniversalTx(abi.encode(payload), signature);
+        evmSmartAccountInstance.executeUniversalTx(payload, signature);
 
         // Check all calls executed
         uint256 magic = target.getMagicNumber();
@@ -503,7 +503,7 @@ contract UEA_EVMTest is Test {
         emit IUEA.PayloadExecuted(ownerBytes, 1);
 
         // Execute
-        evmSmartAccountInstance.executeUniversalTx(abi.encode(payload), signature);
+        evmSmartAccountInstance.executeUniversalTx(payload, signature);
 
         // Check both targets were called correctly
         uint256 magic1 = target.getMagicNumber();
@@ -563,7 +563,7 @@ contract UEA_EVMTest is Test {
         emit IUEA.PayloadExecuted(ownerBytes, 1);
 
         // Execute
-        evmSmartAccountInstance.executeUniversalTx(abi.encode(payload), signature);
+        evmSmartAccountInstance.executeUniversalTx(payload, signature);
 
         // Check both targets were called correctly and received the right amounts
         uint256 magic1 = target.getMagicNumber();
@@ -616,7 +616,7 @@ contract UEA_EVMTest is Test {
 
         // The execution should fail because the account expects nonce to be 0, not 100
         vm.expectRevert(Errors.InvalidEVMSignature.selector);
-        evmSmartAccountInstance.executeUniversalTx(abi.encode(payload), signature);
+        evmSmartAccountInstance.executeUniversalTx(payload, signature);
 
         // Verify state hasn't changed
         uint256 magicValueAfter = target.getMagicNumber();
@@ -642,13 +642,13 @@ contract UEA_EVMTest is Test {
         bytes memory signature = abi.encodePacked(r, s, v);
 
         // First execution should succeed
-        evmSmartAccountInstance.executeUniversalTx(abi.encode(payload), signature);
+        evmSmartAccountInstance.executeUniversalTx(payload, signature);
 
         uint256 previousNonce = evmSmartAccountInstance.nonce();
 
         // Try to execute with same nonce again
         vm.expectRevert(Errors.InvalidEVMSignature.selector);
-        evmSmartAccountInstance.executeUniversalTx(abi.encode(payload), signature);
+        evmSmartAccountInstance.executeUniversalTx(payload, signature);
 
         // Verify state hasn't changed
         assertEq(previousNonce, evmSmartAccountInstance.nonce(), "Nonce should not have changed");
@@ -674,7 +674,7 @@ contract UEA_EVMTest is Test {
         bytes memory signature = abi.encodePacked(r, s, v);
 
         vm.expectRevert(Errors.ExpiredDeadline.selector);
-        evmSmartAccountInstance.executeUniversalTx(abi.encode(payload), signature);
+        evmSmartAccountInstance.executeUniversalTx(payload, signature);
     }
 
     function testRevertWhenInvalidSignature() public deployEvmSmartAccount {
@@ -693,7 +693,7 @@ contract UEA_EVMTest is Test {
         bytes memory invalidSignature = abi.encodePacked(bytes32(0), bytes32(0), uint8(0));
 
         vm.expectRevert(abi.encodeWithSelector(ECDSA.ECDSAInvalidSignature.selector));
-        evmSmartAccountInstance.executeUniversalTx(abi.encode(payload), invalidSignature);
+        evmSmartAccountInstance.executeUniversalTx(payload, invalidSignature);
     }
 
     function testRevertWithMalformedSignature() public deployEvmSmartAccount {
@@ -712,7 +712,7 @@ contract UEA_EVMTest is Test {
         bytes memory malformedSignature = abi.encodePacked(bytes16(0), bytes16(0));
 
         vm.expectRevert();
-        evmSmartAccountInstance.executeUniversalTx(abi.encode(payload), malformedSignature);
+        evmSmartAccountInstance.executeUniversalTx(payload, malformedSignature);
     }
 
     function testReceiveFunction() public {
@@ -763,7 +763,7 @@ contract UEA_EVMTest is Test {
         bytes memory sig = abi.encodePacked(r, s, v);
 
         vm.expectRevert(Errors.InvalidEVMSignature.selector);
-        evmSmartAccountInstance.executeUniversalTx(abi.encode(universalPayload), sig);
+        evmSmartAccountInstance.executeUniversalTx(universalPayload, sig);
     }
 
     function test_RevertWhen_ExpiredDeadlineOnMigration() public deployEvmSmartAccount {
@@ -792,7 +792,7 @@ contract UEA_EVMTest is Test {
         bytes memory sig = abi.encodePacked(r, s, v);
 
         vm.expectRevert(Errors.ExpiredDeadline.selector);
-        evmSmartAccountInstance.executeUniversalTx(abi.encode(universalPayload), sig);
+        evmSmartAccountInstance.executeUniversalTx(universalPayload, sig);
     }
 
     function test_SuccessfulMigrationUpdatesImplementation() public deployEvmSmartAccount {
@@ -821,7 +821,7 @@ contract UEA_EVMTest is Test {
         bytes memory sig = abi.encodePacked(r, s, v);
 
         // Call migrateUEA
-        evmSmartAccountInstance.executeUniversalTx(abi.encode(universalPayload), sig);
+        evmSmartAccountInstance.executeUniversalTx(universalPayload, sig);
 
         // Verify proxy's storage slot now updated
         bytes32 slot = UEA_LOGIC_SLOT;
@@ -983,7 +983,7 @@ contract UEA_EVMTest is Test {
         
         // Prank as UNIVERSAL_EXECUTOR_MODULE
         vm.prank(evmSmartAccountInstance.UNIVERSAL_EXECUTOR_MODULE());
-        evmSmartAccountInstance.executeUniversalTx(abi.encode(payload), "");
+        evmSmartAccountInstance.executeUniversalTx(payload, "");
 
         // Verify execution succeeded
         assertEq(target.getMagicNumber(), 999, "Execution should succeed for UNIVERSAL_EXECUTOR_MODULE");
@@ -1011,7 +1011,7 @@ contract UEA_EVMTest is Test {
         bytes memory wrongSignature = abi.encodePacked(r, s, v);
         
         vm.expectRevert(Errors.InvalidEVMSignature.selector);
-        evmSmartAccountInstance.executeUniversalTx(abi.encode(payload), wrongSignature);
+        evmSmartAccountInstance.executeUniversalTx(payload, wrongSignature);
     }
 
     function testExecutePayloadAsUserWithValidSignature() public deployEvmSmartAccount {
@@ -1034,7 +1034,7 @@ contract UEA_EVMTest is Test {
         bytes memory signature = abi.encodePacked(r, s, v);
         
         // Execute with valid signature
-        evmSmartAccountInstance.executeUniversalTx(abi.encode(payload), signature);
+        evmSmartAccountInstance.executeUniversalTx(payload, signature);
         
         // Verify execution succeeded
         assertEq(target.getMagicNumber(), 999, "Execution should succeed with valid signature");
