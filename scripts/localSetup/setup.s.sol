@@ -62,6 +62,42 @@ contract LocalSetupScript is Script {
                 sourceERC20: "0x7169D38820dfd117C3FA1f22a697dBA58d90BA06"
             })
         );
+        configs.push(
+            PRC20Config({
+                name: "pETH.base",
+                symbol: "pETH.base",
+                decimals: 18,
+                sourceChainId: "eip155:84532",
+                tokenType: IPRC20.TokenType.ERC20,
+                gasLimit: 21000,
+                fee: 0,
+                sourceERC20: "0x0000000000000000000000000000000000000000"
+            })
+        );
+        configs.push(
+            PRC20Config({
+                name: "pETH.arb",
+                symbol: "pETH.arb",
+                decimals: 18,
+                sourceChainId: "eip155:421614",
+                tokenType: IPRC20.TokenType.ERC20,
+                gasLimit: 21000,
+                fee: 0,
+                sourceERC20: "0x0000000000000000000000000000000000000000"
+            })
+        );
+         configs.push(
+            PRC20Config({
+                name: "pBNB",
+                symbol: "pBNB",
+                decimals: 18,
+                sourceChainId: "eip155:97",
+                tokenType: IPRC20.TokenType.ERC20,
+                gasLimit: 21000,
+                fee: 0,
+                sourceERC20: "0x0000000000000000000000000000000000000000"
+            })
+        );
     }
 
     function run() external {
@@ -69,6 +105,9 @@ contract LocalSetupScript is Script {
 
         bytes32 evmHash = keccak256(abi.encode("EVM"));
         bytes32 evmSepoliaHash = keccak256(abi.encode("eip155",'11155111'));
+            bytes32 arbitrumSepoliaHash = keccak256(abi.encode("eip155", "421614"));
+            bytes32 baseSepoliaHash = keccak256(abi.encode("eip155", "84532"));
+            bytes32 bscTestnetHash = keccak256(abi.encode("eip155", "97"));
 
         // Initialize the factory with the initial owner
         UEAFactoryV1 factory = UEAFactoryV1(0x00000000000000000000000000000000000000eA);
@@ -81,6 +120,9 @@ contract LocalSetupScript is Script {
 
         // Register the EVM and SVM implementations
         factory.registerNewChain(evmSepoliaHash, evmHash);
+            factory.registerNewChain(arbitrumSepoliaHash, evmHash);
+            factory.registerNewChain(baseSepoliaHash, evmHash);
+            factory.registerNewChain(bscTestnetHash, evmHash);
         console.log("EVM registered in factory");
 
         UEAProxy proxyImpl = new UEAProxy();
@@ -96,6 +138,9 @@ contract LocalSetupScript is Script {
 
         // Register UEA implementations
         factory.registerUEA(evmSepoliaHash, evmHash, address(ueaEVMImpl));
+            factory.registerUEA(arbitrumSepoliaHash, evmHash, address(ueaEVMImpl));
+            factory.registerUEA(baseSepoliaHash, evmHash, address(ueaEVMImpl));
+            factory.registerUEA(bscTestnetHash, evmHash, address(ueaEVMImpl));
         console.log("UEA_EVM implementations registered in factory");
 
         UEAProxy ueaProxy = new UEAProxy();

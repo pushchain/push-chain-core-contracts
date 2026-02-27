@@ -15,6 +15,9 @@ contract DeploySmartAccountScript is Script {
         bytes32 evmHash = keccak256(abi.encode("EVM"));
         bytes32 svmHash = keccak256(abi.encode("SVM"));
         bytes32 evmSepoliaHash = keccak256(abi.encode("eip155",'11155111'));
+        bytes32 arbitrumSepoliaHash = keccak256(abi.encode("eip155", "421614"));
+        bytes32 baseSepoliaHash = keccak256(abi.encode("eip155", "84532"));
+        bytes32 bscTestnetHash = keccak256(abi.encode("eip155", "97"));
         bytes32 solanaDevnetHash = keccak256(abi.encode("solana","EtWTRABZaYq6iMfeYKouRu166VU2xqa1"));
 
         // Initialize the factory with the initial owner
@@ -28,8 +31,11 @@ contract DeploySmartAccountScript is Script {
 
         // Register the EVM and SVM implementations
         factory.registerNewChain(evmSepoliaHash, evmHash);
+        factory.registerNewChain(arbitrumSepoliaHash, evmHash);
+        factory.registerNewChain(baseSepoliaHash, evmHash);
+        factory.registerNewChain(bscTestnetHash, evmHash);
         factory.registerNewChain(solanaDevnetHash, svmHash);
-        console.log("EVM and SVM VMs registered in factory");
+        console.log("EVM, SVM, Arbitrum, Base and BSC VMs registered in factory");
 
         UEAProxy proxyImpl = new UEAProxy();
         console.log("UEAProxy Implementation deployed at:", address(proxyImpl));
@@ -47,8 +53,11 @@ contract DeploySmartAccountScript is Script {
 
         // Register UEA implementations
         factory.registerUEA(evmSepoliaHash, evmHash, address(ueaEVMImpl));
+        factory.registerUEA(arbitrumSepoliaHash, evmHash, address(ueaEVMImpl));
+        factory.registerUEA(baseSepoliaHash, evmHash, address(ueaEVMImpl));
+        factory.registerUEA(bscTestnetHash, evmHash, address(ueaEVMImpl));
         factory.registerUEA(solanaDevnetHash, svmHash, address(ueaSVMImpl));
-        console.log("UEA_EVM and UEA_SVM implementations registered in factory");
+        console.log("UEA_EVM and UEA_SVM implementations registered for all configured chains in factory");
 
         UEAProxy ueaProxy = new UEAProxy();
         console.log("UEAProxy deployed at:", address(ueaProxy));
