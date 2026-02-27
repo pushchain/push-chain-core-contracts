@@ -98,16 +98,30 @@ contract LocalSetupScript is Script {
                 sourceERC20: "0x0000000000000000000000000000000000000000"
             })
         );
+        configs.push(
+            PRC20Config({
+                name: "pSOL",
+                symbol: "pSOL",
+                decimals: 9,
+                sourceChainId: "solana:EtWTRABZaYq6iMfeYKouRu166VU2xqa1",
+                tokenType: IPRC20.TokenType.NATIVE,
+                gasLimit: 21000,
+                fee: 0,
+                sourceERC20: "11111111111111111111111111111111"
+            })
+        );
     }
 
     function run() external {
         vm.startBroadcast();
 
         bytes32 evmHash = keccak256(abi.encode("EVM"));
+        bytes32 svmHash = keccak256(abi.encode("SVM"));
         bytes32 evmSepoliaHash = keccak256(abi.encode("eip155",'11155111'));
             bytes32 arbitrumSepoliaHash = keccak256(abi.encode("eip155", "421614"));
             bytes32 baseSepoliaHash = keccak256(abi.encode("eip155", "84532"));
             bytes32 bscTestnetHash = keccak256(abi.encode("eip155", "97"));
+            bytes32 solanaDevnetHash = keccak256(abi.encode("solana","EtWTRABZaYq6iMfeYKouRu166VU2xqa1"));
 
         // Initialize the factory with the initial owner
         UEAFactoryV1 factory = UEAFactoryV1(0x00000000000000000000000000000000000000eA);
@@ -123,7 +137,8 @@ contract LocalSetupScript is Script {
             factory.registerNewChain(arbitrumSepoliaHash, evmHash);
             factory.registerNewChain(baseSepoliaHash, evmHash);
             factory.registerNewChain(bscTestnetHash, evmHash);
-        console.log("EVM registered in factory");
+            factory.registerNewChain(solanaDevnetHash, svmHash);
+        console.log("EVM and SVM registered in factory");
 
         UEAProxy proxyImpl = new UEAProxy();
         console.log("UEAProxy Implementation deployed at:", address(proxyImpl));
@@ -135,13 +150,18 @@ contract LocalSetupScript is Script {
         UEA_EVM ueaEVMImpl = new UEA_EVM();
         console.log("UEA_EVM deployed at:", address(ueaEVMImpl));
 
+        // 2. Deploy UEA_SVM implementation
+        UEA_SVM ueaSVMImpl = new UEA_SVM();
+        console.log("UEA_SVM deployed at:", address(ueaSVMImpl));
+
 
         // Register UEA implementations
         factory.registerUEA(evmSepoliaHash, evmHash, address(ueaEVMImpl));
             factory.registerUEA(arbitrumSepoliaHash, evmHash, address(ueaEVMImpl));
             factory.registerUEA(baseSepoliaHash, evmHash, address(ueaEVMImpl));
             factory.registerUEA(bscTestnetHash, evmHash, address(ueaEVMImpl));
-        console.log("UEA_EVM implementations registered in factory");
+            factory.registerUEA(solanaDevnetHash, svmHash, address(ueaSVMImpl));
+        console.log("UEA_EVM and UEA_SVM implementations registered in factory");
 
         UEAProxy ueaProxy = new UEAProxy();
         console.log("UEAProxy deployed at:", address(ueaProxy));
