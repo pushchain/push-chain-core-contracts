@@ -96,7 +96,7 @@ contract CEAMigration_IntegrationTest is Test {
         bytes memory payload = buildMigrationPayload(address(ceaInstance));
 
         vm.prank(vault);
-        ceaInstance.executeUniversalTx(txID, universalTxID, ueaOnPush, payload);
+        ceaInstance.executeUniversalTx(txID, universalTxID, ueaOnPush, address(0), payload);
     }
 
     // =========================================================================
@@ -164,7 +164,7 @@ contract CEAMigration_IntegrationTest is Test {
         bytes memory payload = abi.encodePacked(MULTICALL_SELECTOR, abi.encode(calls));
 
         vm.prank(vault);
-        ceaInstance.executeUniversalTx(txID1, universalTxID1, ueaOnPush, payload);
+        ceaInstance.executeUniversalTx(txID1, universalTxID1, ueaOnPush, address(0), payload);
 
         // Verify executed
         assertTrue(ceaInstance.isExecuted(txID1), "Transaction should be marked as executed");
@@ -264,7 +264,7 @@ contract CEAMigration_IntegrationTest is Test {
         bytes memory payload = abi.encodePacked(MULTICALL_SELECTOR, abi.encode(calls));
 
         vm.prank(vault);
-        ceaInstance.executeUniversalTx(txID, universalTxID, ueaOnPush, payload);
+        ceaInstance.executeUniversalTx(txID, universalTxID, ueaOnPush, address(0), payload);
 
         // Verify executed successfully
         assertTrue(ceaInstance.isExecuted(txID), "Post-migration execution should work");
@@ -297,7 +297,7 @@ contract CEAMigration_IntegrationTest is Test {
         bytes memory payload = abi.encodePacked(MULTICALL_SELECTOR, abi.encode(calls));
 
         vm.prank(vault);
-        ceaInstance.executeUniversalTx(txID, universalTxID, ueaOnPush, payload);
+        ceaInstance.executeUniversalTx(txID, universalTxID, ueaOnPush, address(0), payload);
 
         // Verify executed successfully
         assertTrue(ceaInstance.isExecuted(txID), "Post-migration multicall should work");
@@ -314,12 +314,12 @@ contract CEAMigration_IntegrationTest is Test {
 
         // Execute migration
         vm.prank(vault);
-        ceaInstance.executeUniversalTx(txID, universalTxID, ueaOnPush, payload);
+        ceaInstance.executeUniversalTx(txID, universalTxID, ueaOnPush, address(0), payload);
 
         // Attempt to replay same migration
         vm.prank(vault);
         vm.expectRevert(Errors.PayloadExecuted.selector);
-        ceaInstance.executeUniversalTx(txID, universalTxID, ueaOnPush, payload);
+        ceaInstance.executeUniversalTx(txID, universalTxID, ueaOnPush, address(0), payload);
     }
 
     // =========================================================================
@@ -335,7 +335,7 @@ contract CEAMigration_IntegrationTest is Test {
 
         vm.prank(nonVault);
         vm.expectRevert(Errors.NotVault.selector);
-        ceaInstance.executeUniversalTx(txID, universalTxID, ueaOnPush, payload);
+        ceaInstance.executeUniversalTx(txID, universalTxID, ueaOnPush, address(0), payload);
     }
 
     function test_Migration_WrongOriginCaller() public {
@@ -347,7 +347,7 @@ contract CEAMigration_IntegrationTest is Test {
 
         vm.prank(vault);
         vm.expectRevert(Errors.InvalidUEA.selector);
-        ceaInstance.executeUniversalTx(txID, universalTxID, wrongUEA, payload);
+        ceaInstance.executeUniversalTx(txID, universalTxID, wrongUEA, address(0), payload);
     }
 
     // =========================================================================
@@ -374,7 +374,7 @@ contract CEAMigration_IntegrationTest is Test {
         bytes memory payload = buildMigrationPayload(address(ceaInstance));
 
         vm.prank(vault);
-        ceaInstance.executeUniversalTx(txID, universalTxID, ueaOnPush, payload);
+        ceaInstance.executeUniversalTx(txID, universalTxID, ueaOnPush, address(0), payload);
 
         assertEq(
             CEAProxy(payable(address(ceaInstance))).getImplementation(),
@@ -406,7 +406,7 @@ contract CEAMigration_IntegrationTest is Test {
             bytes memory payload = abi.encodePacked(MULTICALL_SELECTOR, abi.encode(calls));
 
             vm.prank(vault);
-            ceaInstance.executeUniversalTx(txID, universalTxID, ueaOnPush, payload);
+            ceaInstance.executeUniversalTx(txID, universalTxID, ueaOnPush, address(0), payload);
         }
 
         // Verify all executed
@@ -437,7 +437,7 @@ contract CEAMigration_IntegrationTest is Test {
         bytes memory payload = buildMigrationPayload(freshCEA);
 
         vm.prank(vault);
-        freshCEAInstance.executeUniversalTx(txID, universalTxID, freshUEA, payload);
+        freshCEAInstance.executeUniversalTx(txID, universalTxID, freshUEA, address(0), payload);
 
         // Verify migration successful
         assertEq(

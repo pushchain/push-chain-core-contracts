@@ -72,12 +72,17 @@ interface ICEA {
      *  - CEA no longer performs automatic approval/reset logic.
      *  - This ensures flexible, composable execution paths.
      *
-     * @param txId       Transaction ID (must not be executed before)
+     * @param txId              Transaction ID (must not be executed before)
      * @param universalTxId     Unique transaction identifier on Universal Gateway
      * @param originCaller      Push account (UEA on Push Chain) that this CEA represents (verified)
+     * @param recipient         Target contract for single-call execution. Ignored for multicall/migration payloads.
      * @param payload           ABI-encoded Multicall[] containing execution steps
      */
-    function executeUniversalTx(bytes32 txId, bytes32 universalTxId, address originCaller, bytes calldata payload)
-        external
-        payable;
+    function executeUniversalTx(
+        bytes32 txId,
+        bytes32 universalTxId,
+        address originCaller,
+        address recipient,
+        bytes calldata payload
+    ) external payable;
 }
