@@ -97,25 +97,27 @@ contract CEA is ICEA, ReentrancyGuard {
     /// @notice         Executes a universal transaction.
     /// @dev            Payload can be either:
     ///                 - MULTICALL: payload starts with MULTICALL_SELECTOR + ABI-encoded Multicall[]
-    ///                 - SINGLE CALL: raw bytes data for a single call
+    ///                 - MIGRATION: payload starts with MIGRATION_SELECTOR
+    ///                 - SINGLE CALL: non-empty payload forwarded to recipient, or empty to park funds
     ///                 SDK is responsible for crafting correct payload format.
-    /// @param txId      Unique transaction identifier (must not be executed before)
+    /// @param txId             Unique transaction identifier (must not be executed before)
     /// @param universalTxId    Universal transaction identifier for cross-chain tracking
     /// @param originCaller     Address of the origin caller (must match pushAccount)
-    /// @param payload          Either multicall or single call payload
-    function executeUniversalTx(bytes32 txId, bytes32 universalTxId, address originCaller, bytes calldata payload)
-        external
-        payable
-        onlyVault
-        nonReentrant
-    {
-        // Top-level validation
+    /// @param recipient        Target contract for single-call execution. Ignored for multicall/migration payloads.
+    /// @param payload          Either multicall, migration, or single call payload
+    function executeUniversalTx(
+        bytes32 txId,
+        bytes32 universalTxId,
+        address originCaller,
+        address recipient,
+        bytes calldata payload
+    ) external payable onlyVault nonReentrant {
         if (isExecuted[txId]) revert CEAErrors.PayloadExecuted();
         if (originCaller != pushAccount) revert CEAErrors.InvalidUEA();
 
         isExecuted[txId] = true;
 
-        _handleExecution(txId, universalTxId, originCaller, payload);
+        _handleExecution(txId, universalTxId, originCaller, recipient, payload);
     }
 
     /// @notice         Sends funds (and optionally a payload) from CEA to its UEA on Push Chain.
@@ -157,17 +159,22 @@ contract CEA is ICEA, ReentrancyGuard {
     //========================
 
     /// @notice         Routes execution based on payload type (MULTICALL vs MIGRATION vs SINGLE CALL).
-    /// @dev            Three-way branch matching UEA_EVM pattern:
+    /// @dev            Three-way branch:
     ///                 1. isMulticall → decode + _handleMulticall
     ///                 2. isMigration → _handleMigration (top-level, no Multicall wrapper)
-    ///                 3. else → _handleSingleCall (backwards compatibility)
-    /// @param txId      Transaction identifier for event emission
+    ///                 3. else → _handleSingleCall (park funds or single external call)
+    /// @param txId             Transaction identifier for event emission
     /// @param universalTxId    Universal transaction identifier for event emission
     /// @param originCaller     Origin caller for event emission
+    /// @param recipient        Target for single-call path. Ignored for multicall/migration.
     /// @param payload          Raw payload bytes
-    function _handleExecution(bytes32 txId, bytes32 universalTxId, address originCaller, bytes calldata payload)
-        internal
-    {
+    function _handleExecution(
+        bytes32 txId,
+        bytes32 universalTxId,
+        address originCaller,
+        address recipient,
+        bytes calldata payload
+    ) internal {
         if (isMulticall(payload)) {
             Multicall[] memory calls = decodeCalls(payload);
             _handleMulticall(txId, universalTxId, originCaller, calls);
@@ -175,7 +182,7 @@ contract CEA is ICEA, ReentrancyGuard {
             _handleMigration();
             emit UniversalTxExecuted(txId, universalTxId, originCaller, address(this), payload);
         } else {
-            _handleSingleCall(txId, universalTxId, originCaller, payload);
+            _handleSingleCall(txId, universalTxId, originCaller, recipient, payload);
         }
     }
 
@@ -207,19 +214,34 @@ contract CEA is ICEA, ReentrancyGuard {
     }
 
     /// @notice         Internal handler for single call execution.
-    /// @dev            For backwards compatibility, treats payload without MULTICALL_SELECTOR
-    ///                 as direct ABI-encoded Multicall[] (old format).
-    ///                 This allows existing SDKs to continue working.
-    /// @param txId      Transaction identifier for event emission
+    /// @dev            Two modes:
+    ///                 - Empty payload: park funds (native via msg.value, ERC20 sent by Vault)
+    ///                 - Non-empty payload: execute single call to recipient
+    ///                 Self-calls (recipient == address(this)) are blocked; use multicall path instead.
+    /// @param txId             Transaction identifier for event emission
     /// @param universalTxId    Universal transaction identifier for event emission
     /// @param originCaller     Origin caller for event emission
-    /// @param payload          Raw ABI-encoded Multicall[] (old format, no selector prefix)
-    function _handleSingleCall(bytes32 txId, bytes32 universalTxId, address originCaller, bytes calldata payload)
-        internal
-    {
-        // Backwards compatibility: decode as Multicall[] directly (old format)
-        Multicall[] memory calls = abi.decode(payload, (Multicall[]));
-        _handleMulticall(txId, universalTxId, originCaller, calls);
+    /// @param recipient        Target contract for non-empty payload execution
+    /// @param payload          Raw calldata to forward to recipient (empty = park funds)
+    function _handleSingleCall(
+        bytes32 txId,
+        bytes32 universalTxId,
+        address originCaller,
+        address recipient,
+        bytes calldata payload
+    ) internal {
+        if (payload.length == 0) {
+            emit UniversalTxExecuted(txId, universalTxId, originCaller, address(this), payload);
+            return;
+        }
+
+        if (recipient == address(0)) revert CEAErrors.InvalidRecipient();
+        if (recipient == address(this)) revert CEAErrors.InvalidRecipient();
+
+        (bool success,) = recipient.call{value: msg.value}(payload);
+        if (!success) revert CEAErrors.ExecutionFailed();
+
+        emit UniversalTxExecuted(txId, universalTxId, originCaller, recipient, payload);
     }
 
     /// @notice         Internal handler for migration execution.

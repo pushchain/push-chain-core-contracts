@@ -115,7 +115,7 @@ contract CEA_MigrationTest is Test {
 
         // Execute migration (will test isMigration detection internally)
         vm.prank(vault);
-        ceaInstance.executeUniversalTx(txID, universalTxID, ueaOnPush, payload);
+        ceaInstance.executeUniversalTx(txID, universalTxID, ueaOnPush, address(0), payload);
 
         // If execution reaches here without reverting, isMigration worked
         assertTrue(true, "Migration selector detected successfully");
@@ -136,7 +136,7 @@ contract CEA_MigrationTest is Test {
         bytes memory payload = abi.encodePacked(MIGRATION_SELECTOR);
 
         vm.prank(vault);
-        ceaInstance.executeUniversalTx(txID, universalTxID, ueaOnPush, payload);
+        ceaInstance.executeUniversalTx(txID, universalTxID, ueaOnPush, address(0), payload);
 
         // Verify implementation changed
         address implAfter = CEAProxy(payable(address(ceaInstance))).getImplementation();
@@ -154,7 +154,7 @@ contract CEA_MigrationTest is Test {
 
         vm.prank(vault);
         vm.expectRevert(Errors.InvalidInput.selector);
-        ceaInstance.executeUniversalTx{value: 1 ether}(txID, universalTxID, ueaOnPush, payload);
+        ceaInstance.executeUniversalTx{value: 1 ether}(txID, universalTxID, ueaOnPush, address(0), payload);
     }
 
     function test_handleMigration_MigrationInsideMulticall_Reverts() public {
@@ -176,7 +176,7 @@ contract CEA_MigrationTest is Test {
 
         vm.prank(vault);
         vm.expectRevert(Errors.ExecutionFailed.selector);
-        ceaInstance.executeUniversalTx(txID, universalTxID, ueaOnPush, payload);
+        ceaInstance.executeUniversalTx(txID, universalTxID, ueaOnPush, address(0), payload);
     }
 
     function test_handleMigration_NoMigrationContract() public {
@@ -191,7 +191,7 @@ contract CEA_MigrationTest is Test {
         // Expect InvalidCall revert
         vm.prank(vault);
         vm.expectRevert(Errors.InvalidCall.selector);
-        ceaInstance.executeUniversalTx(txID, universalTxID, ueaOnPush, payload);
+        ceaInstance.executeUniversalTx(txID, universalTxID, ueaOnPush, address(0), payload);
     }
 
     // =========================================================================
@@ -222,7 +222,7 @@ contract CEA_MigrationTest is Test {
         // Migration selector in multicall fails as generic execution failure
         vm.prank(vault);
         vm.expectRevert(Errors.ExecutionFailed.selector);
-        ceaInstance.executeUniversalTx(txID, universalTxID, ueaOnPush, payload);
+        ceaInstance.executeUniversalTx(txID, universalTxID, ueaOnPush, address(0), payload);
     }
 
     function test_handleMulticall_MigrationInBatch_FirstPosition() public {
@@ -249,7 +249,7 @@ contract CEA_MigrationTest is Test {
         // Migration selector in multicall fails as generic execution failure
         vm.prank(vault);
         vm.expectRevert(Errors.ExecutionFailed.selector);
-        ceaInstance.executeUniversalTx(txID, universalTxID, ueaOnPush, payload);
+        ceaInstance.executeUniversalTx(txID, universalTxID, ueaOnPush, address(0), payload);
     }
 
     // =========================================================================
@@ -271,7 +271,7 @@ contract CEA_MigrationTest is Test {
 
         // Execute migration
         vm.prank(vault);
-        ceaInstance.executeUniversalTx(txID, universalTxID, ueaOnPush, payload);
+        ceaInstance.executeUniversalTx(txID, universalTxID, ueaOnPush, address(0), payload);
 
         // Get updated implementation
         address implAfter = CEAProxy(payable(address(ceaInstance))).getImplementation();
