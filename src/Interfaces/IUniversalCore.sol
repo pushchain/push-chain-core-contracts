@@ -12,7 +12,8 @@ interface IUniversalCore {
     event SetGasToken(string chainNamespace, address prc20);
     event SetDefaultDeadlineMins(uint256 minutesValue);
     event SetSupportedToken(address indexed prc20, bool supported);
-    event SetGasPCPool(string chainNamespace, address pool, uint24 fee);   
+    event SetGasPCPool(string chainNamespace, address pool, uint24 fee);
+    event SetGasToPCRate(string chainNamespace, uint256 rate);
     event DepositPRC20WithAutoSwap(address prc20, uint256 amountIn, address pcToken, uint256 amountOut, uint24 fee, address target);
     // =========================
     //           Universal Core Functions
@@ -86,6 +87,19 @@ interface IUniversalCore {
     function BASE_GAS_LIMIT() external view returns (uint256 baseGasLimit);
 
     /**
+     * @notice Get gas-to-PC conversion rate for a chain namespace
+     * @param chainNamespace Chain Namespace (e.g. "eip155:1")
+     * @return rate PC wei per 1 wei of gas token (fixed-point / RATE_PRECISION)
+     */
+    function gasToPCRateByChainNamespace(string memory chainNamespace) external view returns (uint256 rate);
+
+    /**
+     * @notice Get the fixed-point precision denominator for rate conversion
+     * @return precision The precision constant (1e18)
+     */
+    function RATE_PRECISION() external pure returns (uint256 precision);
+
+    /**
      * @notice Get gas fee for a PRC20 token.
      * @dev    Uses BASE_GAS_LIMIT for the gas limit used in the fee computation.
      * @param _prc20 PRC20 address
@@ -103,4 +117,21 @@ interface IUniversalCore {
      * @return gasFee Gas fee
      */
     function withdrawGasFeeWithGasLimit(address _prc20, uint256 gasLimit) external view returns (address gasToken, uint256 gasFee);
+
+    /**
+     * @notice Compute withdrawal gas fee in native PC tokens using BASE_GAS_LIMIT.
+     * @dev Converts the gas-token-denominated fee to PC using the admin-set conversion rate.
+     * @param _prc20 PRC20 token address (used to look up chain namespace)
+     * @return pcFee Fee amount in PC wei
+     */
+    function withdrawGasFeeInPC(address _prc20) external view returns (uint256 pcFee);
+
+    /**
+     * @notice Compute withdrawal gas fee in native PC tokens with a custom gas limit.
+     * @dev Converts the gas-token-denominated fee to PC using the admin-set conversion rate.
+     * @param _prc20 PRC20 token address (used to look up chain namespace)
+     * @param gasLimit Custom gas limit for the fee computation
+     * @return pcFee Fee amount in PC wei
+     */
+    function withdrawGasFeeInPCWithGasLimit(address _prc20, uint256 gasLimit) external view returns (uint256 pcFee);
 }

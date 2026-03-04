@@ -38,6 +38,7 @@ library PRC20Errors {
 
 library UniversalCoreErrors {
     error ZeroGasPrice();
+    error ZeroGasToPCRate();
     error PoolNotFound();
     error InvalidTarget();
     error InvalidFeeTier();
@@ -74,4 +75,5 @@ library CEAErrors {
     error InvalidInput();
     error ExecutionFailed();
     error InvalidCall();
+    error InvalidRecipient();
 }

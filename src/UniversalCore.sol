@@ -70,8 +70,15 @@ contract UniversalCore is
     /// @notice Role for managing gas-related configurations
     bytes32 public constant MANAGER_ROLE = keccak256("MANAGER_ROLE");
 
+    /// @notice Fixed-point precision for gas-to-PC rate conversion
+    uint256 public constant RATE_PRECISION = 1e18;
+
     /// @notice Mapping for indicating an official PRC20 supported token
     mapping(address => bool) public isSupportedToken;
+
+    /// @notice Conversion rate: PC wei per 1 wei of gas token (fixed-point, divide by RATE_PRECISION)
+    /// @dev Example: 1 pETH (1e18 wei) = 2500 PC (2500e18 wei) → rate = 2500e18
+    mapping(string => uint256) public gasToPCRateByChainNamespace;
 
     modifier onlyUEModule() {
         if (msg.sender != UNIVERSAL_EXECUTOR_MODULE) revert UniversalCoreErrors.CallerIsNotUEModule();
@@ -239,7 +246,19 @@ contract UniversalCore is
         emit SetGasToken(chainNamespace, prc20);
     }
 
-     /**
+    /**
+     * @dev Set the gas-to-PC conversion rate for a chain.
+     *      Rate = PC_wei per 1 gas_token_wei, scaled by RATE_PRECISION.
+     *      Example: 1 pETH = 2500 PC → rate = 2500e18.
+     * @param chainNamespace Chain Namespace (e.g. "eip155:1")
+     * @param rate Conversion rate
+     */
+    function setGasToPCRate(string memory chainNamespace, uint256 rate) external onlyRole(MANAGER_ROLE) {
+        gasToPCRateByChainNamespace[chainNamespace] = rate;
+        emit SetGasToPCRate(chainNamespace, rate);
+    }
+
+    /**
      * @notice Set auto-swap support for a token
      * @param token Token address
      * @param supported Whether the token supports auto-swap
@@ -410,9 +429,31 @@ contract UniversalCore is
     }
 
     /**
+     * @inheritdoc IUniversalCore
+     */
+    function withdrawGasFeeInPC(address _prc20) public view returns (uint256 pcFee) {
+        (, uint256 gasFee) = withdrawGasFee(_prc20);
+        string memory chainNamespace = IPRC20(_prc20).SOURCE_CHAIN_NAMESPACE();
+        uint256 rate = gasToPCRateByChainNamespace[chainNamespace];
+        if (rate == 0) revert UniversalCoreErrors.ZeroGasToPCRate();
+        pcFee = (gasFee * rate) / RATE_PRECISION;
+    }
+
+    /**
+     * @inheritdoc IUniversalCore
+     */
+    function withdrawGasFeeInPCWithGasLimit(address _prc20, uint256 gasLimit) public view returns (uint256 pcFee) {
+        (, uint256 gasFee) = withdrawGasFeeWithGasLimit(_prc20, gasLimit);
+        string memory chainNamespace = IPRC20(_prc20).SOURCE_CHAIN_NAMESPACE();
+        uint256 rate = gasToPCRateByChainNamespace[chainNamespace];
+        if (rate == 0) revert UniversalCoreErrors.ZeroGasToPCRate();
+        pcFee = (gasFee * rate) / RATE_PRECISION;
+    }
+
+    /**
      * @dev This empty reserved space is put in place to allow future versions to add new
      * variables without shifting down storage in the inheritance chain.
      * See https://docs.openzeppelin.com/contracts/4.x/upgradeable#storage_gaps
      */
-    uint256[50] private __gap;
+    uint256[49] private __gap;
 }
