@@ -9,7 +9,14 @@ contract MockUniswapV3Quoter {
         pure
         returns (uint256)
     {
-        // Mock implementation - return 90% of input as output
         return amountIn * 90 / 100;
+    }
+
+    function quoteExactInputSingle(IQuoterV2.QuoteExactInputSingleParams memory params)
+        external
+        pure
+        returns (uint256, uint160, uint32, uint256)
+    {
+        return (params.amountIn * 90 / 100, 0, 0, 0);
     }
 }

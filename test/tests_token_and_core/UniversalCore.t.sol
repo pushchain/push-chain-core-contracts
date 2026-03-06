@@ -173,12 +173,11 @@ contract UniversalCoreTest is Test, UpgradeableContractHelper {
         assertEq(universalCore.UNIVERSAL_EXECUTOR_MODULE(), UNIVERSAL_EXECUTOR_MODULE);
     }
 
-    function test_ReceiveETH_Reverts() public {
-        // Handler contract has no receive function, so sending ETH should revert
-        vm.expectRevert(IAccessControl.AccessControlUnauthorizedAccount.selector);
+    function test_ReceiveETH_Succeeds() public {
+        vm.deal(address(this), 1 ether);
         (bool success,) = address(universalCore).call{value: 1 ether}("");
-        // Note: This test documents that universalCore doesn't accept ETH directly
-        // The assertion will fail if ETH is successfully sent, which is expected
+        assertTrue(success);
+        assertEq(address(universalCore).balance, 1 ether);
     }
 
     // ========================================

@@ -70,14 +70,12 @@ contract UniversalCoreV0 is
     mapping(string => address) public gasPCPoolByChainNamespace;
     /// @notice Role for managing gas-related configurations
     bytes32 public constant MANAGER_ROLE = keccak256("MANAGER_ROLE");
-    /// @notice Fixed-point precision for gas-to-PC rate conversion
-    uint256 public constant RATE_PRECISION = 1e18;
+    /// @notice Role for gateway contracts that can swap PC for gas tokens
+    bytes32 public constant GATEWAY_ROLE = keccak256("GATEWAY_ROLE");
     /// @notice Base gas limit for the cross-chain outbound transactions.
     uint256 public BASE_GAS_LIMIT = 500_000;
     /// @notice Mapping for indicating an official PRC20 supported token
     mapping(address => bool) public isSupportedToken;
-    /// @notice Conversion rate: PC wei per 1 wei of gas token (fixed-point, divide by RATE_PRECISION)
-    mapping(string => uint256) public gasToPCRateByChainNamespace;
 
     modifier onlyUEModule() {
         if (msg.sender != UNIVERSAL_EXECUTOR_MODULE) {
@@ -471,41 +469,80 @@ contract UniversalCoreV0 is
         gasFee = price * gasLimit + IPRC20(_prc20).PC_PROTOCOL_FEE();
     }
 
-    function setGasToPCRate(string memory chainNamespace, uint256 rate) external onlyRole(MANAGER_ROLE) {
-        gasToPCRateByChainNamespace[chainNamespace] = rate;
-        emit SetGasToPCRate(chainNamespace, rate);
+    /// @notice Swap native PC for gas token PRC20 and send to vault
+    /// @param prc20          PRC20 being withdrawn (for chain namespace lookup)
+    /// @param vault          Vault address to receive gas token
+    /// @param fee            Uniswap V3 fee tier (0 = use default)
+    /// @param minGasTokenOut Min gas token output (0 = use slippage tolerance)
+    /// @param deadline       Swap deadline (0 = use default)
+    /// @return gasTokenOut   Amount of gas token sent to vault
+    function swapPCForGasToken(
+        address prc20,
+        address vault,
+        uint24 fee,
+        uint256 minGasTokenOut,
+        uint256 deadline
+    ) external payable onlyRole(GATEWAY_ROLE) whenNotPaused nonReentrant returns (uint256 gasTokenOut) {
+        if (prc20 == address(0)) revert CommonErrors.ZeroAddress();
+        if (vault == address(0)) revert CommonErrors.ZeroAddress();
+        if (msg.value == 0) revert CommonErrors.ZeroAmount();
+
+        string memory chainNamespace = IPRC20(prc20).SOURCE_CHAIN_NAMESPACE();
+        address gasToken = gasTokenPRC20ByChainNamespace[chainNamespace];
+        if (gasToken == address(0)) revert CommonErrors.ZeroAddress();
+
+        if (fee == 0) {
+            fee = defaultFeeTier[gasToken];
+            if (fee == 0) revert UniversalCoreErrors.InvalidFeeTier();
+        }
+
+        if (deadline == 0) {
+            deadline = block.timestamp + (defaultDeadlineMins * 1 minutes);
+        }
+        if (block.timestamp > deadline) revert CommonErrors.DeadlineExpired();
+
+        address pool = IUniswapV3Factory(uniswapV3FactoryAddress).getPool(
+            wPCContractAddress < gasToken ? wPCContractAddress : gasToken,
+            wPCContractAddress < gasToken ? gasToken : wPCContractAddress,
+            fee
+        );
+        if (pool == address(0)) revert UniversalCoreErrors.PoolNotFound();
+
+        IWPC(wPCContractAddress).deposit{value: msg.value}();
+
+        if (minGasTokenOut == 0) {
+            uint256 expectedOutput = getSwapQuote(wPCContractAddress, gasToken, fee, msg.value);
+            minGasTokenOut = calculateMinOutput(expectedOutput, gasToken);
+        }
+
+        IERC20(wPCContractAddress).approve(uniswapV3SwapRouterAddress, msg.value);
+
+        ISwapRouter.ExactInputSingleParams memory params = ISwapRouter.ExactInputSingleParams({
+            tokenIn: wPCContractAddress,
+            tokenOut: gasToken,
+            fee: fee,
+            recipient: vault,
+            deadline: deadline,
+            amountIn: msg.value,
+            amountOutMinimum: minGasTokenOut,
+            sqrtPriceLimitX96: 0
+        });
+
+        gasTokenOut = ISwapRouter(uniswapV3SwapRouterAddress).exactInputSingle(params);
+        if (gasTokenOut < minGasTokenOut) revert UniversalCoreErrors.SlippageExceeded();
+
+        IERC20(wPCContractAddress).approve(uniswapV3SwapRouterAddress, 0);
+
+        emit SwapPCForGasToken(prc20, gasToken, msg.value, gasTokenOut, fee, vault);
     }
 
-    /// @inheritdoc IUniversalCore
-    function withdrawGasFeeInPC(address _prc20) public view returns (uint256 pcFee) {
-        (, uint256 gasFee) = withdrawGasFee(_prc20);
-        string memory chainNamespace = IPRC20(_prc20).SOURCE_CHAIN_NAMESPACE();
-        uint256 rate = gasToPCRateByChainNamespace[chainNamespace];
-        if (rate == 0) revert UniversalCoreErrors.ZeroGasToPCRate();
-        pcFee = (gasFee * rate) / RATE_PRECISION;
-    }
-
-    /// @inheritdoc IUniversalCore
-    function withdrawGasFeeInPCWithGasLimit(address _prc20, uint256 gasLimit) public view returns (uint256 pcFee) {
-        (, uint256 gasFee) = withdrawGasFeeWithGasLimit(_prc20, gasLimit);
-        string memory chainNamespace = IPRC20(_prc20).SOURCE_CHAIN_NAMESPACE();
-        uint256 rate = gasToPCRateByChainNamespace[chainNamespace];
-        if (rate == 0) revert UniversalCoreErrors.ZeroGasToPCRate();
-        pcFee = (gasFee * rate) / RATE_PRECISION;
-    }
-
-    /**
-     * @notice Receive function to accept native PC transfers from WPC withdraw
-     * @dev This is required for the WPC withdraw functionality to work
-     */
-    receive() external payable {
-        // Accept native PC transfers (e.g., from WPC withdraw)
-    }
+    /// @notice Accept native PC transfers (e.g., from WPC withdraw)
+    receive() external payable {}
 
     /**
      * @dev This empty reserved space is put in place to allow future versions to add new
      * variables without shifting down storage in the inheritance chain.
      * See https://docs.openzeppelin.com/contracts/4.x/upgradeable#storage_gaps
      */
-    uint256[49] private __gap;
+    uint256[50] private __gap;
 }
