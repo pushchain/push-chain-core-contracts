@@ -446,7 +446,7 @@ contract UniversalCoreSwapFeeTest is Test, UpgradeableContractHelper {
     }
 
     // ========================================
-    // 6) withdrawGasFee / withdrawGasFeeWithGasLimit
+    // 6) getOutboundTxGasAndFees
     // ========================================
 
     function test_WithdrawGasFee_Returns4Values() public view {
@@ -455,7 +455,7 @@ contract UniversalCoreSwapFeeTest is Test, UpgradeableContractHelper {
             uint256 gasFee,
             uint256 protocolFee,
             string memory chainNamespace
-        ) = universalCore.withdrawGasFee(address(prc20Token));
+        ) = universalCore.getOutboundTxGasAndFees(address(prc20Token), 0);
 
         assertEq(gasToken, address(gasTokenMock));
         assertEq(gasFee, GAS_PRICE * universalCore.BASE_GAS_LIMIT());
@@ -470,7 +470,7 @@ contract UniversalCoreSwapFeeTest is Test, UpgradeableContractHelper {
             uint256 gasFee,
             uint256 protocolFee,
             string memory chainNamespace
-        ) = universalCore.withdrawGasFeeWithGasLimit(address(prc20Token), customGasLimit);
+        ) = universalCore.getOutboundTxGasAndFees(address(prc20Token), customGasLimit);
 
         assertEq(gasToken, address(gasTokenMock));
         assertEq(gasFee, GAS_PRICE * customGasLimit);

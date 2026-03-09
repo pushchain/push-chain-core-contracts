@@ -464,31 +464,14 @@ contract UniversalCoreV0 is
      /**
      * @inheritdoc IUniversalCore
      */
-    function withdrawGasFee(address _prc20)
+    function getOutboundTxGasAndFees(address _prc20, uint256 gasLimit)
         public
         view
         returns (address gasToken, uint256 gasFee, uint256 protocolFee, string memory chainNamespace)
     {
-        chainNamespace = IPRC20(_prc20).SOURCE_CHAIN_NAMESPACE();
-
-        gasToken = gasTokenPRC20ByChainNamespace[chainNamespace];
-        if (gasToken == address(0)) revert CommonErrors.ZeroAddress();
-
-        uint256 price = gasPriceByChainNamespace[chainNamespace];
-        if (price == 0) revert UniversalCoreErrors.ZeroGasPrice();
-
-        gasFee = price * BASE_GAS_LIMIT;
-        protocolFee = IPRC20(_prc20).PC_PROTOCOL_FEE();
-    }
-
-    /**
-     * @inheritdoc IUniversalCore
-     */
-    function withdrawGasFeeWithGasLimit(address _prc20, uint256 gasLimit)
-        public
-        view
-        returns (address gasToken, uint256 gasFee, uint256 protocolFee, string memory chainNamespace)
-    {
+        if (gasLimit == 0) {
+            gasLimit = BASE_GAS_LIMIT;
+        }
         chainNamespace = IPRC20(_prc20).SOURCE_CHAIN_NAMESPACE();
 
         gasToken = gasTokenPRC20ByChainNamespace[chainNamespace];
