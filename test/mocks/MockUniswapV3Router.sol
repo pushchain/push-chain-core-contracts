@@ -15,4 +15,14 @@ contract MockUniswapV3Router {
         MockPRC20(params.tokenOut).deposit(params.recipient, amountOut);
         return amountOut;
     }
+
+    function exactOutputSingle(ISwapRouter.ExactOutputSingleParams calldata params) external returns (uint256) {
+        uint256 amountIn = params.amountOut * 100 / 90;
+        if (amountIn > params.amountInMaximum) {
+            amountIn = params.amountInMaximum;
+        }
+        IERC20Transfer(params.tokenIn).transferFrom(msg.sender, address(this), amountIn);
+        MockPRC20(params.tokenOut).deposit(params.recipient, params.amountOut);
+        return amountIn;
+    }
 }

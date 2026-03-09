@@ -470,19 +470,21 @@ contract UniversalCoreV0 is
     }
 
     /// @notice Swap native PC for gas token PRC20 and send to vault
-    /// @param prc20          PRC20 being withdrawn (for chain namespace lookup)
-    /// @param vault          Vault address to receive gas token
-    /// @param fee            Uniswap V3 fee tier (0 = use default)
-    /// @param minGasTokenOut Min gas token output (0 = use slippage tolerance)
-    /// @param deadline       Swap deadline (0 = use default)
-    /// @return gasTokenOut   Amount of gas token sent to vault
+    /// @param prc20              PRC20 being withdrawn (for chain namespace lookup)
+    /// @param vault              Vault address to receive gas token
+    /// @param fee                Uniswap V3 fee tier (0 = use default)
+    /// @param minGasTokenOut     Min gas token output (0 = use slippage tolerance)
+    /// @param deadline           Swap deadline (0 = use default)
+    /// @return gasTokenOut       Amount of gas token sent to vault
+    /// @return refund            Always 0 in V0 (no refund logic)
     function swapPCForGasToken(
         address prc20,
         address vault,
         uint24 fee,
         uint256 minGasTokenOut,
-        uint256 deadline
-    ) external payable onlyRole(GATEWAY_ROLE) whenNotPaused nonReentrant returns (uint256 gasTokenOut) {
+        uint256 deadline,
+        address
+    ) external payable onlyRole(GATEWAY_ROLE) whenNotPaused nonReentrant returns (uint256 gasTokenOut, uint256 refund) {
         if (prc20 == address(0)) revert CommonErrors.ZeroAddress();
         if (vault == address(0)) revert CommonErrors.ZeroAddress();
         if (msg.value == 0) revert CommonErrors.ZeroAmount();

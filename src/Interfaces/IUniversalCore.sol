@@ -109,16 +109,19 @@ interface IUniversalCore {
     function withdrawGasFeeWithGasLimit(address _prc20, uint256 gasLimit) external view returns (address gasToken, uint256 gasFee);
 
     /// @notice Swap native PC for gas token PRC20 and send to vault
-    /// @param prc20          PRC20 being withdrawn (for chain namespace lookup)
-    /// @param vault          Vault address to receive gas token
-    /// @param fee            Uniswap V3 fee tier (0 = use default)
-    /// @param minGasTokenOut Min gas token output (0 = use slippage tolerance)
-    /// @param deadline       Swap deadline (0 = use default)
-    /// @return gasTokenOut   Amount of gas token sent to vault
+    /// @param prc20              PRC20 being withdrawn (for chain namespace lookup)
+    /// @param vault              Vault address to receive gas token
+    /// @param fee                Uniswap V3 fee tier (0 = use default)
+    /// @param requiredGasTokenOut Exact gas token output amount
+    /// @param deadline           Swap deadline (0 = use default)
+    /// @param caller             Address to receive unused PC refund
+    /// @return gasTokenOut       Amount of gas token sent to vault
+    /// @return refund            Unused PC refunded to caller
     function swapPCForGasToken(
         address prc20, address vault, uint24 fee,
-        uint256 minGasTokenOut, uint256 deadline
-    ) external payable returns (uint256 gasTokenOut);
+        uint256 requiredGasTokenOut, uint256 deadline,
+        address caller
+    ) external payable returns (uint256 gasTokenOut, uint256 refund);
 
     /// @notice Get the GATEWAY_ROLE identifier
     function GATEWAY_ROLE() external pure returns (bytes32);

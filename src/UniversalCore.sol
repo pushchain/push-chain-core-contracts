@@ -417,22 +417,27 @@ contract UniversalCore is
     receive() external payable {}
 
     /// @notice Swap native PC for gas token PRC20 and send to vault
-    /// @param prc20          PRC20 being withdrawn (for chain namespace lookup)
-    /// @param vault          Vault address to receive gas token
-    /// @param fee            Uniswap V3 fee tier (0 = use default)
-    /// @param minGasTokenOut Min gas token output (0 = use slippage tolerance)
-    /// @param deadline       Swap deadline (0 = use default)
-    /// @return gasTokenOut   Amount of gas token sent to vault
+    /// @param prc20              PRC20 being withdrawn (for chain namespace lookup)
+    /// @param vault              Vault address to receive gas token
+    /// @param fee                Uniswap V3 fee tier (0 = use default)
+    /// @param requiredGasTokenOut Exact gas token output amount
+    /// @param deadline           Swap deadline (0 = use default)
+    /// @param caller             Address to receive unused PC refund
+    /// @return gasTokenOut       Amount of gas token sent to vault
+    /// @return refund            Unused PC refunded to caller
     function swapPCForGasToken(
         address prc20,
         address vault,
         uint24 fee,
-        uint256 minGasTokenOut,
-        uint256 deadline
-    ) external payable onlyRole(GATEWAY_ROLE) whenNotPaused nonReentrant returns (uint256 gasTokenOut) {
+        uint256 requiredGasTokenOut,
+        uint256 deadline,
+        address caller
+    ) external payable onlyRole(GATEWAY_ROLE) whenNotPaused nonReentrant returns (uint256 gasTokenOut, uint256 refund) {
         if (prc20 == address(0)) revert CommonErrors.ZeroAddress();
         if (vault == address(0)) revert CommonErrors.ZeroAddress();
+        if (caller == address(0)) revert CommonErrors.ZeroAddress();
         if (msg.value == 0) revert CommonErrors.ZeroAmount();
+        if (requiredGasTokenOut == 0) revert CommonErrors.ZeroAmount();
 
         string memory chainNamespace = IPRC20(prc20).SOURCE_CHAIN_NAMESPACE();
         address gasToken = gasTokenPRC20ByChainNamespace[chainNamespace];
@@ -457,30 +462,32 @@ contract UniversalCore is
 
         IWPC(wPCContractAddress).deposit{value: msg.value}();
 
-        if (minGasTokenOut == 0) {
-            uint256 expectedOutput = getSwapQuote(wPCContractAddress, gasToken, fee, msg.value);
-            minGasTokenOut = calculateMinOutput(expectedOutput, gasToken);
-        }
-
         IERC20(wPCContractAddress).approve(uniswapV3SwapRouterAddress, msg.value);
 
-        ISwapRouter.ExactInputSingleParams memory params = ISwapRouter.ExactInputSingleParams({
+        ISwapRouter.ExactOutputSingleParams memory params = ISwapRouter.ExactOutputSingleParams({
             tokenIn: wPCContractAddress,
             tokenOut: gasToken,
             fee: fee,
             recipient: vault,
             deadline: deadline,
-            amountIn: msg.value,
-            amountOutMinimum: minGasTokenOut,
+            amountOut: requiredGasTokenOut,
+            amountInMaximum: msg.value,
             sqrtPriceLimitX96: 0
         });
 
-        gasTokenOut = ISwapRouter(uniswapV3SwapRouterAddress).exactInputSingle(params);
-        if (gasTokenOut < minGasTokenOut) revert UniversalCoreErrors.SlippageExceeded();
+        uint256 amountInUsed = ISwapRouter(uniswapV3SwapRouterAddress).exactOutputSingle(params);
 
         IERC20(wPCContractAddress).approve(uniswapV3SwapRouterAddress, 0);
 
-        emit SwapPCForGasToken(prc20, gasToken, msg.value, gasTokenOut, fee, vault);
+        gasTokenOut = requiredGasTokenOut;
+        refund = msg.value - amountInUsed;
+        if (refund > 0) {
+            IWPC(wPCContractAddress).withdraw(refund);
+            (bool ok, ) = caller.call{value: refund}("");
+            if (!ok) revert CommonErrors.TransferFailed();
+        }
+
+        emit SwapPCForGasToken(prc20, gasToken, amountInUsed, gasTokenOut, fee, vault);
     }
 
     /**
