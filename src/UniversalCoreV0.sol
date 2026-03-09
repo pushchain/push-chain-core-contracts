@@ -464,8 +464,12 @@ contract UniversalCoreV0 is
      /**
      * @inheritdoc IUniversalCore
      */
-    function withdrawGasFee(address _prc20) public view returns (address gasToken, uint256 gasFee) {
-        string memory chainNamespace = IPRC20(_prc20).SOURCE_CHAIN_NAMESPACE();
+    function withdrawGasFee(address _prc20)
+        public
+        view
+        returns (address gasToken, uint256 gasFee, uint256 protocolFee, string memory chainNamespace)
+    {
+        chainNamespace = IPRC20(_prc20).SOURCE_CHAIN_NAMESPACE();
 
         gasToken = gasTokenPRC20ByChainNamespace[chainNamespace];
         if (gasToken == address(0)) revert CommonErrors.ZeroAddress();
@@ -473,14 +477,19 @@ contract UniversalCoreV0 is
         uint256 price = gasPriceByChainNamespace[chainNamespace];
         if (price == 0) revert UniversalCoreErrors.ZeroGasPrice();
 
-        gasFee = price * BASE_GAS_LIMIT + IPRC20(_prc20).PC_PROTOCOL_FEE();
+        gasFee = price * BASE_GAS_LIMIT;
+        protocolFee = IPRC20(_prc20).PC_PROTOCOL_FEE();
     }
 
     /**
      * @inheritdoc IUniversalCore
      */
-    function withdrawGasFeeWithGasLimit(address _prc20, uint256 gasLimit) public view returns (address gasToken, uint256 gasFee) {
-        string memory chainNamespace = IPRC20(_prc20).SOURCE_CHAIN_NAMESPACE();
+    function withdrawGasFeeWithGasLimit(address _prc20, uint256 gasLimit)
+        public
+        view
+        returns (address gasToken, uint256 gasFee, uint256 protocolFee, string memory chainNamespace)
+    {
+        chainNamespace = IPRC20(_prc20).SOURCE_CHAIN_NAMESPACE();
 
         gasToken = gasTokenPRC20ByChainNamespace[chainNamespace];
         if (gasToken == address(0)) revert CommonErrors.ZeroAddress();
@@ -488,32 +497,34 @@ contract UniversalCoreV0 is
         uint256 price = gasPriceByChainNamespace[chainNamespace];
         if (price == 0) revert UniversalCoreErrors.ZeroGasPrice();
 
-        gasFee = price * gasLimit + IPRC20(_prc20).PC_PROTOCOL_FEE();
+        gasFee = price * gasLimit;
+        protocolFee = IPRC20(_prc20).PC_PROTOCOL_FEE();
     }
 
-    /// @notice Swap native PC for gas token PRC20 and send to vault
-    /// @param prc20              PRC20 being withdrawn (for chain namespace lookup)
-    /// @param vault              Vault address to receive gas token
+    /// @notice Swap native PC for gas token PRC20, burn gasFee, send protocolFee to vault (V0 uses ExactInputSingle)
+    /// @param gasToken           Gas token PRC20 address
+    /// @param vault              Vault address to receive protocol fee
     /// @param fee                Uniswap V3 fee tier (0 = use default)
-    /// @param minGasTokenOut     Min gas token output (0 = use slippage tolerance)
+    /// @param gasFee             Gas fee amount (unused in V0, kept for interface compatibility)
+    /// @param protocolFee        Protocol fee amount (unused in V0, kept for interface compatibility)
     /// @param deadline           Swap deadline (0 = use default)
-    /// @return gasTokenOut       Amount of gas token sent to vault
+    /// @return gasTokenOut       Amount of gas token swapped
     /// @return refund            Always 0 in V0 (no refund logic)
-    function swapPCForGasToken(
-        address prc20,
+    function swapAndBurnGas(
+        address gasToken,
         address vault,
         uint24 fee,
-        uint256 minGasTokenOut,
+        uint256 gasFee,
+        uint256 protocolFee,
         uint256 deadline,
         address
     ) external payable onlyRole(GATEWAY_ROLE) whenNotPaused nonReentrant returns (uint256 gasTokenOut, uint256 refund) {
-        if (prc20 == address(0)) revert CommonErrors.ZeroAddress();
+        if (gasToken == address(0)) revert CommonErrors.ZeroAddress();
         if (vault == address(0)) revert CommonErrors.ZeroAddress();
         if (msg.value == 0) revert CommonErrors.ZeroAmount();
+        if (gasFee == 0) revert CommonErrors.ZeroAmount();
 
-        string memory chainNamespace = IPRC20(prc20).SOURCE_CHAIN_NAMESPACE();
-        address gasToken = gasTokenPRC20ByChainNamespace[chainNamespace];
-        if (gasToken == address(0)) revert CommonErrors.ZeroAddress();
+        uint256 minGasTokenOut = gasFee + protocolFee;
 
         if (fee == 0) {
             fee = defaultFeeTier[gasToken];
@@ -557,7 +568,7 @@ contract UniversalCoreV0 is
 
         IERC20(wPCContractAddress).approve(uniswapV3SwapRouterAddress, 0);
 
-        emit SwapPCForGasToken(prc20, gasToken, msg.value, gasTokenOut, fee, vault);
+        emit SwapAndBurnGas(gasToken, vault, msg.value, gasFee, protocolFee, fee, address(0));
     }
 
     /// @notice Accept native PC transfers (e.g., from WPC withdraw)

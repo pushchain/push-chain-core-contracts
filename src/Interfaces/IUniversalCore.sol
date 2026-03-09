@@ -15,9 +15,10 @@ interface IUniversalCore {
     event SetSupportedToken(address indexed prc20, bool supported);
     event SetGasPCPool(string chainNamespace, address pool, uint24 fee);
     event DepositPRC20WithAutoSwap(address prc20, uint256 amountIn, address pcToken, uint256 amountOut, uint24 fee, address target);
-    event SwapPCForGasToken(
-        address indexed prc20, address indexed gasToken,
-        uint256 pcIn, uint256 gasTokenOut, uint24 fee, address indexed vault
+    event SwapAndBurnGas(
+        address indexed gasToken, address indexed vault,
+        uint256 pcIn, uint256 gasFee, uint256 protocolFee,
+        uint24 fee, address indexed caller
     );
     // =========================
     //           Universal Core Functions
@@ -91,36 +92,47 @@ interface IUniversalCore {
     function BASE_GAS_LIMIT() external view returns (uint256 baseGasLimit);
 
     /**
-     * @notice Get gas fee for a PRC20 token.
+     * @notice Get gas fee for a PRC20 token, split into gasFee and protocolFee.
      * @dev    Uses BASE_GAS_LIMIT for the gas limit used in the fee computation.
      * @param _prc20 PRC20 address
      * @return gasToken Gas token address
-     * @return gasFee Gas fee
+     * @return gasFee Gas fee (price * BASE_GAS_LIMIT)
+     * @return protocolFee Protocol fee from PRC20
+     * @return chainNamespace Source chain namespace
      */
-    function withdrawGasFee(address _prc20) external view returns (address gasToken, uint256 gasFee);
+    function withdrawGasFee(address _prc20)
+        external
+        view
+        returns (address gasToken, uint256 gasFee, uint256 protocolFee, string memory chainNamespace);
 
     /**
-     * @notice Get gas fee for a PRC20 token with a custom gas limit
+     * @notice Get gas fee for a PRC20 token with a custom gas limit, split into gasFee and protocolFee.
      * @dev    Uses the provided gas limit for the fee computation.
      * @param _prc20 PRC20 address
      * @param gasLimit Gas limit
      * @return gasToken Gas token address
-     * @return gasFee Gas fee
+     * @return gasFee Gas fee (price * gasLimit)
+     * @return protocolFee Protocol fee from PRC20
+     * @return chainNamespace Source chain namespace
      */
-    function withdrawGasFeeWithGasLimit(address _prc20, uint256 gasLimit) external view returns (address gasToken, uint256 gasFee);
+    function withdrawGasFeeWithGasLimit(address _prc20, uint256 gasLimit)
+        external
+        view
+        returns (address gasToken, uint256 gasFee, uint256 protocolFee, string memory chainNamespace);
 
-    /// @notice Swap native PC for gas token PRC20 and send to vault
-    /// @param prc20              PRC20 being withdrawn (for chain namespace lookup)
-    /// @param vault              Vault address to receive gas token
+    /// @notice Swap native PC for gas token PRC20, burn gasFee, send protocolFee to vault
+    /// @param gasToken           Gas token PRC20 address
+    /// @param vault              Vault address to receive protocol fee
     /// @param fee                Uniswap V3 fee tier (0 = use default)
-    /// @param requiredGasTokenOut Exact gas token output amount
+    /// @param gasFee             Gas fee amount to burn
+    /// @param protocolFee        Protocol fee amount to send to vault
     /// @param deadline           Swap deadline (0 = use default)
     /// @param caller             Address to receive unused PC refund
-    /// @return gasTokenOut       Amount of gas token sent to vault
+    /// @return gasTokenOut       Total gas token swapped (gasFee + protocolFee)
     /// @return refund            Unused PC refunded to caller
-    function swapPCForGasToken(
-        address prc20, address vault, uint24 fee,
-        uint256 requiredGasTokenOut, uint256 deadline,
+    function swapAndBurnGas(
+        address gasToken, address vault, uint24 fee,
+        uint256 gasFee, uint256 protocolFee, uint256 deadline,
         address caller
     ) external payable returns (uint256 gasTokenOut, uint256 refund);
 

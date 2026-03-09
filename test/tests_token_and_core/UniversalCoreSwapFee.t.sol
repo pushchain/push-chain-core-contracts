@@ -39,12 +39,13 @@ contract UniversalCoreSwapFeeTest is Test, UpgradeableContractHelper {
     uint256 public constant GAS_PRICE = 50 * 10 ** 9;
     uint24 public constant FEE_TIER = 3000;
 
-    // Default required gas token out for tests
-    uint256 public constant REQUIRED_GAS_TOKEN_OUT = 0.5 ether;
+    uint256 public constant GAS_FEE = 0.4 ether;
+    uint256 public constant PROTOCOL_FEE_AMOUNT = 0.1 ether;
 
-    event SwapPCForGasToken(
-        address indexed prc20, address indexed gasToken,
-        uint256 pcIn, uint256 gasTokenOut, uint24 fee, address indexed vault
+    event SwapAndBurnGas(
+        address indexed gasToken, address indexed vault,
+        uint256 pcIn, uint256 gasFee, uint256 protocolFee,
+        uint24 fee, address indexed caller
     );
 
     function setUp() public {
@@ -124,7 +125,7 @@ contract UniversalCoreSwapFeeTest is Test, UpgradeableContractHelper {
     // 1) Access Control
     // ========================================
 
-    function test_SwapPCForGasToken_OnlyGatewayRole() public {
+    function test_SwapAndBurnGas_OnlyGatewayRole() public {
         vm.deal(nonGateway, 1 ether);
         bytes32 gatewayRole = universalCore.GATEWAY_ROLE();
         vm.prank(nonGateway);
@@ -135,12 +136,12 @@ contract UniversalCoreSwapFeeTest is Test, UpgradeableContractHelper {
                 gatewayRole
             )
         );
-        universalCore.swapPCForGasToken{value: 1 ether}(
-            address(prc20Token), vault, 0, REQUIRED_GAS_TOKEN_OUT, 0, user
+        universalCore.swapAndBurnGas{value: 1 ether}(
+            address(gasTokenMock), vault, 0, GAS_FEE, PROTOCOL_FEE_AMOUNT, 0, user
         );
     }
 
-    function test_SwapPCForGasToken_UEModuleCannotCall() public {
+    function test_SwapAndBurnGas_UEModuleCannotCall() public {
         vm.deal(UNIVERSAL_EXECUTOR_MODULE, 1 ether);
         bytes32 gatewayRole = universalCore.GATEWAY_ROLE();
         vm.prank(UNIVERSAL_EXECUTOR_MODULE);
@@ -151,118 +152,75 @@ contract UniversalCoreSwapFeeTest is Test, UpgradeableContractHelper {
                 gatewayRole
             )
         );
-        universalCore.swapPCForGasToken{value: 1 ether}(
-            address(prc20Token), vault, 0, REQUIRED_GAS_TOKEN_OUT, 0, user
+        universalCore.swapAndBurnGas{value: 1 ether}(
+            address(gasTokenMock), vault, 0, GAS_FEE, PROTOCOL_FEE_AMOUNT, 0, user
         );
     }
 
-    function test_SwapPCForGasToken_AdminCanGrantRole() public {
+    function test_SwapAndBurnGas_AdminCanGrantRole() public {
         address newGateway = makeAddr("newGateway");
         vm.deal(newGateway, 1 ether);
 
         universalCore.grantRole(universalCore.GATEWAY_ROLE(), newGateway);
 
         vm.prank(newGateway);
-        (uint256 gasTokenOut, ) = universalCore.swapPCForGasToken{value: 1 ether}(
-            address(prc20Token), vault, 0, REQUIRED_GAS_TOKEN_OUT, 0, user
+        (uint256 gasTokenOut, ) = universalCore.swapAndBurnGas{value: 1 ether}(
+            address(gasTokenMock), vault, 0, GAS_FEE, PROTOCOL_FEE_AMOUNT, 0, user
         );
-        assertEq(gasTokenOut, REQUIRED_GAS_TOKEN_OUT);
+        assertEq(gasTokenOut, GAS_FEE + PROTOCOL_FEE_AMOUNT);
     }
 
     // ========================================
     // 2) Input Validation
     // ========================================
 
-    function test_SwapPCForGasToken_ZeroPRC20Reverts() public {
+    function test_SwapAndBurnGas_ZeroGasTokenReverts() public {
         vm.prank(gateway);
         vm.expectRevert(CommonErrors.ZeroAddress.selector);
-        universalCore.swapPCForGasToken{value: 1 ether}(
-            address(0), vault, 0, REQUIRED_GAS_TOKEN_OUT, 0, user
+        universalCore.swapAndBurnGas{value: 1 ether}(
+            address(0), vault, 0, GAS_FEE, PROTOCOL_FEE_AMOUNT, 0, user
         );
     }
 
-    function test_SwapPCForGasToken_ZeroVaultReverts() public {
+    function test_SwapAndBurnGas_ZeroVaultReverts() public {
         vm.prank(gateway);
         vm.expectRevert(CommonErrors.ZeroAddress.selector);
-        universalCore.swapPCForGasToken{value: 1 ether}(
-            address(prc20Token), address(0), 0, REQUIRED_GAS_TOKEN_OUT, 0, user
+        universalCore.swapAndBurnGas{value: 1 ether}(
+            address(gasTokenMock), address(0), 0, GAS_FEE, PROTOCOL_FEE_AMOUNT, 0, user
         );
     }
 
-    function test_SwapPCForGasToken_ZeroCallerReverts() public {
+    function test_SwapAndBurnGas_ZeroCallerReverts() public {
         vm.prank(gateway);
         vm.expectRevert(CommonErrors.ZeroAddress.selector);
-        universalCore.swapPCForGasToken{value: 1 ether}(
-            address(prc20Token), vault, 0, REQUIRED_GAS_TOKEN_OUT, 0, address(0)
+        universalCore.swapAndBurnGas{value: 1 ether}(
+            address(gasTokenMock), vault, 0, GAS_FEE, PROTOCOL_FEE_AMOUNT, 0, address(0)
         );
     }
 
-    function test_SwapPCForGasToken_ZeroMsgValueReverts() public {
+    function test_SwapAndBurnGas_ZeroMsgValueReverts() public {
         vm.prank(gateway);
         vm.expectRevert(CommonErrors.ZeroAmount.selector);
-        universalCore.swapPCForGasToken{value: 0}(
-            address(prc20Token), vault, 0, REQUIRED_GAS_TOKEN_OUT, 0, user
+        universalCore.swapAndBurnGas{value: 0}(
+            address(gasTokenMock), vault, 0, GAS_FEE, PROTOCOL_FEE_AMOUNT, 0, user
         );
     }
 
-    function test_SwapPCForGasToken_ZeroRequiredGasTokenOutReverts() public {
+    function test_SwapAndBurnGas_ZeroGasFeeReverts() public {
         vm.prank(gateway);
         vm.expectRevert(CommonErrors.ZeroAmount.selector);
-        universalCore.swapPCForGasToken{value: 1 ether}(
-            address(prc20Token), vault, 0, 0, 0, user
+        universalCore.swapAndBurnGas{value: 1 ether}(
+            address(gasTokenMock), vault, 0, 0, PROTOCOL_FEE_AMOUNT, 0, user
         );
     }
 
-    function test_SwapPCForGasToken_NoGasTokenReverts() public {
-        // Create PRC20 for a chain with no gas token configured
-        PRC20 newPrc20Impl = new PRC20();
-        bytes memory initData = abi.encodeWithSelector(
-            PRC20.initialize.selector,
-            "New PRC20",
-            "NPRC20",
-            18,
-            "eip155:999",
-            IPRC20.TokenType.ERC20,
-            PROTOCOL_FEE,
-            address(universalCore),
-            SOURCE_TOKEN_ADDRESS
-        );
-        address proxyAddress = deployUpgradeableContract(address(newPrc20Impl), initData);
-
-        vm.prank(gateway);
-        vm.expectRevert(CommonErrors.ZeroAddress.selector);
-        universalCore.swapPCForGasToken{value: 1 ether}(
-            proxyAddress, vault, 0, REQUIRED_GAS_TOKEN_OUT, 0, user
-        );
-    }
-
-    function test_SwapPCForGasToken_NoDefaultFeeReverts() public {
-        // Create a gas token with no default fee tier
+    function test_SwapAndBurnGas_NoDefaultFeeReverts() public {
         MockPRC20 newGasToken = new MockPRC20();
-
-        // Configure the gas token but NOT the default fee tier
-        vm.prank(UNIVERSAL_EXECUTOR_MODULE);
-        universalCore.setGasTokenPRC20("eip155:56", address(newGasToken));
-
-        // Deploy PRC20 for BSC chain
-        PRC20 bscPrc20Impl = new PRC20();
-        bytes memory initData = abi.encodeWithSelector(
-            PRC20.initialize.selector,
-            "BSC PRC20",
-            "BPRC20",
-            18,
-            "eip155:56",
-            IPRC20.TokenType.ERC20,
-            PROTOCOL_FEE,
-            address(universalCore),
-            SOURCE_TOKEN_ADDRESS
-        );
-        address proxyAddress = deployUpgradeableContract(address(bscPrc20Impl), initData);
 
         vm.prank(gateway);
         vm.expectRevert(UniversalCoreErrors.InvalidFeeTier.selector);
-        universalCore.swapPCForGasToken{value: 1 ether}(
-            proxyAddress, vault, 0, REQUIRED_GAS_TOKEN_OUT, 0, user
+        universalCore.swapAndBurnGas{value: 1 ether}(
+            address(newGasToken), vault, 0, GAS_FEE, PROTOCOL_FEE_AMOUNT, 0, user
         );
     }
 
@@ -270,61 +228,100 @@ contract UniversalCoreSwapFeeTest is Test, UpgradeableContractHelper {
     // 3) Happy Path
     // ========================================
 
-    function test_SwapPCForGasToken_HappyPath() public {
+    function test_SwapAndBurnGas_HappyPath() public {
+        uint256 totalRequired = GAS_FEE + PROTOCOL_FEE_AMOUNT;
+
         vm.prank(gateway);
-        (uint256 gasTokenOut, uint256 refund) = universalCore.swapPCForGasToken{value: 1 ether}(
-            address(prc20Token), vault, 0, REQUIRED_GAS_TOKEN_OUT, 0, user
+        (uint256 gasTokenOut, uint256 refund) = universalCore.swapAndBurnGas{value: 1 ether}(
+            address(gasTokenMock), vault, 0, GAS_FEE, PROTOCOL_FEE_AMOUNT, 0, user
         );
 
-        // exactOutputSingle: output is exact
-        assertEq(gasTokenOut, REQUIRED_GAS_TOKEN_OUT);
+        assertEq(gasTokenOut, totalRequired);
 
         // Mock router consumes amountOut * 100 / 90 as input
-        uint256 expectedInput = REQUIRED_GAS_TOKEN_OUT * 100 / 90;
+        uint256 expectedInput = totalRequired * 100 / 90;
         assertEq(refund, 1 ether - expectedInput);
     }
 
-    function test_SwapPCForGasToken_VaultReceivesGasToken() public {
+    function test_SwapAndBurnGas_BurnsGasFee() public {
+        uint256 supplyBefore = gasTokenMock.totalSupply();
+
+        vm.prank(gateway);
+        universalCore.swapAndBurnGas{value: 1 ether}(
+            address(gasTokenMock), vault, 0, GAS_FEE, PROTOCOL_FEE_AMOUNT, 0, user
+        );
+
+        uint256 supplyAfter = gasTokenMock.totalSupply();
+        // Total supply increased by totalRequired (from swap), then decreased by gasFee (from burn)
+        // Net: supplyAfter = supplyBefore + totalRequired - gasFee = supplyBefore + protocolFee
+        assertEq(supplyAfter, supplyBefore + PROTOCOL_FEE_AMOUNT);
+    }
+
+    function test_SwapAndBurnGas_VaultReceivesOnlyProtocolFee() public {
         uint256 vaultBalanceBefore = gasTokenMock.balanceOf(vault);
 
         vm.prank(gateway);
-        (uint256 gasTokenOut, ) = universalCore.swapPCForGasToken{value: 1 ether}(
-            address(prc20Token), vault, 0, REQUIRED_GAS_TOKEN_OUT, 0, user
+        universalCore.swapAndBurnGas{value: 1 ether}(
+            address(gasTokenMock), vault, 0, GAS_FEE, PROTOCOL_FEE_AMOUNT, 0, user
         );
 
         uint256 vaultBalanceAfter = gasTokenMock.balanceOf(vault);
-        assertEq(vaultBalanceAfter - vaultBalanceBefore, gasTokenOut);
-        assertEq(gasTokenOut, REQUIRED_GAS_TOKEN_OUT);
+        assertEq(vaultBalanceAfter - vaultBalanceBefore, PROTOCOL_FEE_AMOUNT);
     }
 
-    function test_SwapPCForGasToken_EmitsEvent() public {
-        uint256 expectedInput = REQUIRED_GAS_TOKEN_OUT * 100 / 90;
+    function test_SwapAndBurnGas_ZeroProtocolFee() public {
+        uint256 supplyBefore = gasTokenMock.totalSupply();
+        uint256 vaultBalanceBefore = gasTokenMock.balanceOf(vault);
+
+        vm.prank(gateway);
+        (uint256 gasTokenOut, ) = universalCore.swapAndBurnGas{value: 1 ether}(
+            address(gasTokenMock), vault, 0, GAS_FEE, 0, 0, user
+        );
+
+        assertEq(gasTokenOut, GAS_FEE);
+        // All burned, nothing to vault
+        assertEq(gasTokenMock.totalSupply(), supplyBefore);
+        assertEq(gasTokenMock.balanceOf(vault), vaultBalanceBefore);
+    }
+
+    function test_SwapAndBurnGas_UniversalCoreHoldsNoTokensAfter() public {
+        vm.prank(gateway);
+        universalCore.swapAndBurnGas{value: 1 ether}(
+            address(gasTokenMock), vault, 0, GAS_FEE, PROTOCOL_FEE_AMOUNT, 0, user
+        );
+
+        assertEq(gasTokenMock.balanceOf(address(universalCore)), 0);
+        assertEq(address(universalCore).balance, 0);
+    }
+
+    function test_SwapAndBurnGas_EmitsEvent() public {
+        uint256 totalRequired = GAS_FEE + PROTOCOL_FEE_AMOUNT;
+        uint256 expectedInput = totalRequired * 100 / 90;
 
         vm.expectEmit(true, true, true, true);
-        emit SwapPCForGasToken(
-            address(prc20Token), address(gasTokenMock),
-            expectedInput, REQUIRED_GAS_TOKEN_OUT, FEE_TIER, vault
+        emit SwapAndBurnGas(
+            address(gasTokenMock), vault,
+            expectedInput, GAS_FEE, PROTOCOL_FEE_AMOUNT, FEE_TIER, user
         );
 
         vm.prank(gateway);
-        universalCore.swapPCForGasToken{value: 1 ether}(
-            address(prc20Token), vault, 0, REQUIRED_GAS_TOKEN_OUT, 0, user
+        universalCore.swapAndBurnGas{value: 1 ether}(
+            address(gasTokenMock), vault, 0, GAS_FEE, PROTOCOL_FEE_AMOUNT, 0, user
         );
     }
 
-    function test_SwapPCForGasToken_ExplicitParams() public {
-        uint256 requiredOut = 0.5 ether;
+    function test_SwapAndBurnGas_ExplicitParams() public {
         uint256 explicitDeadline = block.timestamp + 1 hours;
 
         vm.prank(gateway);
-        (uint256 gasTokenOut, ) = universalCore.swapPCForGasToken{value: 1 ether}(
-            address(prc20Token), vault, FEE_TIER, requiredOut, explicitDeadline, user
+        (uint256 gasTokenOut, ) = universalCore.swapAndBurnGas{value: 1 ether}(
+            address(gasTokenMock), vault, FEE_TIER, GAS_FEE, PROTOCOL_FEE_AMOUNT, explicitDeadline, user
         );
 
-        assertEq(gasTokenOut, requiredOut);
+        assertEq(gasTokenOut, GAS_FEE + PROTOCOL_FEE_AMOUNT);
     }
 
-    function test_SwapPCForGasToken_MultipleChains() public {
+    function test_SwapAndBurnGas_MultipleChains() public {
         // Setup BSC chain
         MockPRC20 bscGasToken = new MockPRC20();
         vm.prank(UNIVERSAL_EXECUTOR_MODULE);
@@ -339,99 +336,77 @@ contract UniversalCoreSwapFeeTest is Test, UpgradeableContractHelper {
             mockFactory.setPool(address(bscGasToken), address(mockWPC), FEE_TIER, bscPool);
         }
 
-        // Deploy BSC PRC20
-        PRC20 bscPrc20Impl = new PRC20();
-        bytes memory initData = abi.encodeWithSelector(
-            PRC20.initialize.selector,
-            "BSC PRC20",
-            "BPRC20",
-            18,
-            "eip155:56",
-            IPRC20.TokenType.ERC20,
-            PROTOCOL_FEE,
-            address(universalCore),
-            SOURCE_TOKEN_ADDRESS
-        );
-        address bscProxy = deployUpgradeableContract(address(bscPrc20Impl), initData);
-
         // Swap for ETH chain gas token
         vm.prank(gateway);
-        (uint256 ethGasOut, ) = universalCore.swapPCForGasToken{value: 1 ether}(
-            address(prc20Token), vault, 0, REQUIRED_GAS_TOKEN_OUT, 0, user
+        (uint256 ethGasOut, ) = universalCore.swapAndBurnGas{value: 1 ether}(
+            address(gasTokenMock), vault, 0, GAS_FEE, PROTOCOL_FEE_AMOUNT, 0, user
         );
 
         // Swap for BSC chain gas token
         vm.prank(gateway);
-        (uint256 bscGasOut, ) = universalCore.swapPCForGasToken{value: 1 ether}(
-            bscProxy, vault, 0, REQUIRED_GAS_TOKEN_OUT, 0, user
+        (uint256 bscGasOut, ) = universalCore.swapAndBurnGas{value: 1 ether}(
+            address(bscGasToken), vault, 0, GAS_FEE, PROTOCOL_FEE_AMOUNT, 0, user
         );
 
-        // Both swaps should succeed with exact output
-        assertEq(ethGasOut, REQUIRED_GAS_TOKEN_OUT);
-        assertEq(bscGasOut, REQUIRED_GAS_TOKEN_OUT);
-        // Vault received both tokens
-        assertEq(gasTokenMock.balanceOf(vault), ethGasOut);
-        assertEq(bscGasToken.balanceOf(vault), bscGasOut);
+        uint256 totalRequired = GAS_FEE + PROTOCOL_FEE_AMOUNT;
+        assertEq(ethGasOut, totalRequired);
+        assertEq(bscGasOut, totalRequired);
+        // Vault received only protocolFee from each
+        assertEq(gasTokenMock.balanceOf(vault), PROTOCOL_FEE_AMOUNT);
+        assertEq(bscGasToken.balanceOf(vault), PROTOCOL_FEE_AMOUNT);
     }
 
     // ========================================
     // 4) Refund Behavior
     // ========================================
 
-    function test_SwapPCForGasToken_RefundExcessPC() public {
-        uint256 requiredOut = 0.5 ether;
+    function test_SwapAndBurnGas_RefundExcessPC() public {
+        uint256 totalRequired = GAS_FEE + PROTOCOL_FEE_AMOUNT;
         uint256 sendAmount = 2 ether;
-        uint256 expectedInput = requiredOut * 100 / 90;
+        uint256 expectedInput = totalRequired * 100 / 90;
         uint256 expectedRefund = sendAmount - expectedInput;
 
         uint256 userBalanceBefore = user.balance;
 
         vm.prank(gateway);
-        (uint256 gasTokenOut, uint256 refund) = universalCore.swapPCForGasToken{value: sendAmount}(
-            address(prc20Token), vault, 0, requiredOut, 0, user
+        (uint256 gasTokenOut, uint256 refund) = universalCore.swapAndBurnGas{value: sendAmount}(
+            address(gasTokenMock), vault, 0, GAS_FEE, PROTOCOL_FEE_AMOUNT, 0, user
         );
 
-        assertEq(gasTokenOut, requiredOut);
+        assertEq(gasTokenOut, totalRequired);
         assertEq(refund, expectedRefund);
-        // User received the refund directly
         assertEq(user.balance, userBalanceBefore + refund);
-        // UniversalCore has no stuck funds
         assertEq(address(universalCore).balance, 0);
     }
 
-    function test_SwapPCForGasToken_NoRefundWhenExactMatch() public {
-        // Send exactly the amount the router needs
-        uint256 requiredOut = 0.9 ether;
-        // Mock router needs requiredOut * 100 / 90 = 1 ether
-        uint256 exactInput = requiredOut * 100 / 90;
+    function test_SwapAndBurnGas_NoRefundWhenExactMatch() public {
+        uint256 totalRequired = GAS_FEE + PROTOCOL_FEE_AMOUNT;
+        // Mock router needs totalRequired * 100 / 90
+        uint256 exactInput = totalRequired * 100 / 90;
 
         vm.prank(gateway);
-        (uint256 gasTokenOut, uint256 refund) = universalCore.swapPCForGasToken{value: exactInput}(
-            address(prc20Token), vault, 0, requiredOut, 0, user
+        (uint256 gasTokenOut, uint256 refund) = universalCore.swapAndBurnGas{value: exactInput}(
+            address(gasTokenMock), vault, 0, GAS_FEE, PROTOCOL_FEE_AMOUNT, 0, user
         );
 
-        assertEq(gasTokenOut, requiredOut);
+        assertEq(gasTokenOut, totalRequired);
         assertEq(refund, 0);
         assertEq(address(universalCore).balance, 0);
     }
 
-    function test_SwapPCForGasToken_RefundGoesToCaller() public {
-        // Verify the refund goes to caller (user), not gateway or vault
+    function test_SwapAndBurnGas_RefundGoesToCaller() public {
         uint256 userBalanceBefore = user.balance;
         uint256 gatewayBalanceBefore = gateway.balance;
         uint256 vaultBalanceBefore = vault.balance;
 
         vm.prank(gateway);
-        (, uint256 refund) = universalCore.swapPCForGasToken{value: 2 ether}(
-            address(prc20Token), vault, 0, REQUIRED_GAS_TOKEN_OUT, 0, user
+        (, uint256 refund) = universalCore.swapAndBurnGas{value: 2 ether}(
+            address(gasTokenMock), vault, 0, GAS_FEE, PROTOCOL_FEE_AMOUNT, 0, user
         );
 
         assertGt(refund, 0);
-        // User received refund directly from UniversalCore
         assertEq(user.balance, userBalanceBefore + refund);
-        // Gateway only lost the full msg.value (no refund back to gateway)
         assertEq(gateway.balance, gatewayBalanceBefore - 2 ether);
-        // Vault native balance unchanged (vault receives gas tokens, not native PC)
         assertEq(vault.balance, vaultBalanceBefore);
     }
 
@@ -439,40 +414,72 @@ contract UniversalCoreSwapFeeTest is Test, UpgradeableContractHelper {
     // 5) Edge Cases
     // ========================================
 
-    function test_SwapPCForGasToken_WhenPausedReverts() public {
+    function test_SwapAndBurnGas_WhenPausedReverts() public {
         universalCore.pause();
 
         vm.prank(gateway);
         vm.expectRevert(abi.encodeWithSelector(PausableUpgradeable.EnforcedPause.selector));
-        universalCore.swapPCForGasToken{value: 1 ether}(
-            address(prc20Token), vault, 0, REQUIRED_GAS_TOKEN_OUT, 0, user
+        universalCore.swapAndBurnGas{value: 1 ether}(
+            address(gasTokenMock), vault, 0, GAS_FEE, PROTOCOL_FEE_AMOUNT, 0, user
         );
     }
 
-    function test_SwapPCForGasToken_ExpiredDeadlineReverts() public {
+    function test_SwapAndBurnGas_ExpiredDeadlineReverts() public {
         vm.warp(1000);
         uint256 pastDeadline = block.timestamp - 1;
 
         vm.prank(gateway);
         vm.expectRevert(CommonErrors.DeadlineExpired.selector);
-        universalCore.swapPCForGasToken{value: 1 ether}(
-            address(prc20Token), vault, FEE_TIER, REQUIRED_GAS_TOKEN_OUT, pastDeadline, user
+        universalCore.swapAndBurnGas{value: 1 ether}(
+            address(gasTokenMock), vault, FEE_TIER, GAS_FEE, PROTOCOL_FEE_AMOUNT, pastDeadline, user
         );
     }
 
-    function test_SwapPCForGasToken_PoolNotFoundReverts() public {
-        // Use a fee tier with no pool configured
+    function test_SwapAndBurnGas_PoolNotFoundReverts() public {
         uint24 unusedFeeTier = 500;
 
         vm.prank(gateway);
         vm.expectRevert(UniversalCoreErrors.PoolNotFound.selector);
-        universalCore.swapPCForGasToken{value: 1 ether}(
-            address(prc20Token), vault, unusedFeeTier, REQUIRED_GAS_TOKEN_OUT, 0, user
+        universalCore.swapAndBurnGas{value: 1 ether}(
+            address(gasTokenMock), vault, unusedFeeTier, GAS_FEE, PROTOCOL_FEE_AMOUNT, 0, user
         );
     }
 
     // ========================================
-    // 6) Storage & Constants
+    // 6) withdrawGasFee / withdrawGasFeeWithGasLimit
+    // ========================================
+
+    function test_WithdrawGasFee_Returns4Values() public view {
+        (
+            address gasToken,
+            uint256 gasFee,
+            uint256 protocolFee,
+            string memory chainNamespace
+        ) = universalCore.withdrawGasFee(address(prc20Token));
+
+        assertEq(gasToken, address(gasTokenMock));
+        assertEq(gasFee, GAS_PRICE * universalCore.BASE_GAS_LIMIT());
+        assertEq(protocolFee, prc20Token.PC_PROTOCOL_FEE());
+        assertEq(keccak256(bytes(chainNamespace)), keccak256(bytes(CHAIN_NAMESPACE)));
+    }
+
+    function test_WithdrawGasFeeWithGasLimit_Returns4Values() public view {
+        uint256 customGasLimit = 300_000;
+        (
+            address gasToken,
+            uint256 gasFee,
+            uint256 protocolFee,
+            string memory chainNamespace
+        ) = universalCore.withdrawGasFeeWithGasLimit(address(prc20Token), customGasLimit);
+
+        assertEq(gasToken, address(gasTokenMock));
+        assertEq(gasFee, GAS_PRICE * customGasLimit);
+        assertEq(protocolFee, PROTOCOL_FEE);
+        assertEq(keccak256(bytes(chainNamespace)), keccak256(bytes(CHAIN_NAMESPACE)));
+    }
+
+    // ========================================
+    // 7) Storage & Constants
     // ========================================
 
     function test_GatewayRole_Value() public view {

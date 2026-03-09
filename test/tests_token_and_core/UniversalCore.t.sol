@@ -598,37 +598,41 @@ contract UniversalCoreTest is Test, UpgradeableContractHelper {
     // ========================================
 
     function testWithdrawGasFeeHappyPath() public view {
-        // Get the gas fee quote
-        (address returnedGasToken, uint256 gasFee) = universalCore.withdrawGasFee(address(prc20Token));
+        (
+            address returnedGasToken,
+            uint256 gasFee,
+            uint256 protocolFee,
+            string memory chainNamespace
+        ) = universalCore.withdrawGasFee(address(prc20Token));
 
-        // Verify returned gas token
         assertEq(returnedGasToken, address(mockPRC20));
 
-        // Debug: Check actual values
         uint256 actualGasPrice = universalCore.gasPriceByChainNamespace(CHAIN_NAMESPACE);
         uint256 actualBaseGasLimit = universalCore.BASE_GAS_LIMIT();
         uint256 actualProtocolFee = prc20Token.PC_PROTOCOL_FEE();
-        
-        // Verify fee calculation: price * BASE_GAS_LIMIT + PROTOCOL_FEE
-        uint256 expectedFee = actualGasPrice * actualBaseGasLimit + actualProtocolFee;
-        assertEq(gasFee, expectedFee);
+
+        assertEq(gasFee, actualGasPrice * actualBaseGasLimit);
+        assertEq(protocolFee, actualProtocolFee);
+        assertEq(keccak256(bytes(chainNamespace)), keccak256(bytes(CHAIN_NAMESPACE)));
     }
 
     function testWithdrawGasFeeWithGasLimitHappyPath() public view {
         uint256 customGasLimit = 300000;
 
-        // Get the gas fee quote with custom gas limit
-        (address returnedGasToken, uint256 gasFee) = universalCore.withdrawGasFeeWithGasLimit(
-            address(prc20Token), 
+        (
+            address returnedGasToken,
+            uint256 gasFee,
+            uint256 protocolFee,
+            string memory chainNamespace
+        ) = universalCore.withdrawGasFeeWithGasLimit(
+            address(prc20Token),
             customGasLimit
         );
 
-        // Verify returned gas token
         assertEq(returnedGasToken, address(mockPRC20));
-
-        // Verify fee calculation: price * customGasLimit + PROTOCOL_FEE
-        uint256 expectedFee = GAS_PRICE * customGasLimit + PROTOCOL_FEE;
-        assertEq(gasFee, expectedFee);
+        assertEq(gasFee, GAS_PRICE * customGasLimit);
+        assertEq(protocolFee, PROTOCOL_FEE);
+        assertEq(keccak256(bytes(chainNamespace)), keccak256(bytes(CHAIN_NAMESPACE)));
     }
 
     function testWithdrawGasFeeZeroGasPrice() public {
@@ -672,52 +676,42 @@ contract UniversalCoreTest is Test, UpgradeableContractHelper {
     function testWithdrawGasFeeAfterGasPriceUpdate() public {
         uint256 newGasPrice = GAS_PRICE * 2;
 
-        // Update gas price
         vm.prank(UNIVERSAL_EXECUTOR_MODULE);
         universalCore.setGasPrice(CHAIN_NAMESPACE, newGasPrice);
 
-        // Get the gas fee quote
-        (address _gasTokenIgnored, uint256 gasFee) = universalCore.withdrawGasFee(address(prc20Token));
+        (, uint256 gasFee, uint256 protocolFee,) = universalCore.withdrawGasFee(address(prc20Token));
 
-        // Verify fee calculation with new gas price
         uint256 actualBaseGasLimit = universalCore.BASE_GAS_LIMIT();
-        uint256 actualProtocolFee = prc20Token.PC_PROTOCOL_FEE();
-        uint256 expectedFee = newGasPrice * actualBaseGasLimit + actualProtocolFee;
-        assertEq(gasFee, expectedFee);
+        uint256 expectedGasFee = newGasPrice * actualBaseGasLimit;
+        assertEq(gasFee, expectedGasFee);
+        assertEq(protocolFee, prc20Token.PC_PROTOCOL_FEE());
     }
 
     function testWithdrawGasFeeAfterBaseGasLimitUpdate() public {
         uint256 newBaseGasLimit = BASE_GAS_LIMIT * 2;
 
-        // Update base gas limit
         vm.prank(deployer);
         universalCore.updateBaseGasLimit(newBaseGasLimit);
 
-        // Get the gas fee quote
-        (address _gasTokenIgnored, uint256 gasFee) = universalCore.withdrawGasFee(address(prc20Token));
+        (, uint256 gasFee, uint256 protocolFee,) = universalCore.withdrawGasFee(address(prc20Token));
 
-        // Verify fee calculation with new base gas limit
         uint256 actualGasPrice = universalCore.gasPriceByChainNamespace(CHAIN_NAMESPACE);
-        uint256 actualProtocolFee = prc20Token.PC_PROTOCOL_FEE();
-        uint256 expectedFee = actualGasPrice * newBaseGasLimit + actualProtocolFee;
-        assertEq(gasFee, expectedFee);
+        assertEq(gasFee, actualGasPrice * newBaseGasLimit);
+        assertEq(protocolFee, prc20Token.PC_PROTOCOL_FEE());
     }
 
     function testWithdrawGasFeeAfterProtocolFeeUpdate() public {
         uint256 newProtocolFee = PROTOCOL_FEE * 2;
 
-        // Update protocol fee on PRC20 token
         vm.prank(UNIVERSAL_EXECUTOR_MODULE);
         prc20Token.updateProtocolFlatFee(newProtocolFee);
 
-        // Get the gas fee quote
-        (address _gasTokenIgnored, uint256 gasFee) = universalCore.withdrawGasFee(address(prc20Token));
+        (, uint256 gasFee, uint256 protocolFee,) = universalCore.withdrawGasFee(address(prc20Token));
 
-        // Verify fee calculation with new protocol fee
         uint256 actualGasPrice = universalCore.gasPriceByChainNamespace(CHAIN_NAMESPACE);
         uint256 actualBaseGasLimit = universalCore.BASE_GAS_LIMIT();
-        uint256 expectedFee = actualGasPrice * actualBaseGasLimit + newProtocolFee;
-        assertEq(gasFee, expectedFee);
+        assertEq(gasFee, actualGasPrice * actualBaseGasLimit);
+        assertEq(protocolFee, newProtocolFee);
     }
 
     // ========================================
@@ -890,10 +884,9 @@ contract UniversalCoreTest is Test, UpgradeableContractHelper {
         vm.prank(UNIVERSAL_EXECUTOR_MODULE);
         universalCore.setChainMeta(CHAIN_NAMESPACE, newPrice, 100, block.timestamp);
 
-        // Verify gas fee calculation uses the updated price
-        (address gasToken, uint256 gasFee) = universalCore.withdrawGasFee(address(prc20Token));
-        uint256 expectedFee = newPrice * universalCore.BASE_GAS_LIMIT() + prc20Token.PC_PROTOCOL_FEE();
-        assertEq(gasFee, expectedFee);
+        (, uint256 gasFee, uint256 protocolFee,) = universalCore.withdrawGasFee(address(prc20Token));
+        assertEq(gasFee, newPrice * universalCore.BASE_GAS_LIMIT());
+        assertEq(protocolFee, prc20Token.PC_PROTOCOL_FEE());
     }
 
     function test_SetChainMeta_OverwritesPreviousValues() public {
