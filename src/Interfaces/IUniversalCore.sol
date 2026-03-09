@@ -9,6 +9,7 @@ interface IUniversalCore {
     //           Universal Core Events
     // =========================    
     event SetGasPrice(string chainNamespace, uint256 price);
+    event SetChainMeta(string chainNamespace, uint256 price, uint256 chainHeight, uint256 observedAt);
     event SetGasToken(string chainNamespace, address prc20);
     event SetDefaultDeadlineMins(uint256 minutesValue);
     event SetSupportedToken(address indexed prc20, bool supported);

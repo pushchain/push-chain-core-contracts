@@ -60,6 +60,7 @@ contract UniversalCoreTest is Test, UpgradeableContractHelper {
     event Paused(address account);
     event Unpaused(address account);
     event SetSupportedToken(address indexed prc20, bool supported);
+    event SetChainMeta(string chainNamespace, uint256 price, uint256 chainHeight, uint256 observedAt);
 
     function setUp() public {
         // Setup accounts
@@ -842,5 +843,100 @@ contract UniversalCoreTest is Test, UpgradeableContractHelper {
             )
         );
         universalCore.setSupportedToken(token, true);
+    }
+
+    // ========================================
+    // 7) setChainMeta Tests
+    // ========================================
+
+    function test_SetChainMeta_OnlyManagerRole() public {
+        vm.expectRevert(
+            abi.encodeWithSelector(
+                IAccessControl.AccessControlUnauthorizedAccount.selector, nonUEModule, universalCore.MANAGER_ROLE()
+            )
+        );
+        vm.prank(nonUEModule);
+        universalCore.setChainMeta(CHAIN_NAMESPACE, 100, 1000, block.timestamp);
+    }
+
+    function test_SetChainMeta_HappyPath() public {
+        uint256 price = 100 * 10 ** 9;
+        uint256 chainHeight = 20_000_000;
+        uint256 observedAt = block.timestamp;
+
+        vm.prank(UNIVERSAL_EXECUTOR_MODULE);
+        universalCore.setChainMeta(CHAIN_NAMESPACE, price, chainHeight, observedAt);
+
+        assertEq(universalCore.gasPriceByChainNamespace(CHAIN_NAMESPACE), price);
+        assertEq(universalCore.chainHeightByChainNamespace(CHAIN_NAMESPACE), chainHeight);
+        assertEq(universalCore.timestampObservedAtByChainNamespace(CHAIN_NAMESPACE), observedAt);
+    }
+
+    function test_SetChainMeta_EmitsEvent() public {
+        uint256 price = 100 * 10 ** 9;
+        uint256 chainHeight = 20_000_000;
+        uint256 observedAt = block.timestamp;
+
+        vm.expectEmit(false, false, false, true);
+        emit SetChainMeta(CHAIN_NAMESPACE, price, chainHeight, observedAt);
+
+        vm.prank(UNIVERSAL_EXECUTOR_MODULE);
+        universalCore.setChainMeta(CHAIN_NAMESPACE, price, chainHeight, observedAt);
+    }
+
+    function test_SetChainMeta_UpdatesGasPrice() public {
+        uint256 newPrice = GAS_PRICE * 3;
+
+        vm.prank(UNIVERSAL_EXECUTOR_MODULE);
+        universalCore.setChainMeta(CHAIN_NAMESPACE, newPrice, 100, block.timestamp);
+
+        // Verify gas fee calculation uses the updated price
+        (address gasToken, uint256 gasFee) = universalCore.withdrawGasFee(address(prc20Token));
+        uint256 expectedFee = newPrice * universalCore.BASE_GAS_LIMIT() + prc20Token.PC_PROTOCOL_FEE();
+        assertEq(gasFee, expectedFee);
+    }
+
+    function test_SetChainMeta_OverwritesPreviousValues() public {
+        vm.startPrank(UNIVERSAL_EXECUTOR_MODULE);
+
+        universalCore.setChainMeta(CHAIN_NAMESPACE, 100, 1000, 500);
+        assertEq(universalCore.chainHeightByChainNamespace(CHAIN_NAMESPACE), 1000);
+        assertEq(universalCore.timestampObservedAtByChainNamespace(CHAIN_NAMESPACE), 500);
+
+        universalCore.setChainMeta(CHAIN_NAMESPACE, 200, 2000, 600);
+        assertEq(universalCore.gasPriceByChainNamespace(CHAIN_NAMESPACE), 200);
+        assertEq(universalCore.chainHeightByChainNamespace(CHAIN_NAMESPACE), 2000);
+        assertEq(universalCore.timestampObservedAtByChainNamespace(CHAIN_NAMESPACE), 600);
+
+        vm.stopPrank();
+    }
+
+    function test_SetChainMeta_MultipleChains() public {
+        string memory ethChain = "eip155:1";
+        string memory bscChain = "eip155:56";
+
+        vm.startPrank(UNIVERSAL_EXECUTOR_MODULE);
+
+        universalCore.setChainMeta(ethChain, 50, 20_000_000, 1000);
+        universalCore.setChainMeta(bscChain, 5, 40_000_000, 1001);
+
+        vm.stopPrank();
+
+        assertEq(universalCore.gasPriceByChainNamespace(ethChain), 50);
+        assertEq(universalCore.chainHeightByChainNamespace(ethChain), 20_000_000);
+        assertEq(universalCore.timestampObservedAtByChainNamespace(ethChain), 1000);
+
+        assertEq(universalCore.gasPriceByChainNamespace(bscChain), 5);
+        assertEq(universalCore.chainHeightByChainNamespace(bscChain), 40_000_000);
+        assertEq(universalCore.timestampObservedAtByChainNamespace(bscChain), 1001);
+    }
+
+    function test_SetChainMeta_ZeroValuesAllowed() public {
+        vm.prank(UNIVERSAL_EXECUTOR_MODULE);
+        universalCore.setChainMeta(CHAIN_NAMESPACE, 0, 0, 0);
+
+        assertEq(universalCore.gasPriceByChainNamespace(CHAIN_NAMESPACE), 0);
+        assertEq(universalCore.chainHeightByChainNamespace(CHAIN_NAMESPACE), 0);
+        assertEq(universalCore.timestampObservedAtByChainNamespace(CHAIN_NAMESPACE), 0);
     }
 }

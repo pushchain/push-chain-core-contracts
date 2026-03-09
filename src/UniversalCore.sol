@@ -77,6 +77,12 @@ contract UniversalCore is
     /// @notice Mapping for indicating an official PRC20 supported token
     mapping(address => bool) public isSupportedToken;
 
+    /// @notice External chain block height last observed by relayer
+    mapping(string => uint256) public chainHeightByChainNamespace;
+
+    /// @notice Timestamp when the chain meta was last observed
+    mapping(string => uint256) public timestampObservedAtByChainNamespace;
+
     modifier onlyUEModule() {
         if (msg.sender != UNIVERSAL_EXECUTOR_MODULE) revert UniversalCoreErrors.CallerIsNotUEModule();
         _;
@@ -222,14 +228,30 @@ contract UniversalCore is
         emit SetGasPCPool(chainNamespace, pool, fee);
     }
 
-    /**
-     * @dev Fungible module updates the gas price oracle periodically.
-     * @param chainNamespace Chain Namespace (e.g. "eip155:1" for Ethereum Mainnet)
-     * @param price New gas price
-     */
+    /// @notice To Be Removed — use setChainMeta instead.
+    /// @dev Fungible module updates the gas price oracle periodically.
+    /// @param chainNamespace Chain Namespace (e.g. "eip155:1" for Ethereum Mainnet)
+    /// @param price New gas price
     function setGasPrice(string memory chainNamespace, uint256 price) external onlyRole(MANAGER_ROLE) {
         gasPriceByChainNamespace[chainNamespace] = price;
         emit SetGasPrice(chainNamespace, price);
+    }
+
+    /// @notice Sets gas price, chain height, and observation timestamp for a chain.
+    /// @param chainNamespace Chain Namespace (e.g. "eip155:1" for Ethereum Mainnet)
+    /// @param price Gas price on the external chain
+    /// @param chainHeight Block height observed on the external chain
+    /// @param observedAt Timestamp when the observation was made
+    function setChainMeta(
+        string memory chainNamespace,
+        uint256 price,
+        uint256 chainHeight,
+        uint256 observedAt
+    ) external onlyRole(MANAGER_ROLE) {
+        gasPriceByChainNamespace[chainNamespace] = price;
+        chainHeightByChainNamespace[chainNamespace] = chainHeight;
+        timestampObservedAtByChainNamespace[chainNamespace] = observedAt;
+        emit SetChainMeta(chainNamespace, price, chainHeight, observedAt);
     }
 
     /**
