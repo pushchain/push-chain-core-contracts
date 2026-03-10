@@ -135,12 +135,9 @@ contract UniversalCore is
     /**
      * @inheritdoc IUniversalCore
      */
-    function depositPRC20Token(address prc20, uint256 amount, address target) external onlyUEModule whenNotPaused {
-        if (target == UNIVERSAL_EXECUTOR_MODULE || target == address(this)) revert UniversalCoreErrors.InvalidTarget();
-        if (prc20 == address(0)) revert CommonErrors.ZeroAddress();
-        if (amount == 0) revert CommonErrors.ZeroAmount();
-
-        IPRC20(prc20).deposit(target, amount);
+    function depositPRC20Token(address prc20, uint256 amount, address recipient) external onlyUEModule whenNotPaused {
+        _validateParams(prc20, amount, recipient);
+        IPRC20(prc20).deposit(recipient, amount);
     }
 
     /**
@@ -149,18 +146,16 @@ contract UniversalCore is
     function depositPRC20WithAutoSwap(
         address prc20,
         uint256 amount,
-        address target,
+        address recipient,
         uint24 fee, // 0 = use default
         uint256 minPCOut,
         uint256 deadline // 0 = use default
     ) external onlyUEModule whenNotPaused nonReentrant {
-        if (target == UNIVERSAL_EXECUTOR_MODULE || target == address(this)) revert UniversalCoreErrors.InvalidTarget();
-        if (prc20 == address(0)) revert CommonErrors.ZeroAddress();
-        if (amount == 0) revert CommonErrors.ZeroAmount();
+        _validateParams(prc20, amount, recipient);
 
-        (uint256 pcOut, uint24 resolvedFee) = _autoSwap(prc20, amount, target, fee, minPCOut, deadline);
+        (uint256 pcOut, uint24 resolvedFee) = _autoSwap(prc20, amount, recipient, fee, minPCOut, deadline);
 
-        emit DepositPRC20WithAutoSwap(prc20, amount, wPCContractAddress, pcOut, resolvedFee, target);
+        emit DepositPRC20WithAutoSwap(prc20, amount, wPCContractAddress, pcOut, resolvedFee, recipient);
     }
 
     /// @inheritdoc IUniversalCore
@@ -172,9 +167,7 @@ contract UniversalCore is
         uint24 fee,
         uint256 minPCOut
     ) external onlyUEModule whenNotPaused nonReentrant {
-        if (gasToken == address(0)) revert CommonErrors.ZeroAddress();
-        if (recipient == address(0)) revert CommonErrors.ZeroAddress();
-        if (amount == 0) revert CommonErrors.ZeroAmount();
+        _validateParams(gasToken, amount, recipient);
 
         uint256 pcOut;
 
@@ -430,7 +423,17 @@ contract UniversalCore is
         emit SwapAndBurnGas(gasToken, vault, amountInUsed, gasFee, protocolFee, fee, caller);
     }
 
-    /// @dev Swap PRC20 to WPC via Uniswap V3 exactInputSingle.
+    /// @dev Shared input validation for deposit/refund functions.
+    function _validateParams(address token, uint256 amount, address recipient) private view {
+        if (token == address(0)) revert CommonErrors.ZeroAddress();
+        if (recipient == address(0)) revert CommonErrors.ZeroAddress();
+        if (recipient == UNIVERSAL_EXECUTOR_MODULE || recipient == address(this)) {
+            revert UniversalCoreErrors.InvalidTarget();
+        }
+        if (amount == 0) revert CommonErrors.ZeroAmount();
+    }
+
+    /// @dev Swap PRC20 to native PC via Uniswap V3 and send to recipient.
     function _autoSwap(address prc20, uint256 amount, address recipient, uint24 fee, uint256 minPCOut, uint256 deadline)
         private
         returns (uint256 pcOut, uint24 resolvedFee)
@@ -465,7 +468,7 @@ contract UniversalCore is
             tokenIn: prc20,
             tokenOut: wPCContractAddress,
             fee: resolvedFee,
-            recipient: recipient,
+            recipient: address(this),
             deadline: deadline,
             amountIn: amount,
             amountOutMinimum: minPCOut,
@@ -476,6 +479,10 @@ contract UniversalCore is
         if (pcOut < minPCOut) revert UniversalCoreErrors.SlippageExceeded();
 
         IPRC20(prc20).approve(uniswapV3SwapRouterAddress, 0);
+
+        IWPC(wPCContractAddress).withdraw(pcOut);
+        (bool ok,) = recipient.call{value: pcOut}("");
+        if (!ok) revert CommonErrors.TransferFailed();
     }
 
     /**

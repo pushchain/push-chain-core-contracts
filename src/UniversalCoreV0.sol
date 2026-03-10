@@ -146,54 +146,44 @@ contract UniversalCoreV0 is
     }
 
     /**
-     * @notice Deposits PRC20 tokens to the provided target address.
+     * @notice Deposits PRC20 tokens to the provided recipient address.
      * @dev    Can only be called by the Universal Executor Module.
      *         For any inbound transactions of moving supported tokens from external chains to Push Chain,
-     *         the Universal Executor Module uses this function to deposit the tokens to the target address.
-     *         The target address can be any address of the user's choice.
+     *         the Universal Executor Module uses this function to deposit the tokens to the recipient address.
+     *         The recipient address can be any address of the user's choice.
      * @param prc20 PRC20 address for deposit
      * @param amount Amount to deposit
-     * @param target Address to deposit tokens to
+     * @param recipient Address to deposit tokens to
      */
-    function depositPRC20Token(address prc20, uint256 amount, address target) external onlyUEModule whenNotPaused {
-        if (target == UNIVERSAL_EXECUTOR_MODULE || target == address(this)) {
-            revert UniversalCoreErrors.InvalidTarget();
-        }
-        if (prc20 == address(0)) revert CommonErrors.ZeroAddress();
-        if (amount == 0) revert CommonErrors.ZeroAmount();
-
-        IPRC20(prc20).deposit(target, amount);
+    function depositPRC20Token(address prc20, uint256 amount, address recipient) external onlyUEModule whenNotPaused {
+        _validateParams(prc20, amount, recipient);
+        IPRC20(prc20).deposit(recipient, amount);
     }
 
     /**
-     * @notice Deposits PRC20 tokens to the provided target address.
+     * @notice Deposits PRC20 tokens to the provided recipient address.
      * @dev    Can only be called by the Owner, mainly to create liquidity in testnet
-     *         The target address can be any address of the owner's choice.
+     *         The recipient address can be any address of the owner's choice.
      * @param prc20 PRC20 address for deposit
      * @param amount Amount to deposit
-     * @param target Address to deposit tokens to
+     * @param recipient Address to deposit tokens to
      */
-    function mintPRCTokensviaAdmin(address prc20, uint256 amount, address target) external onlyOwner whenNotPaused {
-        if (target == UNIVERSAL_EXECUTOR_MODULE || target == address(this)) {
-            revert UniversalCoreErrors.InvalidTarget();
-        }
-        if (prc20 == address(0)) revert CommonErrors.ZeroAddress();
-        if (amount == 0) revert CommonErrors.ZeroAmount();
-
-        IPRC20(prc20).deposit(target, amount);
+    function mintPRCTokensviaAdmin(address prc20, uint256 amount, address recipient) external onlyOwner whenNotPaused {
+        _validateParams(prc20, amount, recipient);
+        IPRC20(prc20).deposit(recipient, amount);
     }
 
     /**
-     * @notice Deposits PRC20 tokens and automatically swaps them to native PC before sending to target.
+     * @notice Deposits PRC20 tokens and automatically swaps them to native PC before sending to recipient.
      * @dev    Can only be called by the Universal Executor Module.
      *         Can only be called if the PRC20 token is in the auto-swap supported list. ( eg pETH, pSOL, pUSDC etc.)
      *         If no pool exists, reverts with appropriate error. Although all auto-swap supported tokens are expected to have a pool.
      *         Default values are used when parameters are set to 0. ( fee = defaultFeeTier[prc20], deadline = block.timestamp + (defaultDeadlineMins * 1 minutes) )
-     *         target address always receive the swapped native PC tokens.
+     *         recipient address always receive the swapped native PC tokens.
      *         The function is called directly by the Universal Executor Module and is also gasless.
      * @param prc20 PRC20 address for deposit and swap
      * @param amount Amount to deposit and swap
-     * @param target Address to receive the swapped native PC tokens
+     * @param recipient Address to receive the swapped native PC tokens
      * @param fee Uniswap V3 fee tier for the pool (0 = use default)
      * @param minPCOut Minimum amount of native PC expected from the swap (must be > 0)
      * @param deadline Timestamp after which the transaction will revert (0 = use default)
@@ -201,27 +191,18 @@ contract UniversalCoreV0 is
     function depositPRC20WithAutoSwap(
         address prc20,
         uint256 amount,
-        address target,
+        address recipient,
         uint24 fee, // 0 = use default
         uint256 minPCOut,
         uint256 deadline // 0 = use default
     ) external onlyUEModule whenNotPaused nonReentrant {
-        if (target == UNIVERSAL_EXECUTOR_MODULE || target == address(this)) {
-            revert UniversalCoreErrors.InvalidTarget();
-        }
-        if (prc20 == address(0)) revert CommonErrors.ZeroAddress();
-        if (amount == 0) revert CommonErrors.ZeroAmount();
+        _validateParams(prc20, amount, recipient);
 
-        (uint256 pcOut, uint24 resolvedFee) = _swapPRC20ToWPC(
-            prc20, amount, address(this), fee, minPCOut, deadline
+        (uint256 pcOut, uint24 resolvedFee) = _autoSwap(
+            prc20, amount, recipient, fee, minPCOut, deadline
         );
 
-        // V0-specific: unwrap WPC and send native PC
-        IWPC(wPCContractAddress).withdraw(pcOut);
-        (bool success,) = target.call{value: pcOut}("");
-        if (!success) revert CommonErrors.TransferFailed();
-
-        emit DepositPRC20WithAutoSwap(prc20, amount, wPCContractAddress, pcOut, resolvedFee, target);
+        emit DepositPRC20WithAutoSwap(prc20, amount, wPCContractAddress, pcOut, resolvedFee, recipient);
     }
 
     /// @inheritdoc IUniversalCore
@@ -233,9 +214,7 @@ contract UniversalCoreV0 is
         uint24 fee,
         uint256 minPCOut
     ) external onlyUEModule whenNotPaused nonReentrant {
-        if (gasToken == address(0)) revert CommonErrors.ZeroAddress();
-        if (recipient == address(0)) revert CommonErrors.ZeroAddress();
-        if (amount == 0) revert CommonErrors.ZeroAmount();
+        _validateParams(gasToken, amount, recipient);
 
         uint256 pcOut;
 
@@ -243,7 +222,7 @@ contract UniversalCoreV0 is
             IPRC20(gasToken).deposit(recipient, amount);
         } else {
             if (minPCOut == 0) revert UniversalCoreErrors.MinPCOutRequired();
-            (pcOut,) = _swapPRC20ToWPC(gasToken, amount, recipient, fee, minPCOut, 0);
+            (pcOut,) = _autoSwap(gasToken, amount, recipient, fee, minPCOut, 0);
         }
 
         emit RefundUnusedGas(gasToken, amount, recipient, withSwap, pcOut);
@@ -474,8 +453,18 @@ contract UniversalCoreV0 is
     /// @notice Accept native PC transfers (e.g., from WPC withdraw)
     receive() external payable {}
 
-    /// @dev Swap PRC20 to WPC via Uniswap V3 exactInputSingle.
-    function _swapPRC20ToWPC(
+    /// @dev Shared input validation for deposit/refund functions.
+    function _validateParams(address token, uint256 amount, address recipient) private view {
+        if (token == address(0)) revert CommonErrors.ZeroAddress();
+        if (recipient == address(0)) revert CommonErrors.ZeroAddress();
+        if (recipient == UNIVERSAL_EXECUTOR_MODULE || recipient == address(this)) {
+            revert UniversalCoreErrors.InvalidTarget();
+        }
+        if (amount == 0) revert CommonErrors.ZeroAmount();
+    }
+
+    /// @dev Swap PRC20 to native PC via Uniswap V3 and send to recipient.
+    function _autoSwap(
         address prc20,
         uint256 amount,
         address recipient,
@@ -512,7 +501,7 @@ contract UniversalCoreV0 is
             tokenIn: prc20,
             tokenOut: wPCContractAddress,
             fee: resolvedFee,
-            recipient: recipient,
+            recipient: address(this),
             deadline: deadline,
             amountIn: amount,
             amountOutMinimum: minPCOut,
@@ -523,6 +512,10 @@ contract UniversalCoreV0 is
         if (pcOut < minPCOut) revert UniversalCoreErrors.SlippageExceeded();
 
         IPRC20(prc20).approve(uniswapV3SwapRouterAddress, 0);
+
+        IWPC(wPCContractAddress).withdraw(pcOut);
+        (bool ok,) = recipient.call{value: pcOut}("");
+        if (!ok) revert CommonErrors.TransferFailed();
     }
 
     /**

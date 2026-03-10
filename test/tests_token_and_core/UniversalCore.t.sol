@@ -54,7 +54,7 @@ contract UniversalCoreTest is Test, UpgradeableContractHelper {
         address indexed pcToken,
         uint256 amountOut,
         uint24 fee,
-        address indexed target
+        address indexed recipient
     );
     event Paused(address account);
     event Unpaused(address account);

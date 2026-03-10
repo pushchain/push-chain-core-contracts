@@ -13,12 +13,47 @@ import "../../test/mocks/MockUniswapV3Quoter.sol";
 import "../../test/mocks/MockPRC20.sol";
 import "@openzeppelin/contracts-upgradeable/utils/PausableUpgradeable.sol";
 
+/// @dev Mock that satisfies both MockPRC20 (for mock router) and WPC (for withdraw) interfaces.
+contract MockWPCLike {
+    mapping(address => uint256) public balanceOf;
+    uint256 public totalSupply;
+
+    function deposit(address to, uint256 amount) external returns (bool) {
+        balanceOf[to] += amount;
+        totalSupply += amount;
+        return true;
+    }
+
+    function approve(address, uint256) external returns (bool) {
+        return true;
+    }
+
+    function transfer(address to, uint256 amt) external returns (bool) {
+        balanceOf[msg.sender] -= amt;
+        balanceOf[to] += amt;
+        return true;
+    }
+
+    function transferFrom(address from, address to, uint256 amt) external returns (bool) {
+        balanceOf[from] -= amt;
+        balanceOf[to] += amt;
+        return true;
+    }
+
+    function withdraw(uint256 wad) external {
+        balanceOf[msg.sender] -= wad;
+        payable(msg.sender).transfer(wad);
+    }
+
+    receive() external payable {}
+}
+
 contract UniversalCoreRefundTest is Test, UpgradeableContractHelper {
     UniversalCore public universalCore;
     MockUniswapV3Factory public mockFactory;
     MockUniswapV3Router public mockRouter;
     MockUniswapV3Quoter public mockQuoter;
-    MockPRC20 public mockWPC;
+    MockWPCLike public mockWPC;
     MockPRC20 public gasTokenMock;
 
     address public constant UNIVERSAL_EXECUTOR_MODULE = 0x14191Ea54B4c176fCf86f51b0FAc7CB1E71Df7d7;
@@ -40,7 +75,7 @@ contract UniversalCoreRefundTest is Test, UpgradeableContractHelper {
 
     event DepositPRC20WithAutoSwap(
         address prc20, uint256 amountIn, address pcToken,
-        uint256 amountOut, uint24 fee, address target
+        uint256 amountOut, uint24 fee, address recipient
     );
 
     function setUp() public {
@@ -50,8 +85,11 @@ contract UniversalCoreRefundTest is Test, UpgradeableContractHelper {
         mockFactory = new MockUniswapV3Factory();
         mockRouter = new MockUniswapV3Router();
         mockQuoter = new MockUniswapV3Quoter();
-        mockWPC = new MockPRC20();
+        mockWPC = new MockWPCLike();
         gasTokenMock = new MockPRC20();
+
+        // Fund MockWPCLike with ETH for withdraw calls
+        vm.deal(address(mockWPC), 100 ether);
 
         UniversalCore implementation = new UniversalCore();
         bytes memory initData = abi.encodeWithSelector(
@@ -118,6 +156,20 @@ contract UniversalCoreRefundTest is Test, UpgradeableContractHelper {
         universalCore.refundUnusedGas(address(gasTokenMock), REFUND_AMOUNT, address(0), false, 0, 0);
     }
 
+    function test_RefundUnusedGas_InvalidTarget_UEModule_Reverts() public {
+        vm.prank(UNIVERSAL_EXECUTOR_MODULE);
+        vm.expectRevert(UniversalCoreErrors.InvalidTarget.selector);
+        universalCore.refundUnusedGas(address(gasTokenMock), REFUND_AMOUNT, UNIVERSAL_EXECUTOR_MODULE, false, 0, 0);
+    }
+
+    function test_RefundUnusedGas_InvalidTarget_Self_Reverts() public {
+        vm.prank(UNIVERSAL_EXECUTOR_MODULE);
+        vm.expectRevert(UniversalCoreErrors.InvalidTarget.selector);
+        universalCore.refundUnusedGas(
+            address(gasTokenMock), REFUND_AMOUNT, address(universalCore), false, 0, 0
+        );
+    }
+
     function test_RefundUnusedGas_WithSwap_ZeroMinPCOut_Reverts() public {
         vm.prank(UNIVERSAL_EXECUTOR_MODULE);
         vm.expectRevert(UniversalCoreErrors.MinPCOutRequired.selector);
@@ -164,11 +216,11 @@ contract UniversalCoreRefundTest is Test, UpgradeableContractHelper {
     }
 
     // ========================================
-    // Happy Path (with swap)
+    // Happy Path (with swap) — delivers native PC
     // ========================================
 
-    function test_RefundUnusedGas_WithSwap_SwapsToWPC() public {
-        uint256 balanceBefore = mockWPC.balanceOf(recipient);
+    function test_RefundUnusedGas_WithSwap_SendsNativePC() public {
+        uint256 balanceBefore = recipient.balance;
         uint256 expectedOut = REFUND_AMOUNT * 90 / 100; // mock router: 90% output
 
         vm.prank(UNIVERSAL_EXECUTOR_MODULE);
@@ -176,7 +228,7 @@ contract UniversalCoreRefundTest is Test, UpgradeableContractHelper {
             address(gasTokenMock), REFUND_AMOUNT, recipient, true, FEE_TIER, expectedOut
         );
 
-        assertEq(mockWPC.balanceOf(recipient), balanceBefore + expectedOut);
+        assertEq(recipient.balance, balanceBefore + expectedOut);
     }
 
     function test_RefundUnusedGas_WithSwap_EmitsEvent() public {
@@ -199,7 +251,7 @@ contract UniversalCoreRefundTest is Test, UpgradeableContractHelper {
             address(gasTokenMock), REFUND_AMOUNT, recipient, true, 0, expectedOut
         );
 
-        assertEq(mockWPC.balanceOf(recipient), expectedOut);
+        assertEq(recipient.balance, expectedOut);
     }
 
     function test_RefundUnusedGas_WithSwap_ExplicitFee() public {
@@ -210,11 +262,11 @@ contract UniversalCoreRefundTest is Test, UpgradeableContractHelper {
             address(gasTokenMock), REFUND_AMOUNT, recipient, true, FEE_TIER, expectedOut
         );
 
-        assertEq(mockWPC.balanceOf(recipient), expectedOut);
+        assertEq(recipient.balance, expectedOut);
     }
 
     // ========================================
-    // Regression: depositPRC20WithAutoSwap
+    // Regression: depositPRC20WithAutoSwap — delivers native PC
     // ========================================
 
     function test_DepositPRC20WithAutoSwap_StillWorks() public {
@@ -227,7 +279,7 @@ contract UniversalCoreRefundTest is Test, UpgradeableContractHelper {
             address(gasTokenMock), amount, target, FEE_TIER, expectedOut, 0
         );
 
-        assertEq(mockWPC.balanceOf(target), expectedOut);
+        assertEq(target.balance, expectedOut);
     }
 
     function test_DepositPRC20WithAutoSwap_EmitsResolvedFee() public {
