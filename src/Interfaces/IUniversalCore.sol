@@ -103,14 +103,15 @@ interface IUniversalCore {
      * @param _prc20 PRC20 address
      * @param gasLimit Gas limit (0 = use BASE_GAS_LIMIT)
      * @return gasToken Gas token address
-     * @return gasFee Gas fee (price * effective gas limit)
+     * @return gasFee Gas fee (gasPrice * effective gas limit)
      * @return protocolFee Protocol fee from PRC20
+     * @return gasPrice Gas price on the external chain
      * @return chainNamespace Source chain namespace
      */
     function getOutboundTxGasAndFees(address _prc20, uint256 gasLimit)
         external
         view
-        returns (address gasToken, uint256 gasFee, uint256 protocolFee, string memory chainNamespace);
+        returns (address gasToken, uint256 gasFee, uint256 protocolFee, uint256 gasPrice, string memory chainNamespace);
 
     /// @notice Swap native PC for gas token PRC20, burn gasFee, send protocolFee to vault
     /// @param gasToken           Gas token PRC20 address

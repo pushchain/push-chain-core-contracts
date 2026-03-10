@@ -449,31 +449,35 @@ contract UniversalCoreSwapFeeTest is Test, UpgradeableContractHelper {
     // 6) getOutboundTxGasAndFees
     // ========================================
 
-    function test_WithdrawGasFee_Returns4Values() public view {
+    function test_WithdrawGasFee_Returns5Values() public view {
         (
             address gasToken,
             uint256 gasFee,
             uint256 protocolFee,
+            uint256 gasPrice,
             string memory chainNamespace
         ) = universalCore.getOutboundTxGasAndFees(address(prc20Token), 0);
 
         assertEq(gasToken, address(gasTokenMock));
-        assertEq(gasFee, GAS_PRICE * universalCore.BASE_GAS_LIMIT());
+        assertEq(gasPrice, GAS_PRICE);
+        assertEq(gasFee, gasPrice * universalCore.BASE_GAS_LIMIT());
         assertEq(protocolFee, prc20Token.PC_PROTOCOL_FEE());
         assertEq(keccak256(bytes(chainNamespace)), keccak256(bytes(CHAIN_NAMESPACE)));
     }
 
-    function test_WithdrawGasFeeWithGasLimit_Returns4Values() public view {
+    function test_WithdrawGasFeeWithGasLimit_Returns5Values() public view {
         uint256 customGasLimit = 300_000;
         (
             address gasToken,
             uint256 gasFee,
             uint256 protocolFee,
+            uint256 gasPrice,
             string memory chainNamespace
         ) = universalCore.getOutboundTxGasAndFees(address(prc20Token), customGasLimit);
 
         assertEq(gasToken, address(gasTokenMock));
-        assertEq(gasFee, GAS_PRICE * customGasLimit);
+        assertEq(gasPrice, GAS_PRICE);
+        assertEq(gasFee, gasPrice * customGasLimit);
         assertEq(protocolFee, PROTOCOL_FEE);
         assertEq(keccak256(bytes(chainNamespace)), keccak256(bytes(CHAIN_NAMESPACE)));
     }

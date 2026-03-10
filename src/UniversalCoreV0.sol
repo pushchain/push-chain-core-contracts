@@ -366,7 +366,7 @@ contract UniversalCoreV0 is
     function getOutboundTxGasAndFees(address _prc20, uint256 gasLimit)
         public
         view
-        returns (address gasToken, uint256 gasFee, uint256 protocolFee, string memory chainNamespace)
+        returns (address gasToken, uint256 gasFee, uint256 protocolFee, uint256 gasPrice, string memory chainNamespace)
     {
         if (gasLimit == 0) {
             gasLimit = BASE_GAS_LIMIT;
@@ -376,10 +376,10 @@ contract UniversalCoreV0 is
         gasToken = gasTokenPRC20ByChainNamespace[chainNamespace];
         if (gasToken == address(0)) revert CommonErrors.ZeroAddress();
 
-        uint256 price = gasPriceByChainNamespace[chainNamespace];
-        if (price == 0) revert UniversalCoreErrors.ZeroGasPrice();
+        gasPrice = gasPriceByChainNamespace[chainNamespace];
+        if (gasPrice == 0) revert UniversalCoreErrors.ZeroGasPrice();
 
-        gasFee = price * gasLimit;
+        gasFee = gasPrice * gasLimit;
         protocolFee = IPRC20(_prc20).PC_PROTOCOL_FEE();
     }
 

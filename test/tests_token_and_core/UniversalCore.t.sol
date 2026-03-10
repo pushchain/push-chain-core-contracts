@@ -566,16 +566,17 @@ contract UniversalCoreTest is Test, UpgradeableContractHelper {
             address returnedGasToken,
             uint256 gasFee,
             uint256 protocolFee,
+            uint256 gasPrice,
             string memory chainNamespace
         ) = universalCore.getOutboundTxGasAndFees(address(prc20Token), 0);
 
         assertEq(returnedGasToken, address(mockPRC20));
 
-        uint256 actualGasPrice = universalCore.gasPriceByChainNamespace(CHAIN_NAMESPACE);
         uint256 actualBaseGasLimit = universalCore.BASE_GAS_LIMIT();
         uint256 actualProtocolFee = prc20Token.PC_PROTOCOL_FEE();
 
-        assertEq(gasFee, actualGasPrice * actualBaseGasLimit);
+        assertEq(gasPrice, GAS_PRICE);
+        assertEq(gasFee, gasPrice * actualBaseGasLimit);
         assertEq(protocolFee, actualProtocolFee);
         assertEq(keccak256(bytes(chainNamespace)), keccak256(bytes(CHAIN_NAMESPACE)));
     }
@@ -587,6 +588,7 @@ contract UniversalCoreTest is Test, UpgradeableContractHelper {
             address returnedGasToken,
             uint256 gasFee,
             uint256 protocolFee,
+            uint256 gasPrice,
             string memory chainNamespace
         ) = universalCore.getOutboundTxGasAndFees(
             address(prc20Token),
@@ -594,7 +596,8 @@ contract UniversalCoreTest is Test, UpgradeableContractHelper {
         );
 
         assertEq(returnedGasToken, address(mockPRC20));
-        assertEq(gasFee, GAS_PRICE * customGasLimit);
+        assertEq(gasPrice, GAS_PRICE);
+        assertEq(gasFee, gasPrice * customGasLimit);
         assertEq(protocolFee, PROTOCOL_FEE);
         assertEq(keccak256(bytes(chainNamespace)), keccak256(bytes(CHAIN_NAMESPACE)));
     }
@@ -643,7 +646,7 @@ contract UniversalCoreTest is Test, UpgradeableContractHelper {
         vm.prank(UNIVERSAL_EXECUTOR_MODULE);
         universalCore.setChainMeta(CHAIN_NAMESPACE, newGasPrice, 0, 0);
 
-        (, uint256 gasFee, uint256 protocolFee,) = universalCore.getOutboundTxGasAndFees(address(prc20Token), 0);
+        (, uint256 gasFee, uint256 protocolFee,,) = universalCore.getOutboundTxGasAndFees(address(prc20Token), 0);
 
         uint256 actualBaseGasLimit = universalCore.BASE_GAS_LIMIT();
         uint256 expectedGasFee = newGasPrice * actualBaseGasLimit;
@@ -657,7 +660,7 @@ contract UniversalCoreTest is Test, UpgradeableContractHelper {
         vm.prank(deployer);
         universalCore.updateBaseGasLimit(newBaseGasLimit);
 
-        (, uint256 gasFee, uint256 protocolFee,) = universalCore.getOutboundTxGasAndFees(address(prc20Token), 0);
+        (, uint256 gasFee, uint256 protocolFee,,) = universalCore.getOutboundTxGasAndFees(address(prc20Token), 0);
 
         uint256 actualGasPrice = universalCore.gasPriceByChainNamespace(CHAIN_NAMESPACE);
         assertEq(gasFee, actualGasPrice * newBaseGasLimit);
@@ -670,7 +673,7 @@ contract UniversalCoreTest is Test, UpgradeableContractHelper {
         vm.prank(UNIVERSAL_EXECUTOR_MODULE);
         prc20Token.updateProtocolFlatFee(newProtocolFee);
 
-        (, uint256 gasFee, uint256 protocolFee,) = universalCore.getOutboundTxGasAndFees(address(prc20Token), 0);
+        (, uint256 gasFee, uint256 protocolFee,,) = universalCore.getOutboundTxGasAndFees(address(prc20Token), 0);
 
         uint256 actualGasPrice = universalCore.gasPriceByChainNamespace(CHAIN_NAMESPACE);
         uint256 actualBaseGasLimit = universalCore.BASE_GAS_LIMIT();
@@ -848,7 +851,7 @@ contract UniversalCoreTest is Test, UpgradeableContractHelper {
         vm.prank(UNIVERSAL_EXECUTOR_MODULE);
         universalCore.setChainMeta(CHAIN_NAMESPACE, newPrice, 100, block.timestamp);
 
-        (, uint256 gasFee, uint256 protocolFee,) = universalCore.getOutboundTxGasAndFees(address(prc20Token), 0);
+        (, uint256 gasFee, uint256 protocolFee,,) = universalCore.getOutboundTxGasAndFees(address(prc20Token), 0);
         assertEq(gasFee, newPrice * universalCore.BASE_GAS_LIMIT());
         assertEq(protocolFee, prc20Token.PC_PROTOCOL_FEE());
     }
