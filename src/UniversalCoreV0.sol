@@ -188,14 +188,14 @@ contract UniversalCoreV0 is
      * @dev    Can only be called by the Universal Executor Module.
      *         Can only be called if the PRC20 token is in the auto-swap supported list. ( eg pETH, pSOL, pUSDC etc.)
      *         If no pool exists, reverts with appropriate error. Although all auto-swap supported tokens are expected to have a pool.
-     *         Default values are used when parameters are set to 0. ( fee = defaultFeeTier[prc20], minPCOut = calculateMinOutput(expectedOutput, prc20), deadline = block.timestamp + (defaultDeadlineMins * 1 minutes) )
+     *         Default values are used when parameters are set to 0. ( fee = defaultFeeTier[prc20], deadline = block.timestamp + (defaultDeadlineMins * 1 minutes) )
      *         target address always receive the swapped native PC tokens.
      *         The function is called directly by the Universal Executor Module and is also gasless.
      * @param prc20 PRC20 address for deposit and swap
      * @param amount Amount to deposit and swap
      * @param target Address to receive the swapped native PC tokens
      * @param fee Uniswap V3 fee tier for the pool (0 = use default)
-     * @param minPCOut Minimum amount of native PC expected from the swap (0 = calculate from slippage tolerance)
+     * @param minPCOut Minimum amount of native PC expected from the swap (must be > 0)
      * @param deadline Timestamp after which the transaction will revert (0 = use default)
      */
     function depositPRC20WithAutoSwap(
@@ -203,7 +203,7 @@ contract UniversalCoreV0 is
         uint256 amount,
         address target,
         uint24 fee, // 0 = use default
-        uint256 minPCOut, // 0 = calculate from slippage tolerance
+        uint256 minPCOut,
         uint256 deadline // 0 = use default
     ) external onlyUEModule whenNotPaused nonReentrant {
         // Validate inputs
@@ -238,15 +238,7 @@ contract UniversalCoreV0 is
         );
         if (pool == address(0)) revert UniversalCoreErrors.PoolNotFound();
 
-        // Calculate minimum output if not provided
-        if (minPCOut == 0) {
-            // ToDo: check for accuracy
-            // Get expected output from Uniswap V3 Quoter
-            uint256 expectedOutput = getSwapQuote(prc20, wPCContractAddress, fee, amount);
-
-            // Calculate minimum output based on slippage tolerance
-            minPCOut = calculateMinOutput(expectedOutput, prc20);
-        }
+        if (minPCOut == 0) revert CommonErrors.ZeroAmount();
 
         // Deposit PRC20 tokens to this contract
         IPRC20(prc20).deposit(address(this), amount);
@@ -418,50 +410,6 @@ contract UniversalCoreV0 is
     }
 
     /**
-     * @notice Gets quote for token swap using Uniswap V3 Quoter
-     * @param tokenIn Input token
-     * @param tokenOut Output token
-     * @param fee Fee tier
-     * @param amountIn Input amount
-     * @return amountOut Expected output amount
-     */
-    function getSwapQuote(address tokenIn, address tokenOut, uint24 fee, uint256 amountIn) public returns (uint256) {
-        // Use QuoterV2 interface with struct parameter
-        IQuoterV2.QuoteExactInputSingleParams memory params = IQuoterV2.QuoteExactInputSingleParams({
-            tokenIn: tokenIn,
-            tokenOut: tokenOut,
-            amountIn: amountIn,
-            fee: fee,
-            sqrtPriceLimitX96: 0
-        });
-
-        // Call QuoterV2 directly - it handles the revert internally and returns the values
-        (uint256 amountOut,,,) = IQuoterV2(uniswapV3QuoterAddress).quoteExactInputSingle(params);
-
-        return amountOut;
-    }
-
-    /**
-     * @notice                  Calculates minimum output based on slippage tolerance
-     * @param expectedOutput    Expected output amount from quote (in PC tokens)
-     * @param token             Token address to get slippage tolerance for
-     * @return minAmountOut     Minimum output amount (in PC tokens)
-     */
-    function calculateMinOutput(uint256 expectedOutput, address token) internal view returns (uint256) {
-        uint256 tolerance = slippageTolerance[token];
-        if (tolerance == 0) {
-            tolerance = 300; // Default 3% slippage tolerance
-        }
-
-        // Ensure expectedOutput is not 0 to avoid calculation issues
-        if (expectedOutput == 0) {
-            return 0;
-        }
-
-        // Calculate minimum output: expectedOutput * (10000 - tolerance) / 10000
-        return (expectedOutput * (10000 - tolerance)) / 10000;
-    }
-     /**
      * @inheritdoc IUniversalCore
      */
     function getOutboundTxGasAndFees(address _prc20, uint256 gasLimit)
@@ -528,10 +476,7 @@ contract UniversalCoreV0 is
 
         IWPC(wPCContractAddress).deposit{value: msg.value}();
 
-        if (minGasTokenOut == 0) {
-            uint256 expectedOutput = getSwapQuote(wPCContractAddress, gasToken, fee, msg.value);
-            minGasTokenOut = calculateMinOutput(expectedOutput, gasToken);
-        }
+        if (minGasTokenOut == 0) revert CommonErrors.ZeroAmount();
 
         IERC20(wPCContractAddress).approve(uniswapV3SwapRouterAddress, msg.value);
 

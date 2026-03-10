@@ -47,14 +47,14 @@ interface IUniversalCore {
      * @dev    Can only be called by the Universal Executor Module.
      *         Can only be called if the PRC20 token is in the auto-swap supported list. ( eg pETH, pSOL, pUSDC etc.)
      *         If no pool exists, reverts with appropriate error. Although all auto-swap supported tokens are expected to have a pool.
-     *         Default values are used when parameters are set to 0. ( fee = defaultFeeTier[prc20], minPCOut = calculateMinOutput(expectedOutput, prc20), deadline = block.timestamp + (defaultDeadlineMins * 1 minutes) )
+     *         Default values are used when parameters are set to 0. ( fee = defaultFeeTier[prc20], deadline = block.timestamp + (defaultDeadlineMins * 1 minutes) )
      *         target address always receive the swapped native PC tokens.
      *         The function is called directly by the Universal Executor Module and is also gasless.
      * @param prc20 PRC20 address for deposit and swap
      * @param amount Amount to deposit and swap
      * @param target Address to receive the swapped native PC tokens
      * @param fee Uniswap V3 fee tier for the pool (0 = use default)
-     * @param minPCOut Minimum amount of native PC expected from the swap (0 = calculate from slippage tolerance)
+     * @param minPCOut Minimum amount of native PC expected from the swap (must be > 0)
      * @param deadline Timestamp after which the transaction will revert (0 = use default)
      */
     function depositPRC20WithAutoSwap(

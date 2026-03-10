@@ -151,7 +151,7 @@ contract UniversalCore is
         uint256 amount,
         address target,
         uint24 fee, // 0 = use default
-        uint256 minPCOut, // 0 = calculate from slippage tolerance
+        uint256 minPCOut,
         uint256 deadline // 0 = use default
     ) external onlyUEModule whenNotPaused nonReentrant {
         if (target == UNIVERSAL_EXECUTOR_MODULE || target == address(this)) revert UniversalCoreErrors.InvalidTarget();
@@ -180,12 +180,8 @@ contract UniversalCore is
             );
         if (pool == address(0)) revert UniversalCoreErrors.PoolNotFound();
 
-        // Calculate minimum output if not provided
-        if (minPCOut == 0) {
-            uint256 expectedOutput = getSwapQuote(prc20, wPCContractAddress, fee, amount);
-            // Calculate minimum output based on slippage tolerance
-            minPCOut = calculateMinOutput(expectedOutput, prc20);
-        }
+        if (minPCOut == 0) revert CommonErrors.ZeroAmount();
+
         IPRC20(prc20).deposit(address(this), amount);
         IPRC20(prc20).approve(uniswapV3SwapRouterAddress, amount);
 
@@ -351,49 +347,6 @@ contract UniversalCore is
      */
     function unpause() external onlyAdmin {
         _unpause();
-    }
-
-    //========= Public Helpers =========//
-
-    /**
-     * @notice              Gets quote for token swap using Uniswap V3 Quoter
-     * @param tokenIn       Input token
-     * @param tokenOut      Output token
-     * @param fee           Fee tier
-     * @param amountIn      Input amount
-     * @return amountOut    Expected output amount
-     */
-    function getSwapQuote(address tokenIn, address tokenOut, uint24 fee, uint256 amountIn) public returns (uint256) {
-        // Use QuoterV2 interface with struct parameter
-        IQuoterV2.QuoteExactInputSingleParams memory params = IQuoterV2.QuoteExactInputSingleParams({
-            tokenIn: tokenIn, tokenOut: tokenOut, amountIn: amountIn, fee: fee, sqrtPriceLimitX96: 0
-        });
-
-        // Call QuoterV2 directly - it handles the revert internally and returns the values
-        (uint256 amountOut,,,) = IQuoterV2(uniswapV3QuoterAddress).quoteExactInputSingle(params);
-
-        return amountOut;
-    }
-
-    /**
-     * @notice                  Calculates minimum output based on slippage tolerance
-     * @param expectedOutput    Expected output amount from quote (in PC tokens)
-     * @param token             Token address to get slippage tolerance for
-     * @return minAmountOut     Minimum output amount (in PC tokens)
-     */
-    function calculateMinOutput(uint256 expectedOutput, address token) internal view returns (uint256) {
-        uint256 tolerance = slippageTolerance[token];
-        if (tolerance == 0) {
-            tolerance = 300; // Default 3% slippage tolerance
-        }
-
-        // Ensure expectedOutput is not 0 to avoid calculation issues
-        if (expectedOutput == 0) {
-            return 0;
-        }
-
-        // Calculate minimum output: expectedOutput * (10000 - tolerance) / 10000
-        return (expectedOutput * (10000 - tolerance)) / 10000;
     }
 
     /**
