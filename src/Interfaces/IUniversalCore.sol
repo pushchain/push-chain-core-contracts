@@ -8,7 +8,6 @@ interface IUniversalCore {
     // =========================
     //           Universal Core Events
     // =========================    
-    event SetGasPrice(string chainNamespace, uint256 price);
     event SetChainMeta(string chainNamespace, uint256 price, uint256 chainHeight, uint256 observedAt);
     event SetGasToken(string chainNamespace, address prc20);
     event SetDefaultDeadlineMins(uint256 minutesValue);
@@ -19,6 +18,13 @@ interface IUniversalCore {
         address indexed gasToken, address indexed vault,
         uint256 pcIn, uint256 gasFee, uint256 protocolFee,
         uint24 fee, address indexed caller
+    );
+    event RefundUnusedGas(
+        address indexed gasToken,
+        uint256 amount,
+        address indexed recipient,
+        bool swapped,
+        uint256 pcOut
     );
     // =========================
     //           Universal Core Functions
@@ -121,6 +127,22 @@ interface IUniversalCore {
         uint256 gasFee, uint256 protocolFee, uint256 deadline,
         address caller
     ) external payable returns (uint256 gasTokenOut, uint256 refund);
+
+    /// @notice Refund unused gas to recipient, optionally swapping PRC20 to WPC
+    /// @param gasToken     Gas token PRC20 address
+    /// @param amount       Amount to refund
+    /// @param recipient    Address to receive the refund
+    /// @param withSwap     If true, swap PRC20 to WPC via Uniswap V3
+    /// @param fee          Uniswap V3 fee tier (0 = use default; ignored if !withSwap)
+    /// @param minPCOut     Minimum WPC out (must be > 0 if withSwap; ignored if !withSwap)
+    function refundUnusedGas(
+        address gasToken,
+        uint256 amount,
+        address recipient,
+        bool withSwap,
+        uint24 fee,
+        uint256 minPCOut
+    ) external;
 
     /// @notice Get the GATEWAY_ROLE identifier
     function GATEWAY_ROLE() external pure returns (bytes32);

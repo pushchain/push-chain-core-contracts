@@ -45,6 +45,7 @@ library UniversalCoreErrors {
     error CallerIsNotUEModule();
     error AutoSwapNotSupported();
     error InvalidSlippageTolerance();
+    error MinPCOutRequired();
 }
 
 // =========================

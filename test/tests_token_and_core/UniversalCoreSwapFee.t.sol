@@ -101,7 +101,7 @@ contract UniversalCoreSwapFeeTest is Test, UpgradeableContractHelper {
 
         // Configure gas token and gas price
         vm.startPrank(UNIVERSAL_EXECUTOR_MODULE);
-        universalCore.setGasPrice(CHAIN_NAMESPACE, GAS_PRICE);
+        universalCore.setChainMeta(CHAIN_NAMESPACE, GAS_PRICE, 0, 0);
         universalCore.setGasTokenPRC20(CHAIN_NAMESPACE, address(gasTokenMock));
         vm.stopPrank();
 

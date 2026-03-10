@@ -72,7 +72,6 @@ Managers handle operational configuration that changes with external chain condi
 | Function | Purpose |
 |---|---|
 | `setChainMeta(chainNamespace, price, chainHeight, observedAt)` | Update oracle data for an external chain |
-| `setGasPrice(chainNamespace, price)` | Update gas price only (legacy, use `setChainMeta`) |
 | `setGasTokenPRC20(chainNamespace, prc20)` | Map a chain namespace to its gas token PRC-20 |
 | `setGasPCPool(chainNamespace, gasToken, fee)` | Register a Uniswap V3 pool for PC/gas-token swaps |
 | `setSupportedToken(prc20, supported)` | Mark a PRC-20 token as officially supported |

@@ -47,7 +47,6 @@ contract UniversalCoreTest is Test, UpgradeableContractHelper {
     event SetAutoSwapSupported(address indexed token, bool supported);
     event SetWPC(address indexed wpc);
     event SetGasPCPool(string indexed chainId, address indexed pool, uint24 fee);
-    event SetGasPrice(string indexed chainId, uint256 price);
     event SetGasToken(string indexed chainId, address indexed prc20);
     event DepositPRC20WithAutoSwap(
         address indexed prc20,
@@ -120,7 +119,7 @@ contract UniversalCoreTest is Test, UpgradeableContractHelper {
 
         // Configure gas price and gas token for testing
         vm.startPrank(UNIVERSAL_EXECUTOR_MODULE);
-        universalCore.setGasPrice(CHAIN_NAMESPACE, GAS_PRICE);
+        universalCore.setChainMeta(CHAIN_NAMESPACE, GAS_PRICE, 0, 0);
         universalCore.setGasTokenPRC20(CHAIN_NAMESPACE, address(mockPRC20));
         vm.stopPrank();
     }
@@ -349,41 +348,6 @@ contract UniversalCoreTest is Test, UpgradeableContractHelper {
         universalCore.setGasPCPool(CHAIN_NAMESPACE, gasToken, FEE_TIER);
 
         assertEq(universalCore.gasPCPoolByChainNamespace(CHAIN_NAMESPACE), pool);
-    }
-
-    function test_SetGasPrice_OnlyUEModule() public {
-        uint256 price = 1000;
-
-        // Non-UEM should revert
-        vm.startPrank(nonUEModule);
-        vm.expectRevert(
-            abi.encodeWithSelector(
-                IAccessControl.AccessControlUnauthorizedAccount.selector, nonUEModule, universalCore.MANAGER_ROLE()
-            )
-        );
-        universalCore.setGasPrice(CHAIN_NAMESPACE, price);
-        vm.stopPrank();
-
-        // UEM should succeed
-        vm.prank(UNIVERSAL_EXECUTOR_MODULE);
-        universalCore.setGasPrice(CHAIN_NAMESPACE, price);
-        assertEq(universalCore.gasPriceByChainNamespace(CHAIN_NAMESPACE), price);
-    }
-
-    function test_SetGasPrice_HappyPath() public {
-        uint256 price = 1000;
-
-        vm.prank(UNIVERSAL_EXECUTOR_MODULE);
-        universalCore.setGasPrice(CHAIN_NAMESPACE, price);
-
-        assertEq(universalCore.gasPriceByChainNamespace(CHAIN_NAMESPACE), price);
-    }
-
-    function test_SetGasPrice_ZeroPriceAllowed() public {
-        // Current implementation allows zero price
-        vm.prank(UNIVERSAL_EXECUTOR_MODULE);
-        universalCore.setGasPrice(CHAIN_NAMESPACE, 0);
-        assertEq(universalCore.gasPriceByChainNamespace(CHAIN_NAMESPACE), 0);
     }
 
     function test_SetGasTokenPRC20_OnlyUEModule() public {
@@ -638,7 +602,7 @@ contract UniversalCoreTest is Test, UpgradeableContractHelper {
     function testWithdrawGasFeeZeroGasPrice() public {
         vm.startPrank(UNIVERSAL_EXECUTOR_MODULE);
         // Set gas price to zero
-        universalCore.setGasPrice(CHAIN_NAMESPACE, 0);
+        universalCore.setChainMeta(CHAIN_NAMESPACE, 0, 0, 0);
         vm.stopPrank();
         
         // Expect revert when getting gas fee
@@ -677,7 +641,7 @@ contract UniversalCoreTest is Test, UpgradeableContractHelper {
         uint256 newGasPrice = GAS_PRICE * 2;
 
         vm.prank(UNIVERSAL_EXECUTOR_MODULE);
-        universalCore.setGasPrice(CHAIN_NAMESPACE, newGasPrice);
+        universalCore.setChainMeta(CHAIN_NAMESPACE, newGasPrice, 0, 0);
 
         (, uint256 gasFee, uint256 protocolFee,) = universalCore.getOutboundTxGasAndFees(address(prc20Token), 0);
 
