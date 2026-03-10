@@ -21,7 +21,7 @@ import {
  * @dev     Implementation of the IUEA interface for EVM-based external accounts.
  *          This contract handles verification and execution of cross-chain payloads
  *          using ECDSA signatures from Ethereum-compatible accounts.
- * 
+ *
  * Note:    Find detailed natspec in the IUEA interface -> interfaces/IUEA.sol
  */
 
@@ -93,17 +93,15 @@ contract UEA_EVM is ReentrancyGuard, IUEA {
     /**
      * @inheritdoc IUEA
      */
-    function executeUniversalTx(bytes calldata payload, bytes calldata signature) external nonReentrant {
-        UniversalPayload memory decodedPayload = abi.decode(payload, (UniversalPayload));
-
+    function executeUniversalTx(UniversalPayload calldata payload, bytes calldata signature) external nonReentrant {
         if (msg.sender != UNIVERSAL_EXECUTOR_MODULE) {
-            bytes32 payloadHash = getUniversalPayloadHash(decodedPayload);
+            bytes32 payloadHash = getUniversalPayloadHash(payload);
             if (!verifyUniversalPayloadSignature(payloadHash, signature)) {
                 revert Errors.InvalidEVMSignature();
             }
         }
 
-        _handleExecution(decodedPayload);
+        _handleExecution(payload);
     }
 
     // =========================
@@ -157,14 +155,13 @@ contract UEA_EVM is ReentrancyGuard, IUEA {
      * @return success          whether all calls succeeded
      * @return returnData       return data from the last call or first failed call
      */
-    function _handleMulticall(UniversalPayload memory payload) 
-        internal 
-        returns (bool success, bytes memory returnData) 
+    function _handleMulticall(UniversalPayload memory payload)
+        internal
+        returns (bool success, bytes memory returnData)
     {
         Multicall[] memory calls = decodeCalls(payload.data);
 
         for (uint256 i = 0; i < calls.length; i++) {
-
             (success, returnData) = calls[i].to.call{value: calls[i].value}(calls[i].data);
             if (!success) {
                 return (success, returnData);
@@ -183,14 +180,14 @@ contract UEA_EVM is ReentrancyGuard, IUEA {
      * @return success          whether the migration succeeded
      * @return returnData       return data from the delegatecall
      */
-    function _handleMigration(UniversalPayload memory payload) 
-        internal 
-        returns (bool success, bytes memory returnData) 
+    function _handleMigration(UniversalPayload memory payload)
+        internal
+        returns (bool success, bytes memory returnData)
     {
         if (payload.to != address(this)) {
             revert Errors.InvalidCall();
         }
-        
+
         if (payload.value != 0) {
             revert Errors.InvalidCall();
         }
@@ -198,7 +195,7 @@ contract UEA_EVM is ReentrancyGuard, IUEA {
         // Fetch migration contract address from factory
         // Note: payload.data should only contain MIGRATION_SELECTOR (no additional data needed)
         address migrationContract = ueaFactory.UEA_MIGRATION_CONTRACT();
-        
+
         if (migrationContract == address(0)) {
             revert Errors.InvalidCall();
         }
@@ -209,7 +206,6 @@ contract UEA_EVM is ReentrancyGuard, IUEA {
         (success, returnData) = migrationContract.delegatecall(migrateCallData);
     }
 
-
     /**
      * @notice                  Internal handler for single call execution
      * @dev                     Executes a single call to the target address
@@ -217,9 +213,9 @@ contract UEA_EVM is ReentrancyGuard, IUEA {
      * @return success          whether the call succeeded
      * @return returnData       return data from the call
      */
-    function _handleSingleCall(UniversalPayload memory payload) 
-        internal 
-        returns (bool success, bytes memory returnData) 
+    function _handleSingleCall(UniversalPayload memory payload)
+        internal
+        returns (bool success, bytes memory returnData)
     {
         (success, returnData) = payload.to.call{value: payload.value}(payload.data);
     }
@@ -227,7 +223,7 @@ contract UEA_EVM is ReentrancyGuard, IUEA {
     // =========================
     //    UEA_4: Private Helpers
     // =========================
-    
+
     /**
      * @notice          Checks whether the payload data uses the multicall format
      * @dev             Determines if the payload data starts with the MULTICALL_SELECTOR magic prefix
@@ -290,7 +286,8 @@ contract UEA_EVM is ReentrancyGuard, IUEA {
                 payload.maxFeePerGas,
                 payload.maxPriorityFeePerGas,
                 nonce,
-                payload.deadline
+                payload.deadline,
+                uint8(payload.vType)
             )
         );
 

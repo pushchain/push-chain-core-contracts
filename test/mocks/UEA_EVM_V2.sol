@@ -207,20 +207,17 @@ contract UEA_EVM_V2 is ReentrancyGuard, IUEA {
     /**
      * @inheritdoc IUEA
      */
-    function executeUniversalTx(bytes calldata payload, bytes calldata signature) external nonReentrant {
-        // Decode the raw bytes payload into UniversalPayload struct
-        UniversalPayload memory decodedPayload = abi.decode(payload, (UniversalPayload));
-
+    function executeUniversalTx(UniversalPayload calldata payload, bytes calldata signature) external nonReentrant {
         // Caller-based verification: UEModule can execute without signature, others need signature
         if (msg.sender != UNIVERSAL_EXECUTOR_MODULE) {
-            bytes32 payloadHash = getUniversalPayloadHash(decodedPayload);
+            bytes32 payloadHash = getUniversalPayloadHash(payload);
             if (!verifyUniversalPayloadSignature(payloadHash, signature)) {
                 revert Errors.InvalidEVMSignature();
             }
         }
 
         // Delegate to internal handler
-        _handleExecution(decodedPayload);
+        _handleExecution(payload);
     }
 
     /**
@@ -240,7 +237,8 @@ contract UEA_EVM_V2 is ReentrancyGuard, IUEA {
                 payload.maxFeePerGas,
                 payload.maxPriorityFeePerGas,
                 nonce,
-                payload.deadline
+                payload.deadline,
+                uint8(payload.vType)
             )
         );
 

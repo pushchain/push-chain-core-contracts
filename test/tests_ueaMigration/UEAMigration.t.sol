@@ -149,7 +149,8 @@ contract UEAMigrationTest is BaseTest {
             maxFeePerGas: 0,
             maxPriorityFeePerGas: 0,
             nonce: migrationPayload.nonce,
-            deadline: migrationPayload.deadline
+            deadline: migrationPayload.deadline,
+            vType: VerificationType(0)
         });
         
         // Get the payload hash using getUniversalPayloadHash
@@ -285,7 +286,8 @@ contract UEAMigrationTest is BaseTest {
             maxFeePerGas: 0,
             maxPriorityFeePerGas: 0,
             nonce: migrationPayload.nonce,
-            deadline: migrationPayload.deadline
+            deadline: migrationPayload.deadline,
+            vType: VerificationType(0)
         });
         
         // Get the payload hash using getUniversalPayloadHash
@@ -339,7 +341,8 @@ contract UEAMigrationTest is BaseTest {
             maxFeePerGas: 0,
             maxPriorityFeePerGas: 0,
             nonce: migrationPayload.nonce,
-            deadline: migrationPayload.deadline
+            deadline: migrationPayload.deadline,
+            vType: VerificationType(0)
         });
         
         // Get the payload hash using getUniversalPayloadHash
@@ -382,7 +385,8 @@ contract UEAMigrationTest is BaseTest {
             maxFeePerGas: 0,
             maxPriorityFeePerGas: 0,
             nonce: migrationPayload.nonce,
-            deadline: migrationPayload.deadline
+            deadline: migrationPayload.deadline,
+            vType: VerificationType(0)
         });
         
         bytes32 payloadHash = UEA_EVM(payable(address(ueaProxy))).getUniversalPayloadHash(universalPayload);

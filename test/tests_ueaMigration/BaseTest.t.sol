@@ -291,7 +291,7 @@ contract BaseTest is Test {
         );
         
         // Call executeUniversalTx instead of migrateUEA
-        IUEA(ueaAddress).executeUniversalTx(abi.encode(payload), signature);
+        IUEA(ueaAddress).executeUniversalTx(payload, signature);
     }
 
     function getCurrentImplementation(address ueaProxy) public view returns (address impl) {
@@ -332,7 +332,8 @@ contract BaseTest is Test {
             maxFeePerGas: 0,
             maxPriorityFeePerGas: 0,
             nonce: nonce,
-            deadline: deadline
+            deadline: deadline,
+            vType: VerificationType(0)
         });
     }
 
@@ -363,7 +364,8 @@ contract BaseTest is Test {
             maxFeePerGas: 0,
             maxPriorityFeePerGas: 0,
             nonce: nonce,
-            deadline: deadline
+            deadline: deadline,
+            vType: VerificationType(0)
         });
     }
 

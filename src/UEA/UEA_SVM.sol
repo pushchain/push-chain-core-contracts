@@ -107,17 +107,15 @@ contract UEA_SVM is ReentrancyGuard, IUEA {
     /**
      * @inheritdoc IUEA
      */
-    function executeUniversalTx(bytes calldata payload, bytes calldata signature) external nonReentrant {
-        UniversalPayload memory decodedPayload = abi.decode(payload, (UniversalPayload));
-
+    function executeUniversalTx(UniversalPayload calldata payload, bytes calldata signature) external nonReentrant {
         if (msg.sender != UNIVERSAL_EXECUTOR_MODULE) {
-            bytes32 payloadHash = getUniversalPayloadHash(decodedPayload);
+            bytes32 payloadHash = getUniversalPayloadHash(payload);
             if (!verifyUniversalPayloadSignature(payloadHash, signature)) {
                 revert Errors.InvalidSVMSignature();
             }
         }
 
-        _handleExecution(decodedPayload);
+        _handleExecution(payload);
     }
 
     // =========================
@@ -304,7 +302,8 @@ contract UEA_SVM is ReentrancyGuard, IUEA {
                 payload.maxFeePerGas,
                 payload.maxPriorityFeePerGas,
                 nonce,
-                payload.deadline
+                payload.deadline,
+                uint8(payload.vType)
             )
         );
 
