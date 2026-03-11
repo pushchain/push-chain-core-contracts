@@ -73,6 +73,9 @@ contract PRC20Test is Test, UpgradeableContractHelper {
         address proxyAddress = deployUpgradeableContract(address(universalCoreImplementation), initData);
         universalCore = UniversalCore(payable(proxyAddress));
 
+        // Grant MANAGER_ROLE to uExec so manager functions (e.g. setGasTokenPRC20) are callable
+        universalCore.grantRole(universalCore.MANAGER_ROLE(), uExec);
+
         // Configure universalCore
         vm.startPrank(uExec);
         universalCore.setChainMeta(SOURCE_CHAIN_NAMESPACE, GAS_PRICE, 0, 0);

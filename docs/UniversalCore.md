@@ -58,20 +58,18 @@ The UE Module is a protocol-level system address that executes on behalf of the 
 
 | Function | Purpose |
 |---|---|
-| `depositPRC20Token(prc20, amount, target)` | Mint PRC-20 tokens to a target address on inbound |
-| `depositPRC20WithAutoSwap(prc20, amount, target, fee, minPCOut, deadline)` | Mint PRC-20 and swap to native PC in one step |
-
-The UE Module is also granted `MANAGER_ROLE` during initialization, giving it access to all manager functions as well.
+| `depositPRC20Token(prc20, amount, recipient)` | Mint PRC-20 tokens to a recipient address on inbound |
+| `depositPRC20WithAutoSwap(prc20, amount, recipient, fee, minPCOut, deadline)` | Mint PRC-20 and swap to native PC in one step |
+| `setChainMeta(chainNamespace, price, chainHeight, observedAt)` | Update oracle data for an external chain |
 
 ### Manager Role (`MANAGER_ROLE`)
 
-`keccak256("MANAGER_ROLE")` -- granted to the UE Module at initialization and can be granted to additional addresses by the admin.
+`keccak256("MANAGER_ROLE")` -- can be granted to addresses by the admin.
 
 Managers handle operational configuration that changes with external chain conditions:
 
 | Function | Purpose |
 |---|---|
-| `setChainMeta(chainNamespace, price, chainHeight, observedAt)` | Update oracle data for an external chain |
 | `setGasTokenPRC20(chainNamespace, prc20)` | Map a chain namespace to its gas token PRC-20 |
 | `setGasPCPool(chainNamespace, gasToken, fee)` | Register a Uniswap V3 pool for PC/gas-token swaps |
 | `setSupportedToken(prc20, supported)` | Mark a PRC-20 token as officially supported |
@@ -111,12 +109,12 @@ getOutboundTxGasAndFees(prc20, gasLimit)
     |--> if gasLimit == 0, use BASE_GAS_LIMIT (default: 500,000)
     |--> look up chainNamespace from prc20.SOURCE_CHAIN_NAMESPACE()
     |--> look up gasToken from gasTokenPRC20ByChainNamespace[chainNamespace]
-    |--> look up price from gasPriceByChainNamespace[chainNamespace]
+    |--> look up gasPrice from gasPriceByChainNamespace[chainNamespace]
     |
-    |--> gasFee = price * gasLimit          (denominated in gas token units)
+    |--> gasFee = gasPrice * gasLimit       (denominated in gas token units)
     |--> protocolFee = prc20.PC_PROTOCOL_FEE()  (flat fee set per PRC-20)
     |
-    '--> returns (gasToken, gasFee, protocolFee, chainNamespace)
+    '--> returns (gasToken, gasFee, protocolFee, gasPrice, chainNamespace)
 ```
 
 The returned values are denominated in the destination chain's gas token (e.g. pETH for Ethereum). The gateway then uses these to drive the swap-and-burn settlement.

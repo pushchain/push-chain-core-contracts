@@ -121,7 +121,7 @@ contract UniversalCoreV0 is
         _;
     }
 
-    modifier onlyOwner() {
+    modifier onlyAdmin() {
         if (!hasRole(DEFAULT_ADMIN_ROLE, msg.sender)) {
             revert CommonErrors.InvalidOwner();
         }
@@ -221,15 +221,7 @@ contract UniversalCoreV0 is
     //    UCV0_2: GATEWAY ACTIONS
     // =========================
 
-    /// @notice                     Swap native PC for gas token PRC20 (V0 uses ExactInputSingle).
-    /// @param gasToken             Gas token PRC20 address
-    /// @param vault                Vault address to receive protocol fee
-    /// @param fee                  Uniswap V3 fee tier (0 = use default)
-    /// @param gasFee               Gas fee amount (used as minimum output floor)
-    /// @param protocolFee          Protocol fee amount (used as minimum output floor)
-    /// @param deadline             Swap deadline (0 = use default)
-    /// @return gasTokenOut         Amount of gas token swapped
-    /// @return refund              Always 0 in V0 (no refund logic)
+    /// @inheritdoc IUniversalCore
     function swapAndBurnGas(
         address gasToken,
         address vault,
@@ -237,7 +229,7 @@ contract UniversalCoreV0 is
         uint256 gasFee,
         uint256 protocolFee,
         uint256 deadline,
-        address
+        address caller
     )
         external
         payable
@@ -248,10 +240,11 @@ contract UniversalCoreV0 is
     {
         if (gasToken == address(0)) revert CommonErrors.ZeroAddress();
         if (vault == address(0)) revert CommonErrors.ZeroAddress();
+        if (caller == address(0)) revert CommonErrors.ZeroAddress();
         if (msg.value == 0) revert CommonErrors.ZeroAmount();
         if (gasFee == 0) revert CommonErrors.ZeroAmount();
 
-        uint256 minGasTokenOut = gasFee + protocolFee;
+        uint256 totalRequiredGasOut = gasFee + protocolFee;
 
         if (fee == 0) {
             fee = defaultFeeTier[gasToken];
@@ -273,32 +266,40 @@ contract UniversalCoreV0 is
 
         IWPC(WPC).deposit{value: msg.value}();
 
-        if (minGasTokenOut == 0) revert CommonErrors.ZeroAmount();
-
         IERC20(WPC).approve(uniswapV3SwapRouter, msg.value);
 
-        ISwapRouter.ExactInputSingleParams memory params =
-            ISwapRouter.ExactInputSingleParams({
+        ISwapRouter.ExactOutputSingleParams memory params =
+            ISwapRouter.ExactOutputSingleParams({
                 tokenIn: WPC,
                 tokenOut: gasToken,
                 fee: fee,
-                recipient: vault,
+                recipient: address(this),
                 deadline: deadline,
-                amountIn: msg.value,
-                amountOutMinimum: minGasTokenOut,
+                amountOut: totalRequiredGasOut,
+                amountInMaximum: msg.value,
                 sqrtPriceLimitX96: 0
             });
 
-        gasTokenOut =
-            ISwapRouter(uniswapV3SwapRouter).exactInputSingle(params);
-        if (gasTokenOut < minGasTokenOut) {
-            revert UniversalCoreErrors.SlippageExceeded();
-        }
-
+        uint256 amountInUsed =
+            ISwapRouter(uniswapV3SwapRouter).exactOutputSingle(params);
         IERC20(WPC).approve(uniswapV3SwapRouter, 0);
 
+        IPRC20(gasToken).burn(gasFee);
+
+        if (protocolFee > 0) {
+            IERC20(gasToken).safeTransfer(vault, protocolFee);
+        }
+
+        gasTokenOut = totalRequiredGasOut;
+        refund = msg.value - amountInUsed;
+        if (refund > 0) {
+            IWPC(WPC).withdraw(refund);
+            (bool ok,) = caller.call{value: refund}("");
+            if (!ok) revert CommonErrors.TransferFailed();
+        }
+
         emit SwapAndBurnGas(
-            gasToken, vault, msg.value, gasFee, protocolFee, fee, address(0)
+            gasToken, vault, amountInUsed, gasFee, protocolFee, fee, caller
         );
     }
 
@@ -412,7 +413,7 @@ contract UniversalCoreV0 is
         address prc20,
         uint256 amount,
         address recipient
-    ) external onlyOwner whenNotPaused {
+    ) external onlyAdmin whenNotPaused {
         _validateParams(prc20, amount, recipient);
         IPRC20(prc20).deposit(recipient, amount);
     }
@@ -423,20 +424,20 @@ contract UniversalCoreV0 is
     function setAutoSwapSupported(
         address token,
         bool supported
-    ) external onlyOwner {
+    ) external onlyAdmin {
         isAutoSwapSupported[token] = supported;
     }
 
     /// @notice      Set the wrapped PC address.
     /// @param addr  WPC new address
-    function setWPC(address addr) external onlyOwner {
+    function setWPC(address addr) external onlyAdmin {
         if (addr == address(0)) revert CommonErrors.ZeroAddress();
         WPC = addr;
     }
 
     /// @notice      Set the UniversalGatewayPC address.
     /// @param addr  UniversalGatewayPC address
-    function setUniversalGatewayPC(address addr) external onlyOwner {
+    function setUniversalGatewayPC(address addr) external onlyAdmin {
         if (addr == address(0)) revert CommonErrors.ZeroAddress();
         universalGatewayPC = addr;
     }
@@ -449,7 +450,7 @@ contract UniversalCoreV0 is
         address factory,
         address swapRouter,
         address quoter
-    ) external onlyOwner {
+    ) external onlyAdmin {
         if (
             factory == address(0) || swapRouter == address(0)
                 || quoter == address(0)
@@ -467,7 +468,7 @@ contract UniversalCoreV0 is
     function setDefaultFeeTier(
         address token,
         uint24 feeTier
-    ) external onlyOwner {
+    ) external onlyAdmin {
         if (token == address(0)) revert CommonErrors.ZeroAddress();
         if (feeTier != 500 && feeTier != 3000 && feeTier != 10000) {
             revert UniversalCoreErrors.InvalidFeeTier();
@@ -481,7 +482,7 @@ contract UniversalCoreV0 is
     function setSlippageTolerance(
         address token,
         uint256 tolerance
-    ) external onlyOwner {
+    ) external onlyAdmin {
         if (token == address(0)) revert CommonErrors.ZeroAddress();
         if (tolerance > 5000) {
             revert UniversalCoreErrors.InvalidSlippageTolerance();
@@ -493,23 +494,24 @@ contract UniversalCoreV0 is
     /// @param minutesValue   Default deadline in minutes
     function setDefaultDeadlineMins(
         uint256 minutesValue
-    ) external onlyOwner {
+    ) external onlyAdmin {
         defaultDeadlineMins = minutesValue;
+        emit SetDefaultDeadlineMins(minutesValue);
     }
 
     /// @notice          Update the base gas limit for cross-chain outbound transactions.
     /// @param gasLimit  New base gas limit
-    function updateBaseGasLimit(uint256 gasLimit) external onlyOwner {
+    function updateBaseGasLimit(uint256 gasLimit) external onlyAdmin {
         BASE_GAS_LIMIT = gasLimit;
     }
 
     /// @notice Pause the contract - stops all deposit functions.
-    function pause() external onlyOwner {
+    function pause() external onlyAdmin {
         _pause();
     }
 
     /// @notice Unpause the contract - resumes all deposit functions.
-    function unpause() external onlyOwner {
+    function unpause() external onlyAdmin {
         _unpause();
     }
 

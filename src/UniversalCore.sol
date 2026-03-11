@@ -141,7 +141,6 @@ contract UniversalCore is
         __AccessControl_init();
 
         _grantRole(DEFAULT_ADMIN_ROLE, msg.sender);
-        _grantRole(MANAGER_ROLE, UNIVERSAL_EXECUTOR_MODULE);
 
         WPC = wpc_;
         uniswapV3Factory = uniswapV3Factory_;
@@ -373,7 +372,7 @@ contract UniversalCore is
         uint256 price,
         uint256 chainHeight,
         uint256 observedAt
-    ) external onlyRole(MANAGER_ROLE) {
+    ) external onlyUEModule {
         gasPriceByChainNamespace[chainNamespace] = price;
         chainHeightByChainNamespace[chainNamespace] = chainHeight;
         timestampObservedAtByChainNamespace[chainNamespace] = observedAt;
