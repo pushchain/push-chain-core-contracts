@@ -62,7 +62,7 @@ contract UniversalCoreV0 is
     address public uniswapV3QuoterAddress;
 
     /// @notice Address of the wrapped PC to interact with Uniswap V3.
-    address public wPCContractAddress;
+    address public WPC;
 
     /// @notice Only for TESTNET : String as key.
     mapping(string => uint256) public gasPriceByChainNamespace;
@@ -70,8 +70,8 @@ contract UniversalCoreV0 is
     mapping(string => address) public gasPCPoolByChainNamespace;
     /// @notice Role for managing gas-related configurations
     bytes32 public constant MANAGER_ROLE = keccak256("MANAGER_ROLE");
-    /// @notice Role for gateway contracts that can swap PC for gas tokens
-    bytes32 public constant GATEWAY_ROLE = keccak256("GATEWAY_ROLE");
+    /// @notice Address of the UniversalGatewayPC that can call swapAndBurnGas
+    address public universalGatewayPC;
     /// @notice Base gas limit for the cross-chain outbound transactions.
     uint256 public BASE_GAS_LIMIT = 500_000;
     /// @notice Mapping for indicating an official PRC20 supported token
@@ -86,6 +86,13 @@ contract UniversalCoreV0 is
     modifier onlyUEModule() {
         if (msg.sender != UNIVERSAL_EXECUTOR_MODULE) {
             revert UniversalCoreErrors.CallerIsNotUEModule();
+        }
+        _;
+    }
+
+    modifier onlyGatewayPC() {
+        if (msg.sender != universalGatewayPC) {
+            revert UniversalCoreErrors.CallerIsNotGatewayPC();
         }
         _;
     }
@@ -127,7 +134,7 @@ contract UniversalCoreV0 is
         // Grant the deployer the default admin role
         _grantRole(DEFAULT_ADMIN_ROLE, msg.sender);
 
-        wPCContractAddress = wpc_;
+        WPC = wpc_;
         uniswapV3FactoryAddress = uniswapV3Factory_;
         uniswapV3SwapRouterAddress = uniswapV3SwapRouter_;
         uniswapV3QuoterAddress = uniswapV3Quoter_;
@@ -202,7 +209,7 @@ contract UniversalCoreV0 is
             prc20, amount, recipient, fee, minPCOut, deadline
         );
 
-        emit DepositPRC20WithAutoSwap(prc20, amount, wPCContractAddress, pcOut, resolvedFee, recipient);
+        emit DepositPRC20WithAutoSwap(prc20, amount, WPC, pcOut, resolvedFee, recipient);
     }
 
     /// @inheritdoc IUniversalCore
@@ -238,8 +245,8 @@ contract UniversalCoreV0 is
         if (gasToken == address(0)) revert CommonErrors.ZeroAddress();
 
         address pool = IUniswapV3Factory(uniswapV3FactoryAddress).getPool(
-            wPCContractAddress < gasToken ? wPCContractAddress : gasToken,
-            wPCContractAddress < gasToken ? gasToken : wPCContractAddress,
+            WPC < gasToken ? WPC : gasToken,
+            WPC < gasToken ? gasToken : WPC,
             fee
         );
         if (pool == address(0)) revert UniversalCoreErrors.PoolNotFound();
@@ -284,9 +291,16 @@ contract UniversalCoreV0 is
      * @dev Setter for wrapped PC address.
      * @param addr WPC new address
      */
-    function setWPCContractAddress(address addr) external onlyOwner {
+    function setWPC(address addr) external onlyOwner {
         if (addr == address(0)) revert CommonErrors.ZeroAddress();
-        wPCContractAddress = addr;
+        WPC = addr;
+    }
+
+    /// @notice Set the UniversalGatewayPC address
+    /// @param addr UniversalGatewayPC address
+    function setUniversalGatewayPC(address addr) external onlyOwner {
+        if (addr == address(0)) revert CommonErrors.ZeroAddress();
+        universalGatewayPC = addr;
     }
 
     /**
@@ -400,7 +414,7 @@ contract UniversalCoreV0 is
         uint256 protocolFee,
         uint256 deadline,
         address
-    ) external payable onlyRole(GATEWAY_ROLE) whenNotPaused nonReentrant returns (uint256 gasTokenOut, uint256 refund) {
+    ) external payable onlyGatewayPC whenNotPaused nonReentrant returns (uint256 gasTokenOut, uint256 refund) {
         if (gasToken == address(0)) revert CommonErrors.ZeroAddress();
         if (vault == address(0)) revert CommonErrors.ZeroAddress();
         if (msg.value == 0) revert CommonErrors.ZeroAmount();
@@ -419,20 +433,20 @@ contract UniversalCoreV0 is
         if (block.timestamp > deadline) revert CommonErrors.DeadlineExpired();
 
         address pool = IUniswapV3Factory(uniswapV3FactoryAddress).getPool(
-            wPCContractAddress < gasToken ? wPCContractAddress : gasToken,
-            wPCContractAddress < gasToken ? gasToken : wPCContractAddress,
+            WPC < gasToken ? WPC : gasToken,
+            WPC < gasToken ? gasToken : WPC,
             fee
         );
         if (pool == address(0)) revert UniversalCoreErrors.PoolNotFound();
 
-        IWPC(wPCContractAddress).deposit{value: msg.value}();
+        IWPC(WPC).deposit{value: msg.value}();
 
         if (minGasTokenOut == 0) revert CommonErrors.ZeroAmount();
 
-        IERC20(wPCContractAddress).approve(uniswapV3SwapRouterAddress, msg.value);
+        IERC20(WPC).approve(uniswapV3SwapRouterAddress, msg.value);
 
         ISwapRouter.ExactInputSingleParams memory params = ISwapRouter.ExactInputSingleParams({
-            tokenIn: wPCContractAddress,
+            tokenIn: WPC,
             tokenOut: gasToken,
             fee: fee,
             recipient: vault,
@@ -445,7 +459,7 @@ contract UniversalCoreV0 is
         gasTokenOut = ISwapRouter(uniswapV3SwapRouterAddress).exactInputSingle(params);
         if (gasTokenOut < minGasTokenOut) revert UniversalCoreErrors.SlippageExceeded();
 
-        IERC20(wPCContractAddress).approve(uniswapV3SwapRouterAddress, 0);
+        IERC20(WPC).approve(uniswapV3SwapRouterAddress, 0);
 
         emit SwapAndBurnGas(gasToken, vault, msg.value, gasFee, protocolFee, fee, address(0));
     }
@@ -486,8 +500,8 @@ contract UniversalCoreV0 is
         if (block.timestamp > deadline) revert CommonErrors.DeadlineExpired();
 
         address pool = IUniswapV3Factory(uniswapV3FactoryAddress).getPool(
-            prc20 < wPCContractAddress ? prc20 : wPCContractAddress,
-            prc20 < wPCContractAddress ? wPCContractAddress : prc20,
+            prc20 < WPC ? prc20 : WPC,
+            prc20 < WPC ? WPC : prc20,
             resolvedFee
         );
         if (pool == address(0)) revert UniversalCoreErrors.PoolNotFound();
@@ -499,7 +513,7 @@ contract UniversalCoreV0 is
 
         ISwapRouter.ExactInputSingleParams memory params = ISwapRouter.ExactInputSingleParams({
             tokenIn: prc20,
-            tokenOut: wPCContractAddress,
+            tokenOut: WPC,
             fee: resolvedFee,
             recipient: address(this),
             deadline: deadline,
@@ -513,7 +527,7 @@ contract UniversalCoreV0 is
 
         IPRC20(prc20).approve(uniswapV3SwapRouterAddress, 0);
 
-        IWPC(wPCContractAddress).withdraw(pcOut);
+        IWPC(WPC).withdraw(pcOut);
         (bool ok,) = recipient.call{value: pcOut}("");
         if (!ok) revert CommonErrors.TransferFailed();
     }

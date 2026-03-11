@@ -13,7 +13,6 @@ import "../../test/mocks/MockUniswapV3Router.sol";
 import "../../test/mocks/MockUniswapV3Quoter.sol";
 import "../../test/mocks/MockWPC.sol";
 import "../../test/mocks/MockPRC20.sol";
-import {IAccessControl} from "@openzeppelin/contracts/access/IAccessControl.sol";
 import "@openzeppelin/contracts-upgradeable/utils/PausableUpgradeable.sol";
 
 contract UniversalCoreSwapFeeTest is Test, UpgradeableContractHelper {
@@ -96,8 +95,8 @@ contract UniversalCoreSwapFeeTest is Test, UpgradeableContractHelper {
         // Set BASE_GAS_LIMIT (proxy storage defaults to 0)
         universalCore.updateBaseGasLimit(500_000);
 
-        // Grant GATEWAY_ROLE to gateway
-        universalCore.grantRole(universalCore.GATEWAY_ROLE(), gateway);
+        // Set gateway
+        universalCore.setUniversalGatewayPC(gateway);
 
         // Configure gas token and gas price
         vm.startPrank(UNIVERSAL_EXECUTOR_MODULE);
@@ -125,17 +124,10 @@ contract UniversalCoreSwapFeeTest is Test, UpgradeableContractHelper {
     // 1) Access Control
     // ========================================
 
-    function test_SwapAndBurnGas_OnlyGatewayRole() public {
+    function test_SwapAndBurnGas_OnlyGatewayPC() public {
         vm.deal(nonGateway, 1 ether);
-        bytes32 gatewayRole = universalCore.GATEWAY_ROLE();
         vm.prank(nonGateway);
-        vm.expectRevert(
-            abi.encodeWithSelector(
-                IAccessControl.AccessControlUnauthorizedAccount.selector,
-                nonGateway,
-                gatewayRole
-            )
-        );
+        vm.expectRevert(UniversalCoreErrors.CallerIsNotGatewayPC.selector);
         universalCore.swapAndBurnGas{value: 1 ether}(
             address(gasTokenMock), vault, 0, GAS_FEE, PROTOCOL_FEE_AMOUNT, 0, user
         );
@@ -143,25 +135,18 @@ contract UniversalCoreSwapFeeTest is Test, UpgradeableContractHelper {
 
     function test_SwapAndBurnGas_UEModuleCannotCall() public {
         vm.deal(UNIVERSAL_EXECUTOR_MODULE, 1 ether);
-        bytes32 gatewayRole = universalCore.GATEWAY_ROLE();
         vm.prank(UNIVERSAL_EXECUTOR_MODULE);
-        vm.expectRevert(
-            abi.encodeWithSelector(
-                IAccessControl.AccessControlUnauthorizedAccount.selector,
-                UNIVERSAL_EXECUTOR_MODULE,
-                gatewayRole
-            )
-        );
+        vm.expectRevert(UniversalCoreErrors.CallerIsNotGatewayPC.selector);
         universalCore.swapAndBurnGas{value: 1 ether}(
             address(gasTokenMock), vault, 0, GAS_FEE, PROTOCOL_FEE_AMOUNT, 0, user
         );
     }
 
-    function test_SwapAndBurnGas_AdminCanGrantRole() public {
+    function test_SwapAndBurnGas_AdminCanSetGateway() public {
         address newGateway = makeAddr("newGateway");
         vm.deal(newGateway, 1 ether);
 
-        universalCore.grantRole(universalCore.GATEWAY_ROLE(), newGateway);
+        universalCore.setUniversalGatewayPC(newGateway);
 
         vm.prank(newGateway);
         (uint256 gasTokenOut, ) = universalCore.swapAndBurnGas{value: 1 ether}(
@@ -486,8 +471,8 @@ contract UniversalCoreSwapFeeTest is Test, UpgradeableContractHelper {
     // 7) Storage & Constants
     // ========================================
 
-    function test_GatewayRole_Value() public view {
-        assertEq(universalCore.GATEWAY_ROLE(), keccak256("GATEWAY_ROLE"));
+    function test_UniversalGatewayPC_Value() public view {
+        assertEq(universalCore.universalGatewayPC(), gateway);
     }
 
     function test_ExistingStorage_Preserved() public view {

@@ -10,7 +10,7 @@ contract MaliciousPRC20 {
 
     function deposit(address to, uint256 amount) external returns (bool) {
         // Try to reenter handler with a function that requires admin role
-        (bool success,) = handler.call(abi.encodeWithSignature("setWPCContractAddress(address)", address(0x123)));
+        (bool success,) = handler.call(abi.encodeWithSignature("setWPC(address)", address(0x123)));
         if (!success) {
             revert("Reentry failed");
         }

@@ -145,6 +145,6 @@ interface IUniversalCore {
         uint256 minPCOut
     ) external;
 
-    /// @notice Get the GATEWAY_ROLE identifier
-    function GATEWAY_ROLE() external pure returns (bytes32);
+    /// @notice Get the UniversalGatewayPC address
+    function universalGatewayPC() external view returns (address);
 }

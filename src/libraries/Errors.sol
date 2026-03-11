@@ -43,6 +43,7 @@ library UniversalCoreErrors {
     error InvalidFeeTier();
     error SlippageExceeded();
     error CallerIsNotUEModule();
+    error CallerIsNotGatewayPC();
     error AutoSwapNotSupported();
     error InvalidSlippageTolerance();
     error MinPCOutRequired();

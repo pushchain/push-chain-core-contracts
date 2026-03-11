@@ -158,7 +158,7 @@ contract UniversalCoreTest is Test, UpgradeableContractHelper {
     }
 
     function test_Initialize_SetsAddresses() public view {
-        assertEq(universalCore.wPCContractAddress(), address(mockWPC));
+        assertEq(universalCore.WPC(), address(mockWPC));
         assertEq(universalCore.uniswapV3FactoryAddress(), address(mockFactory));
         assertEq(universalCore.uniswapV3SwapRouterAddress(), address(mockRouter));
         assertEq(universalCore.uniswapV3QuoterAddress(), address(mockQuoter));
@@ -224,27 +224,27 @@ contract UniversalCoreTest is Test, UpgradeableContractHelper {
         // Non-owner should revert
         vm.prank(nonOwner);
         vm.expectRevert(CommonErrors.InvalidOwner.selector);
-        universalCore.setWPCContractAddress(newWPC);
+        universalCore.setWPC(newWPC);
 
         // Deployer (who has admin role) should succeed
         vm.prank(deployer);
-        universalCore.setWPCContractAddress(newWPC);
-        assertEq(universalCore.wPCContractAddress(), newWPC);
+        universalCore.setWPC(newWPC);
+        assertEq(universalCore.WPC(), newWPC);
     }
 
     function test_SetWPCContractAddress_HappyPath() public {
         address newWPC = makeAddr("newWPC");
 
         vm.prank(deployer);
-        universalCore.setWPCContractAddress(newWPC);
+        universalCore.setWPC(newWPC);
 
-        assertEq(universalCore.wPCContractAddress(), newWPC);
+        assertEq(universalCore.WPC(), newWPC);
     }
 
     function test_SetWPCContractAddress_ZeroAddressReverts() public {
         vm.prank(deployer);
         vm.expectRevert(CommonErrors.ZeroAddress.selector);
-        universalCore.setWPCContractAddress(address(0));
+        universalCore.setWPC(address(0));
     }
 
     // ========================================
@@ -335,7 +335,7 @@ contract UniversalCoreTest is Test, UpgradeableContractHelper {
 
         // Change WPC first
         vm.prank(deployer);
-        universalCore.setWPCContractAddress(newWPC);
+        universalCore.setWPC(newWPC);
 
         // Setup pool with new WPC (both orderings)
         if (newWPC < gasToken) {
@@ -469,7 +469,7 @@ contract UniversalCoreTest is Test, UpgradeableContractHelper {
         universalCore.depositPRC20Token(address(revertingToken), 1000, makeAddr("target"));
 
         // Verify universalCore state unchanged
-        assertEq(universalCore.wPCContractAddress(), address(mockWPC));
+        assertEq(universalCore.WPC(), address(mockWPC));
     }
 
     // ============ Pause/Unpause Tests ============
