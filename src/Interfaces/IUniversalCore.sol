@@ -8,12 +8,24 @@ interface IUniversalCore {
     // =========================
     //           Universal Core Events
     // =========================    
-    event SetGasPrice(string chainNamespace, uint256 price);
+    event SetChainMeta(string chainNamespace, uint256 price, uint256 chainHeight, uint256 observedAt);
     event SetGasToken(string chainNamespace, address prc20);
     event SetDefaultDeadlineMins(uint256 minutesValue);
     event SetSupportedToken(address indexed prc20, bool supported);
-    event SetGasPCPool(string chainNamespace, address pool, uint24 fee);   
-    event DepositPRC20WithAutoSwap(address prc20, uint256 amountIn, address pcToken, uint256 amountOut, uint24 fee, address target);
+    event SetGasPCPool(string chainNamespace, address pool, uint24 fee);
+    event DepositPRC20WithAutoSwap(address prc20, uint256 amountIn, address pcToken, uint256 amountOut, uint24 fee, address recipient);
+    event SwapAndBurnGas(
+        address indexed gasToken, address indexed vault,
+        uint256 pcIn, uint256 gasFee, uint256 protocolFee,
+        uint24 fee, address indexed caller
+    );
+    event RefundUnusedGas(
+        address indexed gasToken,
+        uint256 amount,
+        address indexed recipient,
+        bool swapped,
+        uint256 pcOut
+    );
     // =========================
     //           Universal Core Functions
     // =========================  
@@ -25,36 +37,36 @@ interface IUniversalCore {
      */
     function isSupportedToken(address prc20) external view returns (bool supported);
     /**
-     * @notice Deposits PRC20 tokens to the provided target address.
+     * @notice Deposits PRC20 tokens to the provided recipient address.
      * @dev    Can only be called by the Universal Executor Module.
      *         For any inbound transactions of moving supported tokens from external chains to Push Chain,
-     *         the Universal Executor Module uses this function to deposit the tokens to the target address.
-     *         The target address can be any address of the user's choice.
+     *         the Universal Executor Module uses this function to deposit the tokens to the recipient address.
+     *         The recipient address can be any address of the user's choice.
      * @param prc20 PRC20 address for deposit
      * @param amount Amount to deposit
-     * @param target Address to deposit tokens to
+     * @param recipient Address to deposit tokens to
      */
-    function depositPRC20Token(address prc20, uint256 amount, address target) external;
+    function depositPRC20Token(address prc20, uint256 amount, address recipient) external;
 
     /**
-     * @notice Deposits PRC20 tokens and automatically swaps them to native PC before sending to target.
+     * @notice Deposits PRC20 tokens and automatically swaps them to native PC before sending to recipient.
      * @dev    Can only be called by the Universal Executor Module.
      *         Can only be called if the PRC20 token is in the auto-swap supported list. ( eg pETH, pSOL, pUSDC etc.)
      *         If no pool exists, reverts with appropriate error. Although all auto-swap supported tokens are expected to have a pool.
-     *         Default values are used when parameters are set to 0. ( fee = defaultFeeTier[prc20], minPCOut = calculateMinOutput(expectedOutput, prc20), deadline = block.timestamp + (defaultDeadlineMins * 1 minutes) )
-     *         target address always receive the swapped native PC tokens.
+     *         Default values are used when parameters are set to 0. ( fee = defaultFeeTier[prc20], deadline = block.timestamp + (defaultDeadlineMins * 1 minutes) )
+     *         recipient address always receive the swapped native PC tokens.
      *         The function is called directly by the Universal Executor Module and is also gasless.
      * @param prc20 PRC20 address for deposit and swap
      * @param amount Amount to deposit and swap
-     * @param target Address to receive the swapped native PC tokens
+     * @param recipient Address to receive the swapped native PC tokens
      * @param fee Uniswap V3 fee tier for the pool (0 = use default)
-     * @param minPCOut Minimum amount of native PC expected from the swap (0 = calculate from slippage tolerance)
+     * @param minPCOut Minimum amount of native PC expected from the swap (must be > 0)
      * @param deadline Timestamp after which the transaction will revert (0 = use default)
      */
     function depositPRC20WithAutoSwap(
         address prc20,
         uint256 amount,
-        address target,
+        address recipient,
         uint24 fee,
         uint256 minPCOut,
         uint256 deadline
@@ -86,21 +98,53 @@ interface IUniversalCore {
     function BASE_GAS_LIMIT() external view returns (uint256 baseGasLimit);
 
     /**
-     * @notice Get gas fee for a PRC20 token.
-     * @dev    Uses BASE_GAS_LIMIT for the gas limit used in the fee computation.
+     * @notice Get gas fee for a PRC20 token, split into gasFee and protocolFee.
+     * @dev    When gasLimit is 0, falls back to BASE_GAS_LIMIT.
      * @param _prc20 PRC20 address
+     * @param gasLimit Gas limit (0 = use BASE_GAS_LIMIT)
      * @return gasToken Gas token address
-     * @return gasFee Gas fee
+     * @return gasFee Gas fee (gasPrice * effective gas limit)
+     * @return protocolFee Protocol fee from PRC20
+     * @return gasPrice Gas price on the external chain
+     * @return chainNamespace Source chain namespace
      */
-    function withdrawGasFee(address _prc20) external view returns (address gasToken, uint256 gasFee);
+    function getOutboundTxGasAndFees(address _prc20, uint256 gasLimit)
+        external
+        view
+        returns (address gasToken, uint256 gasFee, uint256 protocolFee, uint256 gasPrice, string memory chainNamespace);
 
-    /**
-     * @notice Get gas fee for a PRC20 token with a custom gas limit
-     * @dev    Uses the provided gas limit for the fee computation.
-     * @param _prc20 PRC20 address
-     * @param gasLimit Gas limit
-     * @return gasToken Gas token address
-     * @return gasFee Gas fee
-     */
-    function withdrawGasFeeWithGasLimit(address _prc20, uint256 gasLimit) external view returns (address gasToken, uint256 gasFee);
+    /// @notice Swap native PC for gas token PRC20, burn gasFee, send protocolFee to vault
+    /// @param gasToken           Gas token PRC20 address
+    /// @param vault              Vault address to receive protocol fee
+    /// @param fee                Uniswap V3 fee tier (0 = use default)
+    /// @param gasFee             Gas fee amount to burn
+    /// @param protocolFee        Protocol fee amount to send to vault
+    /// @param deadline           Swap deadline (0 = use default)
+    /// @param caller             Address to receive unused PC refund
+    /// @return gasTokenOut       Total gas token swapped (gasFee + protocolFee)
+    /// @return refund            Unused PC refunded to caller
+    function swapAndBurnGas(
+        address gasToken, address vault, uint24 fee,
+        uint256 gasFee, uint256 protocolFee, uint256 deadline,
+        address caller
+    ) external payable returns (uint256 gasTokenOut, uint256 refund);
+
+    /// @notice Refund unused gas to recipient, optionally swapping PRC20 to WPC
+    /// @param gasToken     Gas token PRC20 address
+    /// @param amount       Amount to refund
+    /// @param recipient    Address to receive the refund
+    /// @param withSwap     If true, swap PRC20 to WPC via Uniswap V3
+    /// @param fee          Uniswap V3 fee tier (0 = use default; ignored if !withSwap)
+    /// @param minPCOut     Minimum WPC out (must be > 0 if withSwap; ignored if !withSwap)
+    function refundUnusedGas(
+        address gasToken,
+        uint256 amount,
+        address recipient,
+        bool withSwap,
+        uint24 fee,
+        uint256 minPCOut
+    ) external;
+
+    /// @notice Get the UniversalGatewayPC address
+    function universalGatewayPC() external view returns (address);
 }

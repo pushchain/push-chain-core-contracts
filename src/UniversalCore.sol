@@ -4,6 +4,7 @@ pragma solidity 0.8.26;
 import "./interfaces/IPRC20.sol";
 import "./interfaces/IUniswapV3.sol";
 import "./interfaces/IUniversalCore.sol";
+import {IWPC} from "./interfaces/IWPC.sol";
 import {UniversalCoreErrors, CommonErrors} from "./libraries/Errors.sol";
 import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
@@ -42,7 +43,7 @@ contract UniversalCore is
     mapping(string => address) public gasPCPoolByChainNamespace;
 
     /// @notice Supproted token list for auto swap to PC using Uniswap V3.
-    mapping(address => bool) public isAutoSwapSupported;
+    mapping(address => bool) public isAutoSwapSupported;    
 
     /// @notice Default fee tier for each token (0 = not set)
     mapping(address => uint24) public defaultFeeTier;
@@ -62,7 +63,7 @@ contract UniversalCore is
     address public uniswapV3QuoterAddress;
 
     /// @notice Address of the wrapped PC to interact with Uniswap V3.
-    address public wPCContractAddress;
+    address public WPC;
 
     /// @notice Base gas limit for the cross-chain outbound transactions.
     uint256 public BASE_GAS_LIMIT = 500_000;
@@ -70,11 +71,25 @@ contract UniversalCore is
     /// @notice Role for managing gas-related configurations
     bytes32 public constant MANAGER_ROLE = keccak256("MANAGER_ROLE");
 
+    /// @notice Address of the UniversalGatewayPC that can call swapAndBurnGas
+    address public universalGatewayPC;
+
     /// @notice Mapping for indicating an official PRC20 supported token
     mapping(address => bool) public isSupportedToken;
 
+    /// @notice External chain block height last observed by relayer
+    mapping(string => uint256) public chainHeightByChainNamespace;
+
+    /// @notice Timestamp when the chain meta was last observed
+    mapping(string => uint256) public timestampObservedAtByChainNamespace;
+
     modifier onlyUEModule() {
         if (msg.sender != UNIVERSAL_EXECUTOR_MODULE) revert UniversalCoreErrors.CallerIsNotUEModule();
+        _;
+    }
+
+    modifier onlyGatewayPC() {
+        if (msg.sender != universalGatewayPC) revert UniversalCoreErrors.CallerIsNotGatewayPC();
         _;
     }
 
@@ -82,6 +97,7 @@ contract UniversalCore is
         if (!hasRole(DEFAULT_ADMIN_ROLE, msg.sender)) revert CommonErrors.InvalidOwner();
         _;
     }
+
     constructor() {
         _disableInitializers();
     }
@@ -104,12 +120,11 @@ contract UniversalCore is
         _grantRole(DEFAULT_ADMIN_ROLE, msg.sender);
         _grantRole(MANAGER_ROLE, UNIVERSAL_EXECUTOR_MODULE);
 
-        wPCContractAddress = wpc_;
+        WPC = wpc_;
         uniswapV3FactoryAddress = uniswapV3Factory_;
         uniswapV3SwapRouterAddress = uniswapV3SwapRouter_;
         uniswapV3QuoterAddress = uniswapV3Quoter_;
     }
-
 
     /**
      * @notice Set whether a PRC20 token is supported
@@ -125,12 +140,9 @@ contract UniversalCore is
     /**
      * @inheritdoc IUniversalCore
      */
-    function depositPRC20Token(address prc20, uint256 amount, address target) external onlyUEModule whenNotPaused {
-        if (target == UNIVERSAL_EXECUTOR_MODULE || target == address(this)) revert UniversalCoreErrors.InvalidTarget();
-        if (prc20 == address(0)) revert CommonErrors.ZeroAddress();
-        if (amount == 0) revert CommonErrors.ZeroAmount();
-
-        IPRC20(prc20).deposit(target, amount);
+    function depositPRC20Token(address prc20, uint256 amount, address recipient) external onlyUEModule whenNotPaused {
+        _validateParams(prc20, amount, recipient);
+        IPRC20(prc20).deposit(recipient, amount);
     }
 
     /**
@@ -139,63 +151,39 @@ contract UniversalCore is
     function depositPRC20WithAutoSwap(
         address prc20,
         uint256 amount,
-        address target,
+        address recipient,
         uint24 fee, // 0 = use default
-        uint256 minPCOut, // 0 = calculate from slippage tolerance
+        uint256 minPCOut,
         uint256 deadline // 0 = use default
     ) external onlyUEModule whenNotPaused nonReentrant {
-        if (target == UNIVERSAL_EXECUTOR_MODULE || target == address(this)) revert UniversalCoreErrors.InvalidTarget();
-        if (prc20 == address(0)) revert CommonErrors.ZeroAddress();
-        if (amount == 0) revert CommonErrors.ZeroAmount();
+        _validateParams(prc20, amount, recipient);
 
-        if (!isAutoSwapSupported[prc20]) revert UniversalCoreErrors.AutoSwapNotSupported();
+        (uint256 pcOut, uint24 resolvedFee) = _autoSwap(prc20, amount, recipient, fee, minPCOut, deadline);
 
-        // Use default fee tier if not provided
-        if (fee == 0) {
-            fee = defaultFeeTier[prc20];
-            if (fee == 0) revert UniversalCoreErrors.InvalidFeeTier();
+        emit DepositPRC20WithAutoSwap(prc20, amount, WPC, pcOut, resolvedFee, recipient);
+    }
+
+    /// @inheritdoc IUniversalCore
+    function refundUnusedGas(
+        address gasToken,
+        uint256 amount,
+        address recipient,
+        bool withSwap,
+        uint24 fee,
+        uint256 minPCOut
+    ) external onlyUEModule whenNotPaused nonReentrant {
+        _validateParams(gasToken, amount, recipient);
+
+        uint256 pcOut;
+
+        if (!withSwap) {
+            IPRC20(gasToken).deposit(recipient, amount);
+        } else {
+            if (minPCOut == 0) revert UniversalCoreErrors.MinPCOutRequired();
+            (pcOut,) = _autoSwap(gasToken, amount, recipient, fee, minPCOut, 0);
         }
 
-        if (deadline == 0) {
-            deadline = block.timestamp + (defaultDeadlineMins * 1 minutes);
-        }
-
-        if (block.timestamp > deadline) revert CommonErrors.DeadlineExpired();
-
-        address pool = IUniswapV3Factory(uniswapV3FactoryAddress).getPool(
-            prc20 < wPCContractAddress ? prc20 : wPCContractAddress,
-            prc20 < wPCContractAddress ? wPCContractAddress : prc20,
-            fee
-        );
-        if (pool == address(0)) revert UniversalCoreErrors.PoolNotFound();
-
-        // Calculate minimum output if not provided
-        if (minPCOut == 0) {
-            uint256 expectedOutput = getSwapQuote(prc20, wPCContractAddress, fee, amount);
-            // Calculate minimum output based on slippage tolerance
-            minPCOut = calculateMinOutput(expectedOutput, prc20);
-        }
-        IPRC20(prc20).deposit(address(this), amount);
-        IPRC20(prc20).approve(uniswapV3SwapRouterAddress, amount);
-
-        // Swap PRC20 -> native PC (wrapped PC) via ExactInputSingle
-        ISwapRouter.ExactInputSingleParams memory params = ISwapRouter.ExactInputSingleParams({
-            tokenIn: prc20,
-            tokenOut: wPCContractAddress,
-            fee: fee,
-            recipient: target,
-            deadline: deadline,
-            amountIn: amount,
-            amountOutMinimum: minPCOut,
-            sqrtPriceLimitX96: 0
-        });
-
-        uint256 pcOut = ISwapRouter(uniswapV3SwapRouterAddress).exactInputSingle(params);
-        if (pcOut < minPCOut) revert UniversalCoreErrors.SlippageExceeded();
-
-        IPRC20(prc20).approve(uniswapV3SwapRouterAddress, 0);
-
-        emit DepositPRC20WithAutoSwap(prc20, amount, wPCContractAddress, pcOut, fee, target);
+        emit RefundUnusedGas(gasToken, amount, recipient, withSwap, pcOut);
     }
 
     /**
@@ -207,25 +195,31 @@ contract UniversalCore is
     function setGasPCPool(string memory chainNamespace, address gasToken, uint24 fee) external onlyRole(MANAGER_ROLE) {
         if (gasToken == address(0)) revert CommonErrors.ZeroAddress();
 
-        address pool = IUniswapV3Factory(uniswapV3FactoryAddress).getPool(
-            wPCContractAddress < gasToken ? wPCContractAddress : gasToken,
-            wPCContractAddress < gasToken ? gasToken : wPCContractAddress,
-            fee
-        );
+        address pool = IUniswapV3Factory(uniswapV3FactoryAddress)
+            .getPool(
+                WPC < gasToken ? WPC : gasToken,
+                WPC < gasToken ? gasToken : WPC,
+                fee
+            );
         if (pool == address(0)) revert UniversalCoreErrors.PoolNotFound();
 
         gasPCPoolByChainNamespace[chainNamespace] = pool;
         emit SetGasPCPool(chainNamespace, pool, fee);
     }
 
-    /**
-     * @dev Fungible module updates the gas price oracle periodically.
-     * @param chainNamespace Chain Namespace (e.g. "eip155:1" for Ethereum Mainnet)
-     * @param price New gas price
-     */
-    function setGasPrice(string memory chainNamespace, uint256 price) external onlyRole(MANAGER_ROLE) {
+    /// @notice Sets gas price, chain height, and observation timestamp for a chain.
+    /// @param chainNamespace Chain Namespace (e.g. "eip155:1" for Ethereum Mainnet)
+    /// @param price Gas price on the external chain
+    /// @param chainHeight Block height observed on the external chain
+    /// @param observedAt Timestamp when the observation was made
+    function setChainMeta(string memory chainNamespace, uint256 price, uint256 chainHeight, uint256 observedAt)
+        external
+        onlyRole(MANAGER_ROLE)
+    {
         gasPriceByChainNamespace[chainNamespace] = price;
-        emit SetGasPrice(chainNamespace, price);
+        chainHeightByChainNamespace[chainNamespace] = chainHeight;
+        timestampObservedAtByChainNamespace[chainNamespace] = observedAt;
+        emit SetChainMeta(chainNamespace, price, chainHeight, observedAt);
     }
 
     /**
@@ -239,7 +233,7 @@ contract UniversalCore is
         emit SetGasToken(chainNamespace, prc20);
     }
 
-     /**
+    /**
      * @notice Set auto-swap support for a token
      * @param token Token address
      * @param supported Whether the token supports auto-swap
@@ -248,13 +242,18 @@ contract UniversalCore is
         isAutoSwapSupported[token] = supported;
     }
 
-    /**
-     * @dev Setter for wrapped PC address.
-     * @param addr WPC new address
-     */
-    function setWPCContractAddress(address addr) external onlyAdmin {
+    /// @notice Set the wrapped PC address
+    /// @param addr WPC new address
+    function setWPC(address addr) external onlyAdmin {
         if (addr == address(0)) revert CommonErrors.ZeroAddress();
-        wPCContractAddress = addr;
+        WPC = addr;
+    }
+
+    /// @notice Set the UniversalGatewayPC address
+    /// @param addr UniversalGatewayPC address
+    function setUniversalGatewayPC(address addr) external onlyAdmin {
+        if (addr == address(0)) revert CommonErrors.ZeroAddress();
+        universalGatewayPC = addr;
     }
 
     /**
@@ -294,7 +293,7 @@ contract UniversalCore is
         if (token == address(0)) revert CommonErrors.ZeroAddress();
         if (tolerance > 5000) revert UniversalCoreErrors.InvalidSlippageTolerance(); // Max 50%
         slippageTolerance[token] = tolerance;
-        }
+    }
 
     /**
      * @notice Set default deadline in minutes
@@ -311,7 +310,6 @@ contract UniversalCore is
         BASE_GAS_LIMIT = gasLimit;
     }
 
-    
     /**
      * @notice Pause the contract - stops all deposit functions
      * @dev Can only be called by the owner
@@ -328,85 +326,173 @@ contract UniversalCore is
         _unpause();
     }
 
-    //========= Public Helpers =========//
-
     /**
-     * @notice              Gets quote for token swap using Uniswap V3 Quoter
-     * @param tokenIn       Input token
-     * @param tokenOut      Output token
-     * @param fee           Fee tier
-     * @param amountIn      Input amount
-     * @return amountOut    Expected output amount
+     * @inheritdoc IUniversalCore
      */
-    function getSwapQuote(address tokenIn, address tokenOut, uint24 fee, uint256 amountIn)
+    function getOutboundTxGasAndFees(address _prc20, uint256 gasLimit)
         public
-        returns (uint256)
+        view
+        returns (address gasToken, uint256 gasFee, uint256 protocolFee, uint256 gasPrice, string memory chainNamespace)
     {
-        // Use QuoterV2 interface with struct parameter
-        IQuoterV2.QuoteExactInputSingleParams memory params = IQuoterV2.QuoteExactInputSingleParams({
-            tokenIn: tokenIn,
-            tokenOut: tokenOut,
-            amountIn: amountIn,
+        if (gasLimit == 0) {
+            gasLimit = BASE_GAS_LIMIT;
+        }
+        chainNamespace = IPRC20(_prc20).SOURCE_CHAIN_NAMESPACE();
+
+        gasToken = gasTokenPRC20ByChainNamespace[chainNamespace];
+        if (gasToken == address(0)) revert CommonErrors.ZeroAddress();
+
+        gasPrice = gasPriceByChainNamespace[chainNamespace];
+        if (gasPrice == 0) revert UniversalCoreErrors.ZeroGasPrice();
+
+        gasFee = gasPrice * gasLimit;
+        protocolFee = IPRC20(_prc20).PC_PROTOCOL_FEE();
+    }
+
+    /// @notice Accept native PC transfers (e.g., from WPC withdraw)
+    receive() external payable {}
+
+    /// @notice Swap native PC for gas token PRC20, burn gasFee, send protocolFee to vault
+    /// @param gasToken           Gas token PRC20 address
+    /// @param vault              Vault address to receive protocol fee
+    /// @param fee                Uniswap V3 fee tier (0 = use default)
+    /// @param gasFee             Gas fee amount to burn
+    /// @param protocolFee        Protocol fee amount to send to vault
+    /// @param deadline           Swap deadline (0 = use default)
+    /// @param caller             Address to receive unused PC refund
+    /// @return gasTokenOut       Total gas token swapped (gasFee + protocolFee)
+    /// @return refund            Unused PC refunded to caller
+    function swapAndBurnGas(
+        address gasToken,
+        address vault,
+        uint24 fee,
+        uint256 gasFee,
+        uint256 protocolFee,
+        uint256 deadline,
+        address caller
+    ) external payable onlyGatewayPC whenNotPaused nonReentrant returns (uint256 gasTokenOut, uint256 refund) {
+        if (gasToken == address(0)) revert CommonErrors.ZeroAddress();
+        if (vault == address(0)) revert CommonErrors.ZeroAddress();
+        if (caller == address(0)) revert CommonErrors.ZeroAddress();
+        if (msg.value == 0) revert CommonErrors.ZeroAmount();
+        if (gasFee == 0) revert CommonErrors.ZeroAmount();
+
+        uint256 totalRequiredGasOut = gasFee + protocolFee;
+
+        if (fee == 0) {
+            fee = defaultFeeTier[gasToken];
+            if (fee == 0) revert UniversalCoreErrors.InvalidFeeTier();
+        }
+
+        if (deadline == 0) {
+            deadline = block.timestamp + (defaultDeadlineMins * 1 minutes);
+        }
+        if (block.timestamp > deadline) revert CommonErrors.DeadlineExpired();
+
+        address pool = IUniswapV3Factory(uniswapV3FactoryAddress)
+            .getPool(
+                WPC < gasToken ? WPC : gasToken,
+                WPC < gasToken ? gasToken : WPC,
+                fee
+            );
+        if (pool == address(0)) revert UniversalCoreErrors.PoolNotFound();
+
+        IWPC(WPC).deposit{value: msg.value}();
+
+        IERC20(WPC).approve(uniswapV3SwapRouterAddress, msg.value);
+
+        ISwapRouter.ExactOutputSingleParams memory params = ISwapRouter.ExactOutputSingleParams({
+            tokenIn: WPC,
+            tokenOut: gasToken,
             fee: fee,
+            recipient: address(this),
+            deadline: deadline,
+            amountOut: totalRequiredGasOut,
+            amountInMaximum: msg.value,
             sqrtPriceLimitX96: 0
         });
 
-        // Call QuoterV2 directly - it handles the revert internally and returns the values
-        (uint256 amountOut, , , ) = IQuoterV2(uniswapV3QuoterAddress).quoteExactInputSingle(params);
-        
-        return amountOut;
-    }
+        uint256 amountInUsed = ISwapRouter(uniswapV3SwapRouterAddress).exactOutputSingle(params);
+        IERC20(WPC).approve(uniswapV3SwapRouterAddress, 0);
 
-
-    /**
-     * @notice                  Calculates minimum output based on slippage tolerance
-     * @param expectedOutput    Expected output amount from quote (in PC tokens)
-     * @param token             Token address to get slippage tolerance for
-     * @return minAmountOut     Minimum output amount (in PC tokens)
-     */
-    function calculateMinOutput(uint256 expectedOutput, address token) internal view returns (uint256) {
-        uint256 tolerance = slippageTolerance[token];
-        if (tolerance == 0) {
-            tolerance = 300; // Default 3% slippage tolerance
+        // Burn the gas fee portion
+        IPRC20(gasToken).burn(gasFee);
+        // Transfer the protocol fee portion to the vaultPC
+        if (protocolFee > 0) {
+            IERC20(gasToken).safeTransfer(vault, protocolFee);
         }
 
-        // Ensure expectedOutput is not 0 to avoid calculation issues
-        if (expectedOutput == 0) {
-            return 0;
+        gasTokenOut = totalRequiredGasOut;
+        refund = msg.value - amountInUsed;
+        if (refund > 0) {
+            IWPC(WPC).withdraw(refund);
+            (bool ok,) = caller.call{value: refund}("");
+            if (!ok) revert CommonErrors.TransferFailed();
         }
 
-        // Calculate minimum output: expectedOutput * (10000 - tolerance) / 10000
-        return (expectedOutput * (10000 - tolerance)) / 10000;
+        emit SwapAndBurnGas(gasToken, vault, amountInUsed, gasFee, protocolFee, fee, caller);
     }
 
-    /**
-     * @inheritdoc IUniversalCore
-     */
-    function withdrawGasFee(address _prc20) public view returns (address gasToken, uint256 gasFee) {
-        string memory chainNamespace = IPRC20(_prc20).SOURCE_CHAIN_NAMESPACE();
-
-        gasToken = gasTokenPRC20ByChainNamespace[chainNamespace];
-        if (gasToken == address(0)) revert CommonErrors.ZeroAddress();
-
-        uint256 price = gasPriceByChainNamespace[chainNamespace];
-        if (price == 0) revert UniversalCoreErrors.ZeroGasPrice();
-
-        gasFee = price * BASE_GAS_LIMIT + IPRC20(_prc20).PC_PROTOCOL_FEE();
+    /// @dev Shared input validation for deposit/refund functions.
+    function _validateParams(address token, uint256 amount, address recipient) private view {
+        if (token == address(0)) revert CommonErrors.ZeroAddress();
+        if (recipient == address(0)) revert CommonErrors.ZeroAddress();
+        if (recipient == UNIVERSAL_EXECUTOR_MODULE || recipient == address(this)) {
+            revert UniversalCoreErrors.InvalidTarget();
+        }
+        if (amount == 0) revert CommonErrors.ZeroAmount();
     }
 
-    /**
-     * @inheritdoc IUniversalCore
-     */
-    function withdrawGasFeeWithGasLimit(address _prc20, uint256 gasLimit) public view returns (address gasToken, uint256 gasFee) {
-        string memory chainNamespace = IPRC20(_prc20).SOURCE_CHAIN_NAMESPACE();
+    /// @dev Swap PRC20 to native PC via Uniswap V3 and send to recipient.
+    function _autoSwap(address prc20, uint256 amount, address recipient, uint24 fee, uint256 minPCOut, uint256 deadline)
+        private
+        returns (uint256 pcOut, uint24 resolvedFee)
+    {
+        if (!isAutoSwapSupported[prc20]) revert UniversalCoreErrors.AutoSwapNotSupported();
 
-        gasToken = gasTokenPRC20ByChainNamespace[chainNamespace];
-        if (gasToken == address(0)) revert CommonErrors.ZeroAddress();
+        resolvedFee = fee;
+        if (resolvedFee == 0) {
+            resolvedFee = defaultFeeTier[prc20];
+            if (resolvedFee == 0) revert UniversalCoreErrors.InvalidFeeTier();
+        }
 
-        uint256 price = gasPriceByChainNamespace[chainNamespace];
-        if (price == 0) revert UniversalCoreErrors.ZeroGasPrice();
+        if (deadline == 0) {
+            deadline = block.timestamp + (defaultDeadlineMins * 1 minutes);
+        }
+        if (block.timestamp > deadline) revert CommonErrors.DeadlineExpired();
 
-        gasFee = price * gasLimit + IPRC20(_prc20).PC_PROTOCOL_FEE();
+        address pool = IUniswapV3Factory(uniswapV3FactoryAddress)
+            .getPool(
+                prc20 < WPC ? prc20 : WPC,
+                prc20 < WPC ? WPC : prc20,
+                resolvedFee
+            );
+        if (pool == address(0)) revert UniversalCoreErrors.PoolNotFound();
+
+        if (minPCOut == 0) revert CommonErrors.ZeroAmount();
+
+        IPRC20(prc20).deposit(address(this), amount);
+        IPRC20(prc20).approve(uniswapV3SwapRouterAddress, amount);
+
+        ISwapRouter.ExactInputSingleParams memory params = ISwapRouter.ExactInputSingleParams({
+            tokenIn: prc20,
+            tokenOut: WPC,
+            fee: resolvedFee,
+            recipient: address(this),
+            deadline: deadline,
+            amountIn: amount,
+            amountOutMinimum: minPCOut,
+            sqrtPriceLimitX96: 0
+        });
+
+        pcOut = ISwapRouter(uniswapV3SwapRouterAddress).exactInputSingle(params);
+        if (pcOut < minPCOut) revert UniversalCoreErrors.SlippageExceeded();
+
+        IPRC20(prc20).approve(uniswapV3SwapRouterAddress, 0);
+
+        IWPC(WPC).withdraw(pcOut);
+        (bool ok,) = recipient.call{value: pcOut}("");
+        if (!ok) revert CommonErrors.TransferFailed();
     }
 
     /**

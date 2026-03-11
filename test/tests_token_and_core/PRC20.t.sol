@@ -71,11 +71,11 @@ contract PRC20Test is Test, UpgradeableContractHelper {
 
         // Deploy proxy and initialize
         address proxyAddress = deployUpgradeableContract(address(universalCoreImplementation), initData);
-        universalCore = UniversalCore(proxyAddress);
+        universalCore = UniversalCore(payable(proxyAddress));
 
         // Configure universalCore
         vm.startPrank(uExec);
-        universalCore.setGasPrice(SOURCE_CHAIN_NAMESPACE, GAS_PRICE);
+        universalCore.setChainMeta(SOURCE_CHAIN_NAMESPACE, GAS_PRICE, 0, 0);
         universalCore.setGasTokenPRC20(SOURCE_CHAIN_NAMESPACE, address(gasToken));
         vm.stopPrank();
 
@@ -486,7 +486,7 @@ contract PRC20Test is Test, UpgradeableContractHelper {
 
         // Deploy proxy and initialize
         address proxyAddress = deployUpgradeableContract(address(newHandlerImpl), initData);
-        UniversalCore newHandler = UniversalCore(proxyAddress);
+        UniversalCore newHandler = UniversalCore(payable(proxyAddress));
 
         // Update universalCore contract from Universal Executor Module
         vm.prank(uExec);
@@ -518,7 +518,7 @@ contract PRC20Test is Test, UpgradeableContractHelper {
 
         // Deploy proxy and initialize
         address proxyAddress = deployUpgradeableContract(address(newHandlerImpl), initData);
-        UniversalCore newHandler = UniversalCore(proxyAddress);
+        UniversalCore newHandler = UniversalCore(payable(proxyAddress));
 
         // Attempt to update universalCore contract from non-Universal Executor Module
         vm.prank(attacker);

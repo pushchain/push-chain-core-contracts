@@ -47,7 +47,6 @@ contract UniversalCoreTest is Test, UpgradeableContractHelper {
     event SetAutoSwapSupported(address indexed token, bool supported);
     event SetWPC(address indexed wpc);
     event SetGasPCPool(string indexed chainId, address indexed pool, uint24 fee);
-    event SetGasPrice(string indexed chainId, uint256 price);
     event SetGasToken(string indexed chainId, address indexed prc20);
     event DepositPRC20WithAutoSwap(
         address indexed prc20,
@@ -55,11 +54,12 @@ contract UniversalCoreTest is Test, UpgradeableContractHelper {
         address indexed pcToken,
         uint256 amountOut,
         uint24 fee,
-        address indexed target
+        address indexed recipient
     );
     event Paused(address account);
     event Unpaused(address account);
     event SetSupportedToken(address indexed prc20, bool supported);
+    event SetChainMeta(string chainNamespace, uint256 price, uint256 chainHeight, uint256 observedAt);
 
     function setUp() public {
         // Setup accounts
@@ -119,7 +119,7 @@ contract UniversalCoreTest is Test, UpgradeableContractHelper {
 
         // Configure gas price and gas token for testing
         vm.startPrank(UNIVERSAL_EXECUTOR_MODULE);
-        universalCore.setGasPrice(CHAIN_NAMESPACE, GAS_PRICE);
+        universalCore.setChainMeta(CHAIN_NAMESPACE, GAS_PRICE, 0, 0);
         universalCore.setGasTokenPRC20(CHAIN_NAMESPACE, address(mockPRC20));
         vm.stopPrank();
     }
@@ -158,7 +158,7 @@ contract UniversalCoreTest is Test, UpgradeableContractHelper {
     }
 
     function test_Initialize_SetsAddresses() public view {
-        assertEq(universalCore.wPCContractAddress(), address(mockWPC));
+        assertEq(universalCore.WPC(), address(mockWPC));
         assertEq(universalCore.uniswapV3FactoryAddress(), address(mockFactory));
         assertEq(universalCore.uniswapV3SwapRouterAddress(), address(mockRouter));
         assertEq(universalCore.uniswapV3QuoterAddress(), address(mockQuoter));
@@ -173,12 +173,11 @@ contract UniversalCoreTest is Test, UpgradeableContractHelper {
         assertEq(universalCore.UNIVERSAL_EXECUTOR_MODULE(), UNIVERSAL_EXECUTOR_MODULE);
     }
 
-    function test_ReceiveETH_Reverts() public {
-        // Handler contract has no receive function, so sending ETH should revert
-        vm.expectRevert(IAccessControl.AccessControlUnauthorizedAccount.selector);
+    function test_ReceiveETH_Succeeds() public {
+        vm.deal(address(this), 1 ether);
         (bool success,) = address(universalCore).call{value: 1 ether}("");
-        // Note: This test documents that universalCore doesn't accept ETH directly
-        // The assertion will fail if ETH is successfully sent, which is expected
+        assertTrue(success);
+        assertEq(address(universalCore).balance, 1 ether);
     }
 
     // ========================================
@@ -225,27 +224,27 @@ contract UniversalCoreTest is Test, UpgradeableContractHelper {
         // Non-owner should revert
         vm.prank(nonOwner);
         vm.expectRevert(CommonErrors.InvalidOwner.selector);
-        universalCore.setWPCContractAddress(newWPC);
+        universalCore.setWPC(newWPC);
 
         // Deployer (who has admin role) should succeed
         vm.prank(deployer);
-        universalCore.setWPCContractAddress(newWPC);
-        assertEq(universalCore.wPCContractAddress(), newWPC);
+        universalCore.setWPC(newWPC);
+        assertEq(universalCore.WPC(), newWPC);
     }
 
     function test_SetWPCContractAddress_HappyPath() public {
         address newWPC = makeAddr("newWPC");
 
         vm.prank(deployer);
-        universalCore.setWPCContractAddress(newWPC);
+        universalCore.setWPC(newWPC);
 
-        assertEq(universalCore.wPCContractAddress(), newWPC);
+        assertEq(universalCore.WPC(), newWPC);
     }
 
     function test_SetWPCContractAddress_ZeroAddressReverts() public {
         vm.prank(deployer);
         vm.expectRevert(CommonErrors.ZeroAddress.selector);
-        universalCore.setWPCContractAddress(address(0));
+        universalCore.setWPC(address(0));
     }
 
     // ========================================
@@ -336,7 +335,7 @@ contract UniversalCoreTest is Test, UpgradeableContractHelper {
 
         // Change WPC first
         vm.prank(deployer);
-        universalCore.setWPCContractAddress(newWPC);
+        universalCore.setWPC(newWPC);
 
         // Setup pool with new WPC (both orderings)
         if (newWPC < gasToken) {
@@ -349,41 +348,6 @@ contract UniversalCoreTest is Test, UpgradeableContractHelper {
         universalCore.setGasPCPool(CHAIN_NAMESPACE, gasToken, FEE_TIER);
 
         assertEq(universalCore.gasPCPoolByChainNamespace(CHAIN_NAMESPACE), pool);
-    }
-
-    function test_SetGasPrice_OnlyUEModule() public {
-        uint256 price = 1000;
-
-        // Non-UEM should revert
-        vm.startPrank(nonUEModule);
-        vm.expectRevert(
-            abi.encodeWithSelector(
-                IAccessControl.AccessControlUnauthorizedAccount.selector, nonUEModule, universalCore.MANAGER_ROLE()
-            )
-        );
-        universalCore.setGasPrice(CHAIN_NAMESPACE, price);
-        vm.stopPrank();
-
-        // UEM should succeed
-        vm.prank(UNIVERSAL_EXECUTOR_MODULE);
-        universalCore.setGasPrice(CHAIN_NAMESPACE, price);
-        assertEq(universalCore.gasPriceByChainNamespace(CHAIN_NAMESPACE), price);
-    }
-
-    function test_SetGasPrice_HappyPath() public {
-        uint256 price = 1000;
-
-        vm.prank(UNIVERSAL_EXECUTOR_MODULE);
-        universalCore.setGasPrice(CHAIN_NAMESPACE, price);
-
-        assertEq(universalCore.gasPriceByChainNamespace(CHAIN_NAMESPACE), price);
-    }
-
-    function test_SetGasPrice_ZeroPriceAllowed() public {
-        // Current implementation allows zero price
-        vm.prank(UNIVERSAL_EXECUTOR_MODULE);
-        universalCore.setGasPrice(CHAIN_NAMESPACE, 0);
-        assertEq(universalCore.gasPriceByChainNamespace(CHAIN_NAMESPACE), 0);
     }
 
     function test_SetGasTokenPRC20_OnlyUEModule() public {
@@ -505,7 +469,7 @@ contract UniversalCoreTest is Test, UpgradeableContractHelper {
         universalCore.depositPRC20Token(address(revertingToken), 1000, makeAddr("target"));
 
         // Verify universalCore state unchanged
-        assertEq(universalCore.wPCContractAddress(), address(mockWPC));
+        assertEq(universalCore.WPC(), address(mockWPC));
     }
 
     // ============ Pause/Unpause Tests ============
@@ -598,48 +562,55 @@ contract UniversalCoreTest is Test, UpgradeableContractHelper {
     // ========================================
 
     function testWithdrawGasFeeHappyPath() public view {
-        // Get the gas fee quote
-        (address returnedGasToken, uint256 gasFee) = universalCore.withdrawGasFee(address(prc20Token));
+        (
+            address returnedGasToken,
+            uint256 gasFee,
+            uint256 protocolFee,
+            uint256 gasPrice,
+            string memory chainNamespace
+        ) = universalCore.getOutboundTxGasAndFees(address(prc20Token), 0);
 
-        // Verify returned gas token
         assertEq(returnedGasToken, address(mockPRC20));
 
-        // Debug: Check actual values
-        uint256 actualGasPrice = universalCore.gasPriceByChainNamespace(CHAIN_NAMESPACE);
         uint256 actualBaseGasLimit = universalCore.BASE_GAS_LIMIT();
         uint256 actualProtocolFee = prc20Token.PC_PROTOCOL_FEE();
-        
-        // Verify fee calculation: price * BASE_GAS_LIMIT + PROTOCOL_FEE
-        uint256 expectedFee = actualGasPrice * actualBaseGasLimit + actualProtocolFee;
-        assertEq(gasFee, expectedFee);
+
+        assertEq(gasPrice, GAS_PRICE);
+        assertEq(gasFee, gasPrice * actualBaseGasLimit);
+        assertEq(protocolFee, actualProtocolFee);
+        assertEq(keccak256(bytes(chainNamespace)), keccak256(bytes(CHAIN_NAMESPACE)));
     }
 
     function testWithdrawGasFeeWithGasLimitHappyPath() public view {
         uint256 customGasLimit = 300000;
 
-        // Get the gas fee quote with custom gas limit
-        (address returnedGasToken, uint256 gasFee) = universalCore.withdrawGasFeeWithGasLimit(
-            address(prc20Token), 
+        (
+            address returnedGasToken,
+            uint256 gasFee,
+            uint256 protocolFee,
+            uint256 gasPrice,
+            string memory chainNamespace
+        ) = universalCore.getOutboundTxGasAndFees(
+            address(prc20Token),
             customGasLimit
         );
 
-        // Verify returned gas token
         assertEq(returnedGasToken, address(mockPRC20));
-
-        // Verify fee calculation: price * customGasLimit + PROTOCOL_FEE
-        uint256 expectedFee = GAS_PRICE * customGasLimit + PROTOCOL_FEE;
-        assertEq(gasFee, expectedFee);
+        assertEq(gasPrice, GAS_PRICE);
+        assertEq(gasFee, gasPrice * customGasLimit);
+        assertEq(protocolFee, PROTOCOL_FEE);
+        assertEq(keccak256(bytes(chainNamespace)), keccak256(bytes(CHAIN_NAMESPACE)));
     }
 
     function testWithdrawGasFeeZeroGasPrice() public {
         vm.startPrank(UNIVERSAL_EXECUTOR_MODULE);
         // Set gas price to zero
-        universalCore.setGasPrice(CHAIN_NAMESPACE, 0);
+        universalCore.setChainMeta(CHAIN_NAMESPACE, 0, 0, 0);
         vm.stopPrank();
         
         // Expect revert when getting gas fee
         vm.expectRevert(UniversalCoreErrors.ZeroGasPrice.selector);
-        universalCore.withdrawGasFee(address(prc20Token));
+        universalCore.getOutboundTxGasAndFees(address(prc20Token), 0);
     }
 
     function testWithdrawGasFeeZeroGasToken() public {
@@ -666,58 +637,48 @@ contract UniversalCoreTest is Test, UpgradeableContractHelper {
         
         // Expect revert when getting gas fee
         vm.expectRevert(CommonErrors.ZeroAddress.selector);
-        universalCore.withdrawGasFee(address(newToken));
+        universalCore.getOutboundTxGasAndFees(address(newToken), 0);
     }
 
     function testWithdrawGasFeeAfterGasPriceUpdate() public {
         uint256 newGasPrice = GAS_PRICE * 2;
 
-        // Update gas price
         vm.prank(UNIVERSAL_EXECUTOR_MODULE);
-        universalCore.setGasPrice(CHAIN_NAMESPACE, newGasPrice);
+        universalCore.setChainMeta(CHAIN_NAMESPACE, newGasPrice, 0, 0);
 
-        // Get the gas fee quote
-        (address _gasTokenIgnored, uint256 gasFee) = universalCore.withdrawGasFee(address(prc20Token));
+        (, uint256 gasFee, uint256 protocolFee,,) = universalCore.getOutboundTxGasAndFees(address(prc20Token), 0);
 
-        // Verify fee calculation with new gas price
         uint256 actualBaseGasLimit = universalCore.BASE_GAS_LIMIT();
-        uint256 actualProtocolFee = prc20Token.PC_PROTOCOL_FEE();
-        uint256 expectedFee = newGasPrice * actualBaseGasLimit + actualProtocolFee;
-        assertEq(gasFee, expectedFee);
+        uint256 expectedGasFee = newGasPrice * actualBaseGasLimit;
+        assertEq(gasFee, expectedGasFee);
+        assertEq(protocolFee, prc20Token.PC_PROTOCOL_FEE());
     }
 
     function testWithdrawGasFeeAfterBaseGasLimitUpdate() public {
         uint256 newBaseGasLimit = BASE_GAS_LIMIT * 2;
 
-        // Update base gas limit
         vm.prank(deployer);
         universalCore.updateBaseGasLimit(newBaseGasLimit);
 
-        // Get the gas fee quote
-        (address _gasTokenIgnored, uint256 gasFee) = universalCore.withdrawGasFee(address(prc20Token));
+        (, uint256 gasFee, uint256 protocolFee,,) = universalCore.getOutboundTxGasAndFees(address(prc20Token), 0);
 
-        // Verify fee calculation with new base gas limit
         uint256 actualGasPrice = universalCore.gasPriceByChainNamespace(CHAIN_NAMESPACE);
-        uint256 actualProtocolFee = prc20Token.PC_PROTOCOL_FEE();
-        uint256 expectedFee = actualGasPrice * newBaseGasLimit + actualProtocolFee;
-        assertEq(gasFee, expectedFee);
+        assertEq(gasFee, actualGasPrice * newBaseGasLimit);
+        assertEq(protocolFee, prc20Token.PC_PROTOCOL_FEE());
     }
 
     function testWithdrawGasFeeAfterProtocolFeeUpdate() public {
         uint256 newProtocolFee = PROTOCOL_FEE * 2;
 
-        // Update protocol fee on PRC20 token
         vm.prank(UNIVERSAL_EXECUTOR_MODULE);
         prc20Token.updateProtocolFlatFee(newProtocolFee);
 
-        // Get the gas fee quote
-        (address _gasTokenIgnored, uint256 gasFee) = universalCore.withdrawGasFee(address(prc20Token));
+        (, uint256 gasFee, uint256 protocolFee,,) = universalCore.getOutboundTxGasAndFees(address(prc20Token), 0);
 
-        // Verify fee calculation with new protocol fee
         uint256 actualGasPrice = universalCore.gasPriceByChainNamespace(CHAIN_NAMESPACE);
         uint256 actualBaseGasLimit = universalCore.BASE_GAS_LIMIT();
-        uint256 expectedFee = actualGasPrice * actualBaseGasLimit + newProtocolFee;
-        assertEq(gasFee, expectedFee);
+        assertEq(gasFee, actualGasPrice * actualBaseGasLimit);
+        assertEq(protocolFee, newProtocolFee);
     }
 
     // ========================================
@@ -843,5 +804,99 @@ contract UniversalCoreTest is Test, UpgradeableContractHelper {
             )
         );
         universalCore.setSupportedToken(token, true);
+    }
+
+    // ========================================
+    // 7) setChainMeta Tests
+    // ========================================
+
+    function test_SetChainMeta_OnlyManagerRole() public {
+        vm.expectRevert(
+            abi.encodeWithSelector(
+                IAccessControl.AccessControlUnauthorizedAccount.selector, nonUEModule, universalCore.MANAGER_ROLE()
+            )
+        );
+        vm.prank(nonUEModule);
+        universalCore.setChainMeta(CHAIN_NAMESPACE, 100, 1000, block.timestamp);
+    }
+
+    function test_SetChainMeta_HappyPath() public {
+        uint256 price = 100 * 10 ** 9;
+        uint256 chainHeight = 20_000_000;
+        uint256 observedAt = block.timestamp;
+
+        vm.prank(UNIVERSAL_EXECUTOR_MODULE);
+        universalCore.setChainMeta(CHAIN_NAMESPACE, price, chainHeight, observedAt);
+
+        assertEq(universalCore.gasPriceByChainNamespace(CHAIN_NAMESPACE), price);
+        assertEq(universalCore.chainHeightByChainNamespace(CHAIN_NAMESPACE), chainHeight);
+        assertEq(universalCore.timestampObservedAtByChainNamespace(CHAIN_NAMESPACE), observedAt);
+    }
+
+    function test_SetChainMeta_EmitsEvent() public {
+        uint256 price = 100 * 10 ** 9;
+        uint256 chainHeight = 20_000_000;
+        uint256 observedAt = block.timestamp;
+
+        vm.expectEmit(false, false, false, true);
+        emit SetChainMeta(CHAIN_NAMESPACE, price, chainHeight, observedAt);
+
+        vm.prank(UNIVERSAL_EXECUTOR_MODULE);
+        universalCore.setChainMeta(CHAIN_NAMESPACE, price, chainHeight, observedAt);
+    }
+
+    function test_SetChainMeta_UpdatesGasPrice() public {
+        uint256 newPrice = GAS_PRICE * 3;
+
+        vm.prank(UNIVERSAL_EXECUTOR_MODULE);
+        universalCore.setChainMeta(CHAIN_NAMESPACE, newPrice, 100, block.timestamp);
+
+        (, uint256 gasFee, uint256 protocolFee,,) = universalCore.getOutboundTxGasAndFees(address(prc20Token), 0);
+        assertEq(gasFee, newPrice * universalCore.BASE_GAS_LIMIT());
+        assertEq(protocolFee, prc20Token.PC_PROTOCOL_FEE());
+    }
+
+    function test_SetChainMeta_OverwritesPreviousValues() public {
+        vm.startPrank(UNIVERSAL_EXECUTOR_MODULE);
+
+        universalCore.setChainMeta(CHAIN_NAMESPACE, 100, 1000, 500);
+        assertEq(universalCore.chainHeightByChainNamespace(CHAIN_NAMESPACE), 1000);
+        assertEq(universalCore.timestampObservedAtByChainNamespace(CHAIN_NAMESPACE), 500);
+
+        universalCore.setChainMeta(CHAIN_NAMESPACE, 200, 2000, 600);
+        assertEq(universalCore.gasPriceByChainNamespace(CHAIN_NAMESPACE), 200);
+        assertEq(universalCore.chainHeightByChainNamespace(CHAIN_NAMESPACE), 2000);
+        assertEq(universalCore.timestampObservedAtByChainNamespace(CHAIN_NAMESPACE), 600);
+
+        vm.stopPrank();
+    }
+
+    function test_SetChainMeta_MultipleChains() public {
+        string memory ethChain = "eip155:1";
+        string memory bscChain = "eip155:56";
+
+        vm.startPrank(UNIVERSAL_EXECUTOR_MODULE);
+
+        universalCore.setChainMeta(ethChain, 50, 20_000_000, 1000);
+        universalCore.setChainMeta(bscChain, 5, 40_000_000, 1001);
+
+        vm.stopPrank();
+
+        assertEq(universalCore.gasPriceByChainNamespace(ethChain), 50);
+        assertEq(universalCore.chainHeightByChainNamespace(ethChain), 20_000_000);
+        assertEq(universalCore.timestampObservedAtByChainNamespace(ethChain), 1000);
+
+        assertEq(universalCore.gasPriceByChainNamespace(bscChain), 5);
+        assertEq(universalCore.chainHeightByChainNamespace(bscChain), 40_000_000);
+        assertEq(universalCore.timestampObservedAtByChainNamespace(bscChain), 1001);
+    }
+
+    function test_SetChainMeta_ZeroValuesAllowed() public {
+        vm.prank(UNIVERSAL_EXECUTOR_MODULE);
+        universalCore.setChainMeta(CHAIN_NAMESPACE, 0, 0, 0);
+
+        assertEq(universalCore.gasPriceByChainNamespace(CHAIN_NAMESPACE), 0);
+        assertEq(universalCore.chainHeightByChainNamespace(CHAIN_NAMESPACE), 0);
+        assertEq(universalCore.timestampObservedAtByChainNamespace(CHAIN_NAMESPACE), 0);
     }
 }

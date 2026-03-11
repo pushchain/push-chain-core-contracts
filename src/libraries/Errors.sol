@@ -43,8 +43,10 @@ library UniversalCoreErrors {
     error InvalidFeeTier();
     error SlippageExceeded();
     error CallerIsNotUEModule();
+    error CallerIsNotGatewayPC();
     error AutoSwapNotSupported();
     error InvalidSlippageTolerance();
+    error MinPCOutRequired();
 }
 
 // =========================
@@ -74,4 +76,5 @@ library CEAErrors {
     error InvalidInput();
     error ExecutionFailed();
     error InvalidCall();
+    error InvalidRecipient();
 }

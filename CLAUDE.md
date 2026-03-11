@@ -142,11 +142,12 @@ Both UEA and CEA use minimal proxy (EIP-1167 clone) architecture:
 - ERC-20 compatible primitive for DEX integrations
 - Used in Uniswap V3 pools for gas token swaps
 
-**UniversalCore (src/UniversalCore.sol:26)**
+**UniversalCore (src/UniversalCore.sol:27)**
 - Protocol coordinator on Push Chain
 - Operated by Universal Executor Module at fixed address `0x14191Ea54B4c176fCf86f51b0FAc7CB1E71Df7d7`
 - Manages PRC20 minting/burning, gas price configuration, and Uniswap V3 integration
 - Upgradeable via proxy pattern
+- `swapPCForGasToken` uses Uniswap V3 `exactOutputSingle` — caller specifies exact gas token output (`requiredGasTokenOut`), unused PC is refunded directly to `caller` address (passed by UGPC as `msg.sender`). Returns `(gasTokenOut, refund)`. Gated by `GATEWAY_ROLE`.
 
 ### Chain Identification
 
