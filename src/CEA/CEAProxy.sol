@@ -1,55 +1,51 @@
 // SPDX-License-Identifier: MIT
 pragma solidity 0.8.26;
 
-import {CEAErrors as Errors} from "../libraries/Errors.sol";
+import {CEAErrors} from "../libraries/Errors.sol";
+
 import {Initializable} from "@openzeppelin/contracts/proxy/utils/Initializable.sol";
 import {Proxy} from "@openzeppelin/contracts/proxy/Proxy.sol";
 
 /**
- * @title CEAProxy
- * @dev
- *  - This is the clone that gets deployed via EIP-1167 by CEAFactory.
- *  - Each CEAProxy delegates all calls to a CEA implementation contract.
- *  - The implementation address is stored in a dedicated storage slot (CEA_LOGIC_SLOT),
- *    similar to UEAProxy.
+ * @title   CEAProxy
+ * @notice  Minimal proxy clone deployed by CEAFactory for each CEA.
+ * @dev     Each CEAProxy delegates all calls to a CEA implementation contract.
+ *          The implementation address is stored in a dedicated storage slot
+ *          (CEA_LOGIC_SLOT), similar to UEAProxy.
  *
- *  Flow:
- *   1. CEAFactory clones this proxy using Clones.cloneDeterministic.
- *   2. CEAFactory calls `initializeCEAProxy(ceaImplementation)` ONCE.
- *   3. CEAFactory then calls `CEA.initializeCEA(uea, vault, universalGateway)` THROUGH the proxy.
+ *          Flow:
+ *          1. CEAFactory clones this proxy via Clones.cloneDeterministic.
+ *          2. CEAFactory calls initializeCEAProxy(ceaImplementation) ONCE.
+ *          3. CEAFactory calls CEA.initializeCEA(...) THROUGH the proxy.
  *
- *  Notes:
- *   - Implementation can be upgraded via migration flow (CEA → CEAMigration delegatecall)
- *   - All CEA state (UEA, VAULT, UNIVERSAL_GATEWAY, etc.) lives in the proxy's storage via delegatecall.
+ *          Implementation can be upgraded via migration flow
+ *          (CEA -> CEAMigration delegatecall).
  */
 contract CEAProxy is Initializable, Proxy {
-    /**
-     * @dev Storage slot with the address of the current implementation.
-     * This follows the EIP-1967 convention style:
-     *   bytes32(uint256(keccak256("cea.proxy.implementation")) - 1)
-     */
-    bytes32 private constant CEA_LOGIC_SLOT = 0x8b2ae8ee8c8678fc65d38e03fd33865426627999aa5e8fab985583dec5888813;
+    // =========================
+    //    CP: CONSTANTS
+    // =========================
 
-    /**
-     * @dev Initializes the proxy with a CEA implementation address.
-     * Can only be called once per proxy instance.
-     * @param _logic The address of the CEA implementation contract.
-     *
-     * Requirements:
-     *  - `_logic` must be non-zero.
-     *  - Proxy must not have an implementation already set.
-     *
-     * Intended caller:
-     *  - CEAFactory, immediately after cloneDeterministic.
-     */
+    /// @dev Storage slot for the current implementation address.
+    ///      bytes32(uint256(keccak256("cea.proxy.implementation")) - 1)
+    bytes32 private constant CEA_LOGIC_SLOT =
+        0x8b2ae8ee8c8678fc65d38e03fd33865426627999aa5e8fab985583dec5888813;
+
+    // =========================
+    //    CP: INITIALIZER
+    // =========================
+
+    /// @notice                  Initializes the proxy with a CEA implementation.
+    /// @dev                     Can only be called once. Intended caller: CEAFactory.
+    /// @param _logic            Address of the CEA implementation contract
     function initializeCEAProxy(address _logic) external initializer {
         if (_logic == address(0)) {
-            revert Errors.InvalidCall(); // or InvalidInput, depending on your Errors design
+            revert CEAErrors.InvalidCall();
         }
 
         address currentImpl = getImplementation();
         if (currentImpl != address(0)) {
-            revert Errors.InvalidCall();
+            revert CEAErrors.InvalidCall();
         }
 
         assembly {
@@ -57,25 +53,34 @@ contract CEAProxy is Initializable, Proxy {
         }
     }
 
-    /**
-     * @notice Returns the current CEA implementation address stored in the proxy.
-     * @dev Reads the implementation address from the CEA_LOGIC_SLOT storage slot.
-     */
+    // =========================
+    //    CP_1: VIEW FUNCTIONS
+    // =========================
+
+    /// @notice             Returns the current CEA implementation address.
+    /// @return impl        Implementation address stored in CEA_LOGIC_SLOT
     function getImplementation() public view returns (address impl) {
         assembly {
             impl := sload(CEA_LOGIC_SLOT)
         }
     }
 
-    /**
-     * @dev Returns the address to which the fallback function should delegate.
-     * Reverts with Errors.InvalidCall() if no implementation has been set.
-     * This function overrides OpenZeppelin's Proxy logic.
-     */
-    function _implementation() internal view virtual override returns (address) {
+    // =========================
+    //    CP_2: INTERNAL HELPERS
+    // =========================
+
+    /// @dev Returns the implementation address for delegation.
+    ///      Reverts if no implementation has been set.
+    function _implementation()
+        internal
+        view
+        virtual
+        override
+        returns (address)
+    {
         address impl = getImplementation();
         if (impl == address(0)) {
-            revert Errors.InvalidCall();
+            revert CEAErrors.InvalidCall();
         }
         return impl;
     }

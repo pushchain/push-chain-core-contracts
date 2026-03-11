@@ -67,7 +67,6 @@ library CEAErrors {
     error AlreadyInitialized();
     error ZeroAddress();
     error NotVault();
-    error InvalidAmount();
     error InvalidTarget();
     error InsufficientBalance();
     error PayloadExecuted();
