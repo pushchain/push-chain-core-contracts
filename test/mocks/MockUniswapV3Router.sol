@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 pragma solidity 0.8.26;
 
-import "../../src/interfaces/IUniswapV3.sol";
+import "../../src/interfaces/uniswapv3/IUniswapV3.sol";
 import "../mocks/MockPRC20.sol";
 
 interface IERC20Transfer {

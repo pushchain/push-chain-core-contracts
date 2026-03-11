@@ -159,9 +159,9 @@ contract UniversalCoreTest is Test, UpgradeableContractHelper {
 
     function test_Initialize_SetsAddresses() public view {
         assertEq(universalCore.WPC(), address(mockWPC));
-        assertEq(universalCore.uniswapV3FactoryAddress(), address(mockFactory));
-        assertEq(universalCore.uniswapV3SwapRouterAddress(), address(mockRouter));
-        assertEq(universalCore.uniswapV3QuoterAddress(), address(mockQuoter));
+        assertEq(universalCore.uniswapV3Factory(), address(mockFactory));
+        assertEq(universalCore.uniswapV3SwapRouter(), address(mockRouter));
+        assertEq(universalCore.uniswapV3Quoter(), address(mockQuoter));
     }
 
     function test_Initialize_RevertsOnSecondCall() public {

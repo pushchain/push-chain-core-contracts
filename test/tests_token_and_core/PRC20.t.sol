@@ -5,7 +5,7 @@ import "forge-std/Test.sol";
 import "../../src/PRC20.sol";
 import "../../src/UniversalCore.sol";
 import "../../src/interfaces/IPRC20.sol";
-import "../../src/interfaces/IUniswapV3.sol";
+import "../../src/interfaces/uniswapv3/IUniswapV3.sol";
 import "../mocks/MockGasToken.sol";
 import "../helpers/UpgradeableContractHelper.sol";
 import {PRC20Errors, UniversalCoreErrors, UEAErrors, CommonErrors} from "../../src/libraries/Errors.sol";
