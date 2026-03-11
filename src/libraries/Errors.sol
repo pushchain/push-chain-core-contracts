@@ -53,7 +53,6 @@ library UniversalCoreErrors {
 // =========================
 library UEAErrors {
     error InvalidCall();
-    error InvalidAccount();
     error ExecutionFailed();
     error ExpiredDeadline();
     error InvalidInputArgs();
