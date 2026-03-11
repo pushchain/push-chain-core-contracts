@@ -28,7 +28,6 @@ library CommonErrors {
 library PRC20Errors {
     error LowAllowance();
     error InvalidSender();
-    error GasFeeTransferFailed();
     error CallerIsNotUniversalExecutor();
 }
 
