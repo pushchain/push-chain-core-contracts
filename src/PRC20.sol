@@ -19,8 +19,7 @@ contract PRC20 is IPRC20, Initializable {
     // =========================
 
     /// @notice The protocol's privileged executor module (auth & fee sink).
-    address public immutable UNIVERSAL_EXECUTOR_MODULE =
-        0x14191Ea54B4c176fCf86f51b0FAc7CB1E71Df7d7;
+    address public immutable UNIVERSAL_EXECUTOR_MODULE = 0x14191Ea54B4c176fCf86f51b0FAc7CB1E71Df7d7;
 
     /// @notice Source chain this PRC20 mirrors (used for oracle lookups).
     string public SOURCE_CHAIN_NAMESPACE;
@@ -127,10 +126,7 @@ contract PRC20 is IPRC20, Initializable {
     }
 
     /// @inheritdoc IPRC20
-    function allowance(
-        address owner,
-        address spender
-    ) external view returns (uint256) {
+    function allowance(address owner, address spender) external view returns (uint256) {
         return _allowances[owner][spender];
     }
 
@@ -139,19 +135,13 @@ contract PRC20 is IPRC20, Initializable {
     // =========================
 
     /// @inheritdoc IPRC20
-    function transfer(
-        address recipient,
-        uint256 amount
-    ) external returns (bool) {
+    function transfer(address recipient, uint256 amount) external returns (bool) {
         _transfer(msg.sender, recipient, amount);
         return true;
     }
 
     /// @inheritdoc IPRC20
-    function approve(
-        address spender,
-        uint256 amount
-    ) external returns (bool) {
+    function approve(address spender, uint256 amount) external returns (bool) {
         if (spender == address(0)) revert CommonErrors.ZeroAddress();
         _allowances[msg.sender][spender] = amount;
         emit Approval(msg.sender, spender, amount);
@@ -159,11 +149,7 @@ contract PRC20 is IPRC20, Initializable {
     }
 
     /// @inheritdoc IPRC20
-    function transferFrom(
-        address sender,
-        address recipient,
-        uint256 amount
-    ) external returns (bool) {
+    function transferFrom(address sender, address recipient, uint256 amount) external returns (bool) {
         _transfer(sender, recipient, amount);
 
         uint256 currentAllowance = _allowances[sender][msg.sender];
@@ -171,9 +157,7 @@ contract PRC20 is IPRC20, Initializable {
         unchecked {
             _allowances[sender][msg.sender] = currentAllowance - amount;
         }
-        emit Approval(
-            sender, msg.sender, _allowances[sender][msg.sender]
-        );
+        emit Approval(sender, msg.sender, _allowances[sender][msg.sender]);
 
         return true;
     }
@@ -189,22 +173,14 @@ contract PRC20 is IPRC20, Initializable {
     // =========================
 
     /// @inheritdoc IPRC20
-    function deposit(
-        address to,
-        uint256 amount
-    ) external returns (bool) {
-        if (
-            msg.sender != UNIVERSAL_CORE
-                && msg.sender != UNIVERSAL_EXECUTOR_MODULE
-        ) {
+    function deposit(address to, uint256 amount) external returns (bool) {
+        if (msg.sender != UNIVERSAL_CORE && msg.sender != UNIVERSAL_EXECUTOR_MODULE) {
             revert PRC20Errors.InvalidSender();
         }
 
         _mint(to, amount);
 
-        emit Deposit(
-            abi.encodePacked(UNIVERSAL_EXECUTOR_MODULE), to, amount
-        );
+        emit Deposit(abi.encodePacked(UNIVERSAL_EXECUTOR_MODULE), to, amount);
         return true;
     }
 
@@ -214,9 +190,7 @@ contract PRC20 is IPRC20, Initializable {
 
     /// @notice          Update UniversalCore contract (gas coin & price oracle source).
     /// @param addr      New UniversalCore address
-    function updateUniversalCore(
-        address addr
-    ) external onlyUniversalExecutor {
+    function updateUniversalCore(address addr) external onlyUniversalExecutor {
         if (addr == address(0)) revert CommonErrors.ZeroAddress();
         UNIVERSAL_CORE = addr;
         emit UpdatedUniversalCore(addr);
@@ -224,26 +198,20 @@ contract PRC20 is IPRC20, Initializable {
 
     /// @notice                  Update flat protocol fee (absolute units in gas coin PRC20).
     /// @param protocolFlatFee_  New protocol fee
-    function updateProtocolFlatFee(
-        uint256 protocolFlatFee_
-    ) external onlyUniversalExecutor {
+    function updateProtocolFlatFee(uint256 protocolFlatFee_) external onlyUniversalExecutor {
         PC_PROTOCOL_FEE = protocolFlatFee_;
         emit UpdatedProtocolFlatFee(protocolFlatFee_);
     }
 
     /// @notice          Update token name.
     /// @param newName   New name string
-    function setName(
-        string memory newName
-    ) external onlyUniversalExecutor {
+    function setName(string memory newName) external onlyUniversalExecutor {
         _name = newName;
     }
 
     /// @notice            Update token symbol.
     /// @param newSymbol   New symbol string
-    function setSymbol(
-        string memory newSymbol
-    ) external onlyUniversalExecutor {
+    function setSymbol(string memory newSymbol) external onlyUniversalExecutor {
         _symbol = newSymbol;
     }
 
@@ -255,11 +223,7 @@ contract PRC20 is IPRC20, Initializable {
     /// @param sender      Source address
     /// @param recipient   Destination address
     /// @param amount      Amount to transfer
-    function _transfer(
-        address sender,
-        address recipient,
-        uint256 amount
-    ) internal {
+    function _transfer(address sender, address recipient, uint256 amount) internal {
         if (sender == address(0) || recipient == address(0)) {
             revert CommonErrors.ZeroAddress();
         }
