@@ -38,62 +38,38 @@ contract UniversalCore is
     //    UC: STATE VARIABLES
     // =========================
 
-    /// @notice Map to know the gas price of each chain given a chain namespace.
-    mapping(string => uint256) public gasPriceByChainNamespace;
+    // -- Protocol constants & roles --
 
-    /// @notice Map to know the PRC20 address of a token given a chain namespace, ex pETH, pBNB etc.
-    mapping(string => address) public gasTokenPRC20ByChainNamespace;
-
-    /// @notice Map to know Uniswap V3 pool of PC/PRC20 given a chain namespace.
-    mapping(string => address) public gasPCPoolByChainNamespace;
-
-    /// @notice Supported token list for auto swap to PC using Uniswap V3.
-    mapping(address => bool) public isAutoSwapSupported;
-
-    /// @notice Default fee tier for each token (0 = not set).
-    mapping(address => uint24) public defaultFeeTier;
-
-    /// @notice Slippage tolerance for each token in basis points (e.g., 300 = 3%).
-    mapping(address => uint256) public slippageTolerance;
-
-    /// @notice Default deadline in minutes for swaps.
-    uint256 public defaultDeadlineMins = 20;
-
-    /// @notice Fungible address is always the same, it's on protocol level.
     address public immutable UNIVERSAL_EXECUTOR_MODULE = 0x14191Ea54B4c176fCf86f51b0FAc7CB1E71Df7d7;
-
-    /// @notice Uniswap V3 Factory.
-    address public uniswapV3Factory;
-
-    /// @notice Uniswap V3 SwapRouter.
-    address public uniswapV3SwapRouter;
-
-    /// @notice Uniswap V3 Quoter.
-    address public uniswapV3Quoter;
-
-    /// @notice Address of the wrapped PC to interact with Uniswap V3.
-    address public WPC;
-
-    /// @notice Base gas limit per chain namespace for cross-chain outbound transactions.
-    mapping(string => uint256) public baseGasLimitByChainNamespace;
-
-    /// @notice Role for managing gas-related configurations.
     bytes32 public constant MANAGER_ROLE = keccak256("MANAGER_ROLE");
 
-    /// @notice Mapping for indicating an official PRC20 supported token.
-    mapping(address => bool) public isSupportedToken;
-
-    /// @notice Address of the UniversalGatewayPC that can call swapAndBurnGas.
+    // -- Protocol addresses --
     address public universalGatewayPC;
+    address public WPC;
 
-    /// @notice External chain block height last observed by relayer.
+    // -- Chain configuration --
+
+    mapping(string => uint256) public gasPriceByChainNamespace;
+    mapping(string => address) public gasTokenPRC20ByChainNamespace;
+    mapping(string => uint256) public baseGasLimitByChainNamespace;
     mapping(string => uint256) public chainHeightByChainNamespace;
-
-    /// @notice Timestamp when the chain meta was last observed.
     mapping(string => uint256) public timestampObservedAtByChainNamespace;
 
-    /// @notice Protocol fee in native PC per token address.
+    // -- Token configuration --
+
+    mapping(address => bool) public isSupportedToken;
     mapping(address => uint256) public protocolFeeByToken;
+
+    // -- Uniswap and AMM specific states --
+
+    address public uniswapV3Factory;
+    address public uniswapV3SwapRouter;
+    address public uniswapV3Quoter;
+    mapping(string => address) public gasPCPoolByChainNamespace;
+    mapping(address => bool) public isAutoSwapSupported;
+    mapping(address => uint24) public defaultFeeTier;
+    mapping(address => uint256) public slippageTolerance;
+    uint256 public defaultDeadlineMins = 20;
 
     // =========================
     //    UC: MODIFIERS
