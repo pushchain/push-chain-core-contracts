@@ -22,7 +22,6 @@ interface IPRC20 {
 
     event UpdatedUniversalCore(address universalCore);
     event Deposit(bytes from, address to, uint256 amount);
-    event UpdatedProtocolFlatFee(uint256 protocolFlatFee);
     event Transfer(
         address indexed from, address indexed to, uint256 value
     );
@@ -49,10 +48,6 @@ interface IPRC20 {
     /// @notice             Returns the source chain namespace this PRC20 mirrors.
     /// @return             Source chain namespace string (e.g. "eip155:1")
     function SOURCE_CHAIN_NAMESPACE() external view returns (string memory);
-
-    /// @notice             Returns the flat protocol fee in gas coin PRC20 units.
-    /// @return             Protocol fee amount
-    function PC_PROTOCOL_FEE() external view returns (uint256);
 
     // =========================
     //    PRC20_2: ERC-20 FUNCTIONS

@@ -31,13 +31,12 @@ interface IUniversalCore {
     );
     event SwapAndBurnGas(
         address indexed gasToken,
-        address indexed vault,
         uint256 pcIn,
         uint256 gasFee,
-        uint256 protocolFee,
         uint24 fee,
         address indexed caller
     );
+    event SetProtocolFeeByToken(address indexed token, uint256 fee);
     event RefundUnusedGas(
         address indexed gasToken,
         uint256 amount,
@@ -109,22 +108,18 @@ interface IUniversalCore {
     //    UC_2: GATEWAY FUNCTIONS
     // =========================
 
-    /// @notice                 Swap native PC for gas token PRC20, burn gasFee, send protocolFee to vault.
+    /// @notice                 Swap native PC for gas token PRC20 and burn gasFee.
     /// @param gasToken         Gas token PRC20 address
-    /// @param vault            Vault address to receive protocol fee
     /// @param fee              Uniswap V3 fee tier (0 = use default)
     /// @param gasFee           Gas fee amount to burn
-    /// @param protocolFee      Protocol fee amount to send to vault
     /// @param deadline         Swap deadline (0 = use default)
     /// @param caller           Address to receive unused PC refund
-    /// @return gasTokenOut     Total gas token swapped (gasFee + protocolFee)
+    /// @return gasTokenOut     Total gas token swapped (gasFee)
     /// @return refund          Unused PC refunded to caller
     function swapAndBurnGas(
         address gasToken,
-        address vault,
         uint24 fee,
         uint256 gasFee,
-        uint256 protocolFee,
         uint256 deadline,
         address caller
     ) external payable returns (uint256 gasTokenOut, uint256 refund);
@@ -167,7 +162,7 @@ interface IUniversalCore {
     /// @param gasLimit         Gas limit (0 = use BASE_GAS_LIMIT)
     /// @return gasToken        Gas token address
     /// @return gasFee          Gas fee (gasPrice * effective gas limit)
-    /// @return protocolFee     Protocol fee from PRC20
+    /// @return protocolFee     Protocol fee in native PC from protocolFeeByToken mapping
     /// @return gasPrice        Gas price on the external chain
     /// @return chainNamespace  Source chain namespace
     function getOutboundTxGasAndFees(
@@ -183,6 +178,16 @@ interface IUniversalCore {
             uint256 gasPrice,
             string memory chainNamespace
         );
+
+    /// @notice                 Get the protocol fee (in native PC) for a given token.
+    /// @param token            Token address
+    /// @return                 Protocol fee amount in native PC
+    function protocolFeeByToken(address token) external view returns (uint256);
+
+    /// @notice                 Set protocol fee (in native PC) for a token.
+    /// @param token            Token address
+    /// @param fee              Protocol fee amount in native PC
+    function setProtocolFeeByToken(address token, uint256 fee) external;
 
     /// @notice Get the UniversalGatewayPC address.
     function universalGatewayPC() external view returns (address);

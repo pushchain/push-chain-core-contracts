@@ -38,7 +38,8 @@ contract PRC20 is IPRC20, Initializable {
     /// @dev    Only included to avoid storage collision in Testnet PRC20.
     uint256 public GAS_LIMIT;
 
-    /// @notice Flat fee (absolute units in gas coin PRC20), NOT basis points.
+    /// @notice (Deprecated) Flat fee — protocol fees now stored in UniversalCore.
+    /// @dev    Only included to avoid storage collision in Testnet PRC20.
     uint256 public PC_PROTOCOL_FEE;
 
     string private _name;
@@ -227,15 +228,6 @@ contract PRC20 is IPRC20, Initializable {
         if (addr == address(0)) revert CommonErrors.ZeroAddress();
         UNIVERSAL_CORE = addr;
         emit UpdatedUniversalCore(addr);
-    }
-
-    /// @notice                  Update flat protocol fee (absolute units in gas coin PRC20).
-    /// @param protocolFlatFee_  New protocol fee
-    function updateProtocolFlatFee(
-        uint256 protocolFlatFee_
-    ) external onlyUniversalExecutor {
-        PC_PROTOCOL_FEE = protocolFlatFee_;
-        emit UpdatedProtocolFlatFee(protocolFlatFee_);
     }
 
     /// @notice          Update token name.

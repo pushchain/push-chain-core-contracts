@@ -151,7 +151,4 @@ contract MockGasToken is IPRC20 {
         revert("Not implemented");
     }
 
-    function PC_PROTOCOL_FEE() external pure returns (uint256) {
-        revert("Not implemented");
-    }
 }

@@ -43,11 +43,9 @@ contract DeployUniversalCoreScript is Script {
         string name;
         string symbol;
         uint8 decimals;
-        uint256 sourceChainId;
+        string sourceChainNamespace;
         IPRC20.TokenType tokenType;
-        uint256 gasLimit;
-        uint256 fee;
-        address sourceERC20;
+        string sourceTokenAddress;
     }
 
     PRC20Config[] public prc20Configs;
@@ -60,11 +58,9 @@ contract DeployUniversalCoreScript is Script {
                 name: "WETH.eth",
                 symbol: "WETH",
                 decimals: 18,
-                sourceChainId: 11155111,
+                sourceChainNamespace: "eip155:11155111",
                 tokenType: IPRC20.TokenType.ERC20,
-                gasLimit: 21000,
-                fee: 0,
-                sourceERC20: 0xfFf9976782d46CC05630D1f6eBAb18b2324d6B14
+                sourceTokenAddress: "0xfFf9976782d46CC05630D1f6eBAb18b2324d6B14"
             })
         );
 
@@ -74,11 +70,9 @@ contract DeployUniversalCoreScript is Script {
                 name: "USDT.eth",
                 symbol: "USDT",
                 decimals: 6,
-                sourceChainId: 11155111,
+                sourceChainNamespace: "eip155:11155111",
                 tokenType: IPRC20.TokenType.ERC20,
-                gasLimit: 21000,
-                fee: 0,
-                sourceERC20: 0x7169D38820dfd117C3FA1f22a697dBA58d90BA06
+                sourceTokenAddress: "0x7169D38820dfd117C3FA1f22a697dBA58d90BA06"
             })
         );
 
@@ -88,11 +82,9 @@ contract DeployUniversalCoreScript is Script {
                 name: "pETH",
                 symbol: "pETH",
                 decimals: 18,
-                sourceChainId: 11155111,
+                sourceChainNamespace: "eip155:11155111",
                 tokenType: IPRC20.TokenType.NATIVE,
-                gasLimit: 21000,
-                fee: 0,
-                sourceERC20: address(0)
+                sourceTokenAddress: "0x0000000000000000000000000000000000000000"
             })
         );
     }
@@ -149,12 +141,10 @@ contract DeployUniversalCoreScript is Script {
             cfg.name,
             cfg.symbol,
             cfg.decimals,
-            cfg.sourceChainId,
+            cfg.sourceChainNamespace,
             cfg.tokenType,
-            cfg.gasLimit,
-            cfg.fee,
             universalCore,
-            cfg.sourceERC20
+            cfg.sourceTokenAddress
         );
 
         TransparentUpgradeableProxy proxy = new TransparentUpgradeableProxy(

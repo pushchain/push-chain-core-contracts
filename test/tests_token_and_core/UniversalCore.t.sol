@@ -86,7 +86,6 @@ contract UniversalCoreTest is Test, UpgradeableContractHelper {
             18,
             CHAIN_NAMESPACE,
             IPRC20.TokenType.ERC20,
-            PROTOCOL_FEE,
             address(0x1), // Temporary address, will be updated
             SOURCE_TOKEN_ADDRESS
         );
@@ -120,10 +119,11 @@ contract UniversalCoreTest is Test, UpgradeableContractHelper {
         // Grant MANAGER_ROLE to UE Module for manager functions
         universalCore.grantRole(universalCore.MANAGER_ROLE(), UNIVERSAL_EXECUTOR_MODULE);
 
-        // Configure gas price and gas token for testing
+        // Configure gas price, gas token, and protocol fee for testing
         vm.startPrank(UNIVERSAL_EXECUTOR_MODULE);
         universalCore.setChainMeta(CHAIN_NAMESPACE, GAS_PRICE, 0, 0);
         universalCore.setGasTokenPRC20(CHAIN_NAMESPACE, address(mockPRC20));
+        universalCore.setProtocolFeeByToken(address(prc20Token), PROTOCOL_FEE);
         vm.stopPrank();
     }
 
@@ -576,7 +576,7 @@ contract UniversalCoreTest is Test, UpgradeableContractHelper {
         assertEq(returnedGasToken, address(mockPRC20));
 
         uint256 actualBaseGasLimit = universalCore.BASE_GAS_LIMIT();
-        uint256 actualProtocolFee = prc20Token.PC_PROTOCOL_FEE();
+        uint256 actualProtocolFee = universalCore.protocolFeeByToken(address(prc20Token));
 
         assertEq(gasPrice, GAS_PRICE);
         assertEq(gasFee, gasPrice * actualBaseGasLimit);
@@ -628,7 +628,6 @@ contract UniversalCoreTest is Test, UpgradeableContractHelper {
             18,
             "999", // Different chain ID
             IPRC20.TokenType.ERC20,
-            PROTOCOL_FEE,
             address(universalCore),
             SOURCE_TOKEN_ADDRESS
         );
@@ -654,7 +653,7 @@ contract UniversalCoreTest is Test, UpgradeableContractHelper {
         uint256 actualBaseGasLimit = universalCore.BASE_GAS_LIMIT();
         uint256 expectedGasFee = newGasPrice * actualBaseGasLimit;
         assertEq(gasFee, expectedGasFee);
-        assertEq(protocolFee, prc20Token.PC_PROTOCOL_FEE());
+        assertEq(protocolFee, universalCore.protocolFeeByToken(address(prc20Token)));
     }
 
     function testWithdrawGasFeeAfterBaseGasLimitUpdate() public {
@@ -667,14 +666,14 @@ contract UniversalCoreTest is Test, UpgradeableContractHelper {
 
         uint256 actualGasPrice = universalCore.gasPriceByChainNamespace(CHAIN_NAMESPACE);
         assertEq(gasFee, actualGasPrice * newBaseGasLimit);
-        assertEq(protocolFee, prc20Token.PC_PROTOCOL_FEE());
+        assertEq(protocolFee, universalCore.protocolFeeByToken(address(prc20Token)));
     }
 
     function testWithdrawGasFeeAfterProtocolFeeUpdate() public {
         uint256 newProtocolFee = PROTOCOL_FEE * 2;
 
         vm.prank(UNIVERSAL_EXECUTOR_MODULE);
-        prc20Token.updateProtocolFlatFee(newProtocolFee);
+        universalCore.setProtocolFeeByToken(address(prc20Token), newProtocolFee);
 
         (, uint256 gasFee, uint256 protocolFee,,) = universalCore.getOutboundTxGasAndFees(address(prc20Token), 0);
 
@@ -852,7 +851,7 @@ contract UniversalCoreTest is Test, UpgradeableContractHelper {
 
         (, uint256 gasFee, uint256 protocolFee,,) = universalCore.getOutboundTxGasAndFees(address(prc20Token), 0);
         assertEq(gasFee, newPrice * universalCore.BASE_GAS_LIMIT());
-        assertEq(protocolFee, prc20Token.PC_PROTOCOL_FEE());
+        assertEq(protocolFee, universalCore.protocolFeeByToken(address(prc20Token)));
     }
 
     function test_SetChainMeta_OverwritesPreviousValues() public {

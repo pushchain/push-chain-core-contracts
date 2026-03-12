@@ -102,6 +102,9 @@ contract UniversalCoreV0 is
     /// @notice Timestamp when the chain meta was last observed.
     mapping(string => uint256) public timestampObservedAtByChainNamespace;
 
+    /// @notice Protocol fee in native PC per token address.
+    mapping(address => uint256) public protocolFeeByToken;
+
     // =========================
     //    UCV0: MODIFIERS
     // =========================
@@ -214,20 +217,15 @@ contract UniversalCoreV0 is
     /// @inheritdoc IUniversalCore
     function swapAndBurnGas(
         address gasToken,
-        address vault,
         uint24 fee,
         uint256 gasFee,
-        uint256 protocolFee,
         uint256 deadline,
         address caller
     ) external payable onlyGatewayPC whenNotPaused nonReentrant returns (uint256 gasTokenOut, uint256 refund) {
         if (gasToken == address(0)) revert CommonErrors.ZeroAddress();
-        if (vault == address(0)) revert CommonErrors.ZeroAddress();
         if (caller == address(0)) revert CommonErrors.ZeroAddress();
         if (msg.value == 0) revert CommonErrors.ZeroAmount();
         if (gasFee == 0) revert CommonErrors.ZeroAmount();
-
-        uint256 totalRequiredGasOut = gasFee + protocolFee;
 
         if (fee == 0) {
             fee = defaultFeeTier[gasToken];
@@ -253,7 +251,7 @@ contract UniversalCoreV0 is
             fee: fee,
             recipient: address(this),
             deadline: deadline,
-            amountOut: totalRequiredGasOut,
+            amountOut: gasFee,
             amountInMaximum: msg.value,
             sqrtPriceLimitX96: 0
         });
@@ -263,11 +261,7 @@ contract UniversalCoreV0 is
 
         IPRC20(gasToken).burn(gasFee);
 
-        if (protocolFee > 0) {
-            IERC20(gasToken).safeTransfer(vault, protocolFee);
-        }
-
-        gasTokenOut = totalRequiredGasOut;
+        gasTokenOut = gasFee;
         refund = msg.value - amountInUsed;
         if (refund > 0) {
             IWPC(WPC).withdraw(refund);
@@ -275,7 +269,7 @@ contract UniversalCoreV0 is
             if (!ok) revert CommonErrors.TransferFailed();
         }
 
-        emit SwapAndBurnGas(gasToken, vault, amountInUsed, gasFee, protocolFee, fee, caller);
+        emit SwapAndBurnGas(gasToken, amountInUsed, gasFee, fee, caller);
     }
 
     // =========================
@@ -300,12 +294,21 @@ contract UniversalCoreV0 is
         if (gasPrice == 0) revert UniversalCoreErrors.ZeroGasPrice();
 
         gasFee = gasPrice * gasLimit;
-        protocolFee = IPRC20(_prc20).PC_PROTOCOL_FEE();
+        protocolFee = protocolFeeByToken[_prc20];
     }
 
     // =========================
     //    UCV0_4: MANAGER ACTIONS
     // =========================
+
+    /// @notice              Set protocol fee (in native PC) for a token.
+    /// @param token         Token address
+    /// @param fee           Protocol fee amount in native PC
+    function setProtocolFeeByToken(address token, uint256 fee) external onlyRole(MANAGER_ROLE) {
+        if (token == address(0)) revert CommonErrors.ZeroAddress();
+        protocolFeeByToken[token] = fee;
+        emit SetProtocolFeeByToken(token, fee);
+    }
 
     /// @notice              Set whether a PRC20 token is supported.
     /// @param prc20         PRC20 token address
@@ -534,5 +537,5 @@ contract UniversalCoreV0 is
      * variables without shifting down storage in the inheritance chain.
      * See https://docs.openzeppelin.com/contracts/4.x/upgradeable#storage_gaps
      */
-    uint256[48] private __gap;
+    uint256[47] private __gap;
 }
