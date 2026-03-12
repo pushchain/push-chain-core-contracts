@@ -37,6 +37,7 @@ interface IUniversalCore {
         address indexed caller
     );
     event SetProtocolFeeByToken(address indexed token, uint256 fee);
+    event SetBaseGasLimitByChain(string chainNamespace, uint256 gasLimit);
     event RefundUnusedGas(
         address indexed gasToken,
         uint256 amount,
@@ -149,17 +150,19 @@ interface IUniversalCore {
         string memory chainNamespace
     ) external view returns (uint256 price);
 
-    /// @notice                 Get base gas limit.
-    /// @return baseGasLimit    Base gas limit
-    function BASE_GAS_LIMIT()
-        external
-        view
-        returns (uint256 baseGasLimit);
+    /// @notice                      Get base gas limit for a chain.
+    /// @param chainNamespace        Chain Namespace
+    /// @return baseGasLimit         Base gas limit for the chain
+    function baseGasLimitByChainNamespace(
+        string memory chainNamespace
+    ) external view returns (uint256 baseGasLimit);
 
     /// @notice                 Get gas fee for a PRC20 token, split into gasFee and protocolFee.
-    /// @dev                    When gasLimitWithBaseLimit is 0, falls back to BASE_GAS_LIMIT.
+    /// @dev                    When gasLimitWithBaseLimit is 0, falls back to per-chain base gas limit.
+    ///                         Reverts with GasLimitBelowBase when gasLimitWithBaseLimit is non-zero
+    ///                         but below the chain's base gas limit.
     /// @param _prc20           PRC20 address
-    /// @param gasLimitWithBaseLimit Gas limit (0 = use BASE_GAS_LIMIT)
+    /// @param gasLimitWithBaseLimit Gas limit (0 = use per-chain base gas limit)
     /// @return gasToken        Gas token address
     /// @return gasFee          Gas fee (gasPrice * effective gas limit)
     /// @return protocolFee     Protocol fee in native PC from protocolFeeByToken mapping

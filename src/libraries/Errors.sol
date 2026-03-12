@@ -46,6 +46,7 @@ library UniversalCoreErrors {
     error AutoSwapNotSupported();
     error InvalidSlippageTolerance();
     error MinPCOutRequired();
+    error GasLimitBelowBase(uint256 provided, uint256 minimum);
 }
 
 // =========================
