@@ -87,14 +87,15 @@ contract UniversalCoreV0 is
     /// @notice Role for managing gas-related configurations.
     bytes32 public constant MANAGER_ROLE = keccak256("MANAGER_ROLE");
 
-    /// @notice Address of the UniversalGatewayPC that can call swapAndBurnGas.
-    address public universalGatewayPC;
-
-    /// @notice Base gas limit for the cross-chain outbound transactions.
+    /// @notice (Deprecated) Base gas limit — now per-chain via baseGasLimitByChainNamespace.
+    /// @dev Only included to avoid storage collision in Testnet UniversalCore.
     uint256 public BASE_GAS_LIMIT = 500_000;
 
     /// @notice Mapping for indicating an official PRC20 supported token.
     mapping(address => bool) public isSupportedToken;
+
+    /// @notice Address of the UniversalGatewayPC that can call swapAndBurnGas.
+    address public universalGatewayPC;
 
     /// @notice External chain block height last observed by relayer.
     mapping(string => uint256) public chainHeightByChainNamespace;
@@ -104,6 +105,9 @@ contract UniversalCoreV0 is
 
     /// @notice Protocol fee in native PC per token address.
     mapping(address => uint256) public protocolFeeByToken;
+
+    /// @notice Base gas limit per chain namespace for cross-chain outbound transactions.
+    mapping(string => uint256) public baseGasLimitByChainNamespace;
 
     // =========================
     //    UCV0: MODIFIERS
@@ -215,13 +219,14 @@ contract UniversalCoreV0 is
     // =========================
 
     /// @inheritdoc IUniversalCore
-    function swapAndBurnGas(
-        address gasToken,
-        uint24 fee,
-        uint256 gasFee,
-        uint256 deadline,
-        address caller
-    ) external payable onlyGatewayPC whenNotPaused nonReentrant returns (uint256 gasTokenOut, uint256 refund) {
+    function swapAndBurnGas(address gasToken, uint24 fee, uint256 gasFee, uint256 deadline, address caller)
+        external
+        payable
+        onlyGatewayPC
+        whenNotPaused
+        nonReentrant
+        returns (uint256 gasTokenOut, uint256 refund)
+    {
         if (gasToken == address(0)) revert CommonErrors.ZeroAddress();
         if (caller == address(0)) revert CommonErrors.ZeroAddress();
         if (msg.value == 0) revert CommonErrors.ZeroAmount();
@@ -282,10 +287,14 @@ contract UniversalCoreV0 is
         view
         returns (address gasToken, uint256 gasFee, uint256 protocolFee, uint256 gasPrice, string memory chainNamespace)
     {
-        if (gasLimitWithBaseLimit == 0) {
-            gasLimitWithBaseLimit = BASE_GAS_LIMIT;
-        }
         chainNamespace = IPRC20(_prc20).SOURCE_CHAIN_NAMESPACE();
+        uint256 baseLimit = baseGasLimitByChainNamespace[chainNamespace];
+
+        if (gasLimitWithBaseLimit == 0) {
+            gasLimitWithBaseLimit = baseLimit;
+        } else if (gasLimitWithBaseLimit < baseLimit) {
+            revert UniversalCoreErrors.GasLimitBelowBase(gasLimitWithBaseLimit, baseLimit);
+        }
 
         gasToken = gasTokenPRC20ByChainNamespace[chainNamespace];
         if (gasToken == address(0)) revert CommonErrors.ZeroAddress();
@@ -434,10 +443,12 @@ contract UniversalCoreV0 is
         emit SetDefaultDeadlineMins(minutesValue);
     }
 
-    /// @notice          Update the base gas limit for cross-chain outbound transactions.
-    /// @param gasLimit  New base gas limit
-    function updateBaseGasLimit(uint256 gasLimit) external onlyAdmin {
-        BASE_GAS_LIMIT = gasLimit;
+    /// @notice                  Set base gas limit for a specific chain.
+    /// @param chainNamespace    Chain Namespace (e.g. "eip155:1" for Ethereum Mainnet)
+    /// @param gasLimit          Base gas limit for the chain
+    function setBaseGasLimitByChain(string memory chainNamespace, uint256 gasLimit) external onlyRole(MANAGER_ROLE) {
+        baseGasLimitByChainNamespace[chainNamespace] = gasLimit;
+        emit SetBaseGasLimitByChain(chainNamespace, gasLimit);
     }
 
     /// @notice Pause the contract - stops all deposit functions.
@@ -531,11 +542,4 @@ contract UniversalCoreV0 is
 
     /// @notice Accept native PC transfers (e.g., from WPC withdraw).
     receive() external payable {}
-
-    /**
-     * @dev This empty reserved space is put in place to allow future versions to add new
-     * variables without shifting down storage in the inheritance chain.
-     * See https://docs.openzeppelin.com/contracts/4.x/upgradeable#storage_gaps
-     */
-    uint256[47] private __gap;
 }

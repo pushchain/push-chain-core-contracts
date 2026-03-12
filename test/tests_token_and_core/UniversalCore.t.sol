@@ -60,6 +60,7 @@ contract UniversalCoreTest is Test, UpgradeableContractHelper {
     event Unpaused(address account);
     event SetSupportedToken(address indexed prc20, bool supported);
     event SetChainMeta(string chainNamespace, uint256 price, uint256 chainHeight, uint256 observedAt);
+    event SetBaseGasLimitByChain(string chainNamespace, uint256 gasLimit);
 
     function setUp() public {
         // Setup accounts
@@ -119,10 +120,11 @@ contract UniversalCoreTest is Test, UpgradeableContractHelper {
         // Grant MANAGER_ROLE to UE Module for manager functions
         universalCore.grantRole(universalCore.MANAGER_ROLE(), UNIVERSAL_EXECUTOR_MODULE);
 
-        // Configure gas price, gas token, and protocol fee for testing
+        // Configure gas price, gas token, base gas limit, and protocol fee for testing
         vm.startPrank(UNIVERSAL_EXECUTOR_MODULE);
         universalCore.setChainMeta(CHAIN_NAMESPACE, GAS_PRICE, 0, 0);
         universalCore.setGasTokenPRC20(CHAIN_NAMESPACE, address(mockPRC20));
+        universalCore.setBaseGasLimitByChain(CHAIN_NAMESPACE, BASE_GAS_LIMIT);
         universalCore.setProtocolFeeByToken(address(prc20Token), PROTOCOL_FEE);
         vm.stopPrank();
     }
@@ -575,7 +577,7 @@ contract UniversalCoreTest is Test, UpgradeableContractHelper {
 
         assertEq(returnedGasToken, address(mockPRC20));
 
-        uint256 actualBaseGasLimit = universalCore.BASE_GAS_LIMIT();
+        uint256 actualBaseGasLimit = universalCore.baseGasLimitByChainNamespace(CHAIN_NAMESPACE);
         uint256 actualProtocolFee = universalCore.protocolFeeByToken(address(prc20Token));
 
         assertEq(gasPrice, GAS_PRICE);
@@ -585,7 +587,7 @@ contract UniversalCoreTest is Test, UpgradeableContractHelper {
     }
 
     function testWithdrawGasFeeWithGasLimitHappyPath() public view {
-        uint256 customGasLimit = 300000;
+        uint256 customGasLimit = 600_000;
 
         (
             address returnedGasToken,
@@ -650,7 +652,7 @@ contract UniversalCoreTest is Test, UpgradeableContractHelper {
 
         (, uint256 gasFee, uint256 protocolFee,,) = universalCore.getOutboundTxGasAndFees(address(prc20Token), 0);
 
-        uint256 actualBaseGasLimit = universalCore.BASE_GAS_LIMIT();
+        uint256 actualBaseGasLimit = universalCore.baseGasLimitByChainNamespace(CHAIN_NAMESPACE);
         uint256 expectedGasFee = newGasPrice * actualBaseGasLimit;
         assertEq(gasFee, expectedGasFee);
         assertEq(protocolFee, universalCore.protocolFeeByToken(address(prc20Token)));
@@ -659,8 +661,8 @@ contract UniversalCoreTest is Test, UpgradeableContractHelper {
     function testWithdrawGasFeeAfterBaseGasLimitUpdate() public {
         uint256 newBaseGasLimit = BASE_GAS_LIMIT * 2;
 
-        vm.prank(deployer);
-        universalCore.updateBaseGasLimit(newBaseGasLimit);
+        vm.prank(UNIVERSAL_EXECUTOR_MODULE);
+        universalCore.setBaseGasLimitByChain(CHAIN_NAMESPACE, newBaseGasLimit);
 
         (, uint256 gasFee, uint256 protocolFee,,) = universalCore.getOutboundTxGasAndFees(address(prc20Token), 0);
 
@@ -678,43 +680,52 @@ contract UniversalCoreTest is Test, UpgradeableContractHelper {
         (, uint256 gasFee, uint256 protocolFee,,) = universalCore.getOutboundTxGasAndFees(address(prc20Token), 0);
 
         uint256 actualGasPrice = universalCore.gasPriceByChainNamespace(CHAIN_NAMESPACE);
-        uint256 actualBaseGasLimit = universalCore.BASE_GAS_LIMIT();
+        uint256 actualBaseGasLimit = universalCore.baseGasLimitByChainNamespace(CHAIN_NAMESPACE);
         assertEq(gasFee, actualGasPrice * actualBaseGasLimit);
         assertEq(protocolFee, newProtocolFee);
     }
 
     // ========================================
-    // 5) Base Gas Limit Management
+    // 5) Base Gas Limit Management (per-chain)
     // ========================================
 
-    function testUpdateBaseGasLimitOnlyOwner() public {
+    function test_SetBaseGasLimitByChain_HappyPath() public {
         uint256 newGasLimit = BASE_GAS_LIMIT * 2;
 
-        // Non-owner should revert
+        vm.prank(UNIVERSAL_EXECUTOR_MODULE);
+        vm.expectEmit(false, false, false, true);
+        emit SetBaseGasLimitByChain(CHAIN_NAMESPACE, newGasLimit);
+        universalCore.setBaseGasLimitByChain(CHAIN_NAMESPACE, newGasLimit);
+
+        assertEq(universalCore.baseGasLimitByChainNamespace(CHAIN_NAMESPACE), newGasLimit);
+    }
+
+    function test_SetBaseGasLimitByChain_OnlyManagerRole() public {
+        uint256 newGasLimit = BASE_GAS_LIMIT * 2;
+
+        // Non-manager should revert
+        vm.expectRevert(
+            abi.encodeWithSelector(
+                IAccessControl.AccessControlUnauthorizedAccount.selector, nonOwner, universalCore.MANAGER_ROLE()
+            )
+        );
         vm.prank(nonOwner);
-        vm.expectRevert(CommonErrors.InvalidOwner.selector);
-        universalCore.updateBaseGasLimit(newGasLimit);
-
-        // Owner should succeed
-        vm.prank(deployer);
-        universalCore.updateBaseGasLimit(newGasLimit);
-        assertEq(universalCore.BASE_GAS_LIMIT(), newGasLimit);
+        universalCore.setBaseGasLimitByChain(CHAIN_NAMESPACE, newGasLimit);
     }
 
-    function testUpdateBaseGasLimitHappyPath() public {
-        uint256 newGasLimit = BASE_GAS_LIMIT * 2;
-
-        vm.prank(deployer);
-        universalCore.updateBaseGasLimit(newGasLimit);
-
-        assertEq(universalCore.BASE_GAS_LIMIT(), newGasLimit);
+    function test_SetBaseGasLimitByChain_ZeroValueAllowed() public {
+        vm.prank(UNIVERSAL_EXECUTOR_MODULE);
+        universalCore.setBaseGasLimitByChain(CHAIN_NAMESPACE, 0);
+        assertEq(universalCore.baseGasLimitByChainNamespace(CHAIN_NAMESPACE), 0);
     }
 
-    function testUpdateBaseGasLimitZeroValue() public {
-        // Current implementation allows zero gas limit
-        vm.prank(deployer);
-        universalCore.updateBaseGasLimit(0);
-        assertEq(universalCore.BASE_GAS_LIMIT(), 0);
+    function test_GetOutboundTxGasAndFees_RevertsWhenBelowBaseLimit() public {
+        uint256 belowBase = BASE_GAS_LIMIT - 1;
+
+        vm.expectRevert(
+            abi.encodeWithSelector(UniversalCoreErrors.GasLimitBelowBase.selector, belowBase, BASE_GAS_LIMIT)
+        );
+        universalCore.getOutboundTxGasAndFees(address(prc20Token), belowBase);
     }
 
     // ========================================
@@ -850,7 +861,7 @@ contract UniversalCoreTest is Test, UpgradeableContractHelper {
         universalCore.setChainMeta(CHAIN_NAMESPACE, newPrice, 100, block.timestamp);
 
         (, uint256 gasFee, uint256 protocolFee,,) = universalCore.getOutboundTxGasAndFees(address(prc20Token), 0);
-        assertEq(gasFee, newPrice * universalCore.BASE_GAS_LIMIT());
+        assertEq(gasFee, newPrice * universalCore.baseGasLimitByChainNamespace(CHAIN_NAMESPACE));
         assertEq(protocolFee, universalCore.protocolFeeByToken(address(prc20Token)));
     }
 

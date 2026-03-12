@@ -90,19 +90,17 @@ contract UniversalCoreSwapFeeTest is Test, UpgradeableContractHelper {
         vm.prank(UNIVERSAL_EXECUTOR_MODULE);
         prc20Token.updateUniversalCore(address(universalCore));
 
-        // Set BASE_GAS_LIMIT (proxy storage defaults to 0)
-        universalCore.updateBaseGasLimit(500_000);
-
         // Set gateway
         universalCore.setUniversalGatewayPC(gateway);
 
         // Grant MANAGER_ROLE to UE Module for manager functions
         universalCore.grantRole(universalCore.MANAGER_ROLE(), UNIVERSAL_EXECUTOR_MODULE);
 
-        // Configure gas token, gas price, and protocol fee
+        // Configure gas token, gas price, base gas limit, and protocol fee
         vm.startPrank(UNIVERSAL_EXECUTOR_MODULE);
         universalCore.setChainMeta(CHAIN_NAMESPACE, GAS_PRICE, 0, 0);
         universalCore.setGasTokenPRC20(CHAIN_NAMESPACE, address(gasTokenMock));
+        universalCore.setBaseGasLimitByChain(CHAIN_NAMESPACE, 500_000);
         universalCore.setProtocolFeeByToken(address(prc20Token), PROTOCOL_FEE);
         vm.stopPrank();
 
@@ -400,13 +398,13 @@ contract UniversalCoreSwapFeeTest is Test, UpgradeableContractHelper {
 
         assertEq(gasToken, address(gasTokenMock));
         assertEq(gasPrice, GAS_PRICE);
-        assertEq(gasFee, gasPrice * universalCore.BASE_GAS_LIMIT());
+        assertEq(gasFee, gasPrice * universalCore.baseGasLimitByChainNamespace(CHAIN_NAMESPACE));
         assertEq(protocolFee, universalCore.protocolFeeByToken(address(prc20Token)));
         assertEq(keccak256(bytes(chainNamespace)), keccak256(bytes(CHAIN_NAMESPACE)));
     }
 
     function test_WithdrawGasFeeWithGasLimit_Returns5Values() public view {
-        uint256 customGasLimit = 300_000;
+        uint256 customGasLimit = 600_000;
         (
             address gasToken,
             uint256 gasFee,
@@ -434,7 +432,7 @@ contract UniversalCoreSwapFeeTest is Test, UpgradeableContractHelper {
         assertEq(universalCore.gasPriceByChainNamespace(CHAIN_NAMESPACE), GAS_PRICE);
         assertEq(universalCore.gasTokenPRC20ByChainNamespace(CHAIN_NAMESPACE), address(gasTokenMock));
         assertTrue(universalCore.isSupportedToken(address(gasTokenMock)) == false);
-        assertEq(universalCore.BASE_GAS_LIMIT(), 500_000);
+        assertEq(universalCore.baseGasLimitByChainNamespace(CHAIN_NAMESPACE), 500_000);
     }
 
     // ========================================
