@@ -1,102 +1,88 @@
 // SPDX-License-Identifier: MIT
 pragma solidity 0.8.26;
 
-import {UniversalAccountId, UniversalPayload, MigrationPayload} from "../libraries/Types.sol";
+import {UniversalAccountId, UniversalPayload} from "../libraries/Types.sol";
 
-/**
- * @title   IUEA (Interface for Universal Executor Account)
- * @dev     Interface that all Universal Executor Accounts (UEA) must implement.
- *          A UEA is a smart contract that acts as a proxy for external chain users on Push Chain.
- *          External Chain users ( from evm or non-evm chains ) get a UEA auto-deployed for them on Push Chain, during their first tx.
- *          UEA implementation logic may vary based on the type of the user's external chain, i.e., UEA_EVM for Ethereum & UEA_SVM for Solana.
- * 
- *          The UEA includes the provides the users with the following:
- *          - An identity for external chain users on Push Chain. ( UEA acts on behalf of the user)
- *          - EIP-712 compliant transaction signing
- *          - Ability to execute SINGLE or MULTIPLE transactions with a single tx.
- *          - Every trasnaction executed is directly controlled by owner of the UEA.
- *          - Ability to migrate the UEA implementation logic to a new implementation.
- */
+/// @title  IUEA (Interface for Universal Executor Account)
+/// @notice Interface that all Universal Executor Accounts (UEA) must implement.
+/// @dev    A UEA is a smart contract proxy for external chain users on Push Chain.
+///         UEA implementation logic varies by external chain type:
+///         UEA_EVM for Ethereum, UEA_SVM for Solana.
 interface IUEA {
-    //========================
-    //           Events
-    //========================
+    // =========================
+    //    UEA: EVENTS
+    // =========================
 
-    /**
-     * @notice        Emitted when a payload is successfully executed by a UEA.
-     * @param caller  The external chain address (UOA) that initiated the execution.
-     * @param nonce   The nonce of the payload that was executed.
-     */
+    /// @notice                  Emitted when a payload is successfully executed.
+    /// @param caller            External chain address (UOA) that initiated execution
+    /// @param nonce             Nonce of the executed payload
     event PayloadExecuted(bytes caller, uint256 nonce);
 
-    //========================
-    //           Functions
-    //========================
+    // =========================
+    //    UEA_1: VIEW FUNCTIONS
+    // =========================
 
-    /**
-     * @dev    Returns the version of the UEA.
-     * @return The version of the UEA.
-     */
+    /// @notice             Returns the version of the UEA.
+    /// @return             Version string
     function VERSION() external view returns (string memory);
 
-    /**
-     * @dev     Returns the Universal Account information for this UEA.
-     * @return  The UniversalAccountId struct containing the chain name and owner key.
-     */
-    function universalAccount() external view returns (UniversalAccountId memory);
+    /// @notice             Returns the Universal Account information for this UEA.
+    /// @return             UniversalAccountId containing chain info and owner key
+    function universalAccount()
+        external
+        view
+        returns (UniversalAccountId memory);
 
-    /**
-     * @notice                  Initializes the UEA with the Universal Account information.
-     * @dev                    This function can only be called once during deployment via Factory.
-     * @param universalAccount  The UniversalAccountId struct containing the chain name and owner key.
-     * @param universalAccount  The UniversalAccountId struct containing:
-     *                          - chain: The name of the external chain (e.g., "eip155:1", "eip155:900")
-     *                          - owner: The owner's address/public key from the external chain
-     *
-     *                          The format of the owner field depends on the UEA type:
-     *                          - For EVM-based UEAs: An Ethereum address (20 bytes)
-     *                          - For SVM-based UEAs: A Solana public key (32 bytes)
-     * @param factory           The address of the UEAFactory contract
-     */
-    function initialize(UniversalAccountId memory universalAccount, address factory) external;
+    /// @notice             Returns the current nonce.
+    /// @return             Current nonce value
+    function nonce() external view returns (uint256);
 
-    /**
-     * @notice              Verifies if a signature is valid for a given message hash.
-     * @dev                 Implementation behavior varies by UEA type:
-     *                      1. For EVM-based UEAs: Uses ECDSA recovery to verify that the signature was created by the
-     *                      address stored in the UniversalAccountId.owner field. The owner is expected to be an
-     *                      Ethereum address represented as bytes.
-     *
-     *                      2. For SVM-based UEAs: Uses a precompiled contract to verify Ed25519 signatures, where the
-     *                      UniversalAccountId.owner field contains a Solana public key. The verification is done through
-     *                      a call to the VERIFIER_PRECOMPILE address.
-     * 
-     * @param payloadHash   The hash of the payload that was signed.
-     * @param signature     The signature to verify.
-     * @return              A boolean indicating whether the signature is valid.
-     */
-    function verifyUniversalPayloadSignature(bytes32 payloadHash, bytes memory signature) external view returns (bool);
+    /// @notice             Verifies a signature for a given payload hash.
+    /// @dev                EVM: ECDSA recovery. SVM: Ed25519 via precompile.
+    /// @param payloadHash  Hash of the payload that was signed
+    /// @param signature    Signature bytes to verify
+    /// @return             True if the signature is valid
+    function verifyUniversalPayloadSignature(
+        bytes32 payloadHash,
+        bytes memory signature
+    ) external view returns (bool);
 
-    /**
-     * @notice                  Executes a cross-chain payload with the provided signature.
-     * @param payload           The UniversalPayload struct (fields defined in Types.sol).
-     * @param signature         The signature bytes for verification.
-     *                          The signature format differs based on UEA type:
-     *                          - For UEA_EVM: ECDSA signature (r, s, v) - 65 bytes
-     *                          - For UEA_SVM: Ed25519 signature - 64 bytes
-     *
-     *                          Note: If the caller is UNIVERSAL_EXECUTOR_MODULE, signature verification is skipped.
-     *
-     * @dev                     Verification behavior:
-     *                          - If caller is UNIVERSAL_EXECUTOR_MODULE: No signature verification required
-     *                          - If caller is not UNIVERSAL_EXECUTOR_MODULE: Signature verification required
-     *
-     *                          Function allows 3 payload executon options:
-     *                          - SINGLE Payload execution               -> using _handleSingleCall()
-     *                          - MULTIPLE Payload execution (Multicall) -> using _handleMulticall()
-     *                          - Migration execution                    -> using _handleMigration()
-     *
-     *                          Note: A migration payload execution cannot be part of subcall in Multicall. Migration must be standalone payload execution.
-     */
-    function executeUniversalTx(UniversalPayload calldata payload, bytes calldata signature) external;
+    /// @notice             Computes the EIP-712 hash for a given payload.
+    /// @param payload      The UniversalPayload to hash
+    /// @return             EIP-712 compliant hash
+    function getUniversalPayloadHash(
+        UniversalPayload memory payload
+    ) external view returns (bytes32);
+
+    /// @notice             Returns the EIP-712 domain separator.
+    /// @return             Domain separator hash
+    function domainSeparator() external view returns (bytes32);
+
+    // =========================
+    //    UEA_2: EXECUTION
+    // =========================
+
+    /// @notice             Executes a cross-chain payload with signature.
+    /// @dev                Three execution modes: SINGLE, MULTICALL, or MIGRATION.
+    ///                     If caller is UNIVERSAL_EXECUTOR_MODULE, signature
+    ///                     verification is skipped.
+    /// @param payload      The UniversalPayload struct (see Types.sol)
+    /// @param signature    Signature bytes (65 bytes ECDSA / 64 bytes Ed25519)
+    function executeUniversalTx(
+        UniversalPayload calldata payload,
+        bytes calldata signature
+    ) external;
+
+    // =========================
+    //    UEA_3: INITIALIZER
+    // =========================
+
+    /// @notice                     Initializes the UEA with Universal Account info.
+    /// @dev                        Can only be called once during deployment via Factory.
+    /// @param universalAccount     UniversalAccountId with chain info and owner key
+    /// @param factory              Address of the UEAFactory contract
+    function initialize(
+        UniversalAccountId memory universalAccount,
+        address factory
+    ) external;
 }

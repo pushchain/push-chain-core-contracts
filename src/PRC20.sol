@@ -1,37 +1,39 @@
 // SPDX-License-Identifier: MIT
 pragma solidity 0.8.26;
 
-import {IUniversalCore} from "./interfaces/IUniversalCore.sol";
+import {Initializable} from "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol";
+
 import {IPRC20} from "./interfaces/IPRC20.sol";
 import {PRC20Errors, CommonErrors} from "./libraries/Errors.sol";
-import "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol";
-
 
 /**
  * @title   PRC20 (Push Chain Synthetic Token)
  * @notice  ERC-20 compatible synthetic token minted/burned by Push Chain protocol.
- * @dev     PRC20 token represents and acts as a alias for an already existing token 
- *          of an external chain. 
- *          All PRC20 tokens must ahdere to the IPRC20 interface.
- *          Apart from the standard ERC-20 functions, PRC20 also supports the following functions:
- *          - deposit:                      Mint PRC20 on inbound bridge (lock on source)
+ * @dev     PRC20 token represents and acts as an alias for an already existing token
+ *          of an external chain.
+ *          All PRC20 tokens must adhere to the IPRC20 interface.
  */
 contract PRC20 is IPRC20, Initializable {
-    /// @notice The protocol's privileged executor module (auth & fee sink)
+    // =========================
+    //    PRC20: STATE VARIABLES
+    // =========================
+
+    /// @notice The protocol's privileged executor module (auth & fee sink).
     address public immutable UNIVERSAL_EXECUTOR_MODULE = 0x14191Ea54B4c176fCf86f51b0FAc7CB1E71Df7d7;
 
-    /// @notice Source chain this PRC20 mirrors (used for oracle lookups)
+    /// @notice Source chain this PRC20 mirrors (used for oracle lookups).
     string public SOURCE_CHAIN_NAMESPACE;
-    /// @notice Source Chain ERC20 address of the PRC20
+
+    /// @notice Source chain ERC20 address of the PRC20.
     string public SOURCE_TOKEN_ADDRESS;
 
-    /// @notice Classification of this synthetic
+    /// @notice Classification of this synthetic.
     TokenType public TOKEN_TYPE;
 
-    /// @notice UniversalCore contract providing gas oracles (gas coin token & gas price)
+    /// @notice UniversalCore contract providing gas oracles (gas coin token & gas price).
     address public UNIVERSAL_CORE;
 
-    /// @notice Flat fee (absolute units in gas coin PRC20), NOT basis points
+    /// @notice Flat fee (absolute units in gas coin PRC20), NOT basis points.
     uint256 public PC_PROTOCOL_FEE;
 
     string private _name;
@@ -42,28 +44,35 @@ contract PRC20 is IPRC20, Initializable {
     mapping(address => uint256) private _balances;
     mapping(address => mapping(address => uint256)) private _allowances;
 
-    //*** MODIFIERS ***//
+    // =========================
+    //    PRC20: MODIFIERS
+    // =========================
 
-    /// @notice Restricts to the Universal Executor Module (protocol owner)
+    /// @notice Restricts to the Universal Executor Module (protocol owner).
     modifier onlyUniversalExecutor() {
-        if (msg.sender != UNIVERSAL_EXECUTOR_MODULE) revert PRC20Errors.CallerIsNotUniversalExecutor();
+        if (msg.sender != UNIVERSAL_EXECUTOR_MODULE) {
+            revert PRC20Errors.CallerIsNotUniversalExecutor();
+        }
         _;
     }
 
-    /// @custom:oz-upgrades-unsafe-allow constructor
+    // =========================
+    //    PRC20: CONSTRUCTOR
+    // =========================
+
     constructor() {
         _disableInitializers();
     }
 
-    //*** CONSTRUCTOR ***//
-
-    /// @param name_              ERC-20 name
-    /// @param symbol_            ERC-20 symbol
-    /// @param decimals_          ERC-20 decimals
-    /// @param sourceChainNamespace_     Source chain identifier this PRC20 represents
-    /// @param tokenType_         Token classification (PC, NATIVE, ERC20)
-    /// @param protocolFlatFee_   Absolute flat fee added to fee computation (units: gas coin PRC20)
-    /// @param universalCore_           Initial universalCore contract providing gas coin & gas price
+    /// @dev                              Initializer for the upgradeable PRC20 token.
+    /// @param name_                      ERC-20 name
+    /// @param symbol_                    ERC-20 symbol
+    /// @param decimals_                  ERC-20 decimals
+    /// @param sourceChainNamespace_      Source chain identifier this PRC20 represents
+    /// @param tokenType_                 Token classification (PC, NATIVE, ERC20)
+    /// @param protocolFlatFee_           Absolute flat fee (units: gas coin PRC20)
+    /// @param universalCore_             UniversalCore contract address
+    /// @param sourceTokenAddress_        Source chain token address
     function initialize(
         string memory name_,
         string memory symbol_,
@@ -87,47 +96,51 @@ contract PRC20 is IPRC20, Initializable {
         SOURCE_TOKEN_ADDRESS = sourceTokenAddress_;
     }
 
-    //*** VIEW FUNCTIONS ***//
+    // =========================
+    //    PRC20_1: ERC-20 VIEW
+    // =========================
 
-    /// @notice Token name
+    /// @inheritdoc IPRC20
     function name() external view returns (string memory) {
         return _name;
     }
 
-    /// @notice Token symbol
+    /// @inheritdoc IPRC20
     function symbol() external view returns (string memory) {
         return _symbol;
     }
 
-    /// @notice Token decimals
+    /// @inheritdoc IPRC20
     function decimals() external view returns (uint8) {
         return _decimals;
     }
 
-    /// @notice Total supply
+    /// @inheritdoc IPRC20
     function totalSupply() external view returns (uint256) {
         return _totalSupply;
     }
 
-    /// @notice Balance of an account
+    /// @inheritdoc IPRC20
     function balanceOf(address account) external view returns (uint256) {
         return _balances[account];
     }
 
-    /// @notice Allowance from owner to spender
+    /// @inheritdoc IPRC20
     function allowance(address owner, address spender) external view returns (uint256) {
         return _allowances[owner][spender];
     }
 
-    //*** MUTABLE FUNCTIONS ***//
+    // =========================
+    //    PRC20_2: ERC-20 MUTATIVE
+    // =========================
 
-    /// @notice Transfer tokens
+    /// @inheritdoc IPRC20
     function transfer(address recipient, uint256 amount) external returns (bool) {
         _transfer(msg.sender, recipient, amount);
         return true;
     }
 
-    /// @notice Approve spender
+    /// @inheritdoc IPRC20
     function approve(address spender, uint256 amount) external returns (bool) {
         if (spender == address(0)) revert CommonErrors.ZeroAddress();
         _allowances[msg.sender][spender] = amount;
@@ -135,7 +148,7 @@ contract PRC20 is IPRC20, Initializable {
         return true;
     }
 
-    /// @notice Transfer tokens using allowance
+    /// @inheritdoc IPRC20
     function transferFrom(address sender, address recipient, uint256 amount) external returns (bool) {
         _transfer(sender, recipient, amount);
 
@@ -149,20 +162,21 @@ contract PRC20 is IPRC20, Initializable {
         return true;
     }
 
-    /// @notice Burn caller's tokens
+    /// @inheritdoc IPRC20
     function burn(uint256 amount) external returns (bool) {
         _burn(msg.sender, amount);
         return true;
     }
 
-    //*** BRIDGE ENTRYPOINTS ***//
+    // =========================
+    //    PRC20_3: BRIDGE ENTRYPOINTS
+    // =========================
 
-    /// @notice         Mint PRC20 on inbound bridge (lock on source)
-    /// @dev            Only callable by UNIVERSAL_CORE or UNIVERSAL_EXECUTOR_MODULE
-    /// @param to       Recipient on Push EVM
-    /// @param amount   Amount to mint
+    /// @inheritdoc IPRC20
     function deposit(address to, uint256 amount) external returns (bool) {
-        if (msg.sender != UNIVERSAL_CORE && msg.sender != UNIVERSAL_EXECUTOR_MODULE) revert PRC20Errors.InvalidSender();
+        if (msg.sender != UNIVERSAL_CORE && msg.sender != UNIVERSAL_EXECUTOR_MODULE) {
+            revert PRC20Errors.InvalidSender();
+        }
 
         _mint(to, amount);
 
@@ -170,46 +184,54 @@ contract PRC20 is IPRC20, Initializable {
         return true;
     }
 
+    // =========================
+    //    PRC20_4: ADMIN ACTIONS
+    // =========================
 
-
-    /// @notice Update UniversalCore contract (gas coin & price oracle source)
-    /// @dev only Universal Executor may update
+    /// @notice          Update UniversalCore contract (gas coin & price oracle source).
+    /// @param addr      New UniversalCore address
     function updateUniversalCore(address addr) external onlyUniversalExecutor {
         if (addr == address(0)) revert CommonErrors.ZeroAddress();
         UNIVERSAL_CORE = addr;
         emit UpdatedUniversalCore(addr);
     }
 
-    /// @notice Update flat protocol fee (absolute units in gas coin PRC20)
+    /// @notice                  Update flat protocol fee (absolute units in gas coin PRC20).
+    /// @param protocolFlatFee_  New protocol fee
     function updateProtocolFlatFee(uint256 protocolFlatFee_) external onlyUniversalExecutor {
         PC_PROTOCOL_FEE = protocolFlatFee_;
         emit UpdatedProtocolFlatFee(protocolFlatFee_);
     }
 
-    /// @notice Update token name 
+    /// @notice          Update token name.
+    /// @param newName   New name string
     function setName(string memory newName) external onlyUniversalExecutor {
         _name = newName;
     }
 
-    /// @notice Update token symbol 
+    /// @notice            Update token symbol.
+    /// @param newSymbol   New symbol string
     function setSymbol(string memory newSymbol) external onlyUniversalExecutor {
         _symbol = newSymbol;
     }
 
-    //*** INTERNAL ERC-20 HELPERS ***//
+    // =========================
+    //    PRC20_5: INTERNAL HELPERS
+    // =========================
 
-    /**
-     * @notice          Internal function to transfer PRC20 tokens between addresses
-     * @dev             Handles the core transfer logic with balance and zero address checks
-     * @param sender    Address to transfer tokens from
-     * @param recipient Address to transfer tokens to
-     * @param amount    Amount of PRC20 tokens to transfer
-     */
+    /// @dev Internal transfer with balance and zero-address checks.
+    /// @param sender      Source address
+    /// @param recipient   Destination address
+    /// @param amount      Amount to transfer
     function _transfer(address sender, address recipient, uint256 amount) internal {
-        if (sender == address(0) || recipient == address(0)) revert CommonErrors.ZeroAddress();
+        if (sender == address(0) || recipient == address(0)) {
+            revert CommonErrors.ZeroAddress();
+        }
 
         uint256 senderBalance = _balances[sender];
-        if (senderBalance < amount) revert CommonErrors.InsufficientBalance();
+        if (senderBalance < amount) {
+            revert CommonErrors.InsufficientBalance();
+        }
 
         unchecked {
             _balances[sender] = senderBalance - amount;
@@ -219,13 +241,9 @@ contract PRC20 is IPRC20, Initializable {
         emit Transfer(sender, recipient, amount);
     }
 
-    /**
-     * @notice          Internal function to mint new PRC20 tokens
-     * @dev             Creates new tokens and assigns them to the specified account
-     * @dev             Increases total supply and account balance
-     * @param account   Address to mint tokens to
-     * @param amount    Amount of PRC20 tokens to mint
-     */
+    /// @dev Internal mint — creates tokens and assigns to account.
+    /// @param account   Address to mint to
+    /// @param amount    Amount to mint
     function _mint(address account, uint256 amount) internal {
         if (account == address(0)) revert CommonErrors.ZeroAddress();
         if (amount == 0) revert CommonErrors.ZeroAmount();
@@ -237,12 +255,9 @@ contract PRC20 is IPRC20, Initializable {
         emit Transfer(address(0), account, amount);
     }
 
-    /**
-     * @notice          Internal function to burn PRC20 tokens
-     * @dev             Burns tokens from the specified account and reduces total supply
-     * @param account   Address to burn tokens from
-     * @param amount    Amount of PRC20 tokens to burn
-     */
+    /// @dev Internal burn — destroys tokens from account.
+    /// @param account   Address to burn from
+    /// @param amount    Amount to burn
     function _burn(address account, uint256 amount) internal {
         if (account == address(0)) revert CommonErrors.ZeroAddress();
         if (amount == 0) revert CommonErrors.ZeroAmount();

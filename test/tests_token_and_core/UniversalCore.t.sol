@@ -117,6 +117,9 @@ contract UniversalCoreTest is Test, UpgradeableContractHelper {
         address pool = makeAddr("mockPool");
         mockFactory.setPool(address(mockWPC), address(prc20Token), FEE_TIER, pool);
 
+        // Grant MANAGER_ROLE to UE Module for manager functions
+        universalCore.grantRole(universalCore.MANAGER_ROLE(), UNIVERSAL_EXECUTOR_MODULE);
+
         // Configure gas price and gas token for testing
         vm.startPrank(UNIVERSAL_EXECUTOR_MODULE);
         universalCore.setChainMeta(CHAIN_NAMESPACE, GAS_PRICE, 0, 0);
@@ -159,9 +162,9 @@ contract UniversalCoreTest is Test, UpgradeableContractHelper {
 
     function test_Initialize_SetsAddresses() public view {
         assertEq(universalCore.WPC(), address(mockWPC));
-        assertEq(universalCore.uniswapV3FactoryAddress(), address(mockFactory));
-        assertEq(universalCore.uniswapV3SwapRouterAddress(), address(mockRouter));
-        assertEq(universalCore.uniswapV3QuoterAddress(), address(mockQuoter));
+        assertEq(universalCore.uniswapV3Factory(), address(mockFactory));
+        assertEq(universalCore.uniswapV3SwapRouter(), address(mockRouter));
+        assertEq(universalCore.uniswapV3Quoter(), address(mockQuoter));
     }
 
     function test_Initialize_RevertsOnSecondCall() public {
@@ -810,12 +813,8 @@ contract UniversalCoreTest is Test, UpgradeableContractHelper {
     // 7) setChainMeta Tests
     // ========================================
 
-    function test_SetChainMeta_OnlyManagerRole() public {
-        vm.expectRevert(
-            abi.encodeWithSelector(
-                IAccessControl.AccessControlUnauthorizedAccount.selector, nonUEModule, universalCore.MANAGER_ROLE()
-            )
-        );
+    function test_SetChainMeta_OnlyUEModule() public {
+        vm.expectRevert(UniversalCoreErrors.CallerIsNotUEModule.selector);
         vm.prank(nonUEModule);
         universalCore.setChainMeta(CHAIN_NAMESPACE, 100, 1000, block.timestamp);
     }

@@ -28,7 +28,6 @@ library CommonErrors {
 library PRC20Errors {
     error LowAllowance();
     error InvalidSender();
-    error GasFeeTransferFailed();
     error CallerIsNotUniversalExecutor();
 }
 
@@ -54,7 +53,6 @@ library UniversalCoreErrors {
 // =========================
 library UEAErrors {
     error InvalidCall();
-    error InvalidAccount();
     error ExecutionFailed();
     error ExpiredDeadline();
     error InvalidInputArgs();
@@ -68,7 +66,6 @@ library CEAErrors {
     error AlreadyInitialized();
     error ZeroAddress();
     error NotVault();
-    error InvalidAmount();
     error InvalidTarget();
     error InsufficientBalance();
     error PayloadExecuted();

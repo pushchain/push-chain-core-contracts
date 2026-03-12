@@ -6,6 +6,7 @@ import "forge-std/console.sol";
 
 import "../../src/CEA/CEA.sol";
 import "../../src/CEA/CEAFactory.sol";
+import {ICEAFactory} from "../../src/interfaces/ICEAFactory.sol";
 import {CEAProxy} from "../../src/CEA/CEAProxy.sol";
 import "../../src/CEA/CEAMigration.sol";
 import {ERC1967Proxy} from "@openzeppelin/contracts/proxy/ERC1967/ERC1967Proxy.sol";
@@ -82,7 +83,7 @@ contract CEAFactory_MigrationTest is Test {
     function test_setCEAMigrationContract_Event() public {
         // Expect CEAMigrationContractUpdated event
         vm.expectEmit(true, true, false, false);
-        emit CEAFactory.CEAMigrationContractUpdated(address(0), address(migration));
+        emit ICEAFactory.CEAMigrationContractUpdated(address(0), address(migration));
 
         factory.setCEAMigrationContract(address(migration));
     }
@@ -97,7 +98,7 @@ contract CEAFactory_MigrationTest is Test {
 
         // Expect event with old and new addresses
         vm.expectEmit(true, true, false, false);
-        emit CEAFactory.CEAMigrationContractUpdated(address(migration), address(migration2));
+        emit ICEAFactory.CEAMigrationContractUpdated(address(migration), address(migration2));
 
         // Update migration contract
         factory.setCEAMigrationContract(address(migration2));

@@ -98,6 +98,9 @@ contract UniversalCoreSwapFeeTest is Test, UpgradeableContractHelper {
         // Set gateway
         universalCore.setUniversalGatewayPC(gateway);
 
+        // Grant MANAGER_ROLE to UE Module for manager functions
+        universalCore.grantRole(universalCore.MANAGER_ROLE(), UNIVERSAL_EXECUTOR_MODULE);
+
         // Configure gas token and gas price
         vm.startPrank(UNIVERSAL_EXECUTOR_MODULE);
         universalCore.setChainMeta(CHAIN_NAMESPACE, GAS_PRICE, 0, 0);
