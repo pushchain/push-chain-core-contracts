@@ -9,7 +9,7 @@ import {PausableUpgradeable} from "@openzeppelin/contracts-upgradeable/utils/Pau
 import {ReentrancyGuardUpgradeable} from "@openzeppelin/contracts-upgradeable/utils/ReentrancyGuardUpgradeable.sol";
 
 import {IPRC20} from "./interfaces/IPRC20.sol";
-import {IUniversalCore} from "./interfaces/IUniversalCore.sol";
+import {IUniversalCoreV0} from "./interfaces/IUniversalCoreV0.sol";
 import {IUniswapV3Factory, ISwapRouter} from "./interfaces/uniswapv3/IUniswapV3.sol";
 import {IWPC} from "./interfaces/IWPC.sol";
 import {UniversalCoreErrors, CommonErrors} from "./libraries/Errors.sol";
@@ -27,7 +27,7 @@ import {UniversalCoreErrors, CommonErrors} from "./libraries/Errors.sol";
  * @dev     All imperative functionalities are handled by the Universal Executor Module.
  */
 contract UniversalCoreV0 is
-    IUniversalCore,
+    IUniversalCoreV0,
     Initializable,
     ReentrancyGuardUpgradeable,
     AccessControlUpgradeable,
@@ -167,13 +167,13 @@ contract UniversalCoreV0 is
     //    UCV0_1: UE MODULE ACTIONS
     // =========================
 
-    /// @inheritdoc IUniversalCore
+    /// @inheritdoc IUniversalCoreV0
     function depositPRC20Token(address prc20, uint256 amount, address recipient) external onlyUEModule whenNotPaused {
         _validateParams(prc20, amount, recipient);
         IPRC20(prc20).deposit(recipient, amount);
     }
 
-    /// @inheritdoc IUniversalCore
+    /// @inheritdoc IUniversalCoreV0
     function depositPRC20WithAutoSwap(
         address prc20,
         uint256 amount,
@@ -189,7 +189,7 @@ contract UniversalCoreV0 is
         emit DepositPRC20WithAutoSwap(prc20, amount, WPC, pcOut, resolvedFee, recipient);
     }
 
-    /// @inheritdoc IUniversalCore
+    /// @inheritdoc IUniversalCoreV0
     function refundUnusedGas(
         address gasToken,
         uint256 amount,
@@ -218,7 +218,7 @@ contract UniversalCoreV0 is
     //    UCV0_2: GATEWAY ACTIONS
     // =========================
 
-    /// @inheritdoc IUniversalCore
+    /// @inheritdoc IUniversalCoreV0
     function swapAndBurnGas(address gasToken, uint24 fee, uint256 gasFee, uint256 deadline, address caller)
         external
         payable
@@ -281,7 +281,7 @@ contract UniversalCoreV0 is
     //    UCV0_3: PUBLIC GETTERS
     // =========================
 
-    /// @inheritdoc IUniversalCore
+    /// @inheritdoc IUniversalCoreV0
     function getOutboundTxGasAndFees(address _prc20, uint256 gasLimitWithBaseLimit)
         public
         view
@@ -341,6 +341,15 @@ contract UniversalCoreV0 is
 
         gasPCPoolByChainNamespace[chainNamespace] = pool;
         emit SetGasPCPool(chainNamespace, pool, fee);
+    }
+
+    /// @notice To Be Removed — use setChainMeta instead.
+    /// @dev Fungible module updates the gas price oracle periodically.
+    /// @param chainNamespace Chain Namespace
+    /// @param price New gas price
+    function setGasPrice(string memory chainNamespace, uint256 price) external onlyUEModule {
+        gasPriceByChainNamespace[chainNamespace] = price;
+        emit SetGasPrice(chainNamespace, price);
     }
 
     /// @notice                  Set gas price, chain height, and observation timestamp for a chain.
