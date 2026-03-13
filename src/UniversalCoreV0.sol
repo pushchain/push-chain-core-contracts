@@ -9,7 +9,7 @@ import {PausableUpgradeable} from "@openzeppelin/contracts-upgradeable/utils/Pau
 import {ReentrancyGuardUpgradeable} from "@openzeppelin/contracts-upgradeable/utils/ReentrancyGuardUpgradeable.sol";
 
 import {IPRC20} from "./interfaces/IPRC20.sol";
-import {IUniversalCore} from "./interfaces/IUniversalCore.sol";
+import {IUniversalCoreV0} from "./interfaces/IUniversalCoreV0.sol";
 import {IUniswapV3Factory, ISwapRouter} from "./interfaces/uniswapv3/IUniswapV3.sol";
 import {IWPC} from "./interfaces/IWPC.sol";
 import {UniversalCoreErrors, CommonErrors} from "./libraries/Errors.sol";
@@ -27,7 +27,7 @@ import {UniversalCoreErrors, CommonErrors} from "./libraries/Errors.sol";
  * @dev     All imperative functionalities are handled by the Universal Executor Module.
  */
 contract UniversalCoreV0 is
-    IUniversalCore,
+    IUniversalCoreV0,
     Initializable,
     ReentrancyGuardUpgradeable,
     AccessControlUpgradeable,
@@ -87,20 +87,27 @@ contract UniversalCoreV0 is
     /// @notice Role for managing gas-related configurations.
     bytes32 public constant MANAGER_ROLE = keccak256("MANAGER_ROLE");
 
-    /// @notice Address of the UniversalGatewayPC that can call swapAndBurnGas.
-    address public universalGatewayPC;
-
-    /// @notice Base gas limit for the cross-chain outbound transactions.
+    /// @notice (Deprecated) Base gas limit — now per-chain via baseGasLimitByChainNamespace.
+    /// @dev Only included to avoid storage collision in Testnet UniversalCore.
     uint256 public BASE_GAS_LIMIT = 500_000;
 
     /// @notice Mapping for indicating an official PRC20 supported token.
     mapping(address => bool) public isSupportedToken;
+
+    /// @notice Address of the UniversalGatewayPC that can call swapAndBurnGas.
+    address public universalGatewayPC;
 
     /// @notice External chain block height last observed by relayer.
     mapping(string => uint256) public chainHeightByChainNamespace;
 
     /// @notice Timestamp when the chain meta was last observed.
     mapping(string => uint256) public timestampObservedAtByChainNamespace;
+
+    /// @notice Protocol fee in native PC per token address.
+    mapping(address => uint256) public protocolFeeByToken;
+
+    /// @notice Base gas limit per chain namespace for cross-chain outbound transactions.
+    mapping(string => uint256) public baseGasLimitByChainNamespace;
 
     // =========================
     //    UCV0: MODIFIERS
@@ -160,13 +167,13 @@ contract UniversalCoreV0 is
     //    UCV0_1: UE MODULE ACTIONS
     // =========================
 
-    /// @inheritdoc IUniversalCore
+    /// @inheritdoc IUniversalCoreV0
     function depositPRC20Token(address prc20, uint256 amount, address recipient) external onlyUEModule whenNotPaused {
         _validateParams(prc20, amount, recipient);
         IPRC20(prc20).deposit(recipient, amount);
     }
 
-    /// @inheritdoc IUniversalCore
+    /// @inheritdoc IUniversalCoreV0
     function depositPRC20WithAutoSwap(
         address prc20,
         uint256 amount,
@@ -182,7 +189,7 @@ contract UniversalCoreV0 is
         emit DepositPRC20WithAutoSwap(prc20, amount, WPC, pcOut, resolvedFee, recipient);
     }
 
-    /// @inheritdoc IUniversalCore
+    /// @inheritdoc IUniversalCoreV0
     function refundUnusedGas(
         address gasToken,
         uint256 amount,
@@ -211,23 +218,19 @@ contract UniversalCoreV0 is
     //    UCV0_2: GATEWAY ACTIONS
     // =========================
 
-    /// @inheritdoc IUniversalCore
-    function swapAndBurnGas(
-        address gasToken,
-        address vault,
-        uint24 fee,
-        uint256 gasFee,
-        uint256 protocolFee,
-        uint256 deadline,
-        address caller
-    ) external payable onlyGatewayPC whenNotPaused nonReentrant returns (uint256 gasTokenOut, uint256 refund) {
+    /// @inheritdoc IUniversalCoreV0
+    function swapAndBurnGas(address gasToken, uint24 fee, uint256 gasFee, uint256 deadline, address caller)
+        external
+        payable
+        onlyGatewayPC
+        whenNotPaused
+        nonReentrant
+        returns (uint256 gasTokenOut, uint256 refund)
+    {
         if (gasToken == address(0)) revert CommonErrors.ZeroAddress();
-        if (vault == address(0)) revert CommonErrors.ZeroAddress();
         if (caller == address(0)) revert CommonErrors.ZeroAddress();
         if (msg.value == 0) revert CommonErrors.ZeroAmount();
         if (gasFee == 0) revert CommonErrors.ZeroAmount();
-
-        uint256 totalRequiredGasOut = gasFee + protocolFee;
 
         if (fee == 0) {
             fee = defaultFeeTier[gasToken];
@@ -253,7 +256,7 @@ contract UniversalCoreV0 is
             fee: fee,
             recipient: address(this),
             deadline: deadline,
-            amountOut: totalRequiredGasOut,
+            amountOut: gasFee,
             amountInMaximum: msg.value,
             sqrtPriceLimitX96: 0
         });
@@ -263,11 +266,7 @@ contract UniversalCoreV0 is
 
         IPRC20(gasToken).burn(gasFee);
 
-        if (protocolFee > 0) {
-            IERC20(gasToken).safeTransfer(vault, protocolFee);
-        }
-
-        gasTokenOut = totalRequiredGasOut;
+        gasTokenOut = gasFee;
         refund = msg.value - amountInUsed;
         if (refund > 0) {
             IWPC(WPC).withdraw(refund);
@@ -275,23 +274,27 @@ contract UniversalCoreV0 is
             if (!ok) revert CommonErrors.TransferFailed();
         }
 
-        emit SwapAndBurnGas(gasToken, vault, amountInUsed, gasFee, protocolFee, fee, caller);
+        emit SwapAndBurnGas(gasToken, amountInUsed, gasFee, fee, caller);
     }
 
     // =========================
     //    UCV0_3: PUBLIC GETTERS
     // =========================
 
-    /// @inheritdoc IUniversalCore
-    function getOutboundTxGasAndFees(address _prc20, uint256 gasLimit)
+    /// @inheritdoc IUniversalCoreV0
+    function getOutboundTxGasAndFees(address _prc20, uint256 gasLimitWithBaseLimit)
         public
         view
         returns (address gasToken, uint256 gasFee, uint256 protocolFee, uint256 gasPrice, string memory chainNamespace)
     {
-        if (gasLimit == 0) {
-            gasLimit = BASE_GAS_LIMIT;
-        }
         chainNamespace = IPRC20(_prc20).SOURCE_CHAIN_NAMESPACE();
+        uint256 baseLimit = baseGasLimitByChainNamespace[chainNamespace];
+
+        if (gasLimitWithBaseLimit == 0) {
+            gasLimitWithBaseLimit = baseLimit;
+        } else if (gasLimitWithBaseLimit < baseLimit) {
+            revert UniversalCoreErrors.GasLimitBelowBase(gasLimitWithBaseLimit, baseLimit);
+        }
 
         gasToken = gasTokenPRC20ByChainNamespace[chainNamespace];
         if (gasToken == address(0)) revert CommonErrors.ZeroAddress();
@@ -299,13 +302,22 @@ contract UniversalCoreV0 is
         gasPrice = gasPriceByChainNamespace[chainNamespace];
         if (gasPrice == 0) revert UniversalCoreErrors.ZeroGasPrice();
 
-        gasFee = gasPrice * gasLimit;
-        protocolFee = IPRC20(_prc20).PC_PROTOCOL_FEE();
+        gasFee = gasPrice * gasLimitWithBaseLimit;
+        protocolFee = protocolFeeByToken[_prc20];
     }
 
     // =========================
     //    UCV0_4: MANAGER ACTIONS
     // =========================
+
+    /// @notice              Set protocol fee (in native PC) for a token.
+    /// @param token         Token address
+    /// @param fee           Protocol fee amount in native PC
+    function setProtocolFeeByToken(address token, uint256 fee) external onlyRole(MANAGER_ROLE) {
+        if (token == address(0)) revert CommonErrors.ZeroAddress();
+        protocolFeeByToken[token] = fee;
+        emit SetProtocolFeeByToken(token, fee);
+    }
 
     /// @notice              Set whether a PRC20 token is supported.
     /// @param prc20         PRC20 token address
@@ -329,6 +341,15 @@ contract UniversalCoreV0 is
 
         gasPCPoolByChainNamespace[chainNamespace] = pool;
         emit SetGasPCPool(chainNamespace, pool, fee);
+    }
+
+    /// @notice To Be Removed — use setChainMeta instead.
+    /// @dev Fungible module updates the gas price oracle periodically.
+    /// @param chainNamespace Chain Namespace
+    /// @param price New gas price
+    function setGasPrice(string memory chainNamespace, uint256 price) external onlyUEModule {
+        gasPriceByChainNamespace[chainNamespace] = price;
+        emit SetGasPrice(chainNamespace, price);
     }
 
     /// @notice                  Set gas price, chain height, and observation timestamp for a chain.
@@ -431,10 +452,12 @@ contract UniversalCoreV0 is
         emit SetDefaultDeadlineMins(minutesValue);
     }
 
-    /// @notice          Update the base gas limit for cross-chain outbound transactions.
-    /// @param gasLimit  New base gas limit
-    function updateBaseGasLimit(uint256 gasLimit) external onlyAdmin {
-        BASE_GAS_LIMIT = gasLimit;
+    /// @notice                  Set base gas limit for a specific chain.
+    /// @param chainNamespace    Chain Namespace (e.g. "eip155:1" for Ethereum Mainnet)
+    /// @param gasLimit          Base gas limit for the chain
+    function setBaseGasLimitByChain(string memory chainNamespace, uint256 gasLimit) external onlyRole(MANAGER_ROLE) {
+        baseGasLimitByChainNamespace[chainNamespace] = gasLimit;
+        emit SetBaseGasLimitByChain(chainNamespace, gasLimit);
     }
 
     /// @notice Pause the contract - stops all deposit functions.
@@ -528,11 +551,4 @@ contract UniversalCoreV0 is
 
     /// @notice Accept native PC transfers (e.g., from WPC withdraw).
     receive() external payable {}
-
-    /**
-     * @dev This empty reserved space is put in place to allow future versions to add new
-     * variables without shifting down storage in the inheritance chain.
-     * See https://docs.openzeppelin.com/contracts/4.x/upgradeable#storage_gaps
-     */
-    uint256[48] private __gap;
 }

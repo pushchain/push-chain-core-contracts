@@ -1,12 +1,12 @@
 // SPDX-License-Identifier: MIT
 pragma solidity 0.8.26;
 
-/// @title  IUniversalCore
-/// @notice Interface for the UniversalCore contract.
-/// @dev    Defines public-facing functions for UniversalCore contract.
-interface IUniversalCore {
+/// @title  IUniversalCoreV0
+/// @notice Interface for the UniversalCoreV0 (testnet) contract.
+/// @dev    Standalone interface dedicated to UniversalCoreV0.
+interface IUniversalCoreV0 {
     // =========================
-    //    UC: EVENTS
+    //    UCV0: EVENTS
     // =========================
 
     event SetChainMeta(
@@ -15,6 +15,7 @@ interface IUniversalCore {
         uint256 chainHeight,
         uint256 observedAt
     );
+    event SetGasPrice(string chainNamespace, uint256 price);
     event SetGasToken(string chainNamespace, address prc20);
     event SetDefaultDeadlineMins(uint256 minutesValue);
     event SetSupportedToken(address indexed prc20, bool supported);
@@ -37,7 +38,9 @@ interface IUniversalCore {
         address indexed caller
     );
     event SetProtocolFeeByToken(address indexed token, uint256 fee);
-    event SetBaseGasLimitByChain(string chainNamespace, uint256 gasLimit);
+    event SetBaseGasLimitByChain(
+        string chainNamespace, uint256 gasLimit
+    );
     event RefundUnusedGas(
         address indexed gasToken,
         uint256 amount,
@@ -47,16 +50,10 @@ interface IUniversalCore {
     );
 
     // =========================
-    //    UC_1: UE MODULE FUNCTIONS
+    //    UCV0_1: UE MODULE FUNCTIONS
     // =========================
 
     /// @notice             Deposits PRC20 tokens to the provided recipient address.
-    /// @dev                Can only be called by the Universal Executor Module.
-    ///                     For any inbound transactions of moving supported tokens
-    ///                     from external chains to Push Chain, the Universal Executor
-    ///                     Module uses this function to deposit the tokens to the
-    ///                     recipient address. The recipient address can be any address
-    ///                     of the user's choice.
     /// @param prc20        PRC20 address for deposit
     /// @param amount       Amount to deposit
     /// @param recipient    Address to deposit tokens to
@@ -68,17 +65,11 @@ interface IUniversalCore {
 
     /// @notice             Deposits PRC20 tokens and automatically swaps them to
     ///                     native PC before sending to recipient.
-    /// @dev                Can only be called by the Universal Executor Module.
-    ///                     Can only be called if the PRC20 token is in the auto-swap
-    ///                     supported list (e.g. pETH, pSOL, pUSDC etc.).
-    ///                     If no pool exists, reverts with appropriate error.
-    ///                     Default values are used when parameters are set to 0.
-    ///                     Recipient address always receives the swapped native PC tokens.
     /// @param prc20        PRC20 address for deposit and swap
     /// @param amount       Amount to deposit and swap
     /// @param recipient    Address to receive the swapped native PC tokens
     /// @param fee          Uniswap V3 fee tier for the pool (0 = use default)
-    /// @param minPCOut     Minimum amount of native PC expected from the swap (must be > 0)
+    /// @param minPCOut     Minimum amount of native PC expected from the swap
     /// @param deadline     Timestamp after which the transaction will revert (0 = use default)
     function depositPRC20WithAutoSwap(
         address prc20,
@@ -105,8 +96,17 @@ interface IUniversalCore {
         uint256 minPCOut
     ) external;
 
+    /// @notice             Set gas price for a chain.
+    /// @dev                To Be Removed — use setChainMeta instead.
+    /// @param chainNamespace Chain Namespace
+    /// @param price        New gas price
+    function setGasPrice(
+        string memory chainNamespace,
+        uint256 price
+    ) external;
+
     // =========================
-    //    UC_2: GATEWAY FUNCTIONS
+    //    UCV0_2: GATEWAY FUNCTIONS
     // =========================
 
     /// @notice                 Swap native PC for gas token PRC20 and burn gasFee.
@@ -126,7 +126,7 @@ interface IUniversalCore {
     ) external payable returns (uint256 gasTokenOut, uint256 refund);
 
     // =========================
-    //    UC_3: PUBLIC GETTERS
+    //    UCV0_3: PUBLIC GETTERS
     // =========================
 
     /// @notice                 Check if a PRC20 token is supported.
@@ -137,7 +137,7 @@ interface IUniversalCore {
     ) external view returns (bool supported);
 
     /// @notice                 Get gas token PRC20 address for a chain.
-    /// @param chainNamespace   Chain Namespace (e.g. "eip155:1" for Ethereum Mainnet)
+    /// @param chainNamespace   Chain Namespace
     /// @return gasToken        Gas token address
     function gasTokenPRC20ByChainNamespace(
         string memory chainNamespace
@@ -150,9 +150,9 @@ interface IUniversalCore {
         string memory chainNamespace
     ) external view returns (uint256 price);
 
-    /// @notice                      Get base gas limit for a chain.
-    /// @param chainNamespace        Chain Namespace
-    /// @return baseGasLimit         Base gas limit for the chain
+    /// @notice                 Get base gas limit for a chain.
+    /// @param chainNamespace   Chain Namespace
+    /// @return baseGasLimit    Base gas limit for the chain
     function baseGasLimitByChainNamespace(
         string memory chainNamespace
     ) external view returns (uint256 baseGasLimit);
@@ -185,13 +185,32 @@ interface IUniversalCore {
     /// @notice                 Get the protocol fee (in native PC) for a given token.
     /// @param token            Token address
     /// @return                 Protocol fee amount in native PC
-    function protocolFeeByToken(address token) external view returns (uint256);
+    function protocolFeeByToken(
+        address token
+    ) external view returns (uint256);
 
     /// @notice                 Set protocol fee (in native PC) for a token.
     /// @param token            Token address
     /// @param fee              Protocol fee amount in native PC
-    function setProtocolFeeByToken(address token, uint256 fee) external;
+    function setProtocolFeeByToken(
+        address token,
+        uint256 fee
+    ) external;
 
     /// @notice Get the UniversalGatewayPC address.
     function universalGatewayPC() external view returns (address);
+
+    // =========================
+    //    UCV0_4: ADMIN FUNCTIONS
+    // =========================
+
+    /// @notice             Mint PRC20 tokens via admin.
+    /// @param prc20        PRC20 address to mint
+    /// @param amount       Amount to mint
+    /// @param recipient    Address to receive minted tokens
+    function mintPRCTokensviaAdmin(
+        address prc20,
+        uint256 amount,
+        address recipient
+    ) external;
 }

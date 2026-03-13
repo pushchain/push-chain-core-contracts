@@ -33,9 +33,6 @@ contract PRC20 is IPRC20, Initializable {
     /// @notice UniversalCore contract providing gas oracles (gas coin token & gas price).
     address public UNIVERSAL_CORE;
 
-    /// @notice Flat fee (absolute units in gas coin PRC20), NOT basis points.
-    uint256 public PC_PROTOCOL_FEE;
-
     string private _name;
     string private _symbol;
     uint8 private _decimals;
@@ -70,7 +67,6 @@ contract PRC20 is IPRC20, Initializable {
     /// @param decimals_                  ERC-20 decimals
     /// @param sourceChainNamespace_      Source chain identifier this PRC20 represents
     /// @param tokenType_                 Token classification (PC, NATIVE, ERC20)
-    /// @param protocolFlatFee_           Absolute flat fee (units: gas coin PRC20)
     /// @param universalCore_             UniversalCore contract address
     /// @param sourceTokenAddress_        Source chain token address
     function initialize(
@@ -79,7 +75,6 @@ contract PRC20 is IPRC20, Initializable {
         uint8 decimals_,
         string memory sourceChainNamespace_,
         TokenType tokenType_,
-        uint256 protocolFlatFee_,
         address universalCore_,
         string memory sourceTokenAddress_
     ) public virtual initializer {
@@ -91,7 +86,6 @@ contract PRC20 is IPRC20, Initializable {
 
         SOURCE_CHAIN_NAMESPACE = sourceChainNamespace_;
         TOKEN_TYPE = tokenType_;
-        PC_PROTOCOL_FEE = protocolFlatFee_;
         UNIVERSAL_CORE = universalCore_;
         SOURCE_TOKEN_ADDRESS = sourceTokenAddress_;
     }
@@ -194,13 +188,6 @@ contract PRC20 is IPRC20, Initializable {
         if (addr == address(0)) revert CommonErrors.ZeroAddress();
         UNIVERSAL_CORE = addr;
         emit UpdatedUniversalCore(addr);
-    }
-
-    /// @notice                  Update flat protocol fee (absolute units in gas coin PRC20).
-    /// @param protocolFlatFee_  New protocol fee
-    function updateProtocolFlatFee(uint256 protocolFlatFee_) external onlyUniversalExecutor {
-        PC_PROTOCOL_FEE = protocolFlatFee_;
-        emit UpdatedProtocolFlatFee(protocolFlatFee_);
     }
 
     /// @notice          Update token name.

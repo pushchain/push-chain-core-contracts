@@ -30,7 +30,7 @@ contract PRC20Test is Test, UpgradeableContractHelper {
     // Constants
     string public constant SOURCE_CHAIN_NAMESPACE = "1"; // Ethereum
     string public constant SOURCE_TOKEN_ADDRESS = "0x0000000000000000000000000000000000000000";
-    uint256 public constant PC_PROTOCOL_FEE = 10000;
+    uint256 public constant PROTOCOL_FEE = 10000;
     uint256 public constant GAS_PRICE = 50 * 10 ** 9; // 50 gwei
 
     // Test values
@@ -43,8 +43,6 @@ contract PRC20Test is Test, UpgradeableContractHelper {
     event Approval(address indexed owner, address indexed spender, uint256 value);
     event Deposit(bytes from, address to, uint256 amount);
     event UpdatedUniversalCore(address universalCore);
-    event UpdatedProtocolFlatFee(uint256 protocolFlatFee);
-
     function setUp() public {
         // Setup actors
         uExec = 0x14191Ea54B4c176fCf86f51b0FAc7CB1E71Df7d7;
@@ -93,7 +91,6 @@ contract PRC20Test is Test, UpgradeableContractHelper {
             18,
             SOURCE_CHAIN_NAMESPACE,
             IPRC20.TokenType.PC,
-            PC_PROTOCOL_FEE,
             address(universalCore),
             SOURCE_TOKEN_ADDRESS
         );
@@ -534,30 +531,6 @@ contract PRC20Test is Test, UpgradeableContractHelper {
         vm.prank(uExec);
         vm.expectRevert(CommonErrors.ZeroAddress.selector);
         prc20.updateUniversalCore(address(0));
-    }
-
-    function testUpdateProtocolFlatFeeFromUExec() public {
-        uint256 newProtocolFee = PC_PROTOCOL_FEE * 2;
-
-        // Update protocol fee from Universal Executor Module
-        vm.prank(uExec);
-
-        vm.expectEmit(false, false, false, true);
-        emit UpdatedProtocolFlatFee(newProtocolFee);
-
-        prc20.updateProtocolFlatFee(newProtocolFee);
-
-        // Verify protocol fee was updated
-        assertEq(prc20.PC_PROTOCOL_FEE(), newProtocolFee);
-    }
-
-    function testUpdateProtocolFlatFeeFromNonUExec() public {
-        uint256 newProtocolFee = PC_PROTOCOL_FEE * 2;
-
-        // Attempt to update protocol fee from non-Universal Executor Module
-        vm.prank(attacker);
-        vm.expectRevert(PRC20Errors.CallerIsNotUniversalExecutor.selector);
-        prc20.updateProtocolFlatFee(newProtocolFee);
     }
 
     function testSetNameFromUExec() public {
