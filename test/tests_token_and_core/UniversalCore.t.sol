@@ -1017,6 +1017,185 @@ contract UniversalCoreTest is Test, UpgradeableContractHelper {
         universalCore.getRescueFundsGasLimit(address(newToken));
     }
 
+    // ========================================
+    // 9) setUniversalGatewayPC Tests
+    // ========================================
+
+    function test_SetUniversalGatewayPC_HappyPath() public {
+        address gateway = makeAddr("gateway");
+        vm.prank(deployer);
+        universalCore.setUniversalGatewayPC(gateway);
+        assertEq(universalCore.universalGatewayPC(), gateway);
+    }
+
+    function test_SetUniversalGatewayPC_ZeroAddressReverts() public {
+        vm.prank(deployer);
+        vm.expectRevert(CommonErrors.ZeroAddress.selector);
+        universalCore.setUniversalGatewayPC(address(0));
+    }
+
+    function test_SetUniversalGatewayPC_OnlyAdmin() public {
+        vm.prank(nonOwner);
+        vm.expectRevert(CommonErrors.InvalidOwner.selector);
+        universalCore.setUniversalGatewayPC(makeAddr("gateway"));
+    }
+
+    // ========================================
+    // 10) setUniswapV3Addresses Tests
+    // ========================================
+
+    function test_SetUniswapV3Addresses_HappyPath() public {
+        address f = makeAddr("factory2");
+        address r = makeAddr("router2");
+        address q = makeAddr("quoter2");
+
+        vm.prank(deployer);
+        universalCore.setUniswapV3Addresses(f, r, q);
+
+        assertEq(universalCore.uniswapV3Factory(), f);
+        assertEq(universalCore.uniswapV3SwapRouter(), r);
+        assertEq(universalCore.uniswapV3Quoter(), q);
+    }
+
+    function test_SetUniswapV3Addresses_RevertsZeroFactory() public {
+        vm.prank(deployer);
+        vm.expectRevert(CommonErrors.ZeroAddress.selector);
+        universalCore.setUniswapV3Addresses(
+            address(0), makeAddr("r"), makeAddr("q")
+        );
+    }
+
+    function test_SetUniswapV3Addresses_RevertsZeroRouter() public {
+        vm.prank(deployer);
+        vm.expectRevert(CommonErrors.ZeroAddress.selector);
+        universalCore.setUniswapV3Addresses(
+            makeAddr("f"), address(0), makeAddr("q")
+        );
+    }
+
+    function test_SetUniswapV3Addresses_RevertsZeroQuoter() public {
+        vm.prank(deployer);
+        vm.expectRevert(CommonErrors.ZeroAddress.selector);
+        universalCore.setUniswapV3Addresses(
+            makeAddr("f"), makeAddr("r"), address(0)
+        );
+    }
+
+    function test_SetUniswapV3Addresses_OnlyAdmin() public {
+        vm.prank(nonOwner);
+        vm.expectRevert(CommonErrors.InvalidOwner.selector);
+        universalCore.setUniswapV3Addresses(
+            makeAddr("f"), makeAddr("r"), makeAddr("q")
+        );
+    }
+
+    // ========================================
+    // 11) setDefaultDeadlineMins Tests
+    // ========================================
+
+    event SetDefaultDeadlineMins(uint256 minutesValue);
+
+    function test_SetDefaultDeadlineMins_HappyPath() public {
+        vm.prank(deployer);
+        vm.expectEmit(false, false, false, true);
+        emit SetDefaultDeadlineMins(30);
+        universalCore.setDefaultDeadlineMins(30);
+        assertEq(universalCore.defaultDeadlineMins(), 30);
+    }
+
+    function test_SetDefaultDeadlineMins_OnlyAdmin() public {
+        vm.prank(nonOwner);
+        vm.expectRevert(CommonErrors.InvalidOwner.selector);
+        universalCore.setDefaultDeadlineMins(30);
+    }
+
+    // ========================================
+    // 12) setDefaultFeeTier Tests
+    // ========================================
+
+    function test_SetDefaultFeeTier_HappyPath_500() public {
+        address token = makeAddr("token");
+        vm.prank(deployer);
+        universalCore.setDefaultFeeTier(token, 500);
+        assertEq(universalCore.defaultFeeTier(token), 500);
+    }
+
+    function test_SetDefaultFeeTier_HappyPath_3000() public {
+        address token = makeAddr("token");
+        vm.prank(deployer);
+        universalCore.setDefaultFeeTier(token, 3000);
+        assertEq(universalCore.defaultFeeTier(token), 3000);
+    }
+
+    function test_SetDefaultFeeTier_HappyPath_10000() public {
+        address token = makeAddr("token");
+        vm.prank(deployer);
+        universalCore.setDefaultFeeTier(token, 10000);
+        assertEq(universalCore.defaultFeeTier(token), 10000);
+    }
+
+    function test_SetDefaultFeeTier_RevertsInvalidTier() public {
+        address token = makeAddr("token");
+        vm.prank(deployer);
+        vm.expectRevert(UniversalCoreErrors.InvalidFeeTier.selector);
+        universalCore.setDefaultFeeTier(token, 100);
+    }
+
+    function test_SetDefaultFeeTier_RevertsZeroAddress() public {
+        vm.prank(deployer);
+        vm.expectRevert(CommonErrors.ZeroAddress.selector);
+        universalCore.setDefaultFeeTier(address(0), 3000);
+    }
+
+    function test_SetDefaultFeeTier_OnlyAdmin() public {
+        vm.prank(nonOwner);
+        vm.expectRevert(CommonErrors.InvalidOwner.selector);
+        universalCore.setDefaultFeeTier(makeAddr("token"), 3000);
+    }
+
+    // ========================================
+    // 13) setSlippageTolerance Tests
+    // ========================================
+
+    function test_SetSlippageTolerance_HappyPath() public {
+        address token = makeAddr("token");
+        vm.prank(deployer);
+        universalCore.setSlippageTolerance(token, 300);
+        assertEq(universalCore.slippageTolerance(token), 300);
+    }
+
+    function test_SetSlippageTolerance_RevertsExceeds5000() public {
+        address token = makeAddr("token");
+        vm.prank(deployer);
+        vm.expectRevert(
+            UniversalCoreErrors.InvalidSlippageTolerance.selector
+        );
+        universalCore.setSlippageTolerance(token, 5001);
+    }
+
+    function test_SetSlippageTolerance_RevertsZeroAddress() public {
+        vm.prank(deployer);
+        vm.expectRevert(CommonErrors.ZeroAddress.selector);
+        universalCore.setSlippageTolerance(address(0), 300);
+    }
+
+    function test_SetSlippageTolerance_OnlyAdmin() public {
+        vm.prank(nonOwner);
+        vm.expectRevert(CommonErrors.InvalidOwner.selector);
+        universalCore.setSlippageTolerance(makeAddr("token"), 300);
+    }
+
+    function test_SetSlippageTolerance_BoundaryAt5000() public {
+        address token = makeAddr("token");
+        vm.prank(deployer);
+        universalCore.setSlippageTolerance(token, 5000);
+        assertEq(universalCore.slippageTolerance(token), 5000);
+    }
+
+    // ========================================
+    // 14) Rescue Funds Gas Limit (continued)
+    // ========================================
+
     function test_GetRescueFundsGasLimit_UpdatedAfterSettingNewLimit() public {
         uint256 initialLimit = 300_000;
         uint256 updatedLimit = 600_000;

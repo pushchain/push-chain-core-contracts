@@ -572,4 +572,20 @@ contract PRC20Test is Test, UpgradeableContractHelper {
         vm.expectRevert(PRC20Errors.CallerIsNotUniversalExecutor.selector);
         prc20.setSymbol(newSymbol);
     }
+
+    function testInitializeRevertsWithZeroUniversalCore() public {
+        PRC20 impl = new PRC20();
+        bytes memory initData = abi.encodeWithSelector(
+            PRC20.initialize.selector,
+            "Test",
+            "TST",
+            18,
+            SOURCE_CHAIN_NAMESPACE,
+            IPRC20.TokenType.PC,
+            address(0),
+            SOURCE_TOKEN_ADDRESS
+        );
+        vm.expectRevert(CommonErrors.ZeroAddress.selector);
+        deployUpgradeableContract(address(impl), initData);
+    }
 }

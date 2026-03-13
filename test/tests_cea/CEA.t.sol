@@ -1728,5 +1728,34 @@ contract CEATest is Test {
         assertTrue(success, "Direct ETH transfer should succeed");
         assertEq(address(ceaInstance).balance, balanceBefore + amount, "CEA balance should increase");
     }
+
+    // =========================================================================
+    // CEAProxy Branch Coverage
+    // =========================================================================
+
+    function testCEAProxy_InitializeWithZeroLogic_Reverts() public {
+        CEAProxy proxy = new CEAProxy();
+        vm.expectRevert(Errors.InvalidCall.selector);
+        proxy.initializeCEAProxy(address(0));
+    }
+
+    function testCEAProxy_InitializeWhenAlreadySet_Reverts() public deployCEA {
+        // ceaInstance is already initialized via deployCEA modifier
+        // Attempt to re-initialize the proxy directly
+        // The Initializable guard will revert before the currentImpl check
+        vm.expectRevert();
+        CEAProxy(payable(address(ceaInstance))).initializeCEAProxy(
+            address(ceaImplementation)
+        );
+    }
+
+    function testCEAProxy_CallBeforeInit_Reverts() public {
+        // Deploy a raw CEAProxy clone (not initialized)
+        address rawClone = address(new CEAProxy());
+        // Any call to the uninitialized proxy should revert
+        // because _implementation() reverts when impl == address(0)
+        vm.expectRevert(Errors.InvalidCall.selector);
+        CEA(payable(rawClone)).pushAccount();
+    }
 }
 

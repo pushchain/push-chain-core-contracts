@@ -16,4 +16,6 @@ auto_detect_solc = false
 evm_version = "shanghai"
 via_ir = true
 
+no_match_coverage = "(PRC20V0\\.sol|UniversalCoreV0\\.sol|src/(libraries|[Ii]nterfaces|mocks)/|test/)"
+
 fs_permissions = [{ access = "read-write", path = "deployments/" }]

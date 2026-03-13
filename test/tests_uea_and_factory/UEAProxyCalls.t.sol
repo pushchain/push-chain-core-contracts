@@ -295,6 +295,25 @@ contract ProxyCallTest is Test {
         user1UEAInstance.executeUniversalTx(payload, signature);
     }
 
+    // =========================================================================
+    // UEAProxy Branch Coverage
+    // =========================================================================
+
+    function testUEAProxy_InitializeWhenAlreadySet_Reverts() public {
+        // user1UEA is already initialized
+        vm.expectRevert();
+        UEAProxy(payable(user1UEA)).initializeUEA(address(ueaEVMImpl));
+    }
+
+    function testUEAProxy_CallBeforeInit_Reverts() public {
+        // Deploy a raw UEAProxy (not initialized)
+        UEAProxy rawProxy = new UEAProxy();
+        // Any delegated call should revert because _implementation()
+        // reverts when impl == address(0)
+        vm.expectRevert(Errors.InvalidCall.selector);
+        UEA_EVM(payable(address(rawProxy))).nonce();
+    }
+
     // Helper function for UniversalPayload hash
     function getCrosschainTxhash(UEA_EVM _smartAccountInstance, UniversalPayload memory payload)
         internal

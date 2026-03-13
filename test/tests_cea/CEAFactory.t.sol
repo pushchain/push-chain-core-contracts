@@ -1345,5 +1345,44 @@ contract CEAFactoryTest is Test {
         }
         return size > 0;
     }
+
+    // =========================================================================
+    // deployCEA / computeCEA — Internal Guard Tests (via vm.store)
+    // =========================================================================
+
+    function testDeployCEA_RevertsWhenProxyImplZeroed() public {
+        // Zero out CEA_PROXY_IMPLEMENTATION (slot 2)
+        vm.store(address(factory), bytes32(uint256(2)), bytes32(0));
+
+        vm.prank(vault);
+        vm.expectRevert(CEAFactory.InvalidImplementation.selector);
+        factory.deployCEA(ueaOnPush);
+    }
+
+    function testDeployCEA_RevertsWhenCEAImplZeroed() public {
+        // Zero out CEA_IMPLEMENTATION (slot 3)
+        vm.store(address(factory), bytes32(uint256(3)), bytes32(0));
+
+        vm.prank(vault);
+        vm.expectRevert(CEAFactory.InvalidImplementation.selector);
+        factory.deployCEA(ueaOnPush);
+    }
+
+    function testDeployCEA_RevertsWhenGatewayZeroed() public {
+        // Zero out UNIVERSAL_GATEWAY (slot 1)
+        vm.store(address(factory), bytes32(uint256(1)), bytes32(0));
+
+        vm.prank(vault);
+        vm.expectRevert(CEAFactory.InvalidImplementation.selector);
+        factory.deployCEA(ueaOnPush);
+    }
+
+    function testComputeCEA_RevertsWhenProxyImplZeroed() public {
+        // Zero out CEA_PROXY_IMPLEMENTATION (slot 2)
+        vm.store(address(factory), bytes32(uint256(2)), bytes32(0));
+
+        vm.expectRevert(CEAFactory.InvalidImplementation.selector);
+        factory.computeCEA(ueaOnPush);
+    }
 }
 

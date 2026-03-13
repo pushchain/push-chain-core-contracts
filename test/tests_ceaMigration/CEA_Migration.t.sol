@@ -280,4 +280,29 @@ contract CEA_MigrationTest is Test {
         assertTrue(implBefore != implAfter, "Implementation should have changed");
         assertEq(implAfter, migration.CEA_IMPLEMENTATION(), "Implementation should be CEA v2");
     }
+
+    function test_handleMigration_DelegatecallFailure_Reverts() public {
+        // Deploy a migration contract that points to an EOA (no code to delegatecall)
+        // We need a contract whose migrateCEA() will fail when delegatecalled.
+        // Use a mock that reverts on migrateCEA().
+        FailingMigration failMigration = new FailingMigration();
+        factory.setCEAMigrationContract(address(failMigration));
+
+        bytes32 txID = generateTxID(1);
+        bytes32 universalTxID = generateUniversalTxID(1);
+        bytes memory payload = buildMigrationPayload(address(ceaInstance));
+
+        vm.prank(vault);
+        vm.expectRevert(Errors.ExecutionFailed.selector);
+        ceaInstance.executeUniversalTx(
+            txID, universalTxID, ueaOnPush, address(0), payload
+        );
+    }
+}
+
+/// @notice Mock migration contract whose migrateCEA() always reverts
+contract FailingMigration {
+    function migrateCEA() external pure {
+        revert("migration failed");
+    }
 }
