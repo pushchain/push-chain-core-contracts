@@ -10,7 +10,9 @@ import {StringUtils} from "../../src/libraries/Utils.sol";
 import {
     UniversalAccountId,
     UniversalPayload,
+    MigrationPayload,
     UNIVERSAL_PAYLOAD_TYPEHASH,
+    MIGRATION_PAYLOAD_TYPEHASH,
     MULTICALL_SELECTOR,
     MIGRATION_SELECTOR,
     Multicall
@@ -45,7 +47,15 @@ contract UEA_EVM_V2 is ReentrancyGuard, IUEA {
     /**
      * @inheritdoc IUEA
      */
+    function initialize(UniversalAccountId memory _id) external {
+        _initialize(_id, msg.sender);
+    }
+
     function initialize(UniversalAccountId memory _id, address _factory) external {
+        _initialize(_id, _factory);
+    }
+
+    function _initialize(UniversalAccountId memory _id, address _factory) internal {
         if (initialized) {
             revert Errors.AccountAlreadyExists();
         }
@@ -75,9 +85,13 @@ contract UEA_EVM_V2 is ReentrancyGuard, IUEA {
     /**
      * @inheritdoc IUEA
      */
-    function verifyUniversalPayloadSignature(bytes32 payloadHash, bytes memory signature) public view returns (bool) {
+    function verifyPayloadSignature(bytes32 payloadHash, bytes memory signature) public view returns (bool) {
         address recoveredSigner = payloadHash.recover(signature);
         return recoveredSigner == address(bytes20(universalAccountId.owner));
+    }
+
+    function verifyUniversalPayloadSignature(bytes32 payloadHash, bytes memory signature) public view returns (bool) {
+        return verifyPayloadSignature(payloadHash, signature);
     }
 
 
@@ -207,11 +221,11 @@ contract UEA_EVM_V2 is ReentrancyGuard, IUEA {
     /**
      * @inheritdoc IUEA
      */
-    function executeUniversalTx(UniversalPayload calldata payload, bytes calldata signature) external nonReentrant {
+    function executePayload(UniversalPayload calldata payload, bytes calldata signature) public nonReentrant {
         // Caller-based verification: UEModule can execute without signature, others need signature
         if (msg.sender != UNIVERSAL_EXECUTOR_MODULE) {
-            bytes32 payloadHash = getUniversalPayloadHash(payload);
-            if (!verifyUniversalPayloadSignature(payloadHash, signature)) {
+            bytes32 payloadHash = getPayloadHash(payload);
+            if (!verifyPayloadSignature(payloadHash, signature)) {
                 revert Errors.InvalidEVMSignature();
             }
         }
@@ -225,7 +239,7 @@ contract UEA_EVM_V2 is ReentrancyGuard, IUEA {
      * @param payload The payload to calculate the hash for.
      * @return bytes32 The transaction hash.
      */
-    function getUniversalPayloadHash(UniversalPayload memory payload) public view returns (bytes32) {
+    function getPayloadHash(UniversalPayload calldata payload) public view returns (bytes32) {
         // Calculate the hash of the payload using EIP-712
         bytes32 structHash = keccak256(
             abi.encode(
@@ -246,6 +260,72 @@ contract UEA_EVM_V2 is ReentrancyGuard, IUEA {
         bytes32 _domainSeparator = domainSeparator();
 
         return keccak256(abi.encodePacked("\x19\x01", _domainSeparator, structHash));
+    }
+
+    function getUniversalPayloadHash(UniversalPayload memory payload) public view returns (bytes32) {
+        bytes32 structHash = keccak256(
+            abi.encode(
+                UNIVERSAL_PAYLOAD_TYPEHASH,
+                payload.to,
+                payload.value,
+                keccak256(payload.data),
+                payload.gasLimit,
+                payload.maxFeePerGas,
+                payload.maxPriorityFeePerGas,
+                nonce,
+                payload.deadline,
+                uint8(payload.vType)
+            )
+        );
+
+        bytes32 _domainSeparator = domainSeparator();
+
+        return keccak256(abi.encodePacked("\x19\x01", _domainSeparator, structHash));
+    }
+
+    function getMigrationPayloadHash(MigrationPayload memory payload) public view returns (bytes32) {
+        if (payload.deadline > 0 && block.timestamp > payload.deadline) {
+            revert Errors.ExpiredDeadline();
+        }
+
+        bytes32 structHash =
+            keccak256(abi.encode(MIGRATION_PAYLOAD_TYPEHASH, payload.migration, nonce, payload.deadline));
+        bytes32 _domainSeparator = domainSeparator();
+
+        return keccak256(abi.encodePacked("\x19\x01", _domainSeparator, structHash));
+    }
+
+    function migrateUEA(MigrationPayload calldata payload, bytes calldata signature) external nonReentrant {
+        bytes32 payloadHash = getMigrationPayloadHash(payload);
+
+        if (!verifyPayloadSignature(payloadHash, signature)) {
+            revert Errors.InvalidEVMSignature();
+        }
+
+        unchecked {
+            nonce++;
+        }
+
+        bytes memory migrateCallData = abi.encodeWithSignature("migrateUEAEVM()");
+
+        (bool success, bytes memory returnData) = payload.migration.delegatecall(migrateCallData);
+
+        if (!success) {
+            if (returnData.length > 0) {
+                assembly {
+                    let returnDataSize := mload(returnData)
+                    revert(add(32, returnData), returnDataSize)
+                }
+            } else {
+                revert Errors.ExecutionFailed();
+            }
+        }
+
+        emit PayloadExecuted(universalAccountId.owner, nonce);
+    }
+
+    function executeUniversalTx(UniversalPayload calldata payload, bytes calldata signature) external {
+        executePayload(payload, signature);
     }
 
     /**

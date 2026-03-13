@@ -54,6 +54,7 @@ library UniversalCoreErrors {
 // =========================
 library UEAErrors {
     error InvalidCall();
+    error InvalidTxHash();
     error ExecutionFailed();
     error ExpiredDeadline();
     error InvalidInputArgs();

@@ -87,7 +87,7 @@ contract UEASVMTest is Test {
             UniversalAccountId({chainNamespace: "solana", chainId: "101", owner: ownerBytes});
 
         // Initialize the account
-        newUEA.initialize(_id, address(factory));
+        newUEA.initialize(_id);
 
         // Verify account details were set correctly
         UniversalAccountId memory storedId = newUEA.universalAccount();
@@ -105,11 +105,11 @@ contract UEASVMTest is Test {
             UniversalAccountId({chainNamespace: "solana", chainId: "101", owner: ownerBytes});
 
         // Initialize the account
-        newUEA.initialize(_id, address(factory));
+        newUEA.initialize(_id);
 
         // Try to initialize again with the same ID
         vm.expectRevert(Errors.AccountAlreadyExists.selector);
-        newUEA.initialize(_id, address(factory));
+        newUEA.initialize(_id);
 
         // Try to initialize again with a different ID
         bytes memory differentOwnerBytes = hex"a48f4e93ca594d3c5e09c3ad39c599bbd6e6a2937869f3456905f5aeb7c78a61";
@@ -117,7 +117,7 @@ contract UEASVMTest is Test {
             UniversalAccountId({chainNamespace: "solana", chainId: "101", owner: differentOwnerBytes});
 
         vm.expectRevert(Errors.AccountAlreadyExists.selector);
-        newUEA.initialize(differentId, address(factory));
+        newUEA.initialize(differentId);
     }
 
     function testRegisterChain() public view {
@@ -173,7 +173,7 @@ contract UEASVMTest is Test {
             abi.encode(true)
         );
 
-        bool verified = svmSmartAccountInstance.verifyUniversalPayloadSignature(messageHash, signature);
+        bool verified = svmSmartAccountInstance.verifyPayloadSignature(messageHash, signature);
         assertTrue(verified);
     }
 
@@ -189,7 +189,7 @@ contract UEASVMTest is Test {
             abi.encode(false)
         );
 
-        bool verified = svmSmartAccountInstance.verifyUniversalPayloadSignature(messageHash, signature);
+        bool verified = svmSmartAccountInstance.verifyPayloadSignature(messageHash, signature);
         assertFalse(verified);
     }
 
@@ -206,7 +206,7 @@ contract UEASVMTest is Test {
         );
 
         vm.expectRevert(Errors.PrecompileCallFailed.selector);
-        svmSmartAccountInstance.verifyUniversalPayloadSignature(messageHash, signature);
+        svmSmartAccountInstance.verifyPayloadSignature(messageHash, signature);
     }
 
     // =========================================================================
@@ -248,7 +248,7 @@ contract UEASVMTest is Test {
         emit IUEA.PayloadExecuted(ownerBytes, 1);
 
         // Execute the payload
-        svmSmartAccountInstance.executeUniversalTx(payload, signature);
+        svmSmartAccountInstance.executePayload(payload, signature);
 
         // Verify state changes
         uint256 magicValueAfter = target.getMagicNumber();
@@ -302,7 +302,7 @@ contract UEASVMTest is Test {
         );
 
         // Execute the payload
-        svmSmartAccountInstance.executeUniversalTx(payload, signature);
+        svmSmartAccountInstance.executePayload(payload, signature);
 
         // Check both calls executed
         uint256 magic = target.getMagicNumber();
@@ -349,7 +349,7 @@ contract UEASVMTest is Test {
 
         // Should bubble up revert reason from revertingTarget
         vm.expectRevert("This function always reverts with reason");
-        svmSmartAccountInstance.executeUniversalTx(payload, signature);
+        svmSmartAccountInstance.executePayload(payload, signature);
     }
 
     function testExecuteMulticallSuccessWithPayload() public deploySvmSmartAccount {
@@ -408,7 +408,7 @@ contract UEASVMTest is Test {
         emit IUEA.PayloadExecuted(ownerBytes, 1);
 
         // Execute
-        svmSmartAccountInstance.executeUniversalTx(payload, signature);
+        svmSmartAccountInstance.executePayload(payload, signature);
 
         // Check all calls executed
         uint256 magic = target.getMagicNumber();
@@ -466,7 +466,7 @@ contract UEASVMTest is Test {
         emit IUEA.PayloadExecuted(ownerBytes, 1);
 
         // Execute
-        svmSmartAccountInstance.executeUniversalTx(payload, signature);
+        svmSmartAccountInstance.executePayload(payload, signature);
 
         // Check both targets were called correctly
         uint256 magic1 = target.getMagicNumber();
@@ -534,7 +534,7 @@ contract UEASVMTest is Test {
         emit IUEA.PayloadExecuted(ownerBytes, 1);
 
         // Execute
-        svmSmartAccountInstance.executeUniversalTx(payload, signature);
+        svmSmartAccountInstance.executePayload(payload, signature);
 
         // Check both targets were called correctly and received the right amounts
         uint256 magic1 = target.getMagicNumber();
@@ -573,7 +573,7 @@ contract UEASVMTest is Test {
         );
 
         // Execute the payload
-        svmSmartAccountInstance.executeUniversalTx(payload, signature);
+        svmSmartAccountInstance.executePayload(payload, signature);
 
         // Verify state changes
         uint256 magicValueAfter = target.getMagicNumber();
@@ -607,7 +607,7 @@ contract UEASVMTest is Test {
 
         // Should revert with InvalidSVMSignature
         vm.expectRevert(Errors.InvalidSVMSignature.selector);
-        svmSmartAccountInstance.executeUniversalTx(payload, signature);
+        svmSmartAccountInstance.executePayload(payload, signature);
     }
 
     function testExecutionWithExpiredDeadline() public deploySvmSmartAccount {
@@ -640,7 +640,7 @@ contract UEASVMTest is Test {
 
         // Should revert with ExpiredDeadline
         vm.expectRevert(Errors.ExpiredDeadline.selector);
-        svmSmartAccountInstance.executeUniversalTx(payload, signature);
+        svmSmartAccountInstance.executePayload(payload, signature);
     }
 
     function testReceiveFunction() public {
@@ -650,7 +650,7 @@ contract UEASVMTest is Test {
         // Initialize it
         UniversalAccountId memory _id =
             UniversalAccountId({chainNamespace: "solana", chainId: "101", owner: ownerBytes});
-        newUEA.initialize(_id, address(factory));
+        newUEA.initialize(_id);
 
         // Check initial balance
         assertEq(address(newUEA).balance, 0, "Initial balance should be 0");
@@ -686,7 +686,7 @@ contract UEASVMTest is Test {
             deadline: payload.deadline,
             vType: VerificationType(0)
         });
-        bytes32 payloadHash = svmSmartAccountInstance.getUniversalPayloadHash(universalPayload);
+        bytes32 payloadHash = svmSmartAccountInstance.getPayloadHash(universalPayload);
 
         // Sign with owner key
         bytes memory signature =
@@ -700,7 +700,7 @@ contract UEASVMTest is Test {
         );
 
         vm.expectRevert(Errors.InvalidSVMSignature.selector);
-        svmSmartAccountInstance.executeUniversalTx(universalPayload, signature);
+        svmSmartAccountInstance.executePayload(universalPayload, signature);
     }
 
     function test_RevertWhen_ExpiredDeadlineOnMigration() public deploySvmSmartAccount {
@@ -720,7 +720,7 @@ contract UEASVMTest is Test {
             deadline: payload.deadline,
             vType: VerificationType(0)
         });
-        bytes32 payloadHash = svmSmartAccountInstance.getUniversalPayloadHash(universalPayload);
+        bytes32 payloadHash = svmSmartAccountInstance.getPayloadHash(universalPayload);
 
         // skip so deadline is expired
         skip(2);
@@ -736,7 +736,7 @@ contract UEASVMTest is Test {
         );
 
         vm.expectRevert(Errors.ExpiredDeadline.selector);
-        svmSmartAccountInstance.executeUniversalTx(universalPayload, signature);
+        svmSmartAccountInstance.executePayload(universalPayload, signature);
     }
 
     function test_SuccessfulMigrationUpdatesImplementation() public deploySvmSmartAccount {
@@ -759,7 +759,7 @@ contract UEASVMTest is Test {
             deadline: payload.deadline,
             vType: VerificationType(0)
         });
-        bytes32 payloadHash = svmSmartAccountInstance.getUniversalPayloadHash(universalPayload);
+        bytes32 payloadHash = svmSmartAccountInstance.getPayloadHash(universalPayload);
 
         // Sign with owner key
         // bytes32 txHash = getCrosschainTxhash(svmSmartAccountInstance, payload);
@@ -774,7 +774,7 @@ contract UEASVMTest is Test {
         );
 
         // Call migrateUEA
-        svmSmartAccountInstance.executeUniversalTx(universalPayload, signature);
+        svmSmartAccountInstance.executePayload(universalPayload, signature);
 
         // Verify proxy’s storage slot now updated
         bytes32 slot = UEA_LOGIC_SLOT;
@@ -816,7 +816,7 @@ contract UEASVMTest is Test {
         assertEq(expectedHash, actualHash, "DOMAIN_SEPARATOR_TYPEHASH_SVM does not match expected value");
     }
 
-    function testgetUniversalPayloadHash() public deploySvmSmartAccount {
+    function testgetPayloadHash() public deploySvmSmartAccount {
         // Create a payload
         UniversalPayload memory payload = UniversalPayload({
             to: address(target),
@@ -831,7 +831,7 @@ contract UEASVMTest is Test {
         });
 
         // Get the transaction hash directly
-        bytes32 directHash = svmSmartAccountInstance.getUniversalPayloadHash(payload);
+        bytes32 directHash = svmSmartAccountInstance.getPayloadHash(payload);
 
         // Calculate the hash manually
         bytes32 structHash = keccak256(
@@ -876,7 +876,7 @@ contract UEASVMTest is Test {
         vm.warp(deadline + 1);
 
         // getUniversalPayloadHash should still work - deadline is checked during execution
-        bytes32 hash = svmSmartAccountInstance.getUniversalPayloadHash(payload);
+        bytes32 hash = svmSmartAccountInstance.getPayloadHash(payload);
         assertTrue(hash != bytes32(0), "Hash should be calculated regardless of deadline");
     }
 
@@ -955,7 +955,7 @@ contract UEASVMTest is Test {
 
         // Should revert with the target's revert reason
         vm.expectRevert("This function always reverts with reason");
-        svmSmartAccountInstance.executeUniversalTx(payload, signature);
+        svmSmartAccountInstance.executePayload(payload, signature);
     }
 
     // Add a test for execution that fails without a revert reason
@@ -988,7 +988,7 @@ contract UEASVMTest is Test {
 
         // Should revert with ExecutionFailed error
         vm.expectRevert(Errors.ExecutionFailed.selector);
-        svmSmartAccountInstance.executeUniversalTx(payload, signature);
+        svmSmartAccountInstance.executePayload(payload, signature);
     }
 
     // Add a test for execution with empty calldata
@@ -1019,7 +1019,7 @@ contract UEASVMTest is Test {
 
         // Expect the ExecutionFailed error when sending empty calldata
         vm.expectRevert(Errors.ExecutionFailed.selector);
-        svmSmartAccountInstance.executeUniversalTx(payload, signature);
+        svmSmartAccountInstance.executePayload(payload, signature);
     }
 
     // Tests for UEModule caller-based verification
@@ -1040,8 +1040,8 @@ contract UEASVMTest is Test {
         });
         
         // Prank as UNIVERSAL_EXECUTOR_MODULE
-        vm.prank(svmSmartAccountInstance.UNIVERSAL_EXECUTOR_MODULE());
-        svmSmartAccountInstance.executeUniversalTx(payload, "");
+        vm.prank(0x14191Ea54B4c176fCf86f51b0FAc7CB1E71Df7d7);
+        svmSmartAccountInstance.executePayload(payload, "");
 
         // Verify execution succeeded
         assertEq(target.getMagicNumber(), 999, "Execution should succeed for UNIVERSAL_EXECUTOR_MODULE");
@@ -1076,7 +1076,7 @@ contract UEASVMTest is Test {
         );
         
         vm.expectRevert(Errors.InvalidSVMSignature.selector);
-        svmSmartAccountInstance.executeUniversalTx(payload, invalidSignature);
+        svmSmartAccountInstance.executePayload(payload, invalidSignature);
     }
 
     function testExecutePayloadAsUserWithValidSignature() public deploySvmSmartAccount {
@@ -1107,7 +1107,7 @@ contract UEASVMTest is Test {
         );
         
         // Execute with valid signature
-        svmSmartAccountInstance.executeUniversalTx(payload, signature);
+        svmSmartAccountInstance.executePayload(payload, signature);
         
         // Verify execution succeeded
         assertEq(target.getMagicNumber(), 999, "Execution should succeed with valid signature");

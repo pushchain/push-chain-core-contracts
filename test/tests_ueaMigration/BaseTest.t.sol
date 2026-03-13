@@ -262,7 +262,7 @@ contract BaseTest is Test {
             oldPayload.nonce,
             oldPayload.deadline
         );
-        bytes32 payloadHash = ueaInstance.getUniversalPayloadHash(payload);
+        bytes32 payloadHash = ueaInstance.getPayloadHash(payload);
         (uint8 v, bytes32 r, bytes32 s) = vm.sign(signerPK, payloadHash);
         return abi.encodePacked(r, s, v);
     }
@@ -290,8 +290,8 @@ contract BaseTest is Test {
             oldPayload.deadline
         );
         
-        // Call executeUniversalTx instead of migrateUEA
-        IUEA(ueaAddress).executeUniversalTx(payload, signature);
+        // Call executePayload instead of migrateUEA
+        IUEA(ueaAddress).executePayload(payload, signature);
     }
 
     function getCurrentImplementation(address ueaProxy) public view returns (address impl) {

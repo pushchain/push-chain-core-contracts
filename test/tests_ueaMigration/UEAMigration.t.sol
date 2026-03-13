@@ -128,7 +128,7 @@ contract UEAMigrationTest is BaseTest {
      */
     function test_migrateUEAEVM_SuccessOnDelegateCall() public {
         ueaProxy.initializeUEA(address(ueaEVMImplV1));
-        IUEA(address(ueaProxy)).initialize(testAccountId, address(factory));
+        IUEA(address(ueaProxy)).initialize(testAccountId);
 
         assertEq(ueaProxy.getImplementation(), address(ueaEVMImplV1), "Initial implementation should be V1");
         assertEq(IUEA(address(ueaProxy)).VERSION(), "1.0.0", "Initial version should be 1.0.0");
@@ -154,7 +154,7 @@ contract UEAMigrationTest is BaseTest {
         });
         
         // Get the payload hash using getUniversalPayloadHash
-        bytes32 payloadHash = UEA_EVM(payable(address(ueaProxy))).getUniversalPayloadHash(universalPayload);
+        bytes32 payloadHash = UEA_EVM(payable(address(ueaProxy))).getPayloadHash(universalPayload);
 
         // Create a valid signature using the owner's private key
         (uint8 v, bytes32 r, bytes32 s) = vm.sign(ownerPK, payloadHash);
@@ -189,7 +189,7 @@ contract UEAMigrationTest is BaseTest {
         svmProxy.initializeUEA(address(ueaSVMImplV1));
 
         // Initialize the UEA implementation itself
-        IUEA(address(svmProxy)).initialize(testAccountId, address(factory));
+        IUEA(address(svmProxy)).initialize(testAccountId);
 
         // Verify initial state
         assertEq(svmProxy.getImplementation(), address(ueaSVMImplV1), "Initial implementation should be SVM V1");
@@ -268,7 +268,7 @@ contract UEAMigrationTest is BaseTest {
         address newImpl = migration.UEA_EVM_IMPLEMENTATION();
 
         ueaProxy.initializeUEA(oldImpl);
-        IUEA(address(ueaProxy)).initialize(testAccountId, address(factory));
+        IUEA(address(ueaProxy)).initialize(testAccountId);
 
         // Create migration payload
         MigrationPayload memory migrationPayload = MigrationPayload({
@@ -291,7 +291,7 @@ contract UEAMigrationTest is BaseTest {
         });
         
         // Get the payload hash using getUniversalPayloadHash
-        bytes32 payloadHash = UEA_EVM(payable(address(ueaProxy))).getUniversalPayloadHash(universalPayload);
+        bytes32 payloadHash = UEA_EVM(payable(address(ueaProxy))).getPayloadHash(universalPayload);
 
         // Create a valid signature using the owner's private key
         (uint8 v, bytes32 r, bytes32 s) = vm.sign(ownerPK, payloadHash);
@@ -309,7 +309,7 @@ contract UEAMigrationTest is BaseTest {
         // Need to update nonce for second migration
         migrationPayload.nonce = 1;
         universalPayload.nonce = 1;
-        payloadHash = UEA_EVM(payable(address(ueaProxy))).getUniversalPayloadHash(universalPayload);
+        payloadHash = UEA_EVM(payable(address(ueaProxy))).getPayloadHash(universalPayload);
         (v, r, s) = vm.sign(ownerPK, payloadHash);
         signature = abi.encodePacked(r, s, v);
 
@@ -323,7 +323,7 @@ contract UEAMigrationTest is BaseTest {
 
         // Initialize UEA proxy
         ueaProxy.initializeUEA(address(ueaEVMImplV1));
-        IUEA(address(ueaProxy)).initialize(testAccountId, address(factory));
+        IUEA(address(ueaProxy)).initialize(testAccountId);
 
         // Create migration payload
         MigrationPayload memory migrationPayload = MigrationPayload({
@@ -346,7 +346,7 @@ contract UEAMigrationTest is BaseTest {
         });
         
         // Get the payload hash using getUniversalPayloadHash
-        bytes32 payloadHash = UEA_EVM(payable(address(ueaProxy))).getUniversalPayloadHash(universalPayload);
+        bytes32 payloadHash = UEA_EVM(payable(address(ueaProxy))).getPayloadHash(universalPayload);
 
         // Create a valid signature using the owner's private key
         (uint8 v, bytes32 r, bytes32 s) = vm.sign(ownerPK, payloadHash);
@@ -367,7 +367,7 @@ contract UEAMigrationTest is BaseTest {
     function test_migration_SwitchingImplementations() public {
         // Start with EVM implementation
         ueaProxy.initializeUEA(address(ueaEVMImplV1));
-        IUEA(address(ueaProxy)).initialize(testAccountId, address(factory));
+        IUEA(address(ueaProxy)).initialize(testAccountId);
 
         assertEq(ueaProxy.getImplementation(), address(ueaEVMImplV1), "Should start with EVM V1");
         assertEq(IUEA(address(ueaProxy)).VERSION(), "1.0.0", "Should start with version 1.0.0");
@@ -389,7 +389,7 @@ contract UEAMigrationTest is BaseTest {
             vType: VerificationType(0)
         });
         
-        bytes32 payloadHash = UEA_EVM(payable(address(ueaProxy))).getUniversalPayloadHash(universalPayload);
+        bytes32 payloadHash = UEA_EVM(payable(address(ueaProxy))).getPayloadHash(universalPayload);
 
         (uint8 v, bytes32 r, bytes32 s) = vm.sign(ownerPK, payloadHash);
         bytes memory signature = abi.encodePacked(r, s, v);

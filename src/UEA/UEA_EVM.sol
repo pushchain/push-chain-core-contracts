@@ -1,120 +1,230 @@
 // SPDX-License-Identifier: MIT
 pragma solidity 0.8.26;
 
-import {IUEA} from "../interfaces/IUEA.sol";
-import {IUEAFactory} from "../interfaces/IUEAFactory.sol";
-import {UEAErrors} from "../libraries/Errors.sol";
+import {UEAErrors as Errors} from "../libraries/Errors.sol";
+import {IUEA} from "../Interfaces/IUEA.sol";
+import {ECDSA} from "@openzeppelin/contracts/utils/cryptography/ECDSA.sol";
+import {ReentrancyGuard} from "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
 import {StringUtils} from "../libraries/Utils.sol";
 import {
     UniversalAccountId,
     UniversalPayload,
+    MigrationPayload,
+    VerificationType,
     UNIVERSAL_PAYLOAD_TYPEHASH,
+    MIGRATION_PAYLOAD_TYPEHASH,
     MULTICALL_SELECTOR,
-    MIGRATION_SELECTOR,
     Multicall
 } from "../libraries/Types.sol";
-
-import {ECDSA} from "@openzeppelin/contracts/utils/cryptography/ECDSA.sol";
-import {ReentrancyGuard} from "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
-
 /**
  * @title   UEA_EVM (Universal Executor Account for EVM)
- * @notice  Implementation logic for EVM-based Universal Executor Accounts.
- * @dev     Handles verification and execution of cross-chain payloads
+ * @notice  UEA_EVM acts as the implementation logic for EVM-based UEAs accounts
+ * @dev     Implementation of the IUEA interface for EVM-based external accounts.
+ *          This contract handles verification and execution of cross-chain payloads
  *          using ECDSA signatures from Ethereum-compatible accounts.
+ * 
+ * Note:    Find detailed natspec in the IUEA interface -> interfaces/IUEA.sol
  */
+
 contract UEA_EVM is ReentrancyGuard, IUEA {
     using ECDSA for bytes32;
 
-    // =========================
-    //    UE: STATE VARIABLES
-    // =========================
-
-    /// @notice Universal Account information.
-    UniversalAccountId internal _universalAccountId;
-
-    /// @notice Flag to track initialization status.
-    bool private _initialized;
-
-    /// @inheritdoc IUEA
+    // @notice Universal Account information
+    UniversalAccountId internal id;
+    // @notice Flag to track initialization status
+    bool private initialized;
+    // @notice The nonce for the UEA
     uint256 public nonce;
-
-    /// @notice The version of the UEA.
+    // @notice The version of the UEA
     string public constant VERSION = "1.0.0";
-
-    /// @notice Universal Executor Module — authorized to execute without signature.
-    address public constant UNIVERSAL_EXECUTOR_MODULE =
-        0x14191Ea54B4c176fCf86f51b0FAc7CB1E71Df7d7;
-
-    /// @notice EIP-712 domain separator typehash.
-    ///         keccak256("EIP712Domain(string version,uint256 chainId,address verifyingContract)")
+    // @notice Precompile address for TxHash Based Verification
+    address public constant TX_BASED_VERIFIER = 0x00000000000000000000000000000000000000CB;
+    // @notice Hash of keccak256("EIP712Domain(string version,uint256 chainId,address verifyingContract)")
     bytes32 public constant DOMAIN_SEPARATOR_TYPEHASH =
         0x2aef22f9d7df5f9d21c56d14029233f3fdaa91917727e1eb68e504d27072d6cd;
 
-    /// @notice UEAFactory reference for fetching migration contract.
-    IUEAFactory public ueaFactory;
-
-    // =========================
-    //    UE: INITIALIZER
-    // =========================
-
-    /// @inheritdoc IUEA
-    function initialize(
-        UniversalAccountId memory _id,
-        address _factory
-    ) external {
-        if (_initialized) {
-            revert UEAErrors.AccountAlreadyExists();
+    /**
+     * @inheritdoc IUEA
+     */
+    function initialize(UniversalAccountId memory _id) external {
+        if (initialized) {
+            revert Errors.AccountAlreadyExists();
         }
-        _initialized = true;
+        initialized = true;
 
-        _universalAccountId = _id;
-        ueaFactory = IUEAFactory(_factory);
+        id = _id;
     }
 
-    // =========================
-    //    UE_1: VIEW FUNCTIONS
-    // =========================
-
-    /// @inheritdoc IUEA
+    /**
+     * @dev             Returns the domain separator for EIP-712 signing.
+     * @return bytes32  domain separator
+     */
     function domainSeparator() public view returns (bytes32) {
-        uint256 chainId = StringUtils.stringToExactUInt256(
-            _universalAccountId.chainId
-        );
+        uint256 chainId = StringUtils.stringToExactUInt256(id.chainId);
 
-        return keccak256(
-            abi.encode(
-                DOMAIN_SEPARATOR_TYPEHASH,
-                keccak256(bytes(VERSION)),
-                chainId,
-                address(this)
+        return keccak256(abi.encode(DOMAIN_SEPARATOR_TYPEHASH, keccak256(bytes(VERSION)), chainId, address(this)));
+    }
+
+    /**
+     * @inheritdoc IUEA
+     */
+    function universalAccount() public view returns (UniversalAccountId memory) {
+        return id;
+    }
+
+    /**
+     * @inheritdoc IUEA
+     */
+    function verifyPayloadSignature(bytes32 payloadHash, bytes memory signature) public view returns (bool) {
+        address recoveredSigner = payloadHash.recover(signature);
+        return recoveredSigner == address(bytes20(id.owner));
+    }
+
+    /**
+     * @notice              Verifies a payload using transaction hash-based verification
+     * @dev                 Uses a precompiled contract ( TX_BASED_VERIFIER on Push Chain) to verify transaction hash for universal transaction verification
+     * @param payloadHash   hash of the payload to verify
+     * @param txHash        transaction hash to verify against
+     * @return bool         indicates whether the transaction hash verification is valid
+     */
+    function verifyPayloadTxHash(bytes32 payloadHash, bytes calldata txHash) public view returns (bool) {
+        (bool success, bytes memory result) = TX_BASED_VERIFIER.staticcall(
+            abi.encodeWithSignature(
+                "verifyTxHash(string,string,bytes,bytes32,bytes)",
+                id.chainNamespace,
+                id.chainId,
+                id.owner,
+                payloadHash,
+                txHash
             )
         );
+        if (!success) {
+            revert Errors.PrecompileCallFailed();
+        }
+
+        return abi.decode(result, (bool));
     }
 
-    /// @inheritdoc IUEA
-    function universalAccount()
-        public
-        view
-        returns (UniversalAccountId memory)
-    {
-        return _universalAccountId;
+    /**
+     * @inheritdoc IUEA
+     */
+    function executePayload(UniversalPayload calldata payload, bytes calldata verificationData) external nonReentrant {
+        bytes32 payloadHash = getPayloadHash(payload);
+
+        if (payload.vType == VerificationType.universalTxVerification) {
+            if (verificationData.length == 0 || !verifyPayloadTxHash(payloadHash, verificationData)) {
+                revert Errors.InvalidTxHash();
+            }
+        } else {
+            if (!verifyPayloadSignature(payloadHash, verificationData)) {
+                revert Errors.InvalidEVMSignature();
+            }
+        }
+
+        unchecked {
+            nonce++;
+        }
+
+        bool success;
+        bytes memory returnData;
+
+        if (isMulticall(payload.data)) {
+            Multicall[] memory calls = decodeCalls(payload.data);
+            for (uint256 i = 0; i < calls.length; i++) {
+                // If any sub-call fails, revert entire multicall
+                (success, returnData) = calls[i].to.call{value: calls[i].value}(calls[i].data);
+                if (!success) {
+                    break;
+                }
+            }
+        } else {
+            (success, returnData) = payload.to.call{value: payload.value}(payload.data);
+        }
+
+        if (!success) {
+            if (returnData.length > 0) {
+                assembly {
+                    let returnDataSize := mload(returnData)
+                    revert(add(32, returnData), returnDataSize)
+                }
+            } else {
+                revert Errors.ExecutionFailed();
+            }
+        }
+
+        emit PayloadExecuted(id.owner, nonce);
     }
 
-    /// @inheritdoc IUEA
-    function verifyUniversalPayloadSignature(
-        bytes32 payloadHash,
-        bytes memory signature
-    ) public view returns (bool) {
-        address recoveredSigner = payloadHash.recover(signature);
-        return recoveredSigner
-            == address(bytes20(_universalAccountId.owner));
+    /**
+     * @inheritdoc IUEA
+     */
+    function migrateUEA(MigrationPayload calldata payload, bytes calldata signature) external nonReentrant {
+        bytes32 payloadHash = getMigrationPayloadHash(payload);
+
+        if (!verifyPayloadSignature(payloadHash, signature)) {
+            revert Errors.InvalidEVMSignature();
+        }
+
+        unchecked {
+            nonce++;
+        }
+
+        bytes memory migrateCallData = abi.encodeWithSignature("migrateUEAEVM()");
+
+        (bool success, bytes memory returnData) = payload.migration.delegatecall(migrateCallData);
+
+        if (!success) {
+            if (returnData.length > 0) {
+                assembly {
+                    let returnDataSize := mload(returnData)
+                    revert(add(32, returnData), returnDataSize)
+                }
+            } else {
+                revert Errors.ExecutionFailed();
+            }
+        }
+
+        emit PayloadExecuted(id.owner, nonce);
     }
 
-    /// @inheritdoc IUEA
-    function getUniversalPayloadHash(
-        UniversalPayload memory payload
-    ) public view returns (bytes32) {
+    // =========================
+    //           Internal Helper Functions
+    // =========================
+    
+    /**
+     * @notice          Checks whether the payload data uses the multicall format
+     * @dev             Determines if the payload data starts with the MULTICALL_SELECTOR magic prefix
+     * @dev             Used to distinguish between single call vs multicall batch execution
+     * @param data      raw calldata from the UniversalPayload
+     * @return bool     returns true if the data starts with MULTICALL_SELECTOR, indicating a multicall batch
+     */
+    function isMulticall(bytes calldata data) internal pure returns (bool) {
+        if (data.length < 4) return false;
+        return bytes4(data[:4]) == MULTICALL_SELECTOR;
+    }
+
+    /**
+     * @notice              Decodes the payload data into an array of Multicall structs
+     * @dev                 Assumes the data uses the multicall format (should be called after isMulticall returns true)
+     * @dev                 Strips the MULTICALL_SELECTOR prefix and decodes the remaining data as Multicall[]
+     * @param data          raw calldata containing MULTICALL_SELECTOR followed by ABI-encoded Multicall[]
+     * @return Multicall[]  decoded array of Multicall structs to be executed
+     */
+    function decodeCalls(bytes calldata data) internal pure returns (Multicall[] memory) {
+        return abi.decode(data[4:], (Multicall[])); // Strip selector
+    }
+
+    /**
+     * @dev             Calculates the transaction hash for a given payload
+     * @param payload   the payload to calculate the hash for
+     * @return bytes32  payload hash
+     */
+    function getPayloadHash(UniversalPayload calldata payload) public view returns (bytes32) {
+        if (payload.deadline > 0) {
+            if (block.timestamp > payload.deadline) {
+                revert Errors.ExpiredDeadline();
+            }
+        }
         bytes32 structHash = keccak256(
             abi.encode(
                 UNIVERSAL_PAYLOAD_TYPEHASH,
@@ -130,193 +240,32 @@ contract UEA_EVM is ReentrancyGuard, IUEA {
             )
         );
 
-        bytes32 domainSep = domainSeparator();
+        bytes32 _domainSeparator = domainSeparator();
 
-        return keccak256(
-            abi.encodePacked("\x19\x01", domainSep, structHash)
-        );
+        return keccak256(abi.encodePacked("\x19\x01", _domainSeparator, structHash));
     }
 
-    // =========================
-    //    UE_2: EXECUTION
-    // =========================
-
-    /// @inheritdoc IUEA
-    function executeUniversalTx(
-        UniversalPayload calldata payload,
-        bytes calldata signature
-    ) external nonReentrant {
-        if (msg.sender != UNIVERSAL_EXECUTOR_MODULE) {
-            bytes32 payloadHash =
-                getUniversalPayloadHash(payload);
-            if (
-                !verifyUniversalPayloadSignature(
-                    payloadHash, signature
-                )
-            ) {
-                revert UEAErrors.InvalidEVMSignature();
-            }
+    /**
+     * @dev             Calculates the transaction hash for a given migration payload
+     * @param payload   migration payload to calculate the hash for
+     * @return bytes32  payload hash
+     */
+    function getMigrationPayloadHash(MigrationPayload memory payload) public view returns (bytes32) {
+        if (payload.deadline > 0 && block.timestamp > payload.deadline) {
+            revert Errors.ExpiredDeadline();
         }
 
-        _handleExecution(payload);
+        bytes32 structHash =
+            keccak256(abi.encode(MIGRATION_PAYLOAD_TYPEHASH, payload.migration, nonce, payload.deadline));
+
+        bytes32 _domainSeparator = domainSeparator();
+
+        // Final EIP-712 hash: keccak256("\x19\x01" || domainSeparator || structHash)
+        return keccak256(abi.encodePacked("\x19\x01", _domainSeparator, structHash));
     }
 
-    // =========================
-    //    UE_3: INTERNAL HELPERS
-    // =========================
-
-    /// @dev Handles nonce increment, selector-based dispatch, and event emission.
-    /// @param payload   The UniversalPayload to execute
-    function _handleExecution(
-        UniversalPayload memory payload
-    ) internal {
-        if (
-            payload.deadline > 0
-                && block.timestamp > payload.deadline
-        ) {
-            revert UEAErrors.ExpiredDeadline();
-        }
-
-        unchecked {
-            nonce++;
-        }
-
-        bool success;
-        bytes memory returnData;
-
-        if (_isMulticall(payload.data)) {
-            (success, returnData) = _handleMulticall(payload);
-        } else if (_isMigration(payload.data)) {
-            (success, returnData) = _handleMigration(payload);
-        } else {
-            (success, returnData) = _handleSingleCall(payload);
-        }
-
-        if (!success) {
-            if (returnData.length > 0) {
-                assembly {
-                    let returnDataSize := mload(returnData)
-                    revert(add(32, returnData), returnDataSize)
-                }
-            } else {
-                revert UEAErrors.ExecutionFailed();
-            }
-        }
-
-        emit PayloadExecuted(_universalAccountId.owner, nonce);
-    }
-
-    /// @dev Executes multiple calls in sequence.
-    /// @param payload   The UniversalPayload containing multicall data
-    /// @return success  Whether all calls succeeded
-    /// @return returnData  Return data from the last or first failed call
-    function _handleMulticall(
-        UniversalPayload memory payload
-    ) internal returns (bool success, bytes memory returnData) {
-        Multicall[] memory calls = _decodeCalls(payload.data);
-
-        for (uint256 i = 0; i < calls.length; i++) {
-            (success, returnData) = calls[i].to.call{
-                value: calls[i].value
-            }(calls[i].data);
-            if (!success) {
-                return (success, returnData);
-            }
-        }
-
-        return (true, "");
-    }
-
-    /// @dev Executes migration via delegatecall to the factory's migration contract.
-    ///      Enforces: must target self, no value transfer.
-    /// @param payload   The UniversalPayload containing migration data
-    /// @return success  Whether the migration succeeded
-    /// @return returnData  Return data from the delegatecall
-    function _handleMigration(
-        UniversalPayload memory payload
-    ) internal returns (bool success, bytes memory returnData) {
-        if (payload.to != address(this)) {
-            revert UEAErrors.InvalidCall();
-        }
-
-        if (payload.value != 0) {
-            revert UEAErrors.InvalidCall();
-        }
-
-        address migrationContract =
-            ueaFactory.UEA_MIGRATION_CONTRACT();
-
-        if (migrationContract == address(0)) {
-            revert UEAErrors.InvalidCall();
-        }
-
-        bytes memory migrateCallData =
-            abi.encodeWithSignature("migrateUEAEVM()");
-
-        (success, returnData) =
-            migrationContract.delegatecall(migrateCallData);
-    }
-
-    /// @dev Executes a single call to the target address.
-    /// @param payload   The UniversalPayload containing call data
-    /// @return success  Whether the call succeeded
-    /// @return returnData  Return data from the call
-    function _handleSingleCall(
-        UniversalPayload memory payload
-    ) internal returns (bool success, bytes memory returnData) {
-        (success, returnData) =
-            payload.to.call{value: payload.value}(payload.data);
-    }
-
-    // =========================
-    //    UE_4: PRIVATE HELPERS
-    // =========================
-
-    /// @dev Checks whether the payload data starts with MULTICALL_SELECTOR.
-    /// @param data   Raw data from the UniversalPayload
-    /// @return       True if multicall format
-    function _isMulticall(
-        bytes memory data
-    ) private pure returns (bool) {
-        if (data.length < 4) return false;
-        bytes4 selector;
-        assembly {
-            selector := mload(add(data, 32))
-        }
-        return selector == MULTICALL_SELECTOR;
-    }
-
-    /// @dev Checks whether the payload data starts with MIGRATION_SELECTOR.
-    /// @param data   Raw data from the UniversalPayload
-    /// @return       True if migration format
-    function _isMigration(
-        bytes memory data
-    ) private pure returns (bool) {
-        if (data.length < 4) return false;
-        bytes4 selector;
-        assembly {
-            selector := mload(add(data, 32))
-        }
-        return selector == MIGRATION_SELECTOR;
-    }
-
-    /// @dev Strips MULTICALL_SELECTOR prefix and decodes as Multicall[].
-    /// @param data   Raw data containing selector + ABI-encoded Multicall[]
-    /// @return       Decoded Multicall array
-    function _decodeCalls(
-        bytes memory data
-    ) private pure returns (Multicall[] memory) {
-        bytes memory strippedData = new bytes(data.length - 4);
-        for (uint256 i = 0; i < strippedData.length; i++) {
-            strippedData[i] = data[i + 4];
-        }
-        return abi.decode(strippedData, (Multicall[]));
-    }
-
-    // =========================
-    //    UE: RECEIVE
-    // =========================
-
-    /// @notice Allows this UEA to receive native tokens.
+    /**
+     * @dev Fallback function to receive ether.
+     */
     receive() external payable {}
 }
