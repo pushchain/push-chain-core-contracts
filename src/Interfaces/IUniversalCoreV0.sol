@@ -41,6 +41,9 @@ interface IUniversalCoreV0 {
     event SetBaseGasLimitByChain(
         string chainNamespace, uint256 gasLimit
     );
+    event SetRescueFundsGasLimitByChain(
+        string chainNamespace, uint256 gasLimit
+    );
     event RefundUnusedGas(
         address indexed gasToken,
         uint256 amount,
@@ -157,6 +160,13 @@ interface IUniversalCoreV0 {
         string memory chainNamespace
     ) external view returns (uint256 baseGasLimit);
 
+    /// @notice                      Get rescue funds gas limit for a chain.
+    /// @param chainNamespace        Chain Namespace
+    /// @return rescueGasLimit       Rescue funds gas limit for the chain
+    function rescueFundsGasLimitByChainNamespace(
+        string memory chainNamespace
+    ) external view returns (uint256 rescueGasLimit);
+
     /// @notice                 Get gas fee for a PRC20 token, split into gasFee and protocolFee.
     /// @dev                    When gasLimitWithBaseLimit is 0, falls back to per-chain base gas limit.
     ///                         Reverts with GasLimitBelowBase when gasLimitWithBaseLimit is non-zero
@@ -182,6 +192,26 @@ interface IUniversalCoreV0 {
             string memory chainNamespace
         );
 
+    /// @notice                 Get rescue funds gas limit, fee, and related config for a PRC20 token.
+    /// @param _prc20           PRC20 address
+    /// @return gasToken        Gas token address
+    /// @return gasFee          Gas fee (gasPrice * rescueGasLimit)
+    /// @return rescueGasLimit  Rescue funds gas limit for the chain
+    /// @return gasPrice        Gas price on the external chain
+    /// @return chainNamespace  Source chain namespace
+    function getRescueFundsGasLimit(
+        address _prc20
+    )
+        external
+        view
+        returns (
+            address gasToken,
+            uint256 gasFee,
+            uint256 rescueGasLimit,
+            uint256 gasPrice,
+            string memory chainNamespace
+        );
+
     /// @notice                 Get the protocol fee (in native PC) for a given token.
     /// @param token            Token address
     /// @return                 Protocol fee amount in native PC
@@ -195,6 +225,14 @@ interface IUniversalCoreV0 {
     function setProtocolFeeByToken(
         address token,
         uint256 fee
+    ) external;
+
+    /// @notice                  Set rescue funds gas limit for a specific chain.
+    /// @param chainNamespace    Chain Namespace
+    /// @param gasLimit          Rescue funds gas limit for the chain
+    function setRescueFundsGasLimitByChain(
+        string memory chainNamespace,
+        uint256 gasLimit
     ) external;
 
     /// @notice Get the UniversalGatewayPC address.

@@ -213,11 +213,11 @@ contract UEASVMTest is Test {
     // Verify Payload TxHash Tests
     // =========================================================================
     // Note: mock calls are used to test the TX_BASED_VERIFIER precompile call.
-    
-    
-    
-    
-    
+
+
+
+
+
     function testExecutionBasic() public deploySvmSmartAccount {
         uint256 previousNonce = svmSmartAccountInstance.nonce();
 
@@ -545,6 +545,62 @@ contract UEASVMTest is Test {
         assertEq(address(target2).balance, 0.1 ether, "Second target should have received 0.1 ETH");
     }
 
+    function testMulticall_EmptyArray_Succeeds() public deploySvmSmartAccount {
+        Multicall[] memory calls = new Multicall[](0);
+
+        bytes4 selector = bytes4(keccak256("UEA_MULTICALL"));
+        bytes memory callData = abi.encode(calls);
+        bytes memory multicallData = abi.encodePacked(selector, callData);
+
+        UniversalPayload memory payload = UniversalPayload({
+            to: address(0),
+            value: 0,
+            data: multicallData,
+            gasLimit: 1000000,
+            maxFeePerGas: 0,
+            nonce: 0,
+            deadline: block.timestamp + 1000,
+            maxPriorityFeePerGas: 0,
+            vType: VerificationType(0)
+        });
+
+        vm.prank(svmSmartAccountInstance.UNIVERSAL_EXECUTOR_MODULE());
+        svmSmartAccountInstance.executeUniversalTx(payload, "");
+        assertEq(svmSmartAccountInstance.nonce(), 1);
+    }
+
+    function testMulticall_FailsOnSilentRevertMiddleCall() public deploySvmSmartAccount {
+        SilentRevertingTarget silentRevertTarget = new SilentRevertingTarget();
+
+        Multicall[] memory calls = new Multicall[](3);
+        calls[0] =
+            Multicall({to: address(target), value: 0, data: abi.encodeWithSignature("setMagicNumber(uint256)", 111)});
+        calls[1] =
+            Multicall({to: address(silentRevertTarget), value: 0, data: abi.encodeWithSignature("revertSilently()")});
+        calls[2] =
+            Multicall({to: address(target), value: 0, data: abi.encodeWithSignature("setMagicNumber(uint256)", 333)});
+
+        bytes4 selector = bytes4(keccak256("UEA_MULTICALL"));
+        bytes memory callData = abi.encode(calls);
+        bytes memory multicallData = abi.encodePacked(selector, callData);
+
+        UniversalPayload memory payload = UniversalPayload({
+            to: address(0),
+            value: 0,
+            data: multicallData,
+            gasLimit: 1000000,
+            maxFeePerGas: 0,
+            nonce: 0,
+            deadline: block.timestamp + 1000,
+            maxPriorityFeePerGas: 0,
+            vType: VerificationType(0)
+        });
+
+        vm.prank(svmSmartAccountInstance.UNIVERSAL_EXECUTOR_MODULE());
+        vm.expectRevert(Errors.ExecutionFailed.selector);
+        svmSmartAccountInstance.executeUniversalTx(payload, "");
+    }
+
     function testExecutionWithValue() public deploySvmSmartAccount {
         // Fund the smart account
         vm.deal(address(svmSmartAccountInstance), 1 ether);
@@ -579,6 +635,52 @@ contract UEASVMTest is Test {
         uint256 magicValueAfter = target.getMagicNumber();
         assertEq(magicValueAfter, 999, "Magic value was not set correctly");
         assertEq(address(target).balance, 0.1 ether, "Target contract should have received 0.1 ETH");
+    }
+
+    function testExecute_WithShortData_ExecutesSingleCall() public deploySvmSmartAccount {
+        vm.deal(address(svmSmartAccountInstance), 1 ether);
+        address payable recipient = payable(makeAddr("recipient"));
+
+        // Data shorter than 4 bytes - both _isMulticall and _isMigration return false
+        UniversalPayload memory payload = UniversalPayload({
+            to: recipient,
+            value: 0.01 ether,
+            data: hex"0102",
+            gasLimit: 1000000,
+            maxFeePerGas: 0,
+            nonce: 0,
+            deadline: block.timestamp + 1000,
+            maxPriorityFeePerGas: 0,
+            vType: VerificationType(0)
+        });
+
+        // Execute as UNIVERSAL_EXECUTOR_MODULE to bypass signature
+        vm.prank(svmSmartAccountInstance.UNIVERSAL_EXECUTOR_MODULE());
+        svmSmartAccountInstance.executeUniversalTx(payload, "");
+
+        assertEq(recipient.balance, 0.01 ether);
+    }
+
+    function testExecutionWithZeroDeadline() public deploySvmSmartAccount {
+        UniversalPayload memory payload = UniversalPayload({
+            to: address(target),
+            value: 0,
+            data: abi.encodeWithSignature("setMagicNumber(uint256)", 555),
+            gasLimit: 1000000,
+            maxFeePerGas: 0,
+            nonce: 0,
+            deadline: 0,
+            maxPriorityFeePerGas: 0,
+            vType: VerificationType(0)
+        });
+
+        // Warp far into the future - should still work with deadline 0
+        vm.warp(block.timestamp + 1000000);
+
+        vm.prank(svmSmartAccountInstance.UNIVERSAL_EXECUTOR_MODULE());
+        svmSmartAccountInstance.executeUniversalTx(payload, "");
+
+        assertEq(target.getMagicNumber(), 555);
     }
 
     function testExecutionWithInvalidSignature() public deploySvmSmartAccount {
@@ -782,6 +884,66 @@ contract UEASVMTest is Test {
         address newImpl = address(uint160(uint256(raw)));
 
         assertEq(newImpl, migration.UEA_SVM_IMPLEMENTATION(), "Migration should update implementation");
+    }
+
+    function testMigration_RevertsWhenValueNonZero() public deploySvmSmartAccount {
+        factory.setUEAMigrationContract(address(migration));
+
+        UniversalPayload memory payload = UniversalPayload({
+            to: address(svmSmartAccountInstance),
+            value: 1 ether,
+            data: abi.encodePacked(MIGRATION_SELECTOR),
+            gasLimit: 1000000,
+            maxFeePerGas: 0,
+            nonce: 0,
+            deadline: block.timestamp + 1000,
+            maxPriorityFeePerGas: 0,
+            vType: VerificationType(0)
+        });
+
+        vm.prank(svmSmartAccountInstance.UNIVERSAL_EXECUTOR_MODULE());
+        vm.expectRevert(Errors.InvalidCall.selector);
+        svmSmartAccountInstance.executeUniversalTx(payload, "");
+    }
+
+    function testMigration_RevertsWhenTargetNotSelf() public deploySvmSmartAccount {
+        factory.setUEAMigrationContract(address(migration));
+
+        UniversalPayload memory payload = UniversalPayload({
+            to: address(target),
+            value: 0,
+            data: abi.encodePacked(MIGRATION_SELECTOR),
+            gasLimit: 1000000,
+            maxFeePerGas: 0,
+            nonce: 0,
+            deadline: block.timestamp + 1000,
+            maxPriorityFeePerGas: 0,
+            vType: VerificationType(0)
+        });
+
+        vm.prank(svmSmartAccountInstance.UNIVERSAL_EXECUTOR_MODULE());
+        vm.expectRevert(Errors.InvalidCall.selector);
+        svmSmartAccountInstance.executeUniversalTx(payload, "");
+    }
+
+    function testMigration_RevertsWhenMigrationContractIsZero() public deploySvmSmartAccount {
+        // Do NOT set migration contract in factory
+
+        UniversalPayload memory payload = UniversalPayload({
+            to: address(svmSmartAccountInstance),
+            value: 0,
+            data: abi.encodePacked(MIGRATION_SELECTOR),
+            gasLimit: 1000000,
+            maxFeePerGas: 0,
+            nonce: 0,
+            deadline: block.timestamp + 1000,
+            maxPriorityFeePerGas: 0,
+            vType: VerificationType(0)
+        });
+
+        vm.prank(svmSmartAccountInstance.UNIVERSAL_EXECUTOR_MODULE());
+        vm.expectRevert(Errors.InvalidCall.selector);
+        svmSmartAccountInstance.executeUniversalTx(payload, "");
     }
 
     // =========================================================================

@@ -7,11 +7,11 @@ import "forge-std/console.sol";
 import "../../src/libraries/Types.sol";
 import {UEAErrors as Errors, CommonErrors} from "../../src/libraries/Errors.sol";
 
-import {UEA_EVM} from "../../src/UEA/UEA_EVM.sol";
-import {UEA_SVM} from "../../src/UEA/UEA_SVM.sol";
-import {UEAProxy} from "../../src/UEA/UEAProxy.sol";
-import {UEAMigration} from "../../src/UEA/UEAMigration.sol";
-import {UEAFactory} from "../../src/UEA/UEAFactory.sol";
+import {UEA_EVM} from "../../src/uea/UEA_EVM.sol";
+import {UEA_SVM} from "../../src/uea/UEA_SVM.sol";
+import {UEAProxy} from "../../src/uea/UEAProxy.sol";
+import {UEAMigration} from "../../src/uea/UEAMigration.sol";
+import {UEAFactory} from "../../src/uea/UEAFactory.sol";
 import {IUEA} from "../../src/Interfaces/IUEA.sol";
 
 import {Target} from "../../src/mocks/Target.sol";
