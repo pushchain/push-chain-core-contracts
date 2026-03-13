@@ -89,6 +89,14 @@ contract UEAFactoryTest is Test {
         assertEq(factory.UEA_VERSION(SVM_HASH), "1.0.0", "UEA_SVM version mismatch");
     }
 
+    function testUEAVersion_RevertsOnUnregisteredVM() public {
+        vm.expectRevert(Errors.InvalidInputArgs.selector);
+        factory.UEA_VERSION(bytes32(0));
+
+        vm.expectRevert(Errors.InvalidInputArgs.selector);
+        factory.UEA_VERSION(keccak256("NONEXISTENT_VM"));
+    }
+
     function testRegisterNewChain() public {
         bytes32 chainHash = keccak256(abi.encode("KOVAN", "42"));
         factory.registerNewChain(chainHash, EVM_HASH);
@@ -376,6 +384,17 @@ contract UEAFactoryTest is Test {
             keccak256(abi.encode(newRetrievedAccount.chainNamespace)), keccak256(abi.encode(newAccount.chainNamespace))
         );
         assertTrue(isNewUEA);
+    }
+
+    function testSetUEAProxyImplementation_RevertsOnZeroAddress() public {
+        vm.expectRevert(Errors.InvalidInputArgs.selector);
+        factory.setUEAProxyImplementation(address(0));
+    }
+
+    function testSetUEAProxyImplementation_OnlyOwner() public {
+        vm.prank(nonOwner);
+        vm.expectRevert(abi.encodeWithSelector(OwnableUpgradeable.OwnableUnauthorizedAccount.selector, nonOwner));
+        factory.setUEAProxyImplementation(address(ueaEVMImpl));
     }
 
     function testOwnershipFunctions() public {
@@ -776,6 +795,46 @@ contract UEAFactoryTest is Test {
         // However, attempting to deploy would fail because there's no implementation
         vm.expectRevert(Errors.InvalidInputArgs.selector);
         factory.deployUEA(_id);
+    }
+
+    function testComputeUEA_RevertsWhenNoProxyImplementation() public {
+        // Deploy a fresh factory without proxy implementation
+        UEAFactory freshFactoryImpl = new UEAFactory();
+        bytes memory initData = abi.encodeWithSelector(UEAFactory.initialize.selector, address(this));
+        ERC1967Proxy freshProxy = new ERC1967Proxy(address(freshFactoryImpl), initData);
+        UEAFactory freshFactory = UEAFactory(address(freshProxy));
+
+        // Register a chain but do NOT set proxy implementation
+        bytes32 chainHash = keccak256(abi.encode("eip155", "1"));
+        freshFactory.registerNewChain(chainHash, EVM_HASH);
+        freshFactory.registerUEA(chainHash, EVM_HASH, address(ueaEVMImpl));
+
+        bytes memory testOwnerBytes = abi.encodePacked(makeAddr("testowner"));
+        UniversalAccountId memory _id =
+            UniversalAccountId({chainNamespace: "eip155", chainId: "1", owner: testOwnerBytes});
+
+        vm.expectRevert(Errors.InvalidInputArgs.selector);
+        freshFactory.computeUEA(_id);
+    }
+
+    function testDeployUEA_RevertsWhenNoProxyImplementation() public {
+        // Deploy a fresh factory without proxy implementation
+        UEAFactory freshFactoryImpl = new UEAFactory();
+        bytes memory initData = abi.encodeWithSelector(UEAFactory.initialize.selector, address(this));
+        ERC1967Proxy freshProxy = new ERC1967Proxy(address(freshFactoryImpl), initData);
+        UEAFactory freshFactory = UEAFactory(address(freshProxy));
+
+        // Register a chain but do NOT set proxy implementation
+        bytes32 chainHash = keccak256(abi.encode("eip155", "1"));
+        freshFactory.registerNewChain(chainHash, EVM_HASH);
+        freshFactory.registerUEA(chainHash, EVM_HASH, address(ueaEVMImpl));
+
+        bytes memory testOwnerBytes = abi.encodePacked(makeAddr("testowner"));
+        UniversalAccountId memory _id =
+            UniversalAccountId({chainNamespace: "eip155", chainId: "1", owner: testOwnerBytes});
+
+        vm.expectRevert(Errors.InvalidInputArgs.selector);
+        freshFactory.deployUEA(_id);
     }
 
     // Salt Generation Consistency
