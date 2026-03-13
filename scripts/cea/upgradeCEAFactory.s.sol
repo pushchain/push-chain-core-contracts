@@ -2,7 +2,7 @@
 pragma solidity ^0.8.20;
 
 import "forge-std/Script.sol";
-import {CEAFactory} from "../../src/CEA/CEAFactory.sol";
+import {CEAFactory} from "../../src/cea/CEAFactory.sol";
 import {ProxyAdmin} from "@openzeppelin/contracts/proxy/transparent/ProxyAdmin.sol";
 import {TransparentUpgradeableProxy, ITransparentUpgradeableProxy} from "@openzeppelin/contracts/proxy/transparent/TransparentUpgradeableProxy.sol";
 
@@ -103,7 +103,7 @@ contract UpgradeCEAFactoryScript is Script {
  *
  * forge verify-contract \
  *   <NEW_IMPLEMENTATION_ADDRESS> \
- *   src/CEA/CEAFactory.sol:CEAFactory \
+ *   src/cea/CEAFactory.sol:CEAFactory \
  *   --chain-id <CHAIN_ID> \
  *   --etherscan-api-key $ETHERSCAN_API_KEY
  *

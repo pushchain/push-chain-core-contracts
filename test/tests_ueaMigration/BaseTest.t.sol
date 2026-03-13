@@ -12,7 +12,7 @@ import {UEA_SVM} from "../../src/uea/UEA_SVM.sol";
 import {UEAProxy} from "../../src/uea/UEAProxy.sol";
 import {UEAMigration} from "../../src/uea/UEAMigration.sol";
 import {UEAFactory} from "../../src/uea/UEAFactory.sol";
-import {IUEA} from "../../src/Interfaces/IUEA.sol";
+import {IUEA} from "../../src/interfaces/IUEA.sol";
 
 import {Target} from "../../src/mocks/Target.sol";
 import {UEA_EVM_V2} from "../mocks/UEA_EVM_V2.sol";

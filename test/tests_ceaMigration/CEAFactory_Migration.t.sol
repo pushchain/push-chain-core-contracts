@@ -4,11 +4,11 @@ pragma solidity 0.8.26;
 import "forge-std/Test.sol";
 import "forge-std/console.sol";
 
-import "../../src/CEA/CEA.sol";
-import "../../src/CEA/CEAFactory.sol";
+import "../../src/cea/CEA.sol";
+import "../../src/cea/CEAFactory.sol";
 import {ICEAFactory} from "../../src/interfaces/ICEAFactory.sol";
-import {CEAProxy} from "../../src/CEA/CEAProxy.sol";
-import "../../src/CEA/CEAMigration.sol";
+import {CEAProxy} from "../../src/cea/CEAProxy.sol";
+import "../../src/cea/CEAMigration.sol";
 import {ERC1967Proxy} from "@openzeppelin/contracts/proxy/ERC1967/ERC1967Proxy.sol";
 
 /**

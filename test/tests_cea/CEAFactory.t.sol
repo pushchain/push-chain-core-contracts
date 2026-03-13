@@ -4,9 +4,9 @@ pragma solidity 0.8.26;
 import "forge-std/Test.sol";
 import "forge-std/console.sol";
 
-import "../../src/CEA/CEAFactory.sol";
-import "../../src/CEA/CEA.sol";
-import {CEAProxy} from "../../src/CEA/CEAProxy.sol";
+import "../../src/cea/CEAFactory.sol";
+import "../../src/cea/CEA.sol";
+import {CEAProxy} from "../../src/cea/CEAProxy.sol";
 import "../../src/interfaces/ICEA.sol";
 import "../../src/interfaces/ICEAProxy.sol";
 import {MockUniversalGateway} from "../mocks/MockUniversalGateway.sol";

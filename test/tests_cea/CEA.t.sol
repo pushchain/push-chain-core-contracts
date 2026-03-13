@@ -4,13 +4,13 @@ pragma solidity 0.8.26;
 import "forge-std/Test.sol";
 import "forge-std/console.sol";
 
-import "../../src/CEA/CEA.sol";
-import "../../src/CEA/CEAFactory.sol";
+import "../../src/cea/CEA.sol";
+import "../../src/cea/CEAFactory.sol";
 import {ICEAProxy} from "../../src/interfaces/ICEAProxy.sol";
 
 // Import CEAProxy with explicit path to avoid Initializable conflict
 // CEAProxy uses non-upgradeable Initializable, CEAFactory uses upgradeable
-import {CEAProxy} from "../../src/CEA/CEAProxy.sol";
+import {CEAProxy} from "../../src/cea/CEAProxy.sol";
 import "../../src/interfaces/ICEA.sol";
 import {IUniversalGateway, UniversalTxRequest} from "../../src/interfaces/IUniversalGateway.sol";
 import {CEAErrors as Errors, CommonErrors} from "../../src/libraries/Errors.sol";

@@ -2,8 +2,8 @@
 pragma solidity 0.8.26;
 
 import "./CEA.t.sol";
-import "../../src/CEA/CEAMigration.sol";
-import {CEAProxy} from "../../src/CEA/CEAProxy.sol";
+import "../../src/cea/CEAMigration.sol";
+import {CEAProxy} from "../../src/cea/CEAProxy.sol";
 import {MIGRATION_SELECTOR} from "../../src/libraries/Types.sol";
 
 /// @title CEA_SingleCallTests

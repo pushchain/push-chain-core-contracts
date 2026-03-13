@@ -4,10 +4,10 @@ pragma solidity 0.8.26;
 import "forge-std/Test.sol";
 import "forge-std/console.sol";
 
-import "../../src/CEA/CEA.sol";
-import "../../src/CEA/CEAFactory.sol";
-import {CEAProxy} from "../../src/CEA/CEAProxy.sol";
-import "../../src/CEA/CEAMigration.sol";
+import "../../src/cea/CEA.sol";
+import "../../src/cea/CEAFactory.sol";
+import {CEAProxy} from "../../src/cea/CEAProxy.sol";
+import "../../src/cea/CEAMigration.sol";
 import {CEAErrors as Errors} from "../../src/libraries/Errors.sol";
 import {Multicall, MULTICALL_SELECTOR, MIGRATION_SELECTOR} from "../../src/libraries/Types.sol";
 import {ERC1967Proxy} from "@openzeppelin/contracts/proxy/ERC1967/ERC1967Proxy.sol";

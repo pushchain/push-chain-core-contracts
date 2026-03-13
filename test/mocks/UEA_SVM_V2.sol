@@ -2,8 +2,8 @@
 pragma solidity 0.8.26;
 
 import {UEAErrors as Errors} from "../../src/libraries/Errors.sol";
-import {IUEA} from "../../src/Interfaces/IUEA.sol";
-import {IUEAFactory} from "../../src/Interfaces/IUEAFactory.sol";
+import {IUEA} from "../../src/interfaces/IUEA.sol";
+import {IUEAFactory} from "../../src/interfaces/IUEAFactory.sol";
 import {ReentrancyGuard} from "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
 import {StringUtils} from "../../src/libraries/Utils.sol";
 import {

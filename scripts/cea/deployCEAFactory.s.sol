@@ -2,9 +2,9 @@
 pragma solidity ^0.8.20;
 
 import "forge-std/Script.sol";
-import {CEAFactory} from "../../src/CEA/CEAFactory.sol";
-import {CEA} from "../../src/CEA/CEA.sol";
-import {CEAProxy} from "../../src/CEA/CEAProxy.sol";
+import {CEAFactory} from "../../src/cea/CEAFactory.sol";
+import {CEA} from "../../src/cea/CEA.sol";
+import {CEAProxy} from "../../src/cea/CEAProxy.sol";
 import {TransparentUpgradeableProxy} from "@openzeppelin/contracts/proxy/transparent/TransparentUpgradeableProxy.sol";
 import {ProxyAdmin} from "@openzeppelin/contracts/proxy/transparent/ProxyAdmin.sol";
 
@@ -210,21 +210,21 @@ contract DeployCEAFactoryScript is Script {
  * 1. Verify CEA Implementation:
  * forge verify-contract \
  *   <CEA_IMPLEMENTATION_ADDRESS> \
- *   src/CEA/CEA.sol:CEA \
+ *   src/cea/CEA.sol:CEA \
  *   --chain-id <CHAIN_ID> \
  *   --etherscan-api-key $ETHERSCAN_API_KEY
  *
  * 2. Verify CEAProxy Implementation:
  * forge verify-contract \
  *   <CEA_PROXY_IMPLEMENTATION_ADDRESS> \
- *   src/CEA/CEAProxy.sol:CEAProxy \
+ *   src/cea/CEAProxy.sol:CEAProxy \
  *   --chain-id <CHAIN_ID> \
  *   --etherscan-api-key $ETHERSCAN_API_KEY
  *
  * 3. Verify CEAFactory Implementation:
  * forge verify-contract \
  *   <CEA_FACTORY_IMPLEMENTATION_ADDRESS> \
- *   src/CEA/CEAFactory.sol:CEAFactory \
+ *   src/cea/CEAFactory.sol:CEAFactory \
  *   --chain-id <CHAIN_ID> \
  *   --etherscan-api-key $ETHERSCAN_API_KEY
  *
