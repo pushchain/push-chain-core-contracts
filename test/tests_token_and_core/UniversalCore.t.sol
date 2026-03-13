@@ -61,6 +61,7 @@ contract UniversalCoreTest is Test, UpgradeableContractHelper {
     event SetSupportedToken(address indexed prc20, bool supported);
     event SetChainMeta(string chainNamespace, uint256 price, uint256 chainHeight, uint256 observedAt);
     event SetBaseGasLimitByChain(string chainNamespace, uint256 gasLimit);
+    event SetRescueFundsGasLimitByChain(string chainNamespace, uint256 gasLimit);
 
     function setUp() public {
         // Setup accounts
@@ -907,5 +908,131 @@ contract UniversalCoreTest is Test, UpgradeableContractHelper {
         assertEq(universalCore.gasPriceByChainNamespace(CHAIN_NAMESPACE), 0);
         assertEq(universalCore.chainHeightByChainNamespace(CHAIN_NAMESPACE), 0);
         assertEq(universalCore.timestampObservedAtByChainNamespace(CHAIN_NAMESPACE), 0);
+    }
+
+    // ========================================
+    // 8) Rescue Funds Gas Limit
+    // ========================================
+
+    function test_SetRescueFundsGasLimitByChain_HappyPath() public {
+        uint256 rescueGasLimit = 300_000;
+
+        vm.prank(UNIVERSAL_EXECUTOR_MODULE);
+        vm.expectEmit(false, false, false, true);
+        emit SetRescueFundsGasLimitByChain(CHAIN_NAMESPACE, rescueGasLimit);
+        universalCore.setRescueFundsGasLimitByChain(CHAIN_NAMESPACE, rescueGasLimit);
+
+        assertEq(universalCore.rescueFundsGasLimitByChainNamespace(CHAIN_NAMESPACE), rescueGasLimit);
+    }
+
+    function test_SetRescueFundsGasLimitByChain_OnlyManagerRole() public {
+        vm.expectRevert(
+            abi.encodeWithSelector(
+                IAccessControl.AccessControlUnauthorizedAccount.selector, nonOwner, universalCore.MANAGER_ROLE()
+            )
+        );
+        vm.prank(nonOwner);
+        universalCore.setRescueFundsGasLimitByChain(CHAIN_NAMESPACE, 300_000);
+    }
+
+    function test_SetRescueFundsGasLimitByChain_ZeroValueAllowed() public {
+        vm.prank(UNIVERSAL_EXECUTOR_MODULE);
+        universalCore.setRescueFundsGasLimitByChain(CHAIN_NAMESPACE, 0);
+        assertEq(universalCore.rescueFundsGasLimitByChainNamespace(CHAIN_NAMESPACE), 0);
+    }
+
+    function test_GetRescueFundsGasLimit_HappyPath() public {
+        uint256 rescueGasLimit = 300_000;
+
+        vm.prank(UNIVERSAL_EXECUTOR_MODULE);
+        universalCore.setRescueFundsGasLimitByChain(CHAIN_NAMESPACE, rescueGasLimit);
+
+        (
+            address returnedGasToken,
+            uint256 gasFee,
+            uint256 returnedRescueGasLimit,
+            uint256 gasPrice,
+            string memory chainNamespace
+        ) = universalCore.getRescueFundsGasLimit(address(prc20Token));
+
+        assertEq(returnedGasToken, address(mockPRC20));
+        assertEq(returnedRescueGasLimit, rescueGasLimit);
+        assertEq(gasPrice, GAS_PRICE);
+        assertEq(gasFee, GAS_PRICE * rescueGasLimit);
+        assertEq(keccak256(bytes(chainNamespace)), keccak256(bytes(CHAIN_NAMESPACE)));
+    }
+
+    function test_GetRescueFundsGasLimit_RevertsWhenZeroRescueGasLimit() public {
+        vm.expectRevert(UniversalCoreErrors.ZeroRescueGasLimit.selector);
+        universalCore.getRescueFundsGasLimit(address(prc20Token));
+    }
+
+    function test_GetRescueFundsGasLimit_RevertsWhenZeroGasToken() public {
+        // Create a PRC20 with a different chain namespace that has no gas token
+        PRC20 newPrc20Impl = new PRC20();
+        bytes memory initData = abi.encodeWithSelector(
+            PRC20.initialize.selector,
+            "New PRC20",
+            "NPRC20",
+            18,
+            "999",
+            IPRC20.TokenType.ERC20,
+            address(universalCore),
+            SOURCE_TOKEN_ADDRESS
+        );
+        address proxyAddress = deployUpgradeableContract(address(newPrc20Impl), initData);
+        PRC20 newToken = PRC20(payable(proxyAddress));
+
+        // Set rescue gas limit but no gas token for this chain
+        vm.prank(UNIVERSAL_EXECUTOR_MODULE);
+        universalCore.setRescueFundsGasLimitByChain("999", 300_000);
+
+        vm.expectRevert(CommonErrors.ZeroAddress.selector);
+        universalCore.getRescueFundsGasLimit(address(newToken));
+    }
+
+    function test_GetRescueFundsGasLimit_RevertsWhenZeroGasPrice() public {
+        // Create a PRC20 with a different chain namespace
+        PRC20 newPrc20Impl = new PRC20();
+        bytes memory initData = abi.encodeWithSelector(
+            PRC20.initialize.selector,
+            "New PRC20",
+            "NPRC20",
+            18,
+            "888",
+            IPRC20.TokenType.ERC20,
+            address(universalCore),
+            SOURCE_TOKEN_ADDRESS
+        );
+        address proxyAddress = deployUpgradeableContract(address(newPrc20Impl), initData);
+        PRC20 newToken = PRC20(payable(proxyAddress));
+
+        // Set rescue gas limit and gas token, but no gas price
+        vm.startPrank(UNIVERSAL_EXECUTOR_MODULE);
+        universalCore.setRescueFundsGasLimitByChain("888", 300_000);
+        universalCore.setGasTokenPRC20("888", address(mockPRC20));
+        vm.stopPrank();
+
+        vm.expectRevert(UniversalCoreErrors.ZeroGasPrice.selector);
+        universalCore.getRescueFundsGasLimit(address(newToken));
+    }
+
+    function test_GetRescueFundsGasLimit_UpdatedAfterSettingNewLimit() public {
+        uint256 initialLimit = 300_000;
+        uint256 updatedLimit = 600_000;
+
+        vm.startPrank(UNIVERSAL_EXECUTOR_MODULE);
+        universalCore.setRescueFundsGasLimitByChain(CHAIN_NAMESPACE, initialLimit);
+        vm.stopPrank();
+
+        (, uint256 gasFee1,,,) = universalCore.getRescueFundsGasLimit(address(prc20Token));
+        assertEq(gasFee1, GAS_PRICE * initialLimit);
+
+        vm.startPrank(UNIVERSAL_EXECUTOR_MODULE);
+        universalCore.setRescueFundsGasLimitByChain(CHAIN_NAMESPACE, updatedLimit);
+        vm.stopPrank();
+
+        (, uint256 gasFee2,,,) = universalCore.getRescueFundsGasLimit(address(prc20Token));
+        assertEq(gasFee2, GAS_PRICE * updatedLimit);
     }
 }

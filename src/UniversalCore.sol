@@ -52,6 +52,7 @@ contract UniversalCore is
     mapping(string => uint256) public gasPriceByChainNamespace;
     mapping(string => address) public gasTokenPRC20ByChainNamespace;
     mapping(string => uint256) public baseGasLimitByChainNamespace;
+    mapping(string => uint256) public rescueFundsGasLimitByChainNamespace;
     mapping(string => uint256) public chainHeightByChainNamespace;
     mapping(string => uint256) public timestampObservedAtByChainNamespace;
 
@@ -268,6 +269,34 @@ contract UniversalCore is
         protocolFee = protocolFeeByToken[_prc20];
     }
 
+    /// @inheritdoc IUniversalCore
+    function getRescueFundsGasLimit(address _prc20)
+        public
+        view
+        returns (
+            address gasToken,
+            uint256 gasFee,
+            uint256 rescueGasLimit,
+            uint256 gasPrice,
+            string memory chainNamespace
+        )
+    {
+        chainNamespace = IPRC20(_prc20).SOURCE_CHAIN_NAMESPACE();
+
+        rescueGasLimit = rescueFundsGasLimitByChainNamespace[chainNamespace];
+        if (rescueGasLimit == 0) {
+            revert UniversalCoreErrors.ZeroRescueGasLimit();
+        }
+
+        gasToken = gasTokenPRC20ByChainNamespace[chainNamespace];
+        if (gasToken == address(0)) revert CommonErrors.ZeroAddress();
+
+        gasPrice = gasPriceByChainNamespace[chainNamespace];
+        if (gasPrice == 0) revert UniversalCoreErrors.ZeroGasPrice();
+
+        gasFee = gasPrice * rescueGasLimit;
+    }
+
     // =========================
     //    UC_4: MANAGER ACTIONS
     // =========================
@@ -402,6 +431,17 @@ contract UniversalCore is
     function setBaseGasLimitByChain(string memory chainNamespace, uint256 gasLimit) external onlyRole(MANAGER_ROLE) {
         baseGasLimitByChainNamespace[chainNamespace] = gasLimit;
         emit SetBaseGasLimitByChain(chainNamespace, gasLimit);
+    }
+
+    /// @notice                  Set rescue funds gas limit for a specific chain.
+    /// @param chainNamespace    Chain Namespace (e.g. "eip155:1" for Ethereum Mainnet)
+    /// @param gasLimit          Rescue funds gas limit for the chain
+    function setRescueFundsGasLimitByChain(string memory chainNamespace, uint256 gasLimit)
+        external
+        onlyRole(MANAGER_ROLE)
+    {
+        rescueFundsGasLimitByChainNamespace[chainNamespace] = gasLimit;
+        emit SetRescueFundsGasLimitByChain(chainNamespace, gasLimit);
     }
 
     /// @notice Pause the contract - stops all deposit functions.
