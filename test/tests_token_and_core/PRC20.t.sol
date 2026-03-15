@@ -64,7 +64,7 @@ contract PRC20Test is Test, UpgradeableContractHelper {
 
         // Create initialization data
         bytes memory initData = abi.encodeWithSelector(
-            UniversalCore.initialize.selector, mockWPC, mockUniswapFactory, mockUniswapRouter, mockUniswapQuoter
+            UniversalCore.initialize.selector, mockWPC, mockUniswapFactory, mockUniswapRouter, mockUniswapQuoter, makeAddr("pauser")
         );
 
         // Deploy proxy and initialize
@@ -481,7 +481,7 @@ contract PRC20Test is Test, UpgradeableContractHelper {
 
         // Create initialization data
         bytes memory initData = abi.encodeWithSelector(
-            UniversalCore.initialize.selector, mockWPC, mockUniswapFactory, mockUniswapRouter, mockUniswapQuoter
+            UniversalCore.initialize.selector, mockWPC, mockUniswapFactory, mockUniswapRouter, mockUniswapQuoter, makeAddr("pauser")
         );
 
         // Deploy proxy and initialize
@@ -513,7 +513,7 @@ contract PRC20Test is Test, UpgradeableContractHelper {
 
         // Create initialization data
         bytes memory initData = abi.encodeWithSelector(
-            UniversalCore.initialize.selector, mockWPC, mockUniswapFactory, mockUniswapRouter, mockUniswapQuoter
+            UniversalCore.initialize.selector, mockWPC, mockUniswapFactory, mockUniswapRouter, mockUniswapQuoter, makeAddr("pauser")
         );
 
         // Deploy proxy and initialize

@@ -41,6 +41,7 @@ contract CEAFactory_MigrationTest is Test {
         bytes memory initData = abi.encodeWithSelector(
             CEAFactory.initialize.selector,
             owner,
+            makeAddr("pauser"),
             vault,
             address(ceaProxyImplementation),
             address(ceaImplementation),

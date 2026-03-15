@@ -60,6 +60,7 @@ contract UniversalCoreRefundTest is Test, UpgradeableContractHelper {
 
     address public recipient;
     address public nonUEModule;
+    address public pauser;
 
     uint24 public constant FEE_TIER = 3000;
     uint256 public constant REFUND_AMOUNT = 2 ether;
@@ -81,6 +82,7 @@ contract UniversalCoreRefundTest is Test, UpgradeableContractHelper {
     function setUp() public {
         recipient = makeAddr("recipient");
         nonUEModule = makeAddr("nonUEModule");
+        pauser = makeAddr("pauser");
 
         mockFactory = new MockUniswapV3Factory();
         mockRouter = new MockUniswapV3Router();
@@ -97,7 +99,8 @@ contract UniversalCoreRefundTest is Test, UpgradeableContractHelper {
             address(mockWPC),
             address(mockFactory),
             address(mockRouter),
-            address(mockQuoter)
+            address(mockQuoter),
+            pauser
         );
         address proxyAddress = deployUpgradeableContract(address(implementation), initData);
         universalCore = UniversalCore(payable(proxyAddress));
@@ -127,6 +130,7 @@ contract UniversalCoreRefundTest is Test, UpgradeableContractHelper {
     }
 
     function test_RefundUnusedGas_WhenPaused_Reverts() public {
+        vm.prank(pauser);
         universalCore.pause();
 
         vm.prank(UNIVERSAL_EXECUTOR_MODULE);

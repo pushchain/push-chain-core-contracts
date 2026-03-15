@@ -8,11 +8,11 @@ import {Initializable} from "@openzeppelin/contracts-upgradeable/proxy/utils/Ini
 import {PausableUpgradeable} from "@openzeppelin/contracts-upgradeable/utils/PausableUpgradeable.sol";
 import {ReentrancyGuardUpgradeable} from "@openzeppelin/contracts-upgradeable/utils/ReentrancyGuardUpgradeable.sol";
 
-import {IPRC20} from "./interfaces/IPRC20.sol";
-import {IUniversalCoreV0} from "./interfaces/IUniversalCoreV0.sol";
-import {IUniswapV3Factory, ISwapRouter} from "./interfaces/uniswapv3/IUniswapV3.sol";
-import {IWPC} from "./interfaces/IWPC.sol";
-import {UniversalCoreErrors, CommonErrors} from "./libraries/Errors.sol";
+import {IPRC20} from "../interfaces/IPRC20.sol";
+import {IUniversalCoreV0} from "./IUniversalCoreV0.sol";
+import {IUniswapV3Factory, ISwapRouter} from "../interfaces/uniswapv3/IUniswapV3.sol";
+import {IWPC} from "../interfaces/IWPC.sol";
+import {UniversalCoreErrors, CommonErrors} from "../libraries/Errors.sol";
 
 /**
  * @title   UniversalCoreV0

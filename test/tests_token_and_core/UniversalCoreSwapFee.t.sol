@@ -32,6 +32,7 @@ contract UniversalCoreSwapFeeTest is Test, UpgradeableContractHelper {
     address public gateway;
     address public user;
     address public nonGateway;
+    address public pauser;
 
     string public constant CHAIN_NAMESPACE = "eip155:1";
     uint256 public constant PROTOCOL_FEE = 1000;
@@ -52,6 +53,7 @@ contract UniversalCoreSwapFeeTest is Test, UpgradeableContractHelper {
         gateway = makeAddr("gateway");
         user = makeAddr("user");
         nonGateway = makeAddr("nonGateway");
+        pauser = makeAddr("pauser");
 
         mockFactory = new MockUniswapV3Factory();
         mockRouter = new MockUniswapV3Router();
@@ -81,7 +83,8 @@ contract UniversalCoreSwapFeeTest is Test, UpgradeableContractHelper {
             address(mockWPC),
             address(mockFactory),
             address(mockRouter),
-            address(mockQuoter)
+            address(mockQuoter),
+            pauser
         );
         address proxyAddress = deployUpgradeableContract(address(implementation), initData);
         universalCore = UniversalCore(payable(proxyAddress));
@@ -353,6 +356,7 @@ contract UniversalCoreSwapFeeTest is Test, UpgradeableContractHelper {
     // ========================================
 
     function test_SwapAndBurnGas_WhenPausedReverts() public {
+        vm.prank(pauser);
         universalCore.pause();
 
         vm.prank(gateway);

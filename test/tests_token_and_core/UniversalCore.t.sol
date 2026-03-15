@@ -34,6 +34,7 @@ contract UniversalCoreTest is Test, UpgradeableContractHelper {
     address public deployer;
     address public nonOwner;
     address public nonUEModule;
+    address public pauser;
     address public user;
     MockPRC20 public mockPRC20;
 
@@ -68,6 +69,7 @@ contract UniversalCoreTest is Test, UpgradeableContractHelper {
         deployer = address(this); // The test contract is the deployer
         nonOwner = makeAddr("nonOwner");
         nonUEModule = makeAddr("nonUEModule");
+        pauser = makeAddr("pauser");
         user = makeAddr("user");
 
         // Deploy mocks
@@ -104,7 +106,8 @@ contract UniversalCoreTest is Test, UpgradeableContractHelper {
             address(mockWPC),
             address(mockFactory),
             address(mockRouter),
-            address(mockQuoter)
+            address(mockQuoter),
+            pauser
         );
 
         address proxyAddress = deployUpgradeableContract(address(implementation), initData);
@@ -138,7 +141,7 @@ contract UniversalCoreTest is Test, UpgradeableContractHelper {
         UniversalCore newHandler = new UniversalCore();
         // Should not be able to call initialize on implementation directly
         vm.expectRevert(Initializable.InvalidInitialization.selector);
-        newHandler.initialize(address(mockWPC), address(mockFactory), address(mockRouter), address(mockQuoter));
+        newHandler.initialize(address(mockWPC), address(mockFactory), address(mockRouter), address(mockQuoter), pauser);
     }
 
     function test_Initialize_GrantsAdminRoleToDeployer() public {
@@ -147,12 +150,14 @@ contract UniversalCoreTest is Test, UpgradeableContractHelper {
         vm.startPrank(newDeployer);
 
         UniversalCore newImplementation = new UniversalCore();
+        address newPauser = makeAddr("newPauser");
         bytes memory initData = abi.encodeWithSelector(
             UniversalCore.initialize.selector,
             address(mockWPC),
             address(mockFactory),
             address(mockRouter),
-            address(mockQuoter)
+            address(mockQuoter),
+            newPauser
         );
 
         address newProxyAddress = deployUpgradeableContract(address(newImplementation), initData);
@@ -172,7 +177,7 @@ contract UniversalCoreTest is Test, UpgradeableContractHelper {
 
     function test_Initialize_RevertsOnSecondCall() public {
         vm.expectRevert(Initializable.InvalidInitialization.selector);
-        universalCore.initialize(address(mockWPC), address(mockFactory), address(mockRouter), address(mockQuoter));
+        universalCore.initialize(address(mockWPC), address(mockFactory), address(mockRouter), address(mockQuoter), pauser);
     }
 
     function test_UniversalExecutorModule_IsImmutable() public view {
@@ -480,50 +485,109 @@ contract UniversalCoreTest is Test, UpgradeableContractHelper {
 
     // ============ Pause/Unpause Tests ============
 
-    function test_Pause_OnlyOwner() public {
+    function test_Pause_OnlyPauser() public {
+        bytes32 role = universalCore.PAUSER_ROLE();
+
+        // Non-pauser cannot pause
+        vm.expectRevert(
+            abi.encodeWithSelector(IAccessControl.AccessControlUnauthorizedAccount.selector, nonOwner, role)
+        );
         vm.prank(nonOwner);
-        vm.expectRevert(abi.encodeWithSelector(CommonErrors.InvalidOwner.selector));
+        universalCore.pause();
+    }
+
+    function test_Pause_AdminCannotPause() public {
+        bytes32 role = universalCore.PAUSER_ROLE();
+
+        // Admin also cannot pause — pauser role is separated from admin
+        vm.expectRevert(
+            abi.encodeWithSelector(IAccessControl.AccessControlUnauthorizedAccount.selector, deployer, role)
+        );
+        vm.prank(deployer);
         universalCore.pause();
     }
 
     function test_Pause_HappyPath() public {
-        vm.prank(deployer);
+        vm.prank(pauser);
         vm.expectEmit(true, true, true, true);
-        emit Paused(deployer);
+        emit Paused(pauser);
         universalCore.pause();
 
         assertTrue(universalCore.paused());
     }
 
-    function test_Unpause_OnlyOwner() public {
+    function test_Unpause_OnlyPauser() public {
+        bytes32 role = universalCore.PAUSER_ROLE();
+
         // First pause the contract
-        vm.prank(deployer);
+        vm.prank(pauser);
         universalCore.pause();
 
-        // Try to unpause as non-owner
+        // Non-pauser cannot unpause
+        vm.expectRevert(
+            abi.encodeWithSelector(IAccessControl.AccessControlUnauthorizedAccount.selector, nonOwner, role)
+        );
         vm.prank(nonOwner);
-        vm.expectRevert(abi.encodeWithSelector(CommonErrors.InvalidOwner.selector));
         universalCore.unpause();
     }
 
     function test_Unpause_HappyPath() public {
         // First pause the contract
-        vm.prank(deployer);
+        vm.prank(pauser);
         universalCore.pause();
         assertTrue(universalCore.paused());
 
         // Unpause
-        vm.prank(deployer);
+        vm.prank(pauser);
         vm.expectEmit(true, true, true, true);
-        emit Unpaused(deployer);
+        emit Unpaused(pauser);
         universalCore.unpause();
 
         assertFalse(universalCore.paused());
     }
 
+    function test_Initialize_GrantsPauserRole() public {
+        assertTrue(universalCore.hasRole(universalCore.PAUSER_ROLE(), pauser));
+    }
+
+    function test_Initialize_AdminDoesNotHavePauserRole() public {
+        assertFalse(universalCore.hasRole(universalCore.PAUSER_ROLE(), deployer));
+    }
+
+    function test_SetPauserRole_OnlyAdmin() public {
+        address newPauser = makeAddr("newPauser");
+
+        // Non-admin cannot set pauser role
+        vm.prank(nonOwner);
+        vm.expectRevert(CommonErrors.InvalidOwner.selector);
+        universalCore.setPauserRole(newPauser);
+
+        // Admin can set pauser role
+        vm.prank(deployer);
+        universalCore.setPauserRole(newPauser);
+        assertTrue(universalCore.hasRole(universalCore.PAUSER_ROLE(), newPauser));
+    }
+
+    function test_SetPauserRole_ZeroAddressReverts() public {
+        vm.prank(deployer);
+        vm.expectRevert(CommonErrors.ZeroAddress.selector);
+        universalCore.setPauserRole(address(0));
+    }
+
+    function test_SetPauserRole_NewPauserCanPause() public {
+        address newPauser = makeAddr("newPauser");
+
+        vm.prank(deployer);
+        universalCore.setPauserRole(newPauser);
+
+        vm.prank(newPauser);
+        universalCore.pause();
+        assertTrue(universalCore.paused());
+    }
+
     function test_DepositPRC20Token_WhenPaused_Reverts() public {
         // Pause the contract
-        vm.prank(deployer);
+        vm.prank(pauser);
         universalCore.pause();
 
         // Try to deposit when paused
@@ -538,7 +602,7 @@ contract UniversalCoreTest is Test, UpgradeableContractHelper {
         universalCore.setAutoSwapSupported(address(mockPRC20), true);
 
         // Pause the contract
-        vm.prank(deployer);
+        vm.prank(pauser);
         universalCore.pause();
 
         // Try to deposit with auto-swap when paused
@@ -549,11 +613,11 @@ contract UniversalCoreTest is Test, UpgradeableContractHelper {
 
     function test_DepositPRC20Token_AfterUnpause_Works() public {
         // Pause the contract
-        vm.prank(deployer);
+        vm.prank(pauser);
         universalCore.pause();
 
         // Unpause the contract
-        vm.prank(deployer);
+        vm.prank(pauser);
         universalCore.unpause();
 
         // Now deposit should work
