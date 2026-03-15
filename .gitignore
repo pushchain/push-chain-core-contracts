@@ -2,14 +2,19 @@
 cache/
 out/
 
+
+# Docs-Internal
+.claude/
+docs-internal/
+
+# Deployments
+deployments
+
 # Ignores development broadcast logs
 !/broadcast
 /broadcast/*/31337/
 /broadcast/**/dry-run/
 /broadcast
-
-# Docs
-docs/
 
 # Dotenv file
 .env
@@ -17,3 +22,4 @@ docs/
 # Safe to ignore
 .wake/
 .vscode/
+foundry.lock

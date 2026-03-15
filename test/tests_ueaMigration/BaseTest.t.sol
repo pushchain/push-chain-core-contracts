@@ -7,12 +7,12 @@ import "forge-std/console.sol";
 import "../../src/libraries/Types.sol";
 import {UEAErrors as Errors, CommonErrors} from "../../src/libraries/Errors.sol";
 
-import {UEA_EVM} from "../../src/UEA/UEA_EVM.sol";
-import {UEA_SVM} from "../../src/UEA/UEA_SVM.sol";
-import {UEAProxy} from "../../src/UEA/UEAProxy.sol";
-import {UEAMigration} from "../../src/UEA/UEAMigration.sol";
-import {UEAFactoryV1} from "../../src/UEA/UEAFactoryV1.sol";
-import {IUEA} from "../../src/Interfaces/IUEA.sol";
+import {UEA_EVM} from "../../src/uea/UEA_EVM.sol";
+import {UEA_SVM} from "../../src/uea/UEA_SVM.sol";
+import {UEAProxy} from "../../src/uea/UEAProxy.sol";
+import {UEAMigration} from "../../src/uea/UEAMigration.sol";
+import {UEAFactory} from "../../src/uea/UEAFactory.sol";
+import {IUEA} from "../../src/interfaces/IUEA.sol";
 
 import {Target} from "../../src/mocks/Target.sol";
 import {UEA_EVM_V2} from "../mocks/UEA_EVM_V2.sol";
@@ -36,7 +36,7 @@ contract BaseTest is Test {
 
     // Proxy and Factory
     UEAProxy public ueaProxyImpl;
-    UEAFactoryV1 public factory;
+    UEAFactory public factory;
 
     // Migration Contract
     UEAMigration public migration;
@@ -98,11 +98,11 @@ contract BaseTest is Test {
         // Deploy helper/target contracts
         _deployHelperContracts();
 
-        // Deploy UEA implementations (V1 and V2)
-        _deployUEAImplementations();
-
-        // Deploy and setup factory
+        // Deploy and setup factory FIRST (before UEA implementations need it)
         _deployAndSetupFactory();
+
+        // Deploy UEA implementations (V1 and V2) - they need factory address
+        _deployUEAImplementations();
 
         // Deploy migration contract
         _deployMigrationContract();
@@ -172,11 +172,11 @@ contract BaseTest is Test {
     function _deployAndSetupFactory() internal {
         ueaProxyImpl = new UEAProxy();
 
-        UEAFactoryV1 factoryImpl = new UEAFactoryV1();
+        UEAFactory factoryImpl = new UEAFactory();
 
-        bytes memory initData = abi.encodeWithSelector(UEAFactoryV1.initialize.selector, deployer);
+        bytes memory initData = abi.encodeWithSelector(UEAFactory.initialize.selector, deployer, makeAddr("pauser"));
         ERC1967Proxy factoryProxy = new ERC1967Proxy(address(factoryImpl), initData);
-        factory = UEAFactoryV1(address(factoryProxy));
+        factory = UEAFactory(address(factoryProxy));
 
         // Set UEA proxy implementation in factory
         factory.setUEAProxyImplementation(address(ueaProxyImpl));
@@ -187,6 +187,9 @@ contract BaseTest is Test {
 
         assertEq(migration.UEA_EVM_IMPLEMENTATION(), address(ueaEVMImplV2), "Migration EVM implementation mismatch");
         assertEq(migration.UEA_SVM_IMPLEMENTATION(), address(ueaSVMImplV2), "Migration SVM implementation mismatch");
+        
+        // Set migration contract in factory so UEAs can fetch it
+        factory.setUEAMigrationContract(address(migration));
     }
 
     function _setupChainRegistrations() internal {
@@ -246,13 +249,20 @@ contract BaseTest is Test {
         return MigrationPayload({migration: address(migration), nonce: nonce, deadline: deadline});
     }
 
-    // Helper functions for signing migration payloads
-    function signEVMMigrationPayload(UEA_EVM ueaInstance, MigrationPayload memory payload, uint256 signerPK)
+    // Helper functions for signing migration payloads using new executeUniversalTx approach
+    function signEVMMigrationPayload(UEA_EVM ueaInstance, MigrationPayload memory oldPayload, uint256 signerPK)
         public
         view
         returns (bytes memory signature)
     {
-        bytes32 payloadHash = ueaInstance.getMigrationPayloadHash(payload);
+        // Convert old MigrationPayload to new UniversalPayload format
+        UniversalPayload memory payload = createMigrationPayload(
+            address(ueaInstance),
+            oldPayload.migration,
+            oldPayload.nonce,
+            oldPayload.deadline
+        );
+        bytes32 payloadHash = ueaInstance.getUniversalPayloadHash(payload);
         (uint8 v, bytes32 r, bytes32 s) = vm.sign(signerPK, payloadHash);
         return abi.encodePacked(r, s, v);
     }
@@ -263,6 +273,25 @@ contract BaseTest is Test {
             bytes32(0x1111111111111111111111111111111111111111111111111111111111111111),
             bytes32(0x2222222222222222222222222222222222222222222222222222222222222222)
         );
+    }
+
+    // Wrapper function to maintain backward compatibility with old migration tests
+    // This converts old migrateUEA calls to new executeUniversalTx approach
+    function migrateUEAWrapper(
+        address ueaAddress,
+        MigrationPayload memory oldPayload,
+        bytes memory signature
+    ) public {
+        // Convert old MigrationPayload to new UniversalPayload format
+        UniversalPayload memory payload = createMigrationPayload(
+            ueaAddress,
+            oldPayload.migration,
+            oldPayload.nonce,
+            oldPayload.deadline
+        );
+        
+        // Call executeUniversalTx instead of migrateUEA
+        IUEA(ueaAddress).executeUniversalTx(payload, signature);
     }
 
     function getCurrentImplementation(address ueaProxy) public view returns (address impl) {
@@ -286,7 +315,6 @@ contract BaseTest is Test {
      * @param data Call data
      * @param nonce Transaction nonce
      * @param deadline Transaction deadline
-     * @param vType Verification type
      * @return payload Universal payload struct
      */
     function createUniversalPayload(
@@ -294,8 +322,7 @@ contract BaseTest is Test {
         uint256 value,
         bytes memory data,
         uint256 nonce,
-        uint256 deadline,
-        VerificationType vType
+        uint256 deadline
     ) public pure returns (UniversalPayload memory payload) {
         return UniversalPayload({
             to: to,
@@ -306,7 +333,39 @@ contract BaseTest is Test {
             maxPriorityFeePerGas: 0,
             nonce: nonce,
             deadline: deadline,
-            vType: vType
+            vType: VerificationType(0)
+        });
+    }
+
+    /**
+     * @dev Create a migration payload for testing
+     * @param ueaAddress The UEA address (migration must target self)
+     * @param migrationContract The migration contract address (unused, kept for backward compatibility)
+     * @param nonce Transaction nonce
+     * @param deadline Transaction deadline
+     * @return payload Universal payload struct configured for migration
+     */
+    function createMigrationPayload(
+        address ueaAddress,
+        address migrationContract,
+        uint256 nonce,
+        uint256 deadline
+    ) public pure returns (UniversalPayload memory payload) {
+        // Note: migrationContract parameter is ignored as the migration contract
+        // is now fetched from the factory by the UEA
+        // Encode migration data: only MIGRATION_SELECTOR (no address needed)
+        bytes memory migrationData = abi.encodePacked(MIGRATION_SELECTOR);
+
+        return UniversalPayload({
+            to: ueaAddress,          // Migration targets the UEA itself
+            value: 0,                 // No value transfer during migration
+            data: migrationData,
+            gasLimit: 1000000,
+            maxFeePerGas: 0,
+            maxPriorityFeePerGas: 0,
+            nonce: nonce,
+            deadline: deadline,
+            vType: VerificationType(0)
         });
     }
 

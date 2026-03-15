@@ -5,7 +5,7 @@ import "forge-std/Test.sol";
 import "../../src/PRC20.sol";
 import "../../src/UniversalCore.sol";
 import "../../src/interfaces/IPRC20.sol";
-import "../../src/interfaces/IUniswapV3.sol";
+import "../../src/interfaces/uniswapv3/IUniswapV3.sol";
 import "../mocks/MockGasToken.sol";
 import "../helpers/UpgradeableContractHelper.sol";
 import {PRC20Errors, UniversalCoreErrors, UEAErrors, CommonErrors} from "../../src/libraries/Errors.sol";
@@ -28,9 +28,9 @@ contract PRC20Test is Test, UpgradeableContractHelper {
     address public attacker;
 
     // Constants
-    string public constant SOURCE_CHAIN_ID = "1"; // Ethereum
+    string public constant SOURCE_CHAIN_NAMESPACE = "1"; // Ethereum
     string public constant SOURCE_TOKEN_ADDRESS = "0x0000000000000000000000000000000000000000";
-    uint256 public constant PC_PROTOCOL_FEE = 10000;
+    uint256 public constant PROTOCOL_FEE = 10000;
     uint256 public constant GAS_PRICE = 50 * 10 ** 9; // 50 gwei
 
     // Test values
@@ -43,8 +43,6 @@ contract PRC20Test is Test, UpgradeableContractHelper {
     event Approval(address indexed owner, address indexed spender, uint256 value);
     event Deposit(bytes from, address to, uint256 amount);
     event UpdatedUniversalCore(address universalCore);
-    event UpdatedProtocolFlatFee(uint256 protocolFlatFee);
-
     function setUp() public {
         // Setup actors
         uExec = 0x14191Ea54B4c176fCf86f51b0FAc7CB1E71Df7d7;
@@ -66,17 +64,20 @@ contract PRC20Test is Test, UpgradeableContractHelper {
 
         // Create initialization data
         bytes memory initData = abi.encodeWithSelector(
-            UniversalCore.initialize.selector, mockWPC, mockUniswapFactory, mockUniswapRouter, mockUniswapQuoter
+            UniversalCore.initialize.selector, mockWPC, mockUniswapFactory, mockUniswapRouter, mockUniswapQuoter, makeAddr("pauser")
         );
 
         // Deploy proxy and initialize
         address proxyAddress = deployUpgradeableContract(address(universalCoreImplementation), initData);
-        universalCore = UniversalCore(proxyAddress);
+        universalCore = UniversalCore(payable(proxyAddress));
+
+        // Grant MANAGER_ROLE to uExec so manager functions (e.g. setGasTokenPRC20) are callable
+        universalCore.grantRole(universalCore.MANAGER_ROLE(), uExec);
 
         // Configure universalCore
         vm.startPrank(uExec);
-        universalCore.setGasPrice(SOURCE_CHAIN_ID, GAS_PRICE);
-        universalCore.setGasTokenPRC20(SOURCE_CHAIN_ID, address(gasToken));
+        universalCore.setChainMeta(SOURCE_CHAIN_NAMESPACE, GAS_PRICE, 0, 0);
+        universalCore.setGasTokenPRC20(SOURCE_CHAIN_NAMESPACE, address(gasToken));
         vm.stopPrank();
 
         // Deploy PRC20 token implementation
@@ -88,9 +89,8 @@ contract PRC20Test is Test, UpgradeableContractHelper {
             "Push Chain Token",
             "PUSH",
             18,
-            SOURCE_CHAIN_ID,
+            SOURCE_CHAIN_NAMESPACE,
             IPRC20.TokenType.PC,
-            PC_PROTOCOL_FEE,
             address(universalCore),
             SOURCE_TOKEN_ADDRESS
         );
@@ -481,12 +481,12 @@ contract PRC20Test is Test, UpgradeableContractHelper {
 
         // Create initialization data
         bytes memory initData = abi.encodeWithSelector(
-            UniversalCore.initialize.selector, mockWPC, mockUniswapFactory, mockUniswapRouter, mockUniswapQuoter
+            UniversalCore.initialize.selector, mockWPC, mockUniswapFactory, mockUniswapRouter, mockUniswapQuoter, makeAddr("pauser")
         );
 
         // Deploy proxy and initialize
         address proxyAddress = deployUpgradeableContract(address(newHandlerImpl), initData);
-        UniversalCore newHandler = UniversalCore(proxyAddress);
+        UniversalCore newHandler = UniversalCore(payable(proxyAddress));
 
         // Update universalCore contract from Universal Executor Module
         vm.prank(uExec);
@@ -513,12 +513,12 @@ contract PRC20Test is Test, UpgradeableContractHelper {
 
         // Create initialization data
         bytes memory initData = abi.encodeWithSelector(
-            UniversalCore.initialize.selector, mockWPC, mockUniswapFactory, mockUniswapRouter, mockUniswapQuoter
+            UniversalCore.initialize.selector, mockWPC, mockUniswapFactory, mockUniswapRouter, mockUniswapQuoter, makeAddr("pauser")
         );
 
         // Deploy proxy and initialize
         address proxyAddress = deployUpgradeableContract(address(newHandlerImpl), initData);
-        UniversalCore newHandler = UniversalCore(proxyAddress);
+        UniversalCore newHandler = UniversalCore(payable(proxyAddress));
 
         // Attempt to update universalCore contract from non-Universal Executor Module
         vm.prank(attacker);
@@ -531,30 +531,6 @@ contract PRC20Test is Test, UpgradeableContractHelper {
         vm.prank(uExec);
         vm.expectRevert(CommonErrors.ZeroAddress.selector);
         prc20.updateUniversalCore(address(0));
-    }
-
-    function testUpdateProtocolFlatFeeFromUExec() public {
-        uint256 newProtocolFee = PC_PROTOCOL_FEE * 2;
-
-        // Update protocol fee from Universal Executor Module
-        vm.prank(uExec);
-
-        vm.expectEmit(false, false, false, true);
-        emit UpdatedProtocolFlatFee(newProtocolFee);
-
-        prc20.updateProtocolFlatFee(newProtocolFee);
-
-        // Verify protocol fee was updated
-        assertEq(prc20.PC_PROTOCOL_FEE(), newProtocolFee);
-    }
-
-    function testUpdateProtocolFlatFeeFromNonUExec() public {
-        uint256 newProtocolFee = PC_PROTOCOL_FEE * 2;
-
-        // Attempt to update protocol fee from non-Universal Executor Module
-        vm.prank(attacker);
-        vm.expectRevert(PRC20Errors.CallerIsNotUniversalExecutor.selector);
-        prc20.updateProtocolFlatFee(newProtocolFee);
     }
 
     function testSetNameFromUExec() public {
@@ -595,5 +571,21 @@ contract PRC20Test is Test, UpgradeableContractHelper {
         vm.prank(attacker);
         vm.expectRevert(PRC20Errors.CallerIsNotUniversalExecutor.selector);
         prc20.setSymbol(newSymbol);
+    }
+
+    function testInitializeRevertsWithZeroUniversalCore() public {
+        PRC20 impl = new PRC20();
+        bytes memory initData = abi.encodeWithSelector(
+            PRC20.initialize.selector,
+            "Test",
+            "TST",
+            18,
+            SOURCE_CHAIN_NAMESPACE,
+            IPRC20.TokenType.PC,
+            address(0),
+            SOURCE_TOKEN_ADDRESS
+        );
+        vm.expectRevert(CommonErrors.ZeroAddress.selector);
+        deployUpgradeableContract(address(impl), initData);
     }
 }

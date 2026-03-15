@@ -14,3 +14,19 @@ optimizer = true
 optimizer_runs = 99999
 auto_detect_solc = false
 evm_version = "shanghai"
+via_ir = true
+
+no_match_coverage = "(PRC20V0\\.sol|UniversalCoreV0\\.sol|src/(libraries|[Ii]nterfaces|mocks)/|test/)"
+
+fs_permissions = [{ access = "read-write", path = "deployments/" }]
+
+[fuzz]
+runs = 1024
+max_test_rejects = 65536
+seed = '0x1'
+
+[profile.ci.fuzz]
+runs = 4096
+
+[rpc_endpoints]
+push_chain_testnet = "${PUSH_CHAIN_TESTNET_RPC_URL}"
