@@ -2,13 +2,13 @@
 
 ## Contract Locations
 
-- **UEA_EVM Implementation**: [`src/UEA/UEA_EVM.sol`](../src/UEA/UEA_EVM.sol)
-- **UEA_SVM Implementation**: [`src/UEA/UEA_SVM.sol`](../src/UEA/UEA_SVM.sol)
-- **UEAFactory**: [`src/UEA/UEAFactory.sol`](../src/UEA/UEAFactory.sol)
-- **UEAProxy**: [`src/UEA/UEAProxy.sol`](../src/UEA/UEAProxy.sol)
-- **UEAMigration**: [`src/UEA/UEAMigration.sol`](../src/UEA/UEAMigration.sol)
-- **IUEA Interface**: [`src/Interfaces/IUEA.sol`](../src/Interfaces/IUEA.sol)
-- **IUEAFactory Interface**: [`src/Interfaces/IUEAFactory.sol`](../src/Interfaces/IUEAFactory.sol)
+- **UEA_EVM Implementation**: [`src/uea/UEA_EVM.sol`](../src/uea/UEA_EVM.sol)
+- **UEA_SVM Implementation**: [`src/uea/UEA_SVM.sol`](../src/uea/UEA_SVM.sol)
+- **UEAFactory**: [`src/uea/UEAFactory.sol`](../src/uea/UEAFactory.sol)
+- **UEAProxy**: [`src/uea/UEAProxy.sol`](../src/uea/UEAProxy.sol)
+- **UEAMigration**: [`src/uea/UEAMigration.sol`](../src/uea/UEAMigration.sol)
+- **IUEA Interface**: [`src/interfaces/IUEA.sol`](../src/interfaces/IUEA.sol)
+- **IUEAFactory Interface**: [`src/interfaces/IUEAFactory.sol`](../src/interfaces/IUEAFactory.sol)
 
 ---
 
@@ -118,6 +118,50 @@ Additionally, a trusted system component (`UNIVERSAL_EXECUTOR_MODULE` at address
 
 ---
 
+## Payload Execution
+
+Both `UEA_EVM` and `UEA_SVM` use a shared `_handleExecution` dispatcher that reads the first 4 bytes of `payload.data` to determine which execution mode to use:
+
+- **`MULTICALL_SELECTOR`** (`bytes4(keccak256("UEA_MULTICALL"))`) → `_handleMulticall`: decodes a `Multicall[]` array and iterates through each `{to, value, data}` entry, calling each target in sequence. A migration cannot be included as a sub-call within a multicall.
+- **`MIGRATION_SELECTOR`** (`bytes4(keccak256("UEA_MIGRATION"))`) → `_handleMigration`: must be a standalone payload (not nested inside a multicall). Requires `payload.to == address(this)` and `payload.value == 0`. Delegatecalls `UEAFactory.UEA_MIGRATION_CONTRACT()` with `migrateUEAEVM()` (for EVM UEAs) or `migrateUEASVM()` (for SVM UEAs).
+- **Otherwise** → `_handleSingleCall`: a direct `call{value}(data)` to `payload.to`.
+
+```text
+executeUniversalTx(payload, sig)
+        │
+        ├─ [UE Module caller] ─────────────────────────────────┐
+        │                                                       │
+        └─ [verify ECDSA / Ed25519] ────────────────────────── │
+                                                                │
+                                           _handleExecution(payload)
+                                                   │
+                            ┌──────────────────────┼──────────────────────┐
+                            │                      │                      │
+                     MULTICALL_SELECTOR   MIGRATION_SELECTOR      (anything else)
+                            │                      │                      │
+                    _handleMulticall()    _handleMigration()    _handleSingleCall()
+                   (batch calls)         (delegatecall to       (single call to
+                                          migration contract)    payload.to)
+```
+
+---
+
+## External Dependencies
+
+### UEA_EVM
+
+- **OZ ECDSA library** (immutable) — signature recovery for EVM keys
+- **`ueaFactory.UEA_MIGRATION_CONTRACT()`** (factory admin-mutable) — migration target; factory admin controls which migration contract is active
+- **Target contracts in multicall / single call** — untrusted, arbitrary; the UEA makes no assumptions about target behavior
+
+### UEA_SVM
+
+- **Ed25519 precompile at `0x00000000000000000000000000000000000000ca`** — Push Chain-specific Cosmos EVM precompile for Ed25519 signature verification. Hardcoded; no fallback if unavailable on a non-Push fork.
+- **`ueaFactory.UEA_MIGRATION_CONTRACT()`** (factory admin-mutable) — migration target
+- **Target contracts** (untrusted, arbitrary)
+
+---
+
 ## UEA Migration Overview (Upgrading UEA Logic)
 
 UEAs use a proxy pattern (`UEAProxy`) where the proxy delegates execution to a UEA implementation stored in a fixed storage slot (`UEA_LOGIC_SLOT`). Migration works by updating this implementation pointer to a newer version.
@@ -125,8 +169,10 @@ UEAs use a proxy pattern (`UEAProxy`) where the proxy delegates execution to a U
 **High-level flow:**
 1. A new UEA implementation (e.g., `UEA_EVM` v2 / `UEA_SVM` v2) is deployed.
 2. A new `UEAMigration` contract is deployed, configured with the new implementation addresses for both EVM and SVM.
-3. The factory is updated to point to the latest migration contract via `UEAFactory.setUEAMigrationContract(migrationAddress)` (the factory is now named `UEAFactory`).
+3. The factory is updated to point to the latest migration contract via `UEAFactory.setUEAMigrationContract(migrationAddress)`.
 4. A user triggers migration via the UEA execution pathway: the payload data must start with `MIGRATION_SELECTOR`, and `payload.to == address(this)`. This is a dedicated execution mode, not a normal call.
 5. The UEA delegates to the migration contract via `delegatecall`, which updates the proxy's implementation slot (`UEA_LOGIC_SLOT`) to the new logic contract. For EVM UEAs, `UEAMigration.migrateUEAEVM()` is called; for SVM UEAs, `UEAMigration.migrateUEASVM()` is called.
 
 **Result**: The UEA keeps the same address (identity) but runs new logic.
+
+See [`docs/CEA_UEA_MIGRATION_FLOW.md`](./CEA_UEA_MIGRATION_FLOW.md) for the complete step-by-step flow with diagrams.
