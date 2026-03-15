@@ -9,7 +9,7 @@ import {UEAProxy} from "../../src/uea/UEAProxy.sol";
 import {UEAErrors} from "../../src/libraries/Errors.sol";
 import {UniversalAccountId} from "../../src/libraries/Types.sol";
 import {ERC1967Proxy} from "@openzeppelin/contracts/proxy/ERC1967/ERC1967Proxy.sol";
-import {OwnableUpgradeable} from "@openzeppelin/contracts-upgradeable/access/OwnableUpgradeable.sol";
+import {IAccessControl} from "@openzeppelin/contracts/access/IAccessControl.sol";
 
 contract UEAFactory_Fuzz is Test {
     UEAFactory factory;
@@ -23,7 +23,9 @@ contract UEAFactory_Fuzz is Test {
     function setUp() public {
         ueaProxyImpl = new UEAProxy();
         UEAFactory factoryImpl = new UEAFactory();
-        bytes memory initData = abi.encodeWithSelector(UEAFactory.initialize.selector, address(this));
+        bytes memory initData = abi.encodeWithSelector(
+            UEAFactory.initialize.selector, address(this), makeAddr("pauser")
+        );
         ERC1967Proxy proxy = new ERC1967Proxy(address(factoryImpl), initData);
         factory = UEAFactory(address(proxy));
         factory.setUEAProxyImplementation(address(ueaProxyImpl));
@@ -216,11 +218,12 @@ contract UEAFactory_Fuzz is Test {
         vm.assume(caller != address(0));
 
         bytes32 chainHash = keccak256(abi.encode("fuzzchain", "999"));
+        bytes32 adminRole = factory.DEFAULT_ADMIN_ROLE();
 
-        vm.prank(caller);
         vm.expectRevert(
-            abi.encodeWithSelector(OwnableUpgradeable.OwnableUnauthorizedAccount.selector, caller)
+            abi.encodeWithSelector(IAccessControl.AccessControlUnauthorizedAccount.selector, caller, adminRole)
         );
+        vm.prank(caller);
         factory.registerNewChain(chainHash, EVM_HASH);
     }
 

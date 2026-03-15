@@ -3,8 +3,8 @@ pragma solidity 0.8.26;
 
 import {Initializable} from "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol";
 
-import {IPRC20} from "./interfaces/IPRC20.sol";
-import {PRC20Errors, CommonErrors} from "./libraries/Errors.sol";
+import {IPRC20} from "../interfaces/IPRC20.sol";
+import {PRC20Errors, CommonErrors} from "../libraries/Errors.sol";
 
 /**
  * @title   PRC20 (Push Chain Synthetic Token — V0 Testnet)

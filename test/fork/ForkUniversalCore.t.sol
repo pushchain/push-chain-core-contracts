@@ -68,7 +68,8 @@ contract ForkUniversalCoreTest is Test, UpgradeableContractHelper, PushChainAddr
             WPC_TOKEN,
             UNISWAP_FACTORY,
             UNISWAP_ROUTER,
-            UNISWAP_QUOTER
+            UNISWAP_QUOTER,
+            makeAddr("pauser")
         );
         address proxyAddress = deployUpgradeableContract(address(implementation), initData);
         universalCore = UniversalCore(payable(proxyAddress));

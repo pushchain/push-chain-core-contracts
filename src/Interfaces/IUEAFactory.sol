@@ -42,6 +42,10 @@ interface IUEAFactory {
         bytes32 vmHash
     );
 
+    /// @notice                  Emitted when the PAUSER_ROLE is granted to a new address.
+    /// @param pauser            Address that was granted the pauser role
+    event PauserRoleGranted(address indexed pauser);
+
     // =========================
     //    UF_1: VIEW FUNCTIONS
     // =========================

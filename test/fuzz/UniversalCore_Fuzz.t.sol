@@ -18,6 +18,7 @@ contract UniversalCore_Fuzz is Test, UpgradeableContractHelper {
 
     address constant uExec = 0x14191Ea54B4c176fCf86f51b0FAc7CB1E71Df7d7;
     address gateway;
+    address pauser;
 
     // Chain namespace configured in setUp — must match prc20.SOURCE_CHAIN_NAMESPACE()
     string constant CHAIN_NS = "1";
@@ -29,6 +30,7 @@ contract UniversalCore_Fuzz is Test, UpgradeableContractHelper {
         address mockFactory = makeAddr("uniswapFactory");
         address mockRouter = makeAddr("uniswapRouter");
         address mockQuoter = makeAddr("uniswapQuoter");
+        pauser = makeAddr("pauser");
 
         UniversalCore impl = new UniversalCore();
         bytes memory initData = abi.encodeWithSelector(
@@ -36,7 +38,8 @@ contract UniversalCore_Fuzz is Test, UpgradeableContractHelper {
             mockWPC,
             mockFactory,
             mockRouter,
-            mockQuoter
+            mockQuoter,
+            pauser
         );
         address proxyAddr = deployUpgradeableContract(address(impl), initData);
         universalCore = UniversalCore(payable(proxyAddr));
@@ -359,13 +362,16 @@ contract UniversalCore_Fuzz is Test, UpgradeableContractHelper {
         universalCore.setWPC(newWPC);
     }
 
-    function testFuzz_pause_nonAdmin_reverts(address caller) public {
-        // Cache role before prank to avoid consuming prank via external call
-        bytes32 adminRole = universalCore.DEFAULT_ADMIN_ROLE();
-        vm.assume(!universalCore.hasRole(adminRole, caller));
+    function testFuzz_pause_nonPauser_reverts(address caller) public {
+        bytes32 pauserRole = universalCore.PAUSER_ROLE();
+        vm.assume(!universalCore.hasRole(pauserRole, caller));
 
+        vm.expectRevert(
+            abi.encodeWithSelector(
+                IAccessControl.AccessControlUnauthorizedAccount.selector, caller, pauserRole
+            )
+        );
         vm.prank(caller);
-        vm.expectRevert(CommonErrors.InvalidOwner.selector);
         universalCore.pause();
     }
 
@@ -374,7 +380,8 @@ contract UniversalCore_Fuzz is Test, UpgradeableContractHelper {
         uint128 amount,
         address recipient
     ) public {
-        // Admin (test contract) pauses
+        // Pauser pauses
+        vm.prank(pauser);
         universalCore.pause();
 
         vm.prank(uExec);

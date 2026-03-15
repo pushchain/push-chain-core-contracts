@@ -44,7 +44,7 @@ contract UEA_EVM_FuzzTest is Test {
 
         UEAFactory factoryImpl = new UEAFactory();
         bytes memory initData =
-            abi.encodeWithSelector(UEAFactory.initialize.selector, address(this));
+            abi.encodeWithSelector(UEAFactory.initialize.selector, address(this), makeAddr("pauser"));
         ERC1967Proxy proxy = new ERC1967Proxy(address(factoryImpl), initData);
         factory = UEAFactory(address(proxy));
         factory.setUEAProxyImplementation(address(ueaProxyImpl));

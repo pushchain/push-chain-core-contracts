@@ -56,7 +56,7 @@ contract ProxyCallTest is Test {
 
         UEAFactory factoryImpl = new UEAFactory();
 
-        bytes memory initData = abi.encodeWithSelector(UEAFactory.initialize.selector, admin);
+        bytes memory initData = abi.encodeWithSelector(UEAFactory.initialize.selector, admin, makeAddr("pauser"));
         ERC1967Proxy proxy = new ERC1967Proxy(address(factoryImpl), initData);
         factory = UEAFactory(address(proxy));
 

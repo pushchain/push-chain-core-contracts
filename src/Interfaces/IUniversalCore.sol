@@ -49,6 +49,10 @@ interface IUniversalCore {
         uint256 pcOut
     );
 
+    /// @notice                  Emitted when the PAUSER_ROLE is granted to a new address.
+    /// @param pauser            Address that was granted the pauser role
+    event PauserRoleGranted(address indexed pauser);
+
     // =========================
     //    UC_1: UE MODULE FUNCTIONS
     // =========================

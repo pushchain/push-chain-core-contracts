@@ -42,6 +42,7 @@ contract UniversalCore is
 
     address public immutable UNIVERSAL_EXECUTOR_MODULE = 0x14191Ea54B4c176fCf86f51b0FAc7CB1E71Df7d7;
     bytes32 public constant MANAGER_ROLE = keccak256("MANAGER_ROLE");
+    bytes32 public constant PAUSER_ROLE = keccak256("PAUSER_ROLE");
 
     // -- Protocol addresses --
     address public universalGatewayPC;
@@ -110,15 +111,22 @@ contract UniversalCore is
     /// @param uniswapV3Factory_         Address of the Uniswap V3 factory
     /// @param uniswapV3SwapRouter_      Address of the Uniswap V3 swap router
     /// @param uniswapV3Quoter_          Address of the Uniswap V3 quoter
-    function initialize(address wpc_, address uniswapV3Factory_, address uniswapV3SwapRouter_, address uniswapV3Quoter_)
-        public
-        virtual
-        initializer
-    {
+    function initialize(
+        address wpc_,
+        address uniswapV3Factory_,
+        address uniswapV3SwapRouter_,
+        address uniswapV3Quoter_,
+        address initialPauser_
+    ) public virtual initializer {
+        if (initialPauser_ == address(0)) revert CommonErrors.ZeroAddress();
         __ReentrancyGuard_init();
         __AccessControl_init();
+        __Pausable_init();
 
         _grantRole(DEFAULT_ADMIN_ROLE, msg.sender);
+        _grantRole(PAUSER_ROLE, initialPauser_);
+
+        emit PauserRoleGranted(initialPauser_);
 
         WPC = wpc_;
         uniswapV3Factory = uniswapV3Factory_;
@@ -444,14 +452,22 @@ contract UniversalCore is
         emit SetRescueFundsGasLimitByChain(chainNamespace, gasLimit);
     }
 
-    /// @notice Pause the contract - stops all deposit functions.
-    function pause() external onlyAdmin {
+    /// @notice Pause the contract - stops all deposit functions. Only callable by PAUSER_ROLE.
+    function pause() external onlyRole(PAUSER_ROLE) {
         _pause();
     }
 
-    /// @notice Unpause the contract - resumes all deposit functions.
-    function unpause() external onlyAdmin {
+    /// @notice Unpause the contract - resumes all deposit functions. Only callable by PAUSER_ROLE.
+    function unpause() external onlyRole(PAUSER_ROLE) {
         _unpause();
+    }
+
+    /// @notice              Grant PAUSER_ROLE to a new address. Only callable by admin.
+    /// @param newPauser     Address to grant pauser role to
+    function setPauserRole(address newPauser) external onlyAdmin {
+        if (newPauser == address(0)) revert CommonErrors.ZeroAddress();
+        _grantRole(PAUSER_ROLE, newPauser);
+        emit PauserRoleGranted(newPauser);
     }
 
     // =========================

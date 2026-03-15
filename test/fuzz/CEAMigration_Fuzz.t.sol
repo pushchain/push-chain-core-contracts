@@ -41,6 +41,7 @@ contract CEAMigration_FuzzTest is Test {
         bytes memory initData = abi.encodeWithSelector(
             CEAFactory.initialize.selector,
             owner,
+            makeAddr("pauser"),
             vault,
             address(ceaProxyImpl),
             address(ceaV1),

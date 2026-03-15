@@ -9,6 +9,7 @@ import {CEAProxy} from "../../src/cea/CEAProxy.sol";
 import {ICEA} from "../../src/interfaces/ICEA.sol";
 import {MockUniversalGateway} from "../mocks/MockUniversalGateway.sol";
 import {ERC1967Proxy} from "@openzeppelin/contracts/proxy/ERC1967/ERC1967Proxy.sol";
+import {IAccessControl} from "@openzeppelin/contracts/access/IAccessControl.sol";
 
 contract CEAFactory_FuzzTest is Test {
     CEA public ceaImplementation;
@@ -30,6 +31,7 @@ contract CEAFactory_FuzzTest is Test {
         bytes memory initData = abi.encodeWithSelector(
             CEAFactory.initialize.selector,
             owner,
+            makeAddr("pauser"),
             vault,
             address(ceaProxyImplementation),
             address(ceaImplementation),
@@ -206,8 +208,9 @@ contract CEAFactory_FuzzTest is Test {
         vm.assume(caller != address(0));
         vm.assume(newVault != address(0));
 
+        bytes32 adminRole = factory.DEFAULT_ADMIN_ROLE();
         vm.expectRevert(
-            abi.encodeWithSignature("OwnableUnauthorizedAccount(address)", caller)
+            abi.encodeWithSelector(IAccessControl.AccessControlUnauthorizedAccount.selector, caller, adminRole)
         );
         vm.prank(caller);
         factory.setVault(newVault);
@@ -222,8 +225,9 @@ contract CEAFactory_FuzzTest is Test {
         vm.assume(caller != address(0));
         vm.assume(newImpl != address(0));
 
+        bytes32 adminRole = factory.DEFAULT_ADMIN_ROLE();
         vm.expectRevert(
-            abi.encodeWithSignature("OwnableUnauthorizedAccount(address)", caller)
+            abi.encodeWithSelector(IAccessControl.AccessControlUnauthorizedAccount.selector, caller, adminRole)
         );
         vm.prank(caller);
         factory.setCEAImplementation(newImpl);
@@ -238,8 +242,9 @@ contract CEAFactory_FuzzTest is Test {
         vm.assume(caller != address(0));
         vm.assume(newMigration != address(0));
 
+        bytes32 adminRole = factory.DEFAULT_ADMIN_ROLE();
         vm.expectRevert(
-            abi.encodeWithSignature("OwnableUnauthorizedAccount(address)", caller)
+            abi.encodeWithSelector(IAccessControl.AccessControlUnauthorizedAccount.selector, caller, adminRole)
         );
         vm.prank(caller);
         factory.setCEAMigrationContract(newMigration);
