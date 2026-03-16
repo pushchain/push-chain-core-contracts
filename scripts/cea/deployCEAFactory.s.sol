@@ -84,7 +84,8 @@ contract DeployCEAFactoryScript is Script {
         // 5. Prepare initialization data for CEAFactory
         bytes memory initData = abi.encodeWithSelector(
             CEAFactory.initialize.selector,
-            owner, // initialOwner
+            owner, // initialAdmin
+            owner, // initialPauser (deployer is pauser)
             vault, // initialVault
             address(ceaProxyImplementation), // ceaProxyImplementation
             address(ceaImplementation), // ceaImplementation
@@ -112,14 +113,14 @@ contract DeployCEAFactoryScript is Script {
         // 9. Post-deployment verification
         console.log("\n=== Post-Deployment Verification ===");
 
-        address verifiedOwner = ceaFactory.owner();
+        bool isAdmin = ceaFactory.hasRole(ceaFactory.DEFAULT_ADMIN_ROLE(), owner);
         address verifiedVault = ceaFactory.VAULT();
         address verifiedCEAProxy = ceaFactory.CEA_PROXY_IMPLEMENTATION();
         address verifiedCEA = ceaFactory.CEA_IMPLEMENTATION();
         address verifiedGateway = ceaFactory.UNIVERSAL_GATEWAY();
         address verifiedProxyAdmin = address(proxyAdmin);
 
-        console.log("Factory Owner:", verifiedOwner, verifiedOwner == owner ? "[OK]" : "[MISMATCH]");
+        console.log("Admin role granted to owner:", isAdmin ? "[OK]" : "[MISMATCH]");
         console.log("Vault:", verifiedVault, verifiedVault == vault ? "[OK]" : "[MISMATCH]");
         console.log(
             "CEA Proxy Impl:",
@@ -130,7 +131,7 @@ contract DeployCEAFactoryScript is Script {
         console.log("Gateway:", verifiedGateway, verifiedGateway == universalGateway ? "[OK]" : "[MISMATCH]");
         console.log("ProxyAdmin:", verifiedProxyAdmin);
 
-        require(verifiedOwner == owner, "Owner mismatch");
+        require(isAdmin, "Owner not granted admin role");
         require(verifiedVault == vault, "Vault mismatch");
         require(verifiedCEAProxy == address(ceaProxyImplementation), "CEA Proxy Implementation mismatch");
         require(verifiedCEA == address(ceaImplementation), "CEA Implementation mismatch");
