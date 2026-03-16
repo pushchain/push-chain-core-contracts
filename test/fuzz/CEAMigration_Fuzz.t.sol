@@ -13,8 +13,7 @@ import {MockUniversalGateway} from "../mocks/MockUniversalGateway.sol";
 import {ERC1967Proxy} from "@openzeppelin/contracts/proxy/ERC1967/ERC1967Proxy.sol";
 
 contract CEAMigration_FuzzTest is Test {
-    bytes32 private constant CEA_LOGIC_SLOT =
-        0x8b2ae8ee8c8678fc65d38e03fd33865426627999aa5e8fab985583dec5888813;
+    bytes32 private constant CEA_LOGIC_SLOT = 0x8b2ae8ee8c8678fc65d38e03fd33865426627999aa5e8fab985583dec5888813;
 
     CEA public ceaV1;
     CEA public ceaV2;
@@ -83,15 +82,11 @@ contract CEAMigration_FuzzTest is Test {
         assertEq(address(uint160(uint256(slotBefore))), address(ceaV1));
 
         // Trigger migration via executeUniversalTx with MIGRATION_SELECTOR payload
-        bytes memory payload = abi.encodePacked(
-            bytes4(keccak256("UEA_MIGRATION"))
-        );
+        bytes memory payload = abi.encodePacked(bytes4(keccak256("UEA_MIGRATION")));
         bytes32 txId = keccak256("migration_slot_test");
 
         vm.prank(vault);
-        ICEA(ceaAddr).executeUniversalTx(
-            txId, bytes32(0), ueaOnPush, address(0), payload
-        );
+        ICEA(ceaAddr).executeUniversalTx(txId, bytes32(0), ueaOnPush, address(0), payload);
 
         // Verify slot was updated to ceaV2
         bytes32 slotAfter = vm.load(ceaAddr, CEA_LOGIC_SLOT);
@@ -105,18 +100,14 @@ contract CEAMigration_FuzzTest is Test {
 
         factory.setCEAMigrationContract(address(migration));
 
-        bytes memory payload = abi.encodePacked(
-            bytes4(keccak256("UEA_MIGRATION"))
-        );
+        bytes memory payload = abi.encodePacked(bytes4(keccak256("UEA_MIGRATION")));
         bytes32 txId = keccak256("migration_event_test");
 
         vm.expectEmit(true, false, false, false);
         emit CEAMigration.ImplementationUpdated(address(ceaV2));
 
         vm.prank(vault);
-        ICEA(ceaAddr).executeUniversalTx(
-            txId, bytes32(0), ueaOnPush, address(0), payload
-        );
+        ICEA(ceaAddr).executeUniversalTx(txId, bytes32(0), ueaOnPush, address(0), payload);
     }
 
     // =========================================================================

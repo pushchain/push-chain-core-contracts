@@ -29,8 +29,7 @@ contract CEA_FuzzTest is Test {
     address public ueaOnPush;
     address public nonVault;
 
-    bytes32 private constant CEA_LOGIC_SLOT =
-        0x8b2ae8ee8c8678fc65d38e03fd33865426627999aa5e8fab985583dec5888813;
+    bytes32 private constant CEA_LOGIC_SLOT = 0x8b2ae8ee8c8678fc65d38e03fd33865426627999aa5e8fab985583dec5888813;
 
     function setUp() public {
         owner = address(this);
@@ -64,11 +63,7 @@ contract CEA_FuzzTest is Test {
     // Helpers
     // =========================================================================
 
-    function makeCall(
-        address to,
-        uint256 value,
-        bytes memory data
-    ) internal pure returns (Multicall memory) {
+    function makeCall(address to, uint256 value, bytes memory data) internal pure returns (Multicall memory) {
         return Multicall({to: to, value: value, data: data});
     }
 
@@ -86,10 +81,7 @@ contract CEA_FuzzTest is Test {
     // =========================================================================
 
     /// @dev After successful execution, isExecuted[txId] is true.
-    function testFuzz_executeUniversalTx_uniqueTxId(
-        bytes32 txId,
-        bytes32 universalTxId
-    ) public {
+    function testFuzz_executeUniversalTx_uniqueTxId(bytes32 txId, bytes32 universalTxId) public {
         bytes memory payload = emptyMulticallPayload();
 
         vm.prank(vault);
@@ -99,10 +91,7 @@ contract CEA_FuzzTest is Test {
     }
 
     /// @dev Second call with same txId always reverts with PayloadExecuted.
-    function testFuzz_executeUniversalTx_replayReverts(
-        bytes32 txId,
-        bytes32 universalTxId
-    ) public {
+    function testFuzz_executeUniversalTx_replayReverts(bytes32 txId, bytes32 universalTxId) public {
         bytes memory payload = emptyMulticallPayload();
 
         vm.prank(vault);
@@ -114,10 +103,7 @@ contract CEA_FuzzTest is Test {
     }
 
     /// @dev Different txIds execute independently without replay issues.
-    function testFuzz_executeUniversalTx_differentTxIds_independent(
-        bytes32 txId1,
-        bytes32 txId2
-    ) public {
+    function testFuzz_executeUniversalTx_differentTxIds_independent(bytes32 txId1, bytes32 txId2) public {
         vm.assume(txId1 != txId2);
 
         bytes memory payload = emptyMulticallPayload();
@@ -137,10 +123,7 @@ contract CEA_FuzzTest is Test {
     // =========================================================================
 
     /// @dev When originCaller != pushAccount, reverts with InvalidUEA.
-    function testFuzz_executeUniversalTx_wrongOriginCaller_reverts(
-        address wrongCaller,
-        bytes32 txId
-    ) public {
+    function testFuzz_executeUniversalTx_wrongOriginCaller_reverts(address wrongCaller, bytes32 txId) public {
         vm.assume(wrongCaller != ueaOnPush);
 
         bytes memory payload = emptyMulticallPayload();
@@ -165,10 +148,7 @@ contract CEA_FuzzTest is Test {
     // =========================================================================
 
     /// @dev isMulticall returns true only when first 4 bytes == MULTICALL_SELECTOR.
-    function testFuzz_isMulticall_onlyForCorrectSelector(
-        bytes4 selector,
-        bytes memory remaining
-    ) public {
+    function testFuzz_isMulticall_onlyForCorrectSelector(bytes4 selector, bytes memory remaining) public {
         bytes memory payload = abi.encodePacked(selector, remaining);
 
         // Execute and check which path is taken based on whether it dispatches as multicall
@@ -198,10 +178,7 @@ contract CEA_FuzzTest is Test {
     }
 
     /// @dev isMigration returns true only when first 4 bytes == MIGRATION_SELECTOR.
-    function testFuzz_isMigration_onlyForCorrectSelector(
-        bytes4 selector,
-        bytes memory remaining
-    ) public {
+    function testFuzz_isMigration_onlyForCorrectSelector(bytes4 selector, bytes memory remaining) public {
         vm.assume(selector != MIGRATION_SELECTOR && selector != MULTICALL_SELECTOR);
         // Build a payload with a non-migration, non-multicall selector
         // Should go to single-call path — use empty payload which parks funds
@@ -237,17 +214,12 @@ contract CEA_FuzzTest is Test {
     }
 
     /// @dev When payload is empty, funds are parked in CEA without external call.
-    function testFuzz_singleCall_emptyPayload_parksFunds(
-        bytes32 txId,
-        uint256 value
-    ) public {
+    function testFuzz_singleCall_emptyPayload_parksFunds(bytes32 txId, uint256 value) public {
         value = bound(value, 0, 100 ether);
         vm.deal(vault, value);
 
         vm.prank(vault);
-        ceaInstance.executeUniversalTx{value: value}(
-            txId, bytes32(0), ueaOnPush, address(0), ""
-        );
+        ceaInstance.executeUniversalTx{value: value}(txId, bytes32(0), ueaOnPush, address(0), "");
 
         assertTrue(ceaInstance.isExecuted(txId));
         // Funds are parked in CEA
@@ -259,10 +231,7 @@ contract CEA_FuzzTest is Test {
     // =========================================================================
 
     /// @dev Any multicall entry with to == address(0) reverts with InvalidTarget.
-    function testFuzz_multicall_zeroAddressTarget_reverts(
-        uint8 numCalls,
-        uint8 zeroIndex
-    ) public {
+    function testFuzz_multicall_zeroAddressTarget_reverts(uint8 numCalls, uint8 zeroIndex) public {
         numCalls = uint8(bound(numCalls, 1, 5));
         zeroIndex = uint8(bound(zeroIndex, 0, numCalls - 1));
 
@@ -327,10 +296,7 @@ contract CEA_FuzzTest is Test {
     ///      A multicall containing MIGRATION_SELECTOR data is executed as a regular call.
     ///      This test verifies that the call does NOT revert with InvalidCall — it either
     ///      succeeds or fails with ExecutionFailed (because Target has no matching function).
-    function testFuzz_multicall_migrationInsideArray_behavesLikeRegularCall(
-        uint8 numCalls,
-        uint8 migIdx
-    ) public {
+    function testFuzz_multicall_migrationInsideArray_behavesLikeRegularCall(uint8 numCalls, uint8 migIdx) public {
         numCalls = uint8(bound(numCalls, 1, 5));
         migIdx = uint8(bound(migIdx, 0, numCalls - 1));
 
@@ -374,9 +340,7 @@ contract CEA_FuzzTest is Test {
 
         vm.expectRevert(CEAErrors.InvalidInput.selector);
         vm.prank(vault);
-        ceaInstance.executeUniversalTx{value: value}(
-            txId, bytes32(0), ueaOnPush, address(0), payload
-        );
+        ceaInstance.executeUniversalTx{value: value}(txId, bytes32(0), ueaOnPush, address(0), payload);
     }
 
     /// @dev When factory has no migration contract set, migration reverts with InvalidCall.
@@ -394,10 +358,7 @@ contract CEA_FuzzTest is Test {
     // =========================================================================
 
     /// @dev When caller != VAULT, executeUniversalTx always reverts with NotVault.
-    function testFuzz_executeUniversalTx_nonVault_reverts(
-        address caller,
-        bytes32 txId
-    ) public {
+    function testFuzz_executeUniversalTx_nonVault_reverts(address caller, bytes32 txId) public {
         vm.assume(caller != vault);
         vm.assume(caller != address(0));
 
@@ -409,18 +370,14 @@ contract CEA_FuzzTest is Test {
     }
 
     /// @dev When caller != address(this), sendUniversalTxToUEA always reverts with Unauthorized.
-    function testFuzz_sendUniversalTxToUEA_nonSelf_reverts(
-        address caller,
-        address token,
-        uint256 amount
-    ) public {
+    function testFuzz_sendUniversalTxToUEA_nonSelf_reverts(address caller, address token, uint256 amount) public {
         vm.assume(caller != address(ceaInstance));
         vm.assume(caller != address(0));
         vm.assume(amount > 0);
 
         vm.expectRevert(CommonErrors.Unauthorized.selector);
         vm.prank(caller);
-        ceaInstance.sendUniversalTxToUEA(token, amount, "");
+        ceaInstance.sendUniversalTxToUEA(token, amount, "", ueaOnPush);
     }
 
     // =========================================================================
@@ -436,10 +393,7 @@ contract CEA_FuzzTest is Test {
             address(ceaInstance),
             0,
             abi.encodeWithSignature(
-                "sendUniversalTxToUEA(address,uint256,bytes)",
-                token,
-                uint256(0),
-                ""
+                "sendUniversalTxToUEA(address,uint256,bytes,address)", token, uint256(0), "", ueaOnPush
             )
         );
 
@@ -453,9 +407,7 @@ contract CEA_FuzzTest is Test {
     }
 
     /// @dev When CEA lacks sufficient ERC20 balance, reverts with InsufficientBalance.
-    function testFuzz_sendUniversalTxToUEA_insufficientBalance_reverts(
-        uint256 amount
-    ) public {
+    function testFuzz_sendUniversalTxToUEA_insufficientBalance_reverts(uint256 amount) public {
         amount = bound(amount, 1, type(uint128).max);
 
         // Deploy a mock token; CEA has zero balance
@@ -466,10 +418,7 @@ contract CEA_FuzzTest is Test {
             address(ceaInstance),
             0,
             abi.encodeWithSignature(
-                "sendUniversalTxToUEA(address,uint256,bytes)",
-                address(token),
-                amount,
-                ""
+                "sendUniversalTxToUEA(address,uint256,bytes,address)", address(token), amount, "", ueaOnPush
             )
         );
 

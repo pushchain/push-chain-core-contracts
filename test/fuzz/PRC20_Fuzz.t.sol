@@ -23,8 +23,7 @@ contract PRC20_Fuzz is Test, UpgradeableContractHelper {
         address mockQuoter = makeAddr("quoter");
         address mockPauser = makeAddr("pauser");
         bytes memory ucInit = abi.encodeWithSelector(
-            UniversalCore.initialize.selector,
-            mockWPC, mockFactory, mockRouter, mockQuoter, mockPauser
+            UniversalCore.initialize.selector, mockWPC, mockFactory, mockRouter, mockQuoter, mockPauser
         );
         address ucProxy = deployUpgradeableContract(address(ucImpl), ucInit);
         universalCore = UniversalCore(payable(ucProxy));
@@ -49,12 +48,9 @@ contract PRC20_Fuzz is Test, UpgradeableContractHelper {
     // 1.1 Transfer Properties
     // =========================================================================
 
-    function testFuzz_transfer_conservesBalance(
-        address sender,
-        address recipient,
-        uint256 mintAmt,
-        uint256 transferAmt
-    ) public {
+    function testFuzz_transfer_conservesBalance(address sender, address recipient, uint256 mintAmt, uint256 transferAmt)
+        public
+    {
         vm.assume(sender != address(0) && recipient != address(0));
         vm.assume(sender != recipient);
         vm.assume(mintAmt > 0 && mintAmt <= type(uint128).max);
@@ -74,12 +70,9 @@ contract PRC20_Fuzz is Test, UpgradeableContractHelper {
         assertEq(prc20.totalSupply(), supplyBefore);
     }
 
-    function testFuzz_transfer_exactDeduction(
-        address sender,
-        address recipient,
-        uint256 mintAmt,
-        uint256 transferAmt
-    ) public {
+    function testFuzz_transfer_exactDeduction(address sender, address recipient, uint256 mintAmt, uint256 transferAmt)
+        public
+    {
         vm.assume(sender != address(0) && recipient != address(0));
         vm.assume(sender != recipient);
         vm.assume(mintAmt > 0 && mintAmt <= type(uint128).max);
@@ -115,11 +108,7 @@ contract PRC20_Fuzz is Test, UpgradeableContractHelper {
         assertEq(prc20.balanceOf(recipient), recipientBefore);
     }
 
-    function testFuzz_transfer_fullBalance(
-        address sender,
-        address recipient,
-        uint256 mintAmt
-    ) public {
+    function testFuzz_transfer_fullBalance(address sender, address recipient, uint256 mintAmt) public {
         vm.assume(sender != address(0) && recipient != address(0));
         vm.assume(sender != recipient);
         vm.assume(mintAmt > 0 && mintAmt <= type(uint128).max);
@@ -160,11 +149,7 @@ contract PRC20_Fuzz is Test, UpgradeableContractHelper {
         prc20.transfer(address(0), amount);
     }
 
-    function testFuzz_transfer_selfTransfer(
-        address sender,
-        uint256 mintAmt,
-        uint256 transferAmt
-    ) public {
+    function testFuzz_transfer_selfTransfer(address sender, uint256 mintAmt, uint256 transferAmt) public {
         vm.assume(sender != address(0));
         vm.assume(mintAmt > 0 && mintAmt <= type(uint128).max);
         vm.assume(transferAmt <= mintAmt);
@@ -312,12 +297,7 @@ contract PRC20_Fuzz is Test, UpgradeableContractHelper {
         assertEq(prc20.allowance(owner, spender), amount);
     }
 
-    function testFuzz_approve_overwrite(
-        address owner,
-        address spender,
-        uint256 amt1,
-        uint256 amt2
-    ) public {
+    function testFuzz_approve_overwrite(address owner, address spender, uint256 amt1, uint256 amt2) public {
         vm.assume(owner != address(0) && spender != address(0));
 
         vm.prank(owner);
@@ -338,11 +318,7 @@ contract PRC20_Fuzz is Test, UpgradeableContractHelper {
     // 1.4 Burn Properties
     // =========================================================================
 
-    function testFuzz_burn_reducesTotalSupply(
-        address account,
-        uint256 mintAmt,
-        uint256 burnAmt
-    ) public {
+    function testFuzz_burn_reducesTotalSupply(address account, uint256 mintAmt, uint256 burnAmt) public {
         vm.assume(account != address(0));
         vm.assume(mintAmt > 0 && mintAmt <= type(uint128).max);
         vm.assume(burnAmt > 0 && burnAmt <= mintAmt);
@@ -358,11 +334,7 @@ contract PRC20_Fuzz is Test, UpgradeableContractHelper {
         assertEq(prc20.totalSupply(), supplyBefore - burnAmt);
     }
 
-    function testFuzz_burn_reducesBalance(
-        address account,
-        uint256 mintAmt,
-        uint256 burnAmt
-    ) public {
+    function testFuzz_burn_reducesBalance(address account, uint256 mintAmt, uint256 burnAmt) public {
         vm.assume(account != address(0));
         vm.assume(mintAmt > 0 && mintAmt <= type(uint128).max);
         vm.assume(burnAmt > 0 && burnAmt <= mintAmt);
@@ -378,11 +350,7 @@ contract PRC20_Fuzz is Test, UpgradeableContractHelper {
         assertEq(prc20.balanceOf(account), balanceBefore - burnAmt);
     }
 
-    function testFuzz_burn_exceedsBalance_reverts(
-        address account,
-        uint256 mintAmt,
-        uint256 excess
-    ) public {
+    function testFuzz_burn_exceedsBalance_reverts(address account, uint256 mintAmt, uint256 excess) public {
         vm.assume(account != address(0));
         vm.assume(mintAmt > 0 && mintAmt <= type(uint128).max);
         vm.assume(excess > 0 && excess <= type(uint128).max);
@@ -449,11 +417,7 @@ contract PRC20_Fuzz is Test, UpgradeableContractHelper {
         assertEq(prc20.balanceOf(to), balanceBefore + amount);
     }
 
-    function testFuzz_deposit_unauthorizedCaller_reverts(
-        address caller,
-        address to,
-        uint256 amount
-    ) public {
+    function testFuzz_deposit_unauthorizedCaller_reverts(address caller, address to, uint256 amount) public {
         vm.assume(caller != UEXEC && caller != address(universalCore));
         vm.assume(to != address(0));
         vm.assume(amount > 0);

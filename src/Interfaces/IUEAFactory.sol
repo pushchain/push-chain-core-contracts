@@ -15,32 +15,20 @@ interface IUEAFactory {
     /// @notice                  Emitted when a new chain is registered.
     /// @param chainHash         Hash of the chain identifier
     /// @param vmHash            VM type hash for this chain
-    event ChainRegistered(
-        bytes32 indexed chainHash,
-        bytes32 vmHash
-    );
+    event ChainRegistered(bytes32 indexed chainHash, bytes32 vmHash);
 
     /// @notice                  Emitted when a new UEA is deployed.
     /// @param uea               Address of the deployed UEA
     /// @param owner             Owner key from the external chain
     /// @param sourceChainId     Source chain identifier
     /// @param chainHash         Hash of the chain identifier
-    event UEADeployed(
-        address indexed uea,
-        bytes owner,
-        string sourceChainId,
-        bytes32 chainHash
-    );
+    event UEADeployed(address indexed uea, bytes owner, string sourceChainId, bytes32 chainHash);
 
     /// @notice                  Emitted when a UEA implementation is registered.
     /// @param chainHash         Hash of the chain identifier
     /// @param ueaLogic          UEA implementation address
     /// @param vmHash            VM type hash
-    event UEARegistered(
-        bytes32 indexed chainHash,
-        address ueaLogic,
-        bytes32 vmHash
-    );
+    event UEARegistered(bytes32 indexed chainHash, address ueaLogic, bytes32 vmHash);
 
     /// @notice                  Emitted when the PAUSER_ROLE is granted to a new address.
     /// @param pauser            Address that was granted the pauser role
@@ -59,9 +47,7 @@ interface IUEAFactory {
     /// @param chainHash    Hash of the chain identifier
     /// @return vmHash      VM type hash
     /// @return isRegistered True if the chain is registered
-    function getVMType(
-        bytes32 chainHash
-    ) external view returns (bytes32 vmHash, bool isRegistered);
+    function getVMType(bytes32 chainHash) external view returns (bytes32 vmHash, bool isRegistered);
 
     /// @notice             Returns origin info for any address on Push Chain.
     /// @dev                If addr is a UEA, returns its external identity.
@@ -69,24 +55,18 @@ interface IUEAFactory {
     /// @param addr         Address to look up
     /// @return account     UniversalAccountId for the address
     /// @return isUEA       True if the address is a deployed UEA
-    function getOriginForUEA(
-        address addr
-    ) external view returns (UniversalAccountId memory account, bool isUEA);
+    function getOriginForUEA(address addr) external view returns (UniversalAccountId memory account, bool isUEA);
 
     /// @notice             Returns the UEA address and deployment status for an identity.
     /// @param id           Universal Account information
     /// @return uea         UEA address (deployed or predicted)
     /// @return isDeployed  True if the UEA has been deployed
-    function getUEAForOrigin(
-        UniversalAccountId memory id
-    ) external view returns (address uea, bool isDeployed);
+    function getUEAForOrigin(UniversalAccountId memory id) external view returns (address uea, bool isDeployed);
 
     /// @notice             Computes the deterministic UEA address before deployment.
     /// @param id           Universal Account information
     /// @return             Predicted UEA proxy address
-    function computeUEA(
-        UniversalAccountId memory id
-    ) external view returns (address);
+    function computeUEA(UniversalAccountId memory id) external view returns (address);
 
     /// @notice             Returns the current UEA migration contract address.
     /// @return             Migration contract address
@@ -99,9 +79,7 @@ interface IUEAFactory {
     /// @notice             Deploys a new UEA for an external chain user.
     /// @param id           Universal Account information
     /// @return             Address of the deployed UEA
-    function deployUEA(
-        UniversalAccountId memory id
-    ) external returns (address);
+    function deployUEA(UniversalAccountId memory id) external returns (address);
 
     // =========================
     //    UF_3: ADMIN ACTIONS
@@ -110,28 +88,17 @@ interface IUEAFactory {
     /// @notice             Registers a new chain with its VM type.
     /// @param chainHash    Hash of the chain identifier
     /// @param vmHash       VM type hash for this chain
-    function registerNewChain(
-        bytes32 chainHash,
-        bytes32 vmHash
-    ) external;
+    function registerNewChain(bytes32 chainHash, bytes32 vmHash) external;
 
     /// @notice             Registers multiple UEA implementations in a batch.
     /// @param chainHashes  Array of chain hashes
     /// @param vmHashes     Array of VM type hashes
     /// @param uea          Array of UEA implementation addresses
-    function registerMultipleUEA(
-        bytes32[] memory chainHashes,
-        bytes32[] memory vmHashes,
-        address[] memory uea
-    ) external;
+    function registerMultipleUEA(bytes32[] memory chainHashes, bytes32[] memory vmHashes, address[] memory uea) external;
 
     /// @notice             Registers a UEA implementation for a specific VM type.
     /// @param chainHash    Hash of the chain identifier
     /// @param vmHash       VM type hash
     /// @param uea          UEA implementation address
-    function registerUEA(
-        bytes32 chainHash,
-        bytes32 vmHash,
-        address uea
-    ) external;
+    function registerUEA(bytes32 chainHash, bytes32 vmHash, address uea) external;
 }

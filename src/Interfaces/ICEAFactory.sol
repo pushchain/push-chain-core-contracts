@@ -14,50 +14,32 @@ interface ICEAFactory {
     /// @notice                  Emitted when a new CEA is deployed.
     /// @param pushAccount       UEA address on Push Chain
     /// @param cea               Deployed CEA address on the external chain
-    event CEADeployed(
-        address indexed pushAccount,
-        address indexed cea
-    );
+    event CEADeployed(address indexed pushAccount, address indexed cea);
 
     /// @notice                  Emitted when the Universal Gateway is updated.
     /// @param oldGateway        Previous Universal Gateway address
     /// @param newGateway        New Universal Gateway address
-    event UniversalGatewayUpdated(
-        address indexed oldGateway,
-        address indexed newGateway
-    );
+    event UniversalGatewayUpdated(address indexed oldGateway, address indexed newGateway);
 
     /// @notice                  Emitted when the Vault address is updated.
     /// @param oldVault          Previous Vault address
     /// @param newVault          New Vault address
-    event VaultUpdated(
-        address indexed oldVault,
-        address indexed newVault
-    );
+    event VaultUpdated(address indexed oldVault, address indexed newVault);
 
     /// @notice                  Emitted when the CEA proxy implementation is updated.
     /// @param oldImpl           Previous proxy implementation address
     /// @param newImpl           New proxy implementation address
-    event CEAProxyImplementationUpdated(
-        address indexed oldImpl,
-        address indexed newImpl
-    );
+    event CEAProxyImplementationUpdated(address indexed oldImpl, address indexed newImpl);
 
     /// @notice                  Emitted when the CEA logic implementation is updated.
     /// @param oldImpl           Previous logic implementation address
     /// @param newImpl           New logic implementation address
-    event CEAImplementationUpdated(
-        address indexed oldImpl,
-        address indexed newImpl
-    );
+    event CEAImplementationUpdated(address indexed oldImpl, address indexed newImpl);
 
     /// @notice                  Emitted when the CEA migration contract is updated.
     /// @param oldContract       Previous migration contract address
     /// @param newContract       New migration contract address
-    event CEAMigrationContractUpdated(
-        address indexed oldContract,
-        address indexed newContract
-    );
+    event CEAMigrationContractUpdated(address indexed oldContract, address indexed newContract);
 
     /// @notice                  Emitted when the PAUSER_ROLE is granted to a new address.
     /// @param pauser            Address that was granted the pauser role
@@ -83,23 +65,17 @@ interface ICEAFactory {
     /// @param pushAccount  UEA address on Push Chain
     /// @return cea         CEA address (deployed or predicted via CREATE2)
     /// @return isDeployed  True if the CEA has code deployed
-    function getCEAForPushAccount(
-        address pushAccount
-    ) external view returns (address cea, bool isDeployed);
+    function getCEAForPushAccount(address pushAccount) external view returns (address cea, bool isDeployed);
 
     /// @notice             Returns the push account for a given CEA.
     /// @param cea          CEA address
     /// @return pushAccount UEA address on Push Chain
-    function getPushAccountForCEA(
-        address cea
-    ) external view returns (address pushAccount);
+    function getPushAccountForCEA(address cea) external view returns (address pushAccount);
 
     /// @notice             Computes the deterministic CEA address for a push account.
     /// @param pushAccount  UEA address on Push Chain
     /// @return cea         Predicted CEA clone address
-    function computeCEA(
-        address pushAccount
-    ) external view returns (address cea);
+    function computeCEA(address pushAccount) external view returns (address cea);
 
     /// @notice             Returns whether a given address is recognized as a CEA.
     /// @param addr         Address to check
@@ -114,7 +90,5 @@ interface ICEAFactory {
     /// @dev                Only callable by the Vault contract.
     /// @param pushAccount  UEA address on Push Chain
     /// @return cea         Deployed CEA address on the external chain
-    function deployCEA(
-        address pushAccount
-    ) external returns (address cea);
+    function deployCEA(address pushAccount) external returns (address cea);
 }

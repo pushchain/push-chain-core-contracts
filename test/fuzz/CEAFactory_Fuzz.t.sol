@@ -71,10 +71,7 @@ contract CEAFactory_FuzzTest is Test {
     }
 
     /// @dev Different pushAccounts produce different CEA addresses.
-    function testFuzz_differentPushAccounts_differentCEAs(
-        address pushAccount1,
-        address pushAccount2
-    ) public view {
+    function testFuzz_differentPushAccounts_differentCEAs(address pushAccount1, address pushAccount2) public view {
         vm.assume(pushAccount1 != address(0));
         vm.assume(pushAccount2 != address(0));
         vm.assume(pushAccount1 > address(0x10));
@@ -186,10 +183,7 @@ contract CEAFactory_FuzzTest is Test {
     // =========================================================================
 
     /// @dev Non-vault callers cannot deploy CEAs.
-    function testFuzz_deployCEA_nonVault_reverts(
-        address caller,
-        address pushAccount
-    ) public {
+    function testFuzz_deployCEA_nonVault_reverts(address caller, address pushAccount) public {
         vm.assume(caller != vault);
         vm.assume(caller != address(0));
         vm.assume(pushAccount != address(0));
@@ -201,10 +195,7 @@ contract CEAFactory_FuzzTest is Test {
     }
 
     /// @dev Non-owner callers cannot call setVault.
-    function testFuzz_setVault_nonOwner_reverts(
-        address caller,
-        address newVault
-    ) public {
+    function testFuzz_setVault_nonOwner_reverts(address caller, address newVault) public {
         vm.assume(caller != owner);
         vm.assume(caller != address(0));
         vm.assume(newVault != address(0));
@@ -218,10 +209,7 @@ contract CEAFactory_FuzzTest is Test {
     }
 
     /// @dev Non-owner callers cannot call setCEAImplementation.
-    function testFuzz_setCEAImplementation_nonOwner_reverts(
-        address caller,
-        address newImpl
-    ) public {
+    function testFuzz_setCEAImplementation_nonOwner_reverts(address caller, address newImpl) public {
         vm.assume(caller != owner);
         vm.assume(caller != address(0));
         vm.assume(newImpl != address(0));
@@ -235,10 +223,7 @@ contract CEAFactory_FuzzTest is Test {
     }
 
     /// @dev Non-owner callers cannot call setCEAMigrationContract.
-    function testFuzz_setCEAMigrationContract_nonOwner_reverts(
-        address caller,
-        address newMigration
-    ) public {
+    function testFuzz_setCEAMigrationContract_nonOwner_reverts(address caller, address newMigration) public {
         vm.assume(caller != owner);
         vm.assume(caller != address(0));
         vm.assume(newMigration != address(0));

@@ -67,16 +67,11 @@ contract UniversalCoreRefundTest is Test, UpgradeableContractHelper {
     uint256 public constant MIN_PC_OUT = 1 ether;
 
     event RefundUnusedGas(
-        address indexed gasToken,
-        uint256 amount,
-        address indexed recipient,
-        bool swapped,
-        uint256 pcOut
+        address indexed gasToken, uint256 amount, address indexed recipient, bool swapped, uint256 pcOut
     );
 
     event DepositPRC20WithAutoSwap(
-        address prc20, uint256 amountIn, address pcToken,
-        uint256 amountOut, uint24 fee, address recipient
+        address prc20, uint256 amountIn, address pcToken, uint256 amountOut, uint24 fee, address recipient
     );
 
     function setUp() public {
@@ -169,9 +164,7 @@ contract UniversalCoreRefundTest is Test, UpgradeableContractHelper {
     function test_RefundUnusedGas_InvalidTarget_Self_Reverts() public {
         vm.prank(UNIVERSAL_EXECUTOR_MODULE);
         vm.expectRevert(UniversalCoreErrors.InvalidTarget.selector);
-        universalCore.refundUnusedGas(
-            address(gasTokenMock), REFUND_AMOUNT, address(universalCore), false, 0, 0
-        );
+        universalCore.refundUnusedGas(address(gasTokenMock), REFUND_AMOUNT, address(universalCore), false, 0, 0);
     }
 
     function test_RefundUnusedGas_WithSwap_ZeroMinPCOut_Reverts() public {
@@ -228,9 +221,7 @@ contract UniversalCoreRefundTest is Test, UpgradeableContractHelper {
         uint256 expectedOut = REFUND_AMOUNT * 90 / 100; // mock router: 90% output
 
         vm.prank(UNIVERSAL_EXECUTOR_MODULE);
-        universalCore.refundUnusedGas(
-            address(gasTokenMock), REFUND_AMOUNT, recipient, true, FEE_TIER, expectedOut
-        );
+        universalCore.refundUnusedGas(address(gasTokenMock), REFUND_AMOUNT, recipient, true, FEE_TIER, expectedOut);
 
         assertEq(recipient.balance, balanceBefore + expectedOut);
     }
@@ -242,18 +233,14 @@ contract UniversalCoreRefundTest is Test, UpgradeableContractHelper {
         emit RefundUnusedGas(address(gasTokenMock), REFUND_AMOUNT, recipient, true, expectedOut);
 
         vm.prank(UNIVERSAL_EXECUTOR_MODULE);
-        universalCore.refundUnusedGas(
-            address(gasTokenMock), REFUND_AMOUNT, recipient, true, FEE_TIER, expectedOut
-        );
+        universalCore.refundUnusedGas(address(gasTokenMock), REFUND_AMOUNT, recipient, true, FEE_TIER, expectedOut);
     }
 
     function test_RefundUnusedGas_WithSwap_UsesDefaultFee() public {
         uint256 expectedOut = REFUND_AMOUNT * 90 / 100;
 
         vm.prank(UNIVERSAL_EXECUTOR_MODULE);
-        universalCore.refundUnusedGas(
-            address(gasTokenMock), REFUND_AMOUNT, recipient, true, 0, expectedOut
-        );
+        universalCore.refundUnusedGas(address(gasTokenMock), REFUND_AMOUNT, recipient, true, 0, expectedOut);
 
         assertEq(recipient.balance, expectedOut);
     }
@@ -262,9 +249,7 @@ contract UniversalCoreRefundTest is Test, UpgradeableContractHelper {
         uint256 expectedOut = REFUND_AMOUNT * 90 / 100;
 
         vm.prank(UNIVERSAL_EXECUTOR_MODULE);
-        universalCore.refundUnusedGas(
-            address(gasTokenMock), REFUND_AMOUNT, recipient, true, FEE_TIER, expectedOut
-        );
+        universalCore.refundUnusedGas(address(gasTokenMock), REFUND_AMOUNT, recipient, true, FEE_TIER, expectedOut);
 
         assertEq(recipient.balance, expectedOut);
     }
@@ -279,9 +264,7 @@ contract UniversalCoreRefundTest is Test, UpgradeableContractHelper {
         uint256 expectedOut = amount * 90 / 100;
 
         vm.prank(UNIVERSAL_EXECUTOR_MODULE);
-        universalCore.depositPRC20WithAutoSwap(
-            address(gasTokenMock), amount, target, FEE_TIER, expectedOut, 0
-        );
+        universalCore.depositPRC20WithAutoSwap(address(gasTokenMock), amount, target, FEE_TIER, expectedOut, 0);
 
         assertEq(target.balance, expectedOut);
     }
@@ -292,14 +275,10 @@ contract UniversalCoreRefundTest is Test, UpgradeableContractHelper {
         uint256 expectedOut = amount * 90 / 100;
 
         vm.expectEmit(false, false, false, true);
-        emit DepositPRC20WithAutoSwap(
-            address(gasTokenMock), amount, address(mockWPC), expectedOut, FEE_TIER, target
-        );
+        emit DepositPRC20WithAutoSwap(address(gasTokenMock), amount, address(mockWPC), expectedOut, FEE_TIER, target);
 
         // Pass fee=0 so it resolves to default FEE_TIER
         vm.prank(UNIVERSAL_EXECUTOR_MODULE);
-        universalCore.depositPRC20WithAutoSwap(
-            address(gasTokenMock), amount, target, 0, expectedOut, 0
-        );
+        universalCore.depositPRC20WithAutoSwap(address(gasTokenMock), amount, target, 0, expectedOut, 0);
     }
 }

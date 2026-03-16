@@ -31,8 +31,7 @@ contract CEAMigration {
     /// @dev Storage slot for the implementation address.
     ///      MUST match CEAProxy.CEA_LOGIC_SLOT exactly.
     ///      bytes32(uint256(keccak256("cea.proxy.implementation")) - 1)
-    bytes32 private constant CEA_LOGIC_SLOT =
-        0x8b2ae8ee8c8678fc65d38e03fd33865426627999aa5e8fab985583dec5888813;
+    bytes32 private constant CEA_LOGIC_SLOT = 0x8b2ae8ee8c8678fc65d38e03fd33865426627999aa5e8fab985583dec5888813;
 
     // =========================
     //    CM: EVENTS

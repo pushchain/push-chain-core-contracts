@@ -92,11 +92,8 @@ contract CEAFactory is Initializable, AccessControlUpgradeable, PausableUpgradea
         address universalGateway
     ) external initializer {
         if (
-            initialAdmin == address(0)
-                || initialPauser == address(0)
-                || initialVault == address(0)
-                || ceaProxyImplementation == address(0)
-                || ceaImplementation == address(0)
+            initialAdmin == address(0) || initialPauser == address(0) || initialVault == address(0)
+                || ceaProxyImplementation == address(0) || ceaImplementation == address(0)
                 || universalGateway == address(0)
         ) {
             revert CEAErrors.ZeroAddress();
@@ -120,9 +117,7 @@ contract CEAFactory is Initializable, AccessControlUpgradeable, PausableUpgradea
     // =========================
 
     /// @inheritdoc ICEAFactory
-    function getCEAForPushAccount(
-        address pushAccount
-    ) external view override returns (address cea, bool isDeployed) {
+    function getCEAForPushAccount(address pushAccount) external view override returns (address cea, bool isDeployed) {
         address mapped = pushAccountToCEA[pushAccount];
 
         if (mapped != address(0)) {
@@ -135,23 +130,17 @@ contract CEAFactory is Initializable, AccessControlUpgradeable, PausableUpgradea
     }
 
     /// @inheritdoc ICEAFactory
-    function computeCEA(
-        address pushAccount
-    ) external view override returns (address cea) {
+    function computeCEA(address pushAccount) external view override returns (address cea) {
         return _computeCEAInternal(pushAccount);
     }
 
     /// @inheritdoc ICEAFactory
-    function isCEA(
-        address addr
-    ) external view override returns (bool isCea) {
+    function isCEA(address addr) external view override returns (bool isCea) {
         return ceaToPushAccount[addr] != address(0);
     }
 
     /// @inheritdoc ICEAFactory
-    function getPushAccountForCEA(
-        address cea
-    ) external view override returns (address pushAccount) {
+    function getPushAccountForCEA(address cea) external view override returns (address pushAccount) {
         return ceaToPushAccount[cea];
     }
 
@@ -160,14 +149,9 @@ contract CEAFactory is Initializable, AccessControlUpgradeable, PausableUpgradea
     // =========================
 
     /// @inheritdoc ICEAFactory
-    function deployCEA(
-        address pushAccount
-    ) external override onlyVault whenNotPaused returns (address cea) {
+    function deployCEA(address pushAccount) external override onlyVault whenNotPaused returns (address cea) {
         if (pushAccount == address(0)) revert CEAErrors.ZeroAddress();
-        if (
-            CEA_PROXY_IMPLEMENTATION == address(0)
-                || CEA_IMPLEMENTATION == address(0)
-        ) {
+        if (CEA_PROXY_IMPLEMENTATION == address(0) || CEA_IMPLEMENTATION == address(0)) {
             revert CEAErrors.InvalidImplementation();
         }
         if (UNIVERSAL_GATEWAY == address(0)) {
@@ -185,9 +169,7 @@ contract CEAFactory is Initializable, AccessControlUpgradeable, PausableUpgradea
 
         ICEAProxy(cea).initializeCEAProxy(CEA_IMPLEMENTATION);
 
-        ICEA(cea).initializeCEA(
-            pushAccount, VAULT, UNIVERSAL_GATEWAY, address(this)
-        );
+        ICEA(cea).initializeCEA(pushAccount, VAULT, UNIVERSAL_GATEWAY, address(this));
 
         pushAccountToCEA[pushAccount] = cea;
         ceaToPushAccount[cea] = pushAccount;
@@ -228,9 +210,7 @@ contract CEAFactory is Initializable, AccessControlUpgradeable, PausableUpgradea
 
     /// @notice                    Sets the CEA proxy implementation (CEAProxy template).
     /// @param newImplementation   New CEA proxy implementation address
-    function setCEAProxyImplementation(
-        address newImplementation
-    ) external onlyRole(DEFAULT_ADMIN_ROLE) {
+    function setCEAProxyImplementation(address newImplementation) external onlyRole(DEFAULT_ADMIN_ROLE) {
         if (newImplementation == address(0)) revert CEAErrors.ZeroAddress();
         address old = CEA_PROXY_IMPLEMENTATION;
         CEA_PROXY_IMPLEMENTATION = newImplementation;
@@ -239,9 +219,7 @@ contract CEAFactory is Initializable, AccessControlUpgradeable, PausableUpgradea
 
     /// @notice                    Sets the CEA logic implementation.
     /// @param newImplementation   New CEA logic implementation address
-    function setCEAImplementation(
-        address newImplementation
-    ) external onlyRole(DEFAULT_ADMIN_ROLE) {
+    function setCEAImplementation(address newImplementation) external onlyRole(DEFAULT_ADMIN_ROLE) {
         if (newImplementation == address(0)) revert CEAErrors.ZeroAddress();
         address old = CEA_IMPLEMENTATION;
         CEA_IMPLEMENTATION = newImplementation;
@@ -250,9 +228,7 @@ contract CEAFactory is Initializable, AccessControlUpgradeable, PausableUpgradea
 
     /// @notice          Sets the Universal Gateway address. Only callable by DEFAULT_ADMIN_ROLE.
     /// @param newUG     New Universal Gateway address
-    function setUniversalGateway(
-        address newUG
-    ) external onlyRole(DEFAULT_ADMIN_ROLE) {
+    function setUniversalGateway(address newUG) external onlyRole(DEFAULT_ADMIN_ROLE) {
         if (newUG == address(0)) revert CEAErrors.ZeroAddress();
         address old = UNIVERSAL_GATEWAY;
         UNIVERSAL_GATEWAY = newUG;
@@ -261,9 +237,7 @@ contract CEAFactory is Initializable, AccessControlUpgradeable, PausableUpgradea
 
     /// @notice                       Sets the CEA migration contract address.
     /// @param newMigrationContract   Address of the new migration contract
-    function setCEAMigrationContract(
-        address newMigrationContract
-    ) external onlyRole(DEFAULT_ADMIN_ROLE) {
+    function setCEAMigrationContract(address newMigrationContract) external onlyRole(DEFAULT_ADMIN_ROLE) {
         if (newMigrationContract == address(0)) revert CEAErrors.ZeroAddress();
         address old = CEA_MIGRATION_CONTRACT;
         CEA_MIGRATION_CONTRACT = newMigrationContract;
@@ -277,23 +251,18 @@ contract CEAFactory is Initializable, AccessControlUpgradeable, PausableUpgradea
     /// @dev Computes the deterministic CEA address for a push account.
     /// @param pushAccount   UEA address on Push Chain
     /// @return              Predicted CEA clone address
-    function _computeCEAInternal(
-        address pushAccount
-    ) internal view returns (address) {
+    function _computeCEAInternal(address pushAccount) internal view returns (address) {
         if (CEA_PROXY_IMPLEMENTATION == address(0)) {
             revert CEAErrors.InvalidImplementation();
         }
         bytes32 salt = _generateSalt(pushAccount);
-        return CEA_PROXY_IMPLEMENTATION
-            .predictDeterministicAddress(salt, address(this));
+        return CEA_PROXY_IMPLEMENTATION.predictDeterministicAddress(salt, address(this));
     }
 
     /// @dev Generates CREATE2 salt from push account.
     /// @param pushAccount   UEA address on Push Chain
     /// @return              Salt for deterministic deployment
-    function _generateSalt(
-        address pushAccount
-    ) internal pure returns (bytes32) {
+    function _generateSalt(address pushAccount) internal pure returns (bytes32) {
         return keccak256(abi.encode(pushAccount));
     }
 

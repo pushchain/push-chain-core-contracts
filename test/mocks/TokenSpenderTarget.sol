@@ -21,19 +21,15 @@ contract TokenSpenderTarget {
     }
 
     // Function that spends tokens and executes custom logic
-    function spendTokensAndExecute(
-        address token,
-        uint256 amount,
-        bytes calldata payload
-    ) external {
+    function spendTokensAndExecute(address token, uint256 amount, bytes calldata payload) external {
         require(IERC20(token).transferFrom(msg.sender, address(this), amount), "TransferFrom failed");
         totalReceived[token] += amount;
-        
+
         if (payload.length > 0) {
-            (bool success, ) = address(this).call(payload);
+            (bool success,) = address(this).call(payload);
             require(success, "Payload execution failed");
         }
-        
+
         magicNumber = amount;
     }
 

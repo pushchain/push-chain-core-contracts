@@ -11,9 +11,9 @@ interface IPRC20 {
 
     /// @notice Token classification for provenance.
     enum TokenType {
-        PC,       // Push Chain native PC-origin asset
-        NATIVE,   // Native coin of the source chain (e.g., ETH on Ethereum)
-        ERC20     // ERC-20-origin asset on the source chain
+        PC, // Push Chain native PC-origin asset
+        NATIVE, // Native coin of the source chain (e.g., ETH on Ethereum)
+        ERC20 // ERC-20-origin asset on the source chain
     }
 
     // =========================
@@ -22,12 +22,8 @@ interface IPRC20 {
 
     event UpdatedUniversalCore(address universalCore);
     event Deposit(bytes from, address to, uint256 amount);
-    event Transfer(
-        address indexed from, address indexed to, uint256 value
-    );
-    event Approval(
-        address indexed owner, address indexed spender, uint256 value
-    );
+    event Transfer(address indexed from, address indexed to, uint256 value);
+    event Approval(address indexed owner, address indexed spender, uint256 value);
 
     // =========================
     //    PRC20_1: ERC-20 METADATA
@@ -66,39 +62,26 @@ interface IPRC20 {
     /// @param owner        Owner address
     /// @param spender      Spender address
     /// @return             Allowance amount
-    function allowance(
-        address owner,
-        address spender
-    ) external view returns (uint256);
+    function allowance(address owner, address spender) external view returns (uint256);
 
     /// @notice             Approve spender to transfer tokens on behalf of caller.
     /// @param spender      Spender address
     /// @param amount       Amount to approve
     /// @return             Success status
-    function approve(
-        address spender,
-        uint256 amount
-    ) external returns (bool);
+    function approve(address spender, uint256 amount) external returns (bool);
 
     /// @notice             Transfer tokens to recipient.
     /// @param recipient    Recipient address
     /// @param amount       Amount to transfer
     /// @return             Success status
-    function transfer(
-        address recipient,
-        uint256 amount
-    ) external returns (bool);
+    function transfer(address recipient, uint256 amount) external returns (bool);
 
     /// @notice             Transfer tokens using allowance.
     /// @param sender       Source address
     /// @param recipient    Destination address
     /// @param amount       Amount to transfer
     /// @return             Success status
-    function transferFrom(
-        address sender,
-        address recipient,
-        uint256 amount
-    ) external returns (bool);
+    function transferFrom(address sender, address recipient, uint256 amount) external returns (bool);
 
     /// @notice             Burn caller's tokens.
     /// @param amount       Amount to burn
@@ -113,8 +96,5 @@ interface IPRC20 {
     /// @param to           Recipient on Push EVM
     /// @param amount       Amount to mint
     /// @return             Success status
-    function deposit(
-        address to,
-        uint256 amount
-    ) external returns (bool);
+    function deposit(address to, uint256 amount) external returns (bool);
 }

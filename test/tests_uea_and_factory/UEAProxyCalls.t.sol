@@ -13,11 +13,7 @@ import {UEAErrors as Errors} from "../../src/libraries/Errors.sol";
 import {IUEA} from "../../src/interfaces/IUEA.sol";
 import {ERC1967Proxy} from "@openzeppelin/contracts/proxy/ERC1967/ERC1967Proxy.sol";
 import {UEAProxy} from "../../src/uea/UEAProxy.sol";
-import {
-    UniversalAccountId,
-    UniversalPayload,
-    UNIVERSAL_PAYLOAD_TYPEHASH
-} from "../../src/libraries/Types.sol";
+import {UniversalAccountId, UniversalPayload, UNIVERSAL_PAYLOAD_TYPEHASH} from "../../src/libraries/Types.sol";
 
 contract ProxyCallTest is Test {
     Target target;

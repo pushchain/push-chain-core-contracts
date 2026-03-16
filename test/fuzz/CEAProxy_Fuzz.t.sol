@@ -24,10 +24,7 @@ contract CEAProxy_FuzzTest is Test {
     }
 
     /// @dev Second call to initializeCEAProxy always reverts (OZ Initializable).
-    function testFuzz_initializeCEAProxy_secondCall_reverts(
-        address logic1,
-        address logic2
-    ) public {
+    function testFuzz_initializeCEAProxy_secondCall_reverts(address logic1, address logic2) public {
         vm.assume(logic1 != address(0));
         vm.assume(logic1 > address(0x10));
         vm.assume(logic2 != address(0));

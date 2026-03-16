@@ -78,7 +78,7 @@ contract CEAFactory_MigrationTest is Test {
 
     function test_setCEAMigrationContract_NonOwner() public {
         vm.prank(nonOwner);
-        vm.expectRevert();  // OwnableUnauthorizedAccount
+        vm.expectRevert(); // OwnableUnauthorizedAccount
         factory.setCEAMigrationContract(address(migration));
     }
 

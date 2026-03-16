@@ -16,8 +16,7 @@ import {ERC1967Proxy} from "@openzeppelin/contracts/proxy/ERC1967/ERC1967Proxy.s
 /// @dev Helper that performs delegatecall to a migration contract.
 ///      Used to test migration execution in a proxy-like context.
 contract DelegatecallProxy {
-    bytes32 private constant UEA_LOGIC_SLOT =
-        0x868a771a75a4aa6c2be13e9a9617cb8ea240ed84a3a90c8469537393ec3e115d;
+    bytes32 private constant UEA_LOGIC_SLOT = 0x868a771a75a4aa6c2be13e9a9617cb8ea240ed84a3a90c8469537393ec3e115d;
 
     function delegateToMigrateEVM(address migration) external returns (bool success) {
         bytes memory callData = abi.encodeWithSignature("migrateUEAEVM()");
@@ -42,8 +41,7 @@ contract UEAMigration_FuzzTest is Test {
     UEA_SVM ueaSVMImpl;
     UEAMigration migration;
 
-    bytes32 private constant UEA_LOGIC_SLOT =
-        0x868a771a75a4aa6c2be13e9a9617cb8ea240ed84a3a90c8469537393ec3e115d;
+    bytes32 private constant UEA_LOGIC_SLOT = 0x868a771a75a4aa6c2be13e9a9617cb8ea240ed84a3a90c8469537393ec3e115d;
 
     function setUp() public {
         ueaEVMImpl = new UEA_EVM();
@@ -101,12 +99,20 @@ contract UEAMigration_FuzzTest is Test {
     // 7.3 Constructor validation
     // =========================================================================
 
-    function testFuzz_constructor_zeroEVM_reverts(address /* svmImpl */) public {
+    function testFuzz_constructor_zeroEVM_reverts(
+        address /* svmImpl */
+    )
+        public
+    {
         vm.expectRevert(UEAErrors.InvalidInputArgs.selector);
         new UEAMigration(address(0), address(ueaSVMImpl));
     }
 
-    function testFuzz_constructor_zeroSVM_reverts(address /* evmImpl */) public {
+    function testFuzz_constructor_zeroSVM_reverts(
+        address /* evmImpl */
+    )
+        public
+    {
         vm.expectRevert(UEAErrors.InvalidInputArgs.selector);
         new UEAMigration(address(ueaEVMImpl), address(0));
     }

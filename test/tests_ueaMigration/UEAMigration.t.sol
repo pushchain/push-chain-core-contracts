@@ -81,6 +81,7 @@ contract UEAMigrationTest is BaseTest {
         vm.expectRevert(Errors.InvalidInputArgs.selector);
         new UEAMigration(address(ueaEVMImplV1), nonOwner);
     }
+
     // Constructor edge cases
 
     /**
@@ -105,6 +106,7 @@ contract UEAMigrationTest is BaseTest {
         assertEq(newMigration.UEA_EVM_IMPLEMENTATION(), address(ueaEVMImplV1), "EVM implementation should match input");
         assertEq(newMigration.UEA_SVM_IMPLEMENTATION(), address(ueaSVMImplV1), "SVM implementation should match input");
     }
+
     // OnlyDelegateCall Modifier Tests
 
     /**
@@ -152,7 +154,7 @@ contract UEAMigrationTest is BaseTest {
             deadline: migrationPayload.deadline,
             vType: VerificationType(0)
         });
-        
+
         // Get the payload hash using getUniversalPayloadHash
         bytes32 payloadHash = UEA_EVM(payable(address(ueaProxy))).getUniversalPayloadHash(universalPayload);
 
@@ -289,7 +291,7 @@ contract UEAMigrationTest is BaseTest {
             deadline: migrationPayload.deadline,
             vType: VerificationType(0)
         });
-        
+
         // Get the payload hash using getUniversalPayloadHash
         bytes32 payloadHash = UEA_EVM(payable(address(ueaProxy))).getUniversalPayloadHash(universalPayload);
 
@@ -344,7 +346,7 @@ contract UEAMigrationTest is BaseTest {
             deadline: migrationPayload.deadline,
             vType: VerificationType(0)
         });
-        
+
         // Get the payload hash using getUniversalPayloadHash
         bytes32 payloadHash = UEA_EVM(payable(address(ueaProxy))).getUniversalPayloadHash(universalPayload);
 
@@ -388,7 +390,7 @@ contract UEAMigrationTest is BaseTest {
             deadline: migrationPayload.deadline,
             vType: VerificationType(0)
         });
-        
+
         bytes32 payloadHash = UEA_EVM(payable(address(ueaProxy))).getUniversalPayloadHash(universalPayload);
 
         (uint8 v, bytes32 r, bytes32 s) = vm.sign(ownerPK, payloadHash);

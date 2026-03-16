@@ -34,12 +34,7 @@ contract UniversalCore_Fuzz is Test, UpgradeableContractHelper {
 
         UniversalCore impl = new UniversalCore();
         bytes memory initData = abi.encodeWithSelector(
-            UniversalCore.initialize.selector,
-            mockWPC,
-            mockFactory,
-            mockRouter,
-            mockQuoter,
-            pauser
+            UniversalCore.initialize.selector, mockWPC, mockFactory, mockRouter, mockQuoter, pauser
         );
         address proxyAddr = deployUpgradeableContract(address(impl), initData);
         universalCore = UniversalCore(payable(proxyAddr));
@@ -77,11 +72,9 @@ contract UniversalCore_Fuzz is Test, UpgradeableContractHelper {
     // 12.1 Gas Fee Calculation Properties
     // =============================================
 
-    function testFuzz_getOutboundTxGasAndFees_calculatesCorrectly(
-        uint128 gasPrice,
-        uint128 gasLimit,
-        uint128 baseLimit
-    ) public {
+    function testFuzz_getOutboundTxGasAndFees_calculatesCorrectly(uint128 gasPrice, uint128 gasLimit, uint128 baseLimit)
+        public
+    {
         vm.assume(gasPrice > 0);
         vm.assume(baseLimit > 0);
         vm.assume(gasLimit >= baseLimit);
@@ -97,10 +90,7 @@ contract UniversalCore_Fuzz is Test, UpgradeableContractHelper {
         assertEq(gasFee, uint256(gasPrice) * uint256(gasLimit));
     }
 
-    function testFuzz_getOutboundTxGasAndFees_zeroGasLimit_usesBase(
-        uint128 gasPrice,
-        uint128 baseLimit
-    ) public {
+    function testFuzz_getOutboundTxGasAndFees_zeroGasLimit_usesBase(uint128 gasPrice, uint128 baseLimit) public {
         vm.assume(gasPrice > 0);
         vm.assume(baseLimit > 0);
 
@@ -116,19 +106,14 @@ contract UniversalCore_Fuzz is Test, UpgradeableContractHelper {
         assertEq(gasFee, uint256(gasPrice) * uint256(baseLimit));
     }
 
-    function testFuzz_getOutboundTxGasAndFees_belowBase_reverts(
-        uint128 baseLimit,
-        uint128 provided
-    ) public {
+    function testFuzz_getOutboundTxGasAndFees_belowBase_reverts(uint128 baseLimit, uint128 provided) public {
         vm.assume(baseLimit > 1);
         vm.assume(provided > 0 && provided < baseLimit);
 
         vm.prank(uExec);
         universalCore.setBaseGasLimitByChain(CHAIN_NS, baseLimit);
 
-        vm.expectRevert(
-            abi.encodeWithSelector(UniversalCoreErrors.GasLimitBelowBase.selector, provided, baseLimit)
-        );
+        vm.expectRevert(abi.encodeWithSelector(UniversalCoreErrors.GasLimitBelowBase.selector, provided, baseLimit));
         universalCore.getOutboundTxGasAndFees(address(prc20), provided);
     }
 
@@ -173,10 +158,7 @@ contract UniversalCore_Fuzz is Test, UpgradeableContractHelper {
     // 12.2 Rescue Gas Limit Properties
     // =============================================
 
-    function testFuzz_getRescueFundsGasLimit_calculatesCorrectly(
-        uint128 gasPrice,
-        uint128 rescueLimit
-    ) public {
+    function testFuzz_getRescueFundsGasLimit_calculatesCorrectly(uint128 gasPrice, uint128 rescueLimit) public {
         vm.assume(gasPrice > 0);
         vm.assume(rescueLimit > 0);
 
@@ -331,11 +313,7 @@ contract UniversalCore_Fuzz is Test, UpgradeableContractHelper {
         universalCore.swapAndBurnGas{value: 0}(address(gasToken), 3000, 1, 0, address(this));
     }
 
-    function testFuzz_setProtocolFeeByToken_nonManager_reverts(
-        address caller,
-        address token,
-        uint256 fee
-    ) public {
+    function testFuzz_setProtocolFeeByToken_nonManager_reverts(address caller, address token, uint256 fee) public {
         vm.assume(caller != uExec);
         // Cache role before prank — external calls inside vm.expectRevert would consume the prank
         bytes32 managerRole = universalCore.MANAGER_ROLE();
@@ -343,11 +321,7 @@ contract UniversalCore_Fuzz is Test, UpgradeableContractHelper {
 
         vm.prank(caller);
         vm.expectRevert(
-            abi.encodeWithSelector(
-                IAccessControl.AccessControlUnauthorizedAccount.selector,
-                caller,
-                managerRole
-            )
+            abi.encodeWithSelector(IAccessControl.AccessControlUnauthorizedAccount.selector, caller, managerRole)
         );
         universalCore.setProtocolFeeByToken(token, fee);
     }
@@ -367,19 +341,13 @@ contract UniversalCore_Fuzz is Test, UpgradeableContractHelper {
         vm.assume(!universalCore.hasRole(pauserRole, caller));
 
         vm.expectRevert(
-            abi.encodeWithSelector(
-                IAccessControl.AccessControlUnauthorizedAccount.selector, caller, pauserRole
-            )
+            abi.encodeWithSelector(IAccessControl.AccessControlUnauthorizedAccount.selector, caller, pauserRole)
         );
         vm.prank(caller);
         universalCore.pause();
     }
 
-    function testFuzz_depositPRC20Token_whenPaused_reverts(
-        address token,
-        uint128 amount,
-        address recipient
-    ) public {
+    function testFuzz_depositPRC20Token_whenPaused_reverts(address token, uint128 amount, address recipient) public {
         // Pauser pauses
         vm.prank(pauser);
         universalCore.pause();
@@ -403,11 +371,7 @@ contract UniversalCore_Fuzz is Test, UpgradeableContractHelper {
         universalCore.setUniversalGatewayPC(address(0));
     }
 
-    function testFuzz_setUniswapV3Addresses_anyZero_reverts(
-        address f,
-        address r,
-        address q
-    ) public {
+    function testFuzz_setUniswapV3Addresses_anyZero_reverts(address f, address r, address q) public {
         bool anyZero = f == address(0) || r == address(0) || q == address(0);
 
         if (anyZero) {

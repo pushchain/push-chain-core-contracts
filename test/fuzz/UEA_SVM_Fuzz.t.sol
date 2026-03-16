@@ -26,11 +26,9 @@ contract UEA_SVM_FuzzTest is Test {
     bytes32 constant EVM_HASH = keccak256("EVM");
     bytes32 constant SVM_HASH = keccak256("SVM");
 
-    address constant UNIVERSAL_EXECUTOR_MODULE =
-        0x14191Ea54B4c176fCf86f51b0FAc7CB1E71Df7d7;
+    address constant UNIVERSAL_EXECUTOR_MODULE = 0x14191Ea54B4c176fCf86f51b0FAc7CB1E71Df7d7;
 
-    address constant VERIFIER_PRECOMPILE =
-        0x00000000000000000000000000000000000000ca;
+    address constant VERIFIER_PRECOMPILE = 0x00000000000000000000000000000000000000ca;
 
     // SVM owner: 32-byte public key
     bytes svmOwnerBytes;
@@ -63,21 +61,17 @@ contract UEA_SVM_FuzzTest is Test {
         svmOwnerBytes = abi.encodePacked(bytes32(uint256(0xdeadbeef)));
 
         // Deploy an SVM UEA
-        UniversalAccountId memory svmId = UniversalAccountId({
-            chainNamespace: "solana",
-            chainId: "mainnet",
-            owner: svmOwnerBytes
-        });
+        UniversalAccountId memory svmId =
+            UniversalAccountId({chainNamespace: "solana", chainId: "mainnet", owner: svmOwnerBytes});
         address svmAddr = factory.deployUEA(svmId);
         svmSmartAccountInstance = UEA_SVM(payable(svmAddr));
     }
 
-    function _buildPayload(
-        address to,
-        uint256 value,
-        bytes memory data,
-        uint256 deadline
-    ) internal pure returns (UniversalPayload memory) {
+    function _buildPayload(address to, uint256 value, bytes memory data, uint256 deadline)
+        internal
+        pure
+        returns (UniversalPayload memory)
+    {
         return UniversalPayload({
             to: to,
             value: value,
@@ -95,19 +89,13 @@ contract UEA_SVM_FuzzTest is Test {
     // 4.1 Domain separator uses string chainId (not uint256 conversion)
     // =========================================================================
 
-    function testFuzz_svmDomainSeparator_usesStringChainId(
-        string calldata chainId
-    ) public {
+    function testFuzz_svmDomainSeparator_usesStringChainId(string calldata chainId) public {
         vm.assume(bytes(chainId).length > 0 && bytes(chainId).length < 64);
 
         // Deploy fresh SVM impl with a string chainId
         UEA_SVM freshSVM = new UEA_SVM();
         bytes memory ownerB = abi.encodePacked(bytes32(uint256(0xabcd)));
-        UniversalAccountId memory id = UniversalAccountId({
-            chainNamespace: "solana",
-            chainId: chainId,
-            owner: ownerB
-        });
+        UniversalAccountId memory id = UniversalAccountId({chainNamespace: "solana", chainId: chainId, owner: ownerB});
         freshSVM.initialize(id, address(factory));
 
         bytes32 ds = freshSVM.domainSeparator();
@@ -120,11 +108,8 @@ contract UEA_SVM_FuzzTest is Test {
         // Verify that a different chainId produces a different domain separator
         string memory differentChainId = string(abi.encodePacked(chainId, "x"));
         UEA_SVM otherSVM = new UEA_SVM();
-        UniversalAccountId memory otherId = UniversalAccountId({
-            chainNamespace: "solana",
-            chainId: differentChainId,
-            owner: ownerB
-        });
+        UniversalAccountId memory otherId =
+            UniversalAccountId({chainNamespace: "solana", chainId: differentChainId, owner: ownerB});
         otherSVM.initialize(otherId, address(factory));
 
         bytes32 dsOther = otherSVM.domainSeparator();
@@ -135,9 +120,7 @@ contract UEA_SVM_FuzzTest is Test {
     // 4.2 Invalid signature length behavior
     // =========================================================================
 
-    function testFuzz_svmSignature_invalidLength_reverts(
-        bytes calldata signature
-    ) public {
+    function testFuzz_svmSignature_invalidLength_reverts(bytes calldata signature) public {
         vm.assume(signature.length != 64);
 
         UniversalPayload memory payload = _buildPayload(address(target), 0, "", 0);
@@ -147,12 +130,7 @@ contract UEA_SVM_FuzzTest is Test {
         // Mock the precompile to return failure (staticcall fails)
         vm.mockCallRevert(
             VERIFIER_PRECOMPILE,
-            abi.encodeWithSignature(
-                "verifyEd25519(bytes,bytes32,bytes)",
-                svmOwnerBytes,
-                h,
-                signature
-            ),
+            abi.encodeWithSignature("verifyEd25519(bytes,bytes32,bytes)", svmOwnerBytes, h, signature),
             "precompile failed"
         );
 
@@ -164,11 +142,7 @@ contract UEA_SVM_FuzzTest is Test {
     // 4.3 Payload hash matches EVM (same typehash)
     // =========================================================================
 
-    function testFuzz_svmPayloadHash_matchesEvm(
-        address toAddr,
-        uint256 value,
-        uint256 deadline
-    ) public {
+    function testFuzz_svmPayloadHash_matchesEvm(address toAddr, uint256 value, uint256 deadline) public {
         // Deploy matching EVM UEA with same chain namespace/id structure
         // The hash uses UNIVERSAL_PAYLOAD_TYPEHASH in both — verify they use the same constant
 
@@ -197,9 +171,7 @@ contract UEA_SVM_FuzzTest is Test {
     // 4.4 Nonce increments on execution (via UNIVERSAL_EXECUTOR_MODULE bypass)
     // =========================================================================
 
-    function testFuzz_svm_nonce_incrementsOnExecution(
-        uint256 magicNum
-    ) public {
+    function testFuzz_svm_nonce_incrementsOnExecution(uint256 magicNum) public {
         magicNum = bound(magicNum, 1, type(uint128).max);
         uint256 nonceBefore = svmSmartAccountInstance.nonce();
 
@@ -218,9 +190,7 @@ contract UEA_SVM_FuzzTest is Test {
     // 4.5 Deadline past timestamp reverts
     // =========================================================================
 
-    function testFuzz_svm_deadline_pastTimestamp_reverts(
-        uint256 pastOffset
-    ) public {
+    function testFuzz_svm_deadline_pastTimestamp_reverts(uint256 pastOffset) public {
         pastOffset = bound(pastOffset, 1, 365 days);
 
         // Warp forward then set a past deadline
@@ -238,10 +208,7 @@ contract UEA_SVM_FuzzTest is Test {
     // 4.6 Selector detection: multicall (same logic as EVM)
     // =========================================================================
 
-    function testFuzz_svm_selectorDetection_multicall(
-        bytes4 selector,
-        bytes calldata extra
-    ) public {
+    function testFuzz_svm_selectorDetection_multicall(bytes4 selector, bytes calldata extra) public {
         vm.assume(selector != MULTICALL_SELECTOR);
         vm.assume(selector != MIGRATION_SELECTOR);
 
@@ -258,13 +225,11 @@ contract UEA_SVM_FuzzTest is Test {
     // 4.7 Selector detection: migration (same logic as EVM)
     // =========================================================================
 
-    function testFuzz_svm_selectorDetection_migration(
-        bytes calldata extra
-    ) public {
+    function testFuzz_svm_selectorDetection_migration(bytes calldata extra) public {
         // MIGRATION_SELECTOR with extra bytes but targeting wrong address => InvalidCall
         bytes memory data = abi.encodePacked(MIGRATION_SELECTOR, extra);
         UniversalPayload memory payload = _buildPayload(
-            address(target),  // not self
+            address(target), // not self
             0,
             data,
             0
