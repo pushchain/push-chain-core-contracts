@@ -7,6 +7,7 @@ import "forge-std/console.sol";
 import "../../src/cea/CEA.sol";
 import "../../src/cea/CEAFactory.sol";
 import {ICEAFactory} from "../../src/interfaces/ICEAFactory.sol";
+import {CEAErrors} from "../../src/libraries/Errors.sol";
 import {CEAProxy} from "../../src/cea/CEAProxy.sol";
 import "../../src/cea/CEAMigration.sol";
 import {ERC1967Proxy} from "@openzeppelin/contracts/proxy/ERC1967/ERC1967Proxy.sol";
@@ -71,7 +72,7 @@ contract CEAFactory_MigrationTest is Test {
     }
 
     function test_setCEAMigrationContract_ZeroAddress() public {
-        vm.expectRevert(abi.encodeWithSelector(CEAFactory.ZeroAddress.selector));
+        vm.expectRevert(abi.encodeWithSelector(CEAErrors.ZeroAddress.selector));
         factory.setCEAMigrationContract(address(0));
     }
 

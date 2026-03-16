@@ -7,6 +7,7 @@ import {CEA} from "../../src/cea/CEA.sol";
 import {CEAFactory} from "../../src/cea/CEAFactory.sol";
 import {CEAProxy} from "../../src/cea/CEAProxy.sol";
 import {ICEA} from "../../src/interfaces/ICEA.sol";
+import {CEAErrors} from "../../src/libraries/Errors.sol";
 import {MockUniversalGateway} from "../mocks/MockUniversalGateway.sol";
 import {ERC1967Proxy} from "@openzeppelin/contracts/proxy/ERC1967/ERC1967Proxy.sol";
 import {IAccessControl} from "@openzeppelin/contracts/access/IAccessControl.sol";
@@ -109,7 +110,7 @@ contract CEAFactory_FuzzTest is Test {
         vm.prank(vault);
         factory.deployCEA(pushAccount);
 
-        vm.expectRevert(CEAFactory.CEAAlreadyDeployed.selector);
+        vm.expectRevert(CEAErrors.CEAAlreadyDeployed.selector);
         vm.prank(vault);
         factory.deployCEA(pushAccount);
     }
@@ -128,7 +129,7 @@ contract CEAFactory_FuzzTest is Test {
 
     /// @dev deployCEA(address(0)) reverts with ZeroAddress.
     function testFuzz_deployCEA_zeroAddress_reverts() public {
-        vm.expectRevert(CEAFactory.ZeroAddress.selector);
+        vm.expectRevert(CEAErrors.ZeroAddress.selector);
         vm.prank(vault);
         factory.deployCEA(address(0));
     }
@@ -194,7 +195,7 @@ contract CEAFactory_FuzzTest is Test {
         vm.assume(pushAccount != address(0));
         vm.assume(pushAccount > address(0x10));
 
-        vm.expectRevert(CEAFactory.NotVault.selector);
+        vm.expectRevert(CEAErrors.NotVault.selector);
         vm.prank(caller);
         factory.deployCEA(pushAccount);
     }
@@ -256,25 +257,25 @@ contract CEAFactory_FuzzTest is Test {
 
     /// @dev setVault(address(0)) reverts with ZeroAddress.
     function testFuzz_setVault_zeroAddress_reverts() public {
-        vm.expectRevert(CEAFactory.ZeroAddress.selector);
+        vm.expectRevert(CEAErrors.ZeroAddress.selector);
         factory.setVault(address(0));
     }
 
     /// @dev setCEAProxyImplementation(address(0)) reverts with ZeroAddress.
     function testFuzz_setCEAProxyImplementation_zeroAddress_reverts() public {
-        vm.expectRevert(CEAFactory.ZeroAddress.selector);
+        vm.expectRevert(CEAErrors.ZeroAddress.selector);
         factory.setCEAProxyImplementation(address(0));
     }
 
     /// @dev setCEAImplementation(address(0)) reverts with ZeroAddress.
     function testFuzz_setCEAImplementation_zeroAddress_reverts() public {
-        vm.expectRevert(CEAFactory.ZeroAddress.selector);
+        vm.expectRevert(CEAErrors.ZeroAddress.selector);
         factory.setCEAImplementation(address(0));
     }
 
     /// @dev setUniversalGateway(address(0)) reverts with ZeroAddress.
     function testFuzz_setUniversalGateway_zeroAddress_reverts() public {
-        vm.expectRevert(CEAFactory.ZeroAddress.selector);
+        vm.expectRevert(CEAErrors.ZeroAddress.selector);
         factory.setUniversalGateway(address(0));
     }
 }
