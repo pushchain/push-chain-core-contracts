@@ -19,6 +19,9 @@ deployments
 # Dotenv file
 .env
 
+# OS artifacts
+**/.DS_Store
+
 # Safe to ignore
 .wake/
 .vscode/

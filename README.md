@@ -39,8 +39,10 @@ brew install lcov
 ```
 
 ```bash
-forge coverage --no-match-coverage "(PRC20V0\.sol|UniversalCoreV0\.sol|src/(libraries|[Ii]nterfaces|mocks)/|test/)"
+forge coverage --ir-minimum --no-match-coverage "(PRC20V0\.sol|UniversalCoreV0\.sol|ReceiverExample\.sol|src/(libraries|[Ii]nterfaces|mocks)/|test/)"
 ```
+
+> **Note:** The `--ir-minimum` flag is required because the codebase uses `via_ir = true`. Without it, `forge coverage` disables the optimizer and hits "Stack too deep" errors in some fuzz tests. The `--ir-minimum` flag re-enables `viaIR` with minimal optimization, producing accurate coverage without stack issues.
 
 ---
 
