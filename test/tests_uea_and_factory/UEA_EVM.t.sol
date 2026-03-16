@@ -53,7 +53,8 @@ contract UEA_EVMTest is Test {
         UEAFactory factoryImpl = new UEAFactory();
 
         // Deploy and initialize the proxy with initialOwner
-        bytes memory initData = abi.encodeWithSelector(UEAFactory.initialize.selector, address(this), makeAddr("pauser"));
+        bytes memory initData =
+            abi.encodeWithSelector(UEAFactory.initialize.selector, address(this), makeAddr("pauser"));
         ERC1967Proxy proxy = new ERC1967Proxy(address(factoryImpl), initData);
         factory = UEAFactory(address(proxy));
 
@@ -364,9 +365,7 @@ contract UEA_EVMTest is Test {
             Multicall({to: address(target), value: 0, data: abi.encodeWithSignature("setMagicNumber(uint256)", 123)});
 
         calls[1] = Multicall({
-            to: address(target),
-            value: 0.1 ether,
-            data: abi.encodeWithSignature("setMagicNumberWithFee(uint256)", 456)
+            to: address(target), value: 0.1 ether, data: abi.encodeWithSignature("setMagicNumberWithFee(uint256)", 456)
         });
 
         // Encode with multicall prefix (0x4e2d2ff6 is keccak256("MulticallPayload")[0:4])
@@ -445,15 +444,11 @@ contract UEA_EVMTest is Test {
         // Prepare multiple calls with different values
         Multicall[] memory calls = new Multicall[](3);
         calls[0] = Multicall({
-            to: address(target),
-            value: 0.1 ether,
-            data: abi.encodeWithSignature("setMagicNumberWithFee(uint256)", 111)
+            to: address(target), value: 0.1 ether, data: abi.encodeWithSignature("setMagicNumberWithFee(uint256)", 111)
         });
 
         calls[1] = Multicall({
-            to: address(target),
-            value: 0.1 ether,
-            data: abi.encodeWithSignature("setMagicNumberWithFee(uint256)", 222)
+            to: address(target), value: 0.1 ether, data: abi.encodeWithSignature("setMagicNumberWithFee(uint256)", 222)
         });
 
         calls[2] =
@@ -557,15 +552,11 @@ contract UEA_EVMTest is Test {
         // Prepare multiple calls to different targets with different values
         Multicall[] memory calls = new Multicall[](3);
         calls[0] = Multicall({
-            to: address(target),
-            value: 0.1 ether,
-            data: abi.encodeWithSignature("setMagicNumberWithFee(uint256)", 555)
+            to: address(target), value: 0.1 ether, data: abi.encodeWithSignature("setMagicNumberWithFee(uint256)", 555)
         });
 
         calls[1] = Multicall({
-            to: address(target2),
-            value: 0.1 ether,
-            data: abi.encodeWithSignature("setMagicNumberWithFee(uint256)", 666)
+            to: address(target2), value: 0.1 ether, data: abi.encodeWithSignature("setMagicNumberWithFee(uint256)", 666)
         });
 
         calls[2] =
@@ -641,8 +632,9 @@ contract UEA_EVMTest is Test {
         Multicall[] memory calls = new Multicall[](3);
         calls[0] =
             Multicall({to: address(target), value: 0, data: abi.encodeWithSignature("setMagicNumber(uint256)", 111)});
-        calls[1] =
-            Multicall({to: address(silentRevertingTarget), value: 0, data: abi.encodeWithSignature("revertSilently()")});
+        calls[1] = Multicall({
+            to: address(silentRevertingTarget), value: 0, data: abi.encodeWithSignature("revertSilently()")
+        });
         calls[2] =
             Multicall({to: address(target), value: 0, data: abi.encodeWithSignature("setMagicNumber(uint256)", 333)});
 
@@ -902,7 +894,7 @@ contract UEA_EVMTest is Test {
     function test_SuccessfulMigrationUpdatesImplementation() public deployEvmSmartAccount {
         // Set migration contract in factory
         factory.setUEAMigrationContract(address(migration));
-        
+
         MigrationPayload memory payload =
             MigrationPayload({migration: address(migration), nonce: 0, deadline: block.timestamp + 1000});
 
@@ -1054,7 +1046,7 @@ contract UEA_EVMTest is Test {
         assertTrue(isValid, "Signature should be valid for the owner");
 
         // Test with wrong signer
-        ( /*address wrongSigner*/ , uint256 wrongPK) = makeAddrAndKey("wrongSigner");
+        (/*address wrongSigner*/, uint256 wrongPK) = makeAddrAndKey("wrongSigner");
         (v, r, s) = vm.sign(wrongPK, messageHash);
         bytes memory wrongSignature = abi.encodePacked(r, s, v);
 
@@ -1066,10 +1058,6 @@ contract UEA_EVMTest is Test {
     // Verify Payload TxHash Tests
     // =========================================================================
     // Note: mock calls are used to test the TX_BASED_VERIFIER precompile call.
-
-
-
-
 
     function testgetUniversalPayloadHash() public deployEvmSmartAccount {
         // Create a payload
@@ -1146,7 +1134,7 @@ contract UEA_EVMTest is Test {
     function testExecutePayloadAsUEModuleWithoutSignature() public deployEvmSmartAccount {
         // Fund UEA
         vm.deal(address(evmSmartAccountInstance), 1 ether);
-        
+
         UniversalPayload memory payload = UniversalPayload({
             to: address(target),
             value: 0,
@@ -1158,7 +1146,7 @@ contract UEA_EVMTest is Test {
             maxPriorityFeePerGas: 0,
             vType: VerificationType(0)
         });
-        
+
         // Prank as UNIVERSAL_EXECUTOR_MODULE
         vm.prank(evmSmartAccountInstance.UNIVERSAL_EXECUTOR_MODULE());
         evmSmartAccountInstance.executeUniversalTx(payload, "");
@@ -1170,7 +1158,7 @@ contract UEA_EVMTest is Test {
     function testExecutePayloadAsUserRequiresSignature() public deployEvmSmartAccount {
         // Fund UEA
         vm.deal(address(evmSmartAccountInstance), 1 ether);
-        
+
         UniversalPayload memory payload = UniversalPayload({
             to: address(target),
             value: 0,
@@ -1182,13 +1170,13 @@ contract UEA_EVMTest is Test {
             maxPriorityFeePerGas: 0,
             vType: VerificationType(0)
         });
-        
+
         // Try to execute with wrong signer's signature as regular user
         (address wrongSigner, uint256 wrongPK) = makeAddrAndKey("wrongSigner");
         bytes32 txHash = getCrosschainTxhash(evmSmartAccountInstance, payload);
         (uint8 v, bytes32 r, bytes32 s) = vm.sign(wrongPK, txHash);
         bytes memory wrongSignature = abi.encodePacked(r, s, v);
-        
+
         vm.expectRevert(Errors.InvalidEVMSignature.selector);
         evmSmartAccountInstance.executeUniversalTx(payload, wrongSignature);
     }
@@ -1196,7 +1184,7 @@ contract UEA_EVMTest is Test {
     function testExecutePayloadAsUserWithValidSignature() public deployEvmSmartAccount {
         // Fund UEA
         vm.deal(address(evmSmartAccountInstance), 1 ether);
-        
+
         UniversalPayload memory payload = UniversalPayload({
             to: address(target),
             value: 0,
@@ -1208,14 +1196,14 @@ contract UEA_EVMTest is Test {
             maxPriorityFeePerGas: 0,
             vType: VerificationType(0)
         });
-        
+
         bytes32 txHash = getCrosschainTxhash(evmSmartAccountInstance, payload);
         (uint8 v, bytes32 r, bytes32 s) = vm.sign(ownerPK, txHash);
         bytes memory signature = abi.encodePacked(r, s, v);
-        
+
         // Execute with valid signature
         evmSmartAccountInstance.executeUniversalTx(payload, signature);
-        
+
         // Verify execution succeeded
         assertEq(target.getMagicNumber(), 999, "Execution should succeed with valid signature");
     }

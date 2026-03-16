@@ -28,8 +28,7 @@ contract CEAProxy is Initializable, Proxy {
 
     /// @dev Storage slot for the current implementation address.
     ///      bytes32(uint256(keccak256("cea.proxy.implementation")) - 1)
-    bytes32 private constant CEA_LOGIC_SLOT =
-        0x8b2ae8ee8c8678fc65d38e03fd33865426627999aa5e8fab985583dec5888813;
+    bytes32 private constant CEA_LOGIC_SLOT = 0x8b2ae8ee8c8678fc65d38e03fd33865426627999aa5e8fab985583dec5888813;
 
     // =========================
     //    CP: INITIALIZER
@@ -71,13 +70,7 @@ contract CEAProxy is Initializable, Proxy {
 
     /// @dev Returns the implementation address for delegation.
     ///      Reverts if no implementation has been set.
-    function _implementation()
-        internal
-        view
-        virtual
-        override
-        returns (address)
-    {
+    function _implementation() internal view virtual override returns (address) {
         address impl = getImplementation();
         if (impl == address(0)) {
             revert CEAErrors.InvalidCall();

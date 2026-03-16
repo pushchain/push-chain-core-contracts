@@ -28,11 +28,9 @@ contract UEA_EVM_FuzzTest is Test {
     UEAMigration migration;
 
     bytes32 constant EVM_HASH = keccak256("EVM");
-    bytes32 private constant UEA_LOGIC_SLOT =
-        0x868a771a75a4aa6c2be13e9a9617cb8ea240ed84a3a90c8469537393ec3e115d;
+    bytes32 private constant UEA_LOGIC_SLOT = 0x868a771a75a4aa6c2be13e9a9617cb8ea240ed84a3a90c8469537393ec3e115d;
 
-    address constant UNIVERSAL_EXECUTOR_MODULE =
-        0x14191Ea54B4c176fCf86f51b0FAc7CB1E71Df7d7;
+    address constant UNIVERSAL_EXECUTOR_MODULE = 0x14191Ea54B4c176fCf86f51b0FAc7CB1E71Df7d7;
 
     address owner;
     uint256 ownerPK;
@@ -64,8 +62,7 @@ contract UEA_EVM_FuzzTest is Test {
     }
 
     modifier deployEvmSmartAccount() {
-        UniversalAccountId memory _id =
-            UniversalAccountId({chainNamespace: "eip155", chainId: "1", owner: ownerBytes});
+        UniversalAccountId memory _id = UniversalAccountId({chainNamespace: "eip155", chainId: "1", owner: ownerBytes});
         address addr = factory.deployUEA(_id);
         evmSmartAccountInstance = UEA_EVM(payable(addr));
         _;
@@ -75,12 +72,11 @@ contract UEA_EVM_FuzzTest is Test {
     // Helper functions
     // =========================================================================
 
-    function _buildPayload(
-        address to,
-        uint256 value,
-        bytes memory data,
-        uint256 deadline
-    ) internal pure returns (UniversalPayload memory) {
+    function _buildPayload(address to, uint256 value, bytes memory data, uint256 deadline)
+        internal
+        pure
+        returns (UniversalPayload memory)
+    {
         return UniversalPayload({
             to: to,
             value: value,
@@ -94,11 +90,11 @@ contract UEA_EVM_FuzzTest is Test {
         });
     }
 
-    function _signPayload(
-        UEA_EVM uea,
-        UniversalPayload memory payload,
-        uint256 pk
-    ) internal view returns (bytes memory) {
+    function _signPayload(UEA_EVM uea, UniversalPayload memory payload, uint256 pk)
+        internal
+        view
+        returns (bytes memory)
+    {
         bytes32 h = uea.getUniversalPayloadHash(payload);
         (uint8 v, bytes32 r, bytes32 s) = vm.sign(pk, h);
         return abi.encodePacked(r, s, v);
@@ -108,12 +104,10 @@ contract UEA_EVM_FuzzTest is Test {
     // 3.1 Signature Verification Properties
     // =========================================================================
 
-    function testFuzz_validSignature_alwaysVerifies(
-        uint256 privateKey,
-        address toAddr,
-        uint256 value,
-        uint256 deadline
-    ) public deployEvmSmartAccount {
+    function testFuzz_validSignature_alwaysVerifies(uint256 privateKey, address toAddr, uint256 value, uint256 deadline)
+        public
+        deployEvmSmartAccount
+    {
         // Bound private key to valid secp256k1 range
         privateKey = bound(privateKey, 1, 0xfffffffffffffffffffffffffffffffebaaedce6af48a03bbfd25e8cd0364140);
 
@@ -125,8 +119,7 @@ contract UEA_EVM_FuzzTest is Test {
         // We need a fresh chain hash so we can deploy under different owner
         // Instead, deploy directly using factory for unique owner
         // Use a salt-unique chainId to deploy fresh
-        UniversalAccountId memory id =
-            UniversalAccountId({chainNamespace: "eip155", chainId: "1", owner: signerBytes});
+        UniversalAccountId memory id = UniversalAccountId({chainNamespace: "eip155", chainId: "1", owner: signerBytes});
 
         // Only deploy if not already deployed
         (address predicted,) = factory.getUEAForOrigin(id);
@@ -147,9 +140,7 @@ contract UEA_EVM_FuzzTest is Test {
         assertTrue(signerUEA.verifyUniversalPayloadSignature(h, sig));
     }
 
-    function testFuzz_invalidSignature_alwaysRejects(
-        uint256 signerKey
-    ) public deployEvmSmartAccount {
+    function testFuzz_invalidSignature_alwaysRejects(uint256 signerKey) public deployEvmSmartAccount {
         // secp256k1 curve order n - 1 (inclusive upper bound)
         uint256 secp256k1N = 0xfffffffffffffffffffffffffffffffebaaedce6af48a03bbfd25e8cd0364140;
         signerKey = bound(signerKey, 1, secp256k1N);
@@ -165,12 +156,10 @@ contract UEA_EVM_FuzzTest is Test {
         assertFalse(evmSmartAccountInstance.verifyUniversalPayloadSignature(h, sig));
     }
 
-    function testFuzz_samePayload_sameHash(
-        address toAddr,
-        uint256 value,
-        bytes memory data,
-        uint256 deadline
-    ) public deployEvmSmartAccount {
+    function testFuzz_samePayload_sameHash(address toAddr, uint256 value, bytes memory data, uint256 deadline)
+        public
+        deployEvmSmartAccount
+    {
         UniversalPayload memory payload = UniversalPayload({
             to: toAddr,
             value: value,
@@ -188,12 +177,10 @@ contract UEA_EVM_FuzzTest is Test {
         assertEq(h1, h2);
     }
 
-    function testFuzz_differentPayloads_differentHashes(
-        address to1,
-        address to2,
-        uint256 value1,
-        uint256 value2
-    ) public deployEvmSmartAccount {
+    function testFuzz_differentPayloads_differentHashes(address to1, address to2, uint256 value1, uint256 value2)
+        public
+        deployEvmSmartAccount
+    {
         vm.assume(to1 != to2 || value1 != value2);
 
         UniversalPayload memory p1 = _buildPayload(to1, value1, "", 0);
@@ -214,18 +201,12 @@ contract UEA_EVM_FuzzTest is Test {
     // 3.2 Nonce Properties
     // =========================================================================
 
-    function testFuzz_nonce_incrementsOnExecution(
-        uint256 magicNum
-    ) public deployEvmSmartAccount {
+    function testFuzz_nonce_incrementsOnExecution(uint256 magicNum) public deployEvmSmartAccount {
         magicNum = bound(magicNum, 0, type(uint128).max);
         uint256 nonceBefore = evmSmartAccountInstance.nonce();
 
-        UniversalPayload memory payload = _buildPayload(
-            address(target),
-            0,
-            abi.encodeWithSignature("setMagicNumber(uint256)", magicNum),
-            0
-        );
+        UniversalPayload memory payload =
+            _buildPayload(address(target), 0, abi.encodeWithSignature("setMagicNumber(uint256)", magicNum), 0);
         bytes memory sig = _signPayload(evmSmartAccountInstance, payload, ownerPK);
 
         evmSmartAccountInstance.executeUniversalTx(payload, sig);
@@ -233,9 +214,7 @@ contract UEA_EVM_FuzzTest is Test {
         assertEq(evmSmartAccountInstance.nonce(), nonceBefore + 1);
     }
 
-    function testFuzz_nonce_incrementsOnRevertedInnerCall(
-        bytes memory callData
-    ) public deployEvmSmartAccount {
+    function testFuzz_nonce_incrementsOnRevertedInnerCall(bytes memory callData) public deployEvmSmartAccount {
         // Use a target that will revert (call a non-existent function)
         // The nonce increments before execution
         uint256 nonceBefore = evmSmartAccountInstance.nonce();
@@ -250,9 +229,7 @@ contract UEA_EVM_FuzzTest is Test {
         assertEq(evmSmartAccountInstance.nonce(), nonceBefore + 1);
     }
 
-    function testFuzz_nonce_wrongNonce_reverts(
-        uint256 wrongNonce
-    ) public deployEvmSmartAccount {
+    function testFuzz_nonce_wrongNonce_reverts(uint256 wrongNonce) public deployEvmSmartAccount {
         wrongNonce = bound(wrongNonce, 1, type(uint64).max);
 
         // Execute first transaction to advance nonce to 1
@@ -272,16 +249,14 @@ contract UEA_EVM_FuzzTest is Test {
     // 3.3 Deadline Properties
     // =========================================================================
 
-    function testFuzz_deadline_zero_alwaysPasses(
-        uint256 magicNum
-    ) public deployEvmSmartAccount {
+    function testFuzz_deadline_zero_alwaysPasses(uint256 magicNum) public deployEvmSmartAccount {
         magicNum = bound(magicNum, 0, type(uint128).max);
 
         UniversalPayload memory payload = _buildPayload(
             address(target),
             0,
             abi.encodeWithSignature("setMagicNumber(uint256)", magicNum),
-            0  // deadline = 0 means no deadline
+            0 // deadline = 0 means no deadline
         );
         bytes memory sig = _signPayload(evmSmartAccountInstance, payload, ownerPK);
 
@@ -290,18 +265,12 @@ contract UEA_EVM_FuzzTest is Test {
         assertEq(evmSmartAccountInstance.nonce(), 1);
     }
 
-    function testFuzz_deadline_futureTimestamp_passes(
-        uint256 futureOffset
-    ) public deployEvmSmartAccount {
+    function testFuzz_deadline_futureTimestamp_passes(uint256 futureOffset) public deployEvmSmartAccount {
         futureOffset = bound(futureOffset, 1, 365 days);
         uint256 deadline = block.timestamp + futureOffset;
 
-        UniversalPayload memory payload = _buildPayload(
-            address(target),
-            0,
-            abi.encodeWithSignature("setMagicNumber(uint256)", 42),
-            deadline
-        );
+        UniversalPayload memory payload =
+            _buildPayload(address(target), 0, abi.encodeWithSignature("setMagicNumber(uint256)", 42), deadline);
         bytes memory sig = _signPayload(evmSmartAccountInstance, payload, ownerPK);
 
         // Should pass — deadline is in the future
@@ -309,21 +278,14 @@ contract UEA_EVM_FuzzTest is Test {
         assertEq(evmSmartAccountInstance.nonce(), 1);
     }
 
-    function testFuzz_deadline_pastTimestamp_reverts(
-        uint256 pastOffset
-    ) public deployEvmSmartAccount {
+    function testFuzz_deadline_pastTimestamp_reverts(uint256 pastOffset) public deployEvmSmartAccount {
         pastOffset = bound(pastOffset, 1, 365 days);
 
         // Warp forward so we have a past timestamp to use
         vm.warp(block.timestamp + 365 days);
         uint256 pastDeadline = block.timestamp - pastOffset;
 
-        UniversalPayload memory payload = _buildPayload(
-            address(target),
-            0,
-            "",
-            pastDeadline
-        );
+        UniversalPayload memory payload = _buildPayload(address(target), 0, "", pastDeadline);
         bytes memory sig = _signPayload(evmSmartAccountInstance, payload, ownerPK);
 
         vm.expectRevert(UEAErrors.ExpiredDeadline.selector);
@@ -334,10 +296,7 @@ contract UEA_EVM_FuzzTest is Test {
     // 3.4 Execution Dispatch Properties
     // =========================================================================
 
-    function testFuzz_selectorDetection_multicall(
-        bytes4 selector,
-        bytes memory extra
-    ) public deployEvmSmartAccount {
+    function testFuzz_selectorDetection_multicall(bytes4 selector, bytes memory extra) public deployEvmSmartAccount {
         // Build data with the given selector prefix
         bytes memory data = abi.encodePacked(selector, extra);
 
@@ -365,9 +324,7 @@ contract UEA_EVM_FuzzTest is Test {
         }
     }
 
-    function testFuzz_selectorDetection_migration(
-        bytes4 selector
-    ) public deployEvmSmartAccount {
+    function testFuzz_selectorDetection_migration(bytes4 selector) public deployEvmSmartAccount {
         vm.assume(selector != MULTICALL_SELECTOR && selector != MIGRATION_SELECTOR);
 
         // Build a 4-byte payload with non-migration selector
@@ -389,9 +346,7 @@ contract UEA_EVM_FuzzTest is Test {
         evmSmartAccountInstance.executeUniversalTx(migPayload, migSig);
     }
 
-    function testFuzz_selectorDetection_mutualExclusion(
-        bytes memory payloadData
-    ) public view {
+    function testFuzz_selectorDetection_mutualExclusion(bytes memory payloadData) public view {
         // MULTICALL_SELECTOR and MIGRATION_SELECTOR can never both be true
         if (payloadData.length < 4) {
             // Neither applies
@@ -406,9 +361,7 @@ contract UEA_EVM_FuzzTest is Test {
         assertFalse(isMulticallPath && isMigrationPath);
     }
 
-    function testFuzz_singleCall_forwardsCorrectly(
-        uint256 magicNum
-    ) public deployEvmSmartAccount {
+    function testFuzz_singleCall_forwardsCorrectly(uint256 magicNum) public deployEvmSmartAccount {
         magicNum = bound(magicNum, 1, type(uint128).max);
 
         bytes memory callData = abi.encodeWithSignature("setMagicNumber(uint256)", magicNum);
@@ -423,26 +376,18 @@ contract UEA_EVM_FuzzTest is Test {
     // 3.5 Multicall Properties
     // =========================================================================
 
-    function testFuzz_multicall_executesSequentially(
-        uint8 numCalls,
-        uint256 seed
-    ) public deployEvmSmartAccount {
+    function testFuzz_multicall_executesSequentially(uint8 numCalls, uint256 seed) public deployEvmSmartAccount {
         numCalls = uint8(bound(numCalls, 1, 5));
 
         Multicall[] memory calls = new Multicall[](numCalls);
         for (uint256 i = 0; i < numCalls; i++) {
             uint256 val = uint256(keccak256(abi.encode(seed, i))) % 1000;
             calls[i] = Multicall({
-                to: address(target),
-                value: 0,
-                data: abi.encodeWithSignature("setMagicNumber(uint256)", val)
+                to: address(target), value: 0, data: abi.encodeWithSignature("setMagicNumber(uint256)", val)
             });
         }
 
-        bytes memory encodedCalls = abi.encodePacked(
-            MULTICALL_SELECTOR,
-            abi.encode(calls)
-        );
+        bytes memory encodedCalls = abi.encodePacked(MULTICALL_SELECTOR, abi.encode(calls));
         UniversalPayload memory payload = _buildPayload(address(0), 0, encodedCalls, 0);
         bytes memory sig = _signPayload(evmSmartAccountInstance, payload, ownerPK);
 
@@ -453,10 +398,7 @@ contract UEA_EVM_FuzzTest is Test {
         assertEq(target.magicNumber(), lastVal);
     }
 
-    function testFuzz_multicall_failedCallRevertsAll(
-        uint8 numCalls,
-        uint8 failIndex
-    ) public deployEvmSmartAccount {
+    function testFuzz_multicall_failedCallRevertsAll(uint8 numCalls, uint8 failIndex) public deployEvmSmartAccount {
         numCalls = uint8(bound(numCalls, 2, 5));
         failIndex = uint8(bound(failIndex, 0, numCalls - 1));
 
@@ -468,24 +410,19 @@ contract UEA_EVM_FuzzTest is Test {
                 // This call will fail: calling non-existent function on EOA (reverts silently)
                 // Use a revert-inducing call: send value to a contract without fallback
                 calls[i] = Multicall({
-                    to: address(this),  // test contract has no receive, will fail with value
+                    to: address(this), // test contract has no receive, will fail with value
                     value: 0,
                     // Call a non-existent function selector
                     data: hex"deadbeef"
                 });
             } else {
                 calls[i] = Multicall({
-                    to: address(target),
-                    value: 0,
-                    data: abi.encodeWithSignature("setMagicNumber(uint256)", i + 1)
+                    to: address(target), value: 0, data: abi.encodeWithSignature("setMagicNumber(uint256)", i + 1)
                 });
             }
         }
 
-        bytes memory encodedCalls = abi.encodePacked(
-            MULTICALL_SELECTOR,
-            abi.encode(calls)
-        );
+        bytes memory encodedCalls = abi.encodePacked(MULTICALL_SELECTOR, abi.encode(calls));
 
         vm.deal(address(evmSmartAccountInstance), 1 ether);
         UniversalPayload memory payload = _buildPayload(address(0), 0, encodedCalls, 0);
@@ -503,9 +440,7 @@ contract UEA_EVM_FuzzTest is Test {
     // 3.6 Migration Properties
     // =========================================================================
 
-    function testFuzz_migration_nonSelfTarget_reverts(
-        address wrongTarget
-    ) public deployEvmSmartAccount {
+    function testFuzz_migration_nonSelfTarget_reverts(address wrongTarget) public deployEvmSmartAccount {
         vm.assume(wrongTarget != address(evmSmartAccountInstance));
 
         bytes memory migData = abi.encodePacked(MIGRATION_SELECTOR);
@@ -516,19 +451,12 @@ contract UEA_EVM_FuzzTest is Test {
         evmSmartAccountInstance.executeUniversalTx(payload, sig);
     }
 
-    function testFuzz_migration_nonZeroValue_reverts(
-        uint256 value
-    ) public deployEvmSmartAccount {
+    function testFuzz_migration_nonZeroValue_reverts(uint256 value) public deployEvmSmartAccount {
         value = bound(value, 1, type(uint128).max);
         vm.deal(address(evmSmartAccountInstance), value);
 
         bytes memory migData = abi.encodePacked(MIGRATION_SELECTOR);
-        UniversalPayload memory payload = _buildPayload(
-            address(evmSmartAccountInstance),
-            value,
-            migData,
-            0
-        );
+        UniversalPayload memory payload = _buildPayload(address(evmSmartAccountInstance), value, migData, 0);
         bytes memory sig = _signPayload(evmSmartAccountInstance, payload, ownerPK);
 
         vm.expectRevert(UEAErrors.InvalidCall.selector);
@@ -539,9 +467,7 @@ contract UEA_EVM_FuzzTest is Test {
     // 3.7 Access Control Properties
     // =========================================================================
 
-    function testFuzz_executorModule_bypassesSignature(
-        uint256 magicNum
-    ) public deployEvmSmartAccount {
+    function testFuzz_executorModule_bypassesSignature(uint256 magicNum) public deployEvmSmartAccount {
         magicNum = bound(magicNum, 1, type(uint128).max);
 
         bytes memory callData = abi.encodeWithSignature("setMagicNumber(uint256)", magicNum);
@@ -556,9 +482,7 @@ contract UEA_EVM_FuzzTest is Test {
         assertEq(target.magicNumber(), magicNum);
     }
 
-    function testFuzz_nonExecutorModule_requiresValidSignature(
-        address caller
-    ) public deployEvmSmartAccount {
+    function testFuzz_nonExecutorModule_requiresValidSignature(address caller) public deployEvmSmartAccount {
         vm.assume(caller != UNIVERSAL_EXECUTOR_MODULE);
         vm.assume(caller != address(0));
 

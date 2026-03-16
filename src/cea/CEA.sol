@@ -57,17 +57,10 @@ contract CEA is ICEA, ReentrancyGuard {
     // =========================
 
     /// @inheritdoc ICEA
-    function initializeCEA(
-        address _pushAccount,
-        address _vault,
-        address _universalGateway,
-        address _factory
-    ) external {
+    function initializeCEA(address _pushAccount, address _vault, address _universalGateway, address _factory) external {
         if (_initialized) revert CEAErrors.AlreadyInitialized();
         if (
-            _pushAccount == address(0)
-                || _vault == address(0)
-                || _universalGateway == address(0)
+            _pushAccount == address(0) || _vault == address(0) || _universalGateway == address(0)
                 || _factory == address(0)
         ) {
             revert CEAErrors.ZeroAddress();
@@ -107,9 +100,7 @@ contract CEA is ICEA, ReentrancyGuard {
 
         isExecuted[txId] = true;
 
-        _handleExecution(
-            txId, universalTxId, originCaller, recipient, payload
-        );
+        _handleExecution(txId, universalTxId, originCaller, recipient, payload);
     }
 
     // =========================
@@ -117,22 +108,23 @@ contract CEA is ICEA, ReentrancyGuard {
     // =========================
 
     /// @inheritdoc ICEA
-    function sendUniversalTxToUEA(
-        address token,
-        uint256 amount,
-        bytes calldata payload
-    ) external {
+    function sendUniversalTxToUEA(address token, uint256 amount, bytes calldata payload, address revertRecipient)
+        external
+    {
         if (msg.sender != address(this)) {
             revert CommonErrors.Unauthorized();
         }
         if (amount == 0) revert CEAErrors.InvalidInput();
+        if (revertRecipient == address(0)) {
+            revert CEAErrors.InvalidInput();
+        }
 
         UniversalTxRequest memory req = UniversalTxRequest({
             recipient: pushAccount,
             token: token,
             amount: amount,
             payload: payload,
-            revertRecipient: pushAccount,
+            revertRecipient: revertRecipient,
             signatureData: ""
         });
 
@@ -140,19 +132,15 @@ contract CEA is ICEA, ReentrancyGuard {
             if (address(this).balance < amount) {
                 revert CEAErrors.InsufficientBalance();
             }
-            IUniversalGateway(UNIVERSAL_GATEWAY)
-                .sendUniversalTxFromCEA{value: amount}(req);
+            IUniversalGateway(UNIVERSAL_GATEWAY).sendUniversalTxFromCEA{value: amount}(req);
         } else {
             if (IERC20(token).balanceOf(address(this)) < amount) {
                 revert CEAErrors.InsufficientBalance();
             }
-            IUniversalGateway(UNIVERSAL_GATEWAY)
-                .sendUniversalTxFromCEA(req);
+            IUniversalGateway(UNIVERSAL_GATEWAY).sendUniversalTxFromCEA(req);
         }
 
-        emit UniversalTxToUEA(
-            address(this), pushAccount, token, amount
-        );
+        emit UniversalTxToUEA(address(this), pushAccount, token, amount);
     }
 
     // =========================
@@ -175,19 +163,12 @@ contract CEA is ICEA, ReentrancyGuard {
     ) internal {
         if (_isMulticall(payload)) {
             Multicall[] memory calls = _decodeCalls(payload);
-            _handleMulticall(
-                txId, universalTxId, originCaller, calls
-            );
+            _handleMulticall(txId, universalTxId, originCaller, calls);
         } else if (_isMigration(payload)) {
             _handleMigration();
-            emit UniversalTxExecuted(
-                txId, universalTxId, originCaller,
-                address(this), payload
-            );
+            emit UniversalTxExecuted(txId, universalTxId, originCaller, address(this), payload);
         } else {
-            _handleSingleCall(
-                txId, universalTxId, originCaller, recipient, payload
-            );
+            _handleSingleCall(txId, universalTxId, originCaller, recipient, payload);
         }
     }
 
@@ -197,35 +178,23 @@ contract CEA is ICEA, ReentrancyGuard {
     /// @param universalTxId    Universal tx identifier for event emission
     /// @param originCaller     Origin caller for event emission
     /// @param calls            Decoded Multicall[] array
-    function _handleMulticall(
-        bytes32 txId,
-        bytes32 universalTxId,
-        address originCaller,
-        Multicall[] memory calls
-    ) internal {
+    function _handleMulticall(bytes32 txId, bytes32 universalTxId, address originCaller, Multicall[] memory calls)
+        internal
+    {
         for (uint256 i = 0; i < calls.length; i++) {
             if (calls[i].to == address(0)) {
                 revert CEAErrors.InvalidTarget();
             }
 
-            if (
-                calls[i].to == address(this)
-                    && calls[i].value != 0
-            ) {
+            if (calls[i].to == address(this) && calls[i].value != 0) {
                 revert CEAErrors.InvalidInput();
             }
 
-            (bool success,) =
-                calls[i].to.call{value: calls[i].value}(
-                    calls[i].data
-                );
+            (bool success,) = calls[i].to.call{value: calls[i].value}(calls[i].data);
 
             if (!success) revert CEAErrors.ExecutionFailed();
 
-            emit UniversalTxExecuted(
-                txId, universalTxId, originCaller,
-                calls[i].to, calls[i].data
-            );
+            emit UniversalTxExecuted(txId, universalTxId, originCaller, calls[i].to, calls[i].data);
         }
     }
 
@@ -245,10 +214,7 @@ contract CEA is ICEA, ReentrancyGuard {
         bytes calldata payload
     ) internal {
         if (payload.length == 0) {
-            emit UniversalTxExecuted(
-                txId, universalTxId, originCaller,
-                address(this), payload
-            );
+            emit UniversalTxExecuted(txId, universalTxId, originCaller, address(this), payload);
             return;
         }
 
@@ -259,13 +225,10 @@ contract CEA is ICEA, ReentrancyGuard {
             revert CEAErrors.InvalidRecipient();
         }
 
-        (bool success,) =
-            recipient.call{value: msg.value}(payload);
+        (bool success,) = recipient.call{value: msg.value}(payload);
         if (!success) revert CEAErrors.ExecutionFailed();
 
-        emit UniversalTxExecuted(
-            txId, universalTxId, originCaller, recipient, payload
-        );
+        emit UniversalTxExecuted(txId, universalTxId, originCaller, recipient, payload);
     }
 
     /// @dev Fetches migration contract from factory and delegates.
@@ -277,10 +240,8 @@ contract CEA is ICEA, ReentrancyGuard {
             revert CEAErrors.InvalidCall();
         }
 
-        bytes memory migrateCallData =
-            abi.encodeWithSignature("migrateCEA()");
-        (bool success,) =
-            migrationContract.delegatecall(migrateCallData);
+        bytes memory migrateCallData = abi.encodeWithSignature("migrateCEA()");
+        (bool success,) = migrationContract.delegatecall(migrateCallData);
         if (!success) revert CEAErrors.ExecutionFailed();
     }
 
@@ -291,9 +252,7 @@ contract CEA is ICEA, ReentrancyGuard {
     /// @dev Checks whether the payload uses the multicall format.
     /// @param data     Raw payload bytes
     /// @return         True if payload starts with MULTICALL_SELECTOR
-    function _isMulticall(
-        bytes calldata data
-    ) private pure returns (bool) {
+    function _isMulticall(bytes calldata data) private pure returns (bool) {
         if (data.length < 4) return false;
         return bytes4(data[0:4]) == MULTICALL_SELECTOR;
     }
@@ -302,9 +261,7 @@ contract CEA is ICEA, ReentrancyGuard {
     ///      Strips MULTICALL_SELECTOR prefix and decodes remaining data.
     /// @param data     Raw payload containing selector + ABI-encoded Multicall[]
     /// @return         Decoded Multicall array
-    function _decodeCalls(
-        bytes calldata data
-    ) private pure returns (Multicall[] memory) {
+    function _decodeCalls(bytes calldata data) private pure returns (Multicall[] memory) {
         bytes calldata strippedData = data[4:];
         return abi.decode(strippedData, (Multicall[]));
     }
@@ -312,9 +269,7 @@ contract CEA is ICEA, ReentrancyGuard {
     /// @dev Checks whether a top-level payload is a migration request.
     /// @param data     Raw payload bytes
     /// @return         True if payload starts with MIGRATION_SELECTOR
-    function _isMigration(
-        bytes calldata data
-    ) private pure returns (bool) {
+    function _isMigration(bytes calldata data) private pure returns (bool) {
         if (data.length < 4) return false;
         return bytes4(data[0:4]) == MIGRATION_SELECTOR;
     }

@@ -537,7 +537,9 @@ contract CEA_NewMulticallTests is CEATest {
         calls[0] = makeCall(
             address(ceaInstance),
             0.1 ether, // Non-zero value to self-call
-            abi.encodeWithSignature("sendUniversalTxToUEA(address,uint256,bytes)", address(0), 0.1 ether, "")
+            abi.encodeWithSignature(
+                "sendUniversalTxToUEA(address,uint256,bytes,address)", address(0), 0.1 ether, "", ueaOnPush
+            )
         );
 
         bytes memory payload = encodeCalls(calls);
@@ -554,7 +556,7 @@ contract CEA_NewMulticallTests is CEATest {
 
         // Try to call sendUniversalTxToUEA directly (not through executeUniversalTx)
         vm.expectRevert(CommonErrors.Unauthorized.selector);
-        CEA(payable(address(ceaInstance))).sendUniversalTxToUEA(address(token), 100 ether, "");
+        CEA(payable(address(ceaInstance))).sendUniversalTxToUEA(address(token), 100 ether, "", ueaOnPush);
     }
 
     // =========================================================================
@@ -894,7 +896,8 @@ contract CEA_NewMulticallTests is CEATest {
         Target testTarget = new Target();
 
         Multicall[] memory calls = new Multicall[](1);
-        calls[0] = makeCall(address(testTarget), 0.1 ether, abi.encodeWithSignature("setMagicNumberWithFee(uint256)", 42));
+        calls[0] =
+            makeCall(address(testTarget), 0.1 ether, abi.encodeWithSignature("setMagicNumberWithFee(uint256)", 42));
 
         bytes memory payload = encodeCalls(calls);
 
@@ -1007,7 +1010,7 @@ contract CEA_NewMulticallTests is CEATest {
             address(ceaInstance),
             0.1 ether, // Non-zero value to self-call - should revert
             abi.encodeWithSignature(
-                "sendUniversalTxToUEA(address,uint256,bytes)", address(token), 100 ether, ""
+                "sendUniversalTxToUEA(address,uint256,bytes,address)", address(token), 100 ether, "", ueaOnPush
             )
         );
 
@@ -1033,7 +1036,9 @@ contract CEA_NewMulticallTests is CEATest {
         calls[1] = makeCall(
             address(ceaInstance),
             0, // Zero value to self-call - OK
-            abi.encodeWithSignature("sendUniversalTxToUEA(address,uint256,bytes)", address(token), 100 ether, "")
+            abi.encodeWithSignature(
+                "sendUniversalTxToUEA(address,uint256,bytes,address)", address(token), 100 ether, "", ueaOnPush
+            )
         );
 
         bytes memory payload = encodeCalls(calls);
@@ -1098,9 +1103,7 @@ contract CEA_NewMulticallTests is CEATest {
 
         vm.prank(vault);
         vm.expectRevert(Errors.ExecutionFailed.selector);
-        ceaInstance.executeUniversalTx(
-            generateTxID(1), generateUniversalTxID(1), ueaOnPush, address(0), payload
-        );
+        ceaInstance.executeUniversalTx(generateTxID(1), generateUniversalTxID(1), ueaOnPush, address(0), payload);
     }
 
     function test_MigrationSelectorAtPositionZero_Reverts() public deployCEA {
@@ -1112,9 +1115,7 @@ contract CEA_NewMulticallTests is CEATest {
 
         vm.prank(vault);
         vm.expectRevert(Errors.ExecutionFailed.selector);
-        ceaInstance.executeUniversalTx(
-            generateTxID(1), generateUniversalTxID(1), ueaOnPush, address(0), payload
-        );
+        ceaInstance.executeUniversalTx(generateTxID(1), generateUniversalTxID(1), ueaOnPush, address(0), payload);
     }
 
     function test_MigrationSelectorAtLastPosition_Reverts() public deployCEA {
@@ -1127,8 +1128,6 @@ contract CEA_NewMulticallTests is CEATest {
 
         vm.prank(vault);
         vm.expectRevert(Errors.ExecutionFailed.selector);
-        ceaInstance.executeUniversalTx(
-            generateTxID(1), generateUniversalTxID(1), ueaOnPush, address(0), payload
-        );
+        ceaInstance.executeUniversalTx(generateTxID(1), generateUniversalTxID(1), ueaOnPush, address(0), payload);
     }
 }

@@ -128,11 +128,7 @@ contract WPC_Fuzz is Test {
     // 2.2 Transfer Properties
     // =========================================================================
 
-    function testFuzz_transfer_conservesBalance(
-        address dst,
-        uint256 depositAmt,
-        uint256 transferAmt
-    ) public {
+    function testFuzz_transfer_conservesBalance(address dst, uint256 depositAmt, uint256 transferAmt) public {
         vm.assume(dst != address(0));
         vm.assume(dst > address(0x10));
         depositAmt = bound(depositAmt, 0, MAX_AMOUNT);
@@ -154,11 +150,7 @@ contract WPC_Fuzz is Test {
         assertEq(wpc.balanceOf(src) + wpc.balanceOf(dst), srcBefore + dstBefore);
     }
 
-    function testFuzz_transfer_exceedsBalance_reverts(
-        address dst,
-        uint256 depositAmt,
-        uint256 excess
-    ) public {
+    function testFuzz_transfer_exceedsBalance_reverts(address dst, uint256 depositAmt, uint256 excess) public {
         vm.assume(dst != address(0));
         depositAmt = bound(depositAmt, 0, MAX_AMOUNT);
         excess = bound(excess, 1, MAX_AMOUNT);
@@ -312,11 +304,7 @@ contract WPC_Fuzz is Test {
         wpc.transferFrom(src, dst, transferAmt);
     }
 
-    function testFuzz_transferFrom_selfApproval_bypassed(
-        address dst,
-        uint256 depositAmt,
-        uint256 transferAmt
-    ) public {
+    function testFuzz_transferFrom_selfApproval_bypassed(address dst, uint256 depositAmt, uint256 transferAmt) public {
         vm.assume(dst != address(0));
         vm.assume(dst > address(0x10));
         depositAmt = bound(depositAmt, 0, MAX_AMOUNT);

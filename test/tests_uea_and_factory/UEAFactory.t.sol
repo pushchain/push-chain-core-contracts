@@ -124,7 +124,9 @@ contract UEAFactoryTest is Test {
 
         // Non-owner should revert
         bytes32 adminRole = factory.DEFAULT_ADMIN_ROLE();
-        vm.expectRevert(abi.encodeWithSelector(IAccessControl.AccessControlUnauthorizedAccount.selector, nonOwner, adminRole));
+        vm.expectRevert(
+            abi.encodeWithSelector(IAccessControl.AccessControlUnauthorizedAccount.selector, nonOwner, adminRole)
+        );
         vm.prank(nonOwner);
         factory.setUEAMigrationContract(address(migration));
 
@@ -397,7 +399,9 @@ contract UEAFactoryTest is Test {
 
     function testSetUEAProxyImplementation_OnlyOwner() public {
         bytes32 adminRole = factory.DEFAULT_ADMIN_ROLE();
-        vm.expectRevert(abi.encodeWithSelector(IAccessControl.AccessControlUnauthorizedAccount.selector, nonOwner, adminRole));
+        vm.expectRevert(
+            abi.encodeWithSelector(IAccessControl.AccessControlUnauthorizedAccount.selector, nonOwner, adminRole)
+        );
         vm.prank(nonOwner);
         factory.setUEAProxyImplementation(address(ueaEVMImpl));
     }
@@ -405,7 +409,9 @@ contract UEAFactoryTest is Test {
     function testOwnershipFunctions() public {
         // Test that only owner can register implementations
         bytes32 adminRole = factory.DEFAULT_ADMIN_ROLE();
-        vm.expectRevert(abi.encodeWithSelector(IAccessControl.AccessControlUnauthorizedAccount.selector, nonOwner, adminRole));
+        vm.expectRevert(
+            abi.encodeWithSelector(IAccessControl.AccessControlUnauthorizedAccount.selector, nonOwner, adminRole)
+        );
         vm.prank(nonOwner);
 
         bytes32 chainHash = keccak256(abi.encode("APTOS", "1"));
@@ -508,7 +514,11 @@ contract UEAFactoryTest is Test {
 
         // Try to register a chain with old owner — should fail
         bytes32 chainHash = keccak256(abi.encode("TestChain", "123"));
-        vm.expectRevert(abi.encodeWithSelector(IAccessControl.AccessControlUnauthorizedAccount.selector, address(this), factory.DEFAULT_ADMIN_ROLE()));
+        vm.expectRevert(
+            abi.encodeWithSelector(
+                IAccessControl.AccessControlUnauthorizedAccount.selector, address(this), factory.DEFAULT_ADMIN_ROLE()
+            )
+        );
         factory.registerNewChain(chainHash, MOVE_VM_HASH);
 
         // New owner should be able to register a chain
@@ -961,7 +971,9 @@ contract UEAFactoryTest is Test {
         bytes32 role = factory.PAUSER_ROLE();
 
         // Non-pauser cannot pause
-        vm.expectRevert(abi.encodeWithSelector(IAccessControl.AccessControlUnauthorizedAccount.selector, nonOwner, role));
+        vm.expectRevert(
+            abi.encodeWithSelector(IAccessControl.AccessControlUnauthorizedAccount.selector, nonOwner, role)
+        );
         vm.prank(nonOwner);
         factory.pause();
     }
@@ -970,7 +982,9 @@ contract UEAFactoryTest is Test {
         bytes32 role = factory.PAUSER_ROLE();
 
         // Admin (deployer) also cannot pause — pauser role is separated from admin
-        vm.expectRevert(abi.encodeWithSelector(IAccessControl.AccessControlUnauthorizedAccount.selector, deployer, role));
+        vm.expectRevert(
+            abi.encodeWithSelector(IAccessControl.AccessControlUnauthorizedAccount.selector, deployer, role)
+        );
         vm.prank(deployer);
         factory.pause();
     }
@@ -989,7 +1003,9 @@ contract UEAFactoryTest is Test {
         vm.prank(pauser);
         factory.pause();
 
-        vm.expectRevert(abi.encodeWithSelector(IAccessControl.AccessControlUnauthorizedAccount.selector, nonOwner, role));
+        vm.expectRevert(
+            abi.encodeWithSelector(IAccessControl.AccessControlUnauthorizedAccount.selector, nonOwner, role)
+        );
         vm.prank(nonOwner);
         factory.unpause();
     }
@@ -1034,7 +1050,9 @@ contract UEAFactoryTest is Test {
         address newPauser = makeAddr("newPauser");
 
         bytes32 adminRole = factory.DEFAULT_ADMIN_ROLE();
-        vm.expectRevert(abi.encodeWithSelector(IAccessControl.AccessControlUnauthorizedAccount.selector, nonOwner, adminRole));
+        vm.expectRevert(
+            abi.encodeWithSelector(IAccessControl.AccessControlUnauthorizedAccount.selector, nonOwner, adminRole)
+        );
         vm.prank(nonOwner);
         factory.setPauserRole(newPauser);
 

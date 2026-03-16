@@ -177,7 +177,9 @@ contract UniversalCoreTest is Test, UpgradeableContractHelper {
 
     function test_Initialize_RevertsOnSecondCall() public {
         vm.expectRevert(Initializable.InvalidInitialization.selector);
-        universalCore.initialize(address(mockWPC), address(mockFactory), address(mockRouter), address(mockQuoter), pauser);
+        universalCore.initialize(
+            address(mockWPC), address(mockFactory), address(mockRouter), address(mockQuoter), pauser
+        );
     }
 
     function test_UniversalExecutorModule_IsImmutable() public view {
@@ -660,10 +662,7 @@ contract UniversalCoreTest is Test, UpgradeableContractHelper {
             uint256 protocolFee,
             uint256 gasPrice,
             string memory chainNamespace
-        ) = universalCore.getOutboundTxGasAndFees(
-            address(prc20Token),
-            customGasLimit
-        );
+        ) = universalCore.getOutboundTxGasAndFees(address(prc20Token), customGasLimit);
 
         assertEq(returnedGasToken, address(mockPRC20));
         assertEq(gasPrice, GAS_PRICE);
@@ -677,7 +676,7 @@ contract UniversalCoreTest is Test, UpgradeableContractHelper {
         // Set gas price to zero
         universalCore.setChainMeta(CHAIN_NAMESPACE, 0, 0, 0);
         vm.stopPrank();
-        
+
         // Expect revert when getting gas fee
         vm.expectRevert(UniversalCoreErrors.ZeroGasPrice.selector);
         universalCore.getOutboundTxGasAndFees(address(prc20Token), 0);
@@ -686,7 +685,7 @@ contract UniversalCoreTest is Test, UpgradeableContractHelper {
     function testWithdrawGasFeeZeroGasToken() public {
         // Create a new PRC20 token with a different chain ID that has no gas token set
         PRC20 newPrc20Token = new PRC20();
-        
+
         // Initialize with a different chain ID
         bytes memory initData = abi.encodeWithSelector(
             PRC20.initialize.selector,
@@ -698,12 +697,12 @@ contract UniversalCoreTest is Test, UpgradeableContractHelper {
             address(universalCore),
             SOURCE_TOKEN_ADDRESS
         );
-        
+
         address proxyAddress = deployUpgradeableContract(address(newPrc20Token), initData);
         PRC20 newToken = PRC20(payable(proxyAddress));
-        
+
         // Don't set gas token for this chain ID, so it will be address(0)
-        
+
         // Expect revert when getting gas fee
         vm.expectRevert(CommonErrors.ZeroAddress.selector);
         universalCore.getOutboundTxGasAndFees(address(newToken), 0);
@@ -1124,33 +1123,25 @@ contract UniversalCoreTest is Test, UpgradeableContractHelper {
     function test_SetUniswapV3Addresses_RevertsZeroFactory() public {
         vm.prank(deployer);
         vm.expectRevert(CommonErrors.ZeroAddress.selector);
-        universalCore.setUniswapV3Addresses(
-            address(0), makeAddr("r"), makeAddr("q")
-        );
+        universalCore.setUniswapV3Addresses(address(0), makeAddr("r"), makeAddr("q"));
     }
 
     function test_SetUniswapV3Addresses_RevertsZeroRouter() public {
         vm.prank(deployer);
         vm.expectRevert(CommonErrors.ZeroAddress.selector);
-        universalCore.setUniswapV3Addresses(
-            makeAddr("f"), address(0), makeAddr("q")
-        );
+        universalCore.setUniswapV3Addresses(makeAddr("f"), address(0), makeAddr("q"));
     }
 
     function test_SetUniswapV3Addresses_RevertsZeroQuoter() public {
         vm.prank(deployer);
         vm.expectRevert(CommonErrors.ZeroAddress.selector);
-        universalCore.setUniswapV3Addresses(
-            makeAddr("f"), makeAddr("r"), address(0)
-        );
+        universalCore.setUniswapV3Addresses(makeAddr("f"), makeAddr("r"), address(0));
     }
 
     function test_SetUniswapV3Addresses_OnlyAdmin() public {
         vm.prank(nonOwner);
         vm.expectRevert(CommonErrors.InvalidOwner.selector);
-        universalCore.setUniswapV3Addresses(
-            makeAddr("f"), makeAddr("r"), makeAddr("q")
-        );
+        universalCore.setUniswapV3Addresses(makeAddr("f"), makeAddr("r"), makeAddr("q"));
     }
 
     // ========================================
@@ -1231,9 +1222,7 @@ contract UniversalCoreTest is Test, UpgradeableContractHelper {
     function test_SetSlippageTolerance_RevertsExceeds5000() public {
         address token = makeAddr("token");
         vm.prank(deployer);
-        vm.expectRevert(
-            UniversalCoreErrors.InvalidSlippageTolerance.selector
-        );
+        vm.expectRevert(UniversalCoreErrors.InvalidSlippageTolerance.selector);
         universalCore.setSlippageTolerance(token, 5001);
     }
 

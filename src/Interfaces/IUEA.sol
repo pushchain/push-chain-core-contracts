@@ -28,10 +28,7 @@ interface IUEA {
 
     /// @notice             Returns the Universal Account information for this UEA.
     /// @return             UniversalAccountId containing chain info and owner key
-    function universalAccount()
-        external
-        view
-        returns (UniversalAccountId memory);
+    function universalAccount() external view returns (UniversalAccountId memory);
 
     /// @notice             Returns the current nonce.
     /// @return             Current nonce value
@@ -42,17 +39,12 @@ interface IUEA {
     /// @param payloadHash  Hash of the payload that was signed
     /// @param signature    Signature bytes to verify
     /// @return             True if the signature is valid
-    function verifyUniversalPayloadSignature(
-        bytes32 payloadHash,
-        bytes memory signature
-    ) external view returns (bool);
+    function verifyUniversalPayloadSignature(bytes32 payloadHash, bytes memory signature) external view returns (bool);
 
     /// @notice             Computes the EIP-712 hash for a given payload.
     /// @param payload      The UniversalPayload to hash
     /// @return             EIP-712 compliant hash
-    function getUniversalPayloadHash(
-        UniversalPayload memory payload
-    ) external view returns (bytes32);
+    function getUniversalPayloadHash(UniversalPayload memory payload) external view returns (bytes32);
 
     /// @notice             Returns the EIP-712 domain separator.
     /// @return             Domain separator hash
@@ -68,10 +60,7 @@ interface IUEA {
     ///                     verification is skipped.
     /// @param payload      The UniversalPayload struct (see Types.sol)
     /// @param signature    Signature bytes (65 bytes ECDSA / 64 bytes Ed25519)
-    function executeUniversalTx(
-        UniversalPayload calldata payload,
-        bytes calldata signature
-    ) external;
+    function executeUniversalTx(UniversalPayload calldata payload, bytes calldata signature) external;
 
     // =========================
     //    UEA_3: INITIALIZER
@@ -81,8 +70,5 @@ interface IUEA {
     /// @dev                        Can only be called once during deployment via Factory.
     /// @param universalAccount     UniversalAccountId with chain info and owner key
     /// @param factory              Address of the UEAFactory contract
-    function initialize(
-        UniversalAccountId memory universalAccount,
-        address factory
-    ) external;
+    function initialize(UniversalAccountId memory universalAccount, address factory) external;
 }

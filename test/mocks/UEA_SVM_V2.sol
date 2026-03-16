@@ -48,10 +48,7 @@ contract UEA_SVM_V2 is ReentrancyGuard, IUEA {
     function domainSeparator() public view returns (bytes32) {
         return keccak256(
             abi.encode(
-                DOMAIN_SEPARATOR_TYPEHASH_SVM,
-                keccak256(bytes(VERSION)),
-                universalAccountId.chainId,
-                address(this)
+                DOMAIN_SEPARATOR_TYPEHASH_SVM, keccak256(bytes(VERSION)), universalAccountId.chainId, address(this)
             )
         );
     }

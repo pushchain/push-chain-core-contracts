@@ -168,11 +168,7 @@ contract CEA_MigrationTest is Test {
         // MIGRATION_SELECTOR wrapped in multicall fails as generic execution failure
         // (CEA has no function matching the migration selector, so .call() reverts)
         Multicall[] memory calls = new Multicall[](1);
-        calls[0] = Multicall({
-            to: address(ceaInstance),
-            value: 0,
-            data: abi.encodePacked(MIGRATION_SELECTOR)
-        });
+        calls[0] = Multicall({to: address(ceaInstance), value: 0, data: abi.encodePacked(MIGRATION_SELECTOR)});
         bytes memory payload = abi.encodePacked(MULTICALL_SELECTOR, abi.encode(calls));
 
         vm.prank(vault);
@@ -208,15 +204,11 @@ contract CEA_MigrationTest is Test {
 
         // Build batched payload with migration
         Multicall[] memory calls = new Multicall[](2);
-        calls[0] = Multicall({
-            to: makeAddr("external"),
-            value: 0,
-            data: abi.encodeWithSignature("someFunction()")
-        });
+        calls[0] = Multicall({to: makeAddr("external"), value: 0, data: abi.encodeWithSignature("someFunction()")});
         calls[1] = Multicall({
             to: address(ceaInstance),
             value: 0,
-            data: abi.encodePacked(MIGRATION_SELECTOR)  // Migration in batch!
+            data: abi.encodePacked(MIGRATION_SELECTOR) // Migration in batch!
         });
         bytes memory payload = abi.encodePacked(MULTICALL_SELECTOR, abi.encode(calls));
 
@@ -238,13 +230,9 @@ contract CEA_MigrationTest is Test {
         calls[0] = Multicall({
             to: address(ceaInstance),
             value: 0,
-            data: abi.encodePacked(MIGRATION_SELECTOR)  // Migration first!
+            data: abi.encodePacked(MIGRATION_SELECTOR) // Migration first!
         });
-        calls[1] = Multicall({
-            to: makeAddr("external"),
-            value: 0,
-            data: abi.encodeWithSignature("someFunction()")
-        });
+        calls[1] = Multicall({to: makeAddr("external"), value: 0, data: abi.encodeWithSignature("someFunction()")});
         bytes memory payload = abi.encodePacked(MULTICALL_SELECTOR, abi.encode(calls));
 
         // Migration selector in multicall fails as generic execution failure
@@ -295,9 +283,7 @@ contract CEA_MigrationTest is Test {
 
         vm.prank(vault);
         vm.expectRevert(Errors.ExecutionFailed.selector);
-        ceaInstance.executeUniversalTx(
-            txID, universalTxID, ueaOnPush, address(0), payload
-        );
+        ceaInstance.executeUniversalTx(txID, universalTxID, ueaOnPush, address(0), payload);
     }
 }
 

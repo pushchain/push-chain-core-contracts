@@ -43,6 +43,7 @@ contract PRC20Test is Test, UpgradeableContractHelper {
     event Approval(address indexed owner, address indexed spender, uint256 value);
     event Deposit(bytes from, address to, uint256 amount);
     event UpdatedUniversalCore(address universalCore);
+
     function setUp() public {
         // Setup actors
         uExec = 0x14191Ea54B4c176fCf86f51b0FAc7CB1E71Df7d7;
@@ -64,7 +65,12 @@ contract PRC20Test is Test, UpgradeableContractHelper {
 
         // Create initialization data
         bytes memory initData = abi.encodeWithSelector(
-            UniversalCore.initialize.selector, mockWPC, mockUniswapFactory, mockUniswapRouter, mockUniswapQuoter, makeAddr("pauser")
+            UniversalCore.initialize.selector,
+            mockWPC,
+            mockUniswapFactory,
+            mockUniswapRouter,
+            mockUniswapQuoter,
+            makeAddr("pauser")
         );
 
         // Deploy proxy and initialize
@@ -481,7 +487,12 @@ contract PRC20Test is Test, UpgradeableContractHelper {
 
         // Create initialization data
         bytes memory initData = abi.encodeWithSelector(
-            UniversalCore.initialize.selector, mockWPC, mockUniswapFactory, mockUniswapRouter, mockUniswapQuoter, makeAddr("pauser")
+            UniversalCore.initialize.selector,
+            mockWPC,
+            mockUniswapFactory,
+            mockUniswapRouter,
+            mockUniswapQuoter,
+            makeAddr("pauser")
         );
 
         // Deploy proxy and initialize
@@ -513,7 +524,12 @@ contract PRC20Test is Test, UpgradeableContractHelper {
 
         // Create initialization data
         bytes memory initData = abi.encodeWithSelector(
-            UniversalCore.initialize.selector, mockWPC, mockUniswapFactory, mockUniswapRouter, mockUniswapQuoter, makeAddr("pauser")
+            UniversalCore.initialize.selector,
+            mockWPC,
+            mockUniswapFactory,
+            mockUniswapRouter,
+            mockUniswapQuoter,
+            makeAddr("pauser")
         );
 
         // Deploy proxy and initialize

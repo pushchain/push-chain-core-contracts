@@ -157,11 +157,7 @@ contract CEAMigration_IntegrationTest is Test {
         bytes32 universalTxID1 = generateUniversalTxID(1);
 
         Multicall[] memory calls = new Multicall[](1);
-        calls[0] = Multicall({
-            to: address(this),
-            value: 0,
-            data: abi.encodeWithSignature("dummyFunction()")
-        });
+        calls[0] = Multicall({to: address(this), value: 0, data: abi.encodeWithSignature("dummyFunction()")});
         bytes memory payload = abi.encodePacked(MULTICALL_SELECTOR, abi.encode(calls));
 
         vm.prank(vault);
@@ -257,11 +253,7 @@ contract CEAMigration_IntegrationTest is Test {
         bytes32 universalTxID = generateUniversalTxID(100);
 
         Multicall[] memory calls = new Multicall[](1);
-        calls[0] = Multicall({
-            to: address(this),
-            value: 0,
-            data: abi.encodeWithSignature("dummyFunction()")
-        });
+        calls[0] = Multicall({to: address(this), value: 0, data: abi.encodeWithSignature("dummyFunction()")});
         bytes memory payload = abi.encodePacked(MULTICALL_SELECTOR, abi.encode(calls));
 
         vm.prank(vault);
@@ -280,21 +272,9 @@ contract CEAMigration_IntegrationTest is Test {
         bytes32 universalTxID = generateUniversalTxID(101);
 
         Multicall[] memory calls = new Multicall[](3);
-        calls[0] = Multicall({
-            to: address(this),
-            value: 0,
-            data: abi.encodeWithSignature("dummyFunction()")
-        });
-        calls[1] = Multicall({
-            to: address(this),
-            value: 0,
-            data: abi.encodeWithSignature("dummyFunction()")
-        });
-        calls[2] = Multicall({
-            to: address(this),
-            value: 0,
-            data: abi.encodeWithSignature("dummyFunction()")
-        });
+        calls[0] = Multicall({to: address(this), value: 0, data: abi.encodeWithSignature("dummyFunction()")});
+        calls[1] = Multicall({to: address(this), value: 0, data: abi.encodeWithSignature("dummyFunction()")});
+        calls[2] = Multicall({to: address(this), value: 0, data: abi.encodeWithSignature("dummyFunction()")});
         bytes memory payload = abi.encodePacked(MULTICALL_SELECTOR, abi.encode(calls));
 
         vm.prank(vault);
@@ -399,11 +379,7 @@ contract CEAMigration_IntegrationTest is Test {
             bytes32 universalTxID = generateUniversalTxID(i);
 
             Multicall[] memory calls = new Multicall[](1);
-            calls[0] = Multicall({
-                to: address(this),
-                value: 0,
-                data: abi.encodeWithSignature("dummyFunction()")
-            });
+            calls[0] = Multicall({to: address(this), value: 0, data: abi.encodeWithSignature("dummyFunction()")});
             bytes memory payload = abi.encodePacked(MULTICALL_SELECTOR, abi.encode(calls));
 
             vm.prank(vault);

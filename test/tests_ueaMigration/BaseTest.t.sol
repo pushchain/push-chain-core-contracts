@@ -187,7 +187,7 @@ contract BaseTest is Test {
 
         assertEq(migration.UEA_EVM_IMPLEMENTATION(), address(ueaEVMImplV2), "Migration EVM implementation mismatch");
         assertEq(migration.UEA_SVM_IMPLEMENTATION(), address(ueaSVMImplV2), "Migration SVM implementation mismatch");
-        
+
         // Set migration contract in factory so UEAs can fetch it
         factory.setUEAMigrationContract(address(migration));
     }
@@ -256,12 +256,8 @@ contract BaseTest is Test {
         returns (bytes memory signature)
     {
         // Convert old MigrationPayload to new UniversalPayload format
-        UniversalPayload memory payload = createMigrationPayload(
-            address(ueaInstance),
-            oldPayload.migration,
-            oldPayload.nonce,
-            oldPayload.deadline
-        );
+        UniversalPayload memory payload =
+            createMigrationPayload(address(ueaInstance), oldPayload.migration, oldPayload.nonce, oldPayload.deadline);
         bytes32 payloadHash = ueaInstance.getUniversalPayloadHash(payload);
         (uint8 v, bytes32 r, bytes32 s) = vm.sign(signerPK, payloadHash);
         return abi.encodePacked(r, s, v);
@@ -277,19 +273,11 @@ contract BaseTest is Test {
 
     // Wrapper function to maintain backward compatibility with old migration tests
     // This converts old migrateUEA calls to new executeUniversalTx approach
-    function migrateUEAWrapper(
-        address ueaAddress,
-        MigrationPayload memory oldPayload,
-        bytes memory signature
-    ) public {
+    function migrateUEAWrapper(address ueaAddress, MigrationPayload memory oldPayload, bytes memory signature) public {
         // Convert old MigrationPayload to new UniversalPayload format
-        UniversalPayload memory payload = createMigrationPayload(
-            ueaAddress,
-            oldPayload.migration,
-            oldPayload.nonce,
-            oldPayload.deadline
-        );
-        
+        UniversalPayload memory payload =
+            createMigrationPayload(ueaAddress, oldPayload.migration, oldPayload.nonce, oldPayload.deadline);
+
         // Call executeUniversalTx instead of migrateUEA
         IUEA(ueaAddress).executeUniversalTx(payload, signature);
     }
@@ -317,13 +305,11 @@ contract BaseTest is Test {
      * @param deadline Transaction deadline
      * @return payload Universal payload struct
      */
-    function createUniversalPayload(
-        address to,
-        uint256 value,
-        bytes memory data,
-        uint256 nonce,
-        uint256 deadline
-    ) public pure returns (UniversalPayload memory payload) {
+    function createUniversalPayload(address to, uint256 value, bytes memory data, uint256 nonce, uint256 deadline)
+        public
+        pure
+        returns (UniversalPayload memory payload)
+    {
         return UniversalPayload({
             to: to,
             value: value,
@@ -345,20 +331,19 @@ contract BaseTest is Test {
      * @param deadline Transaction deadline
      * @return payload Universal payload struct configured for migration
      */
-    function createMigrationPayload(
-        address ueaAddress,
-        address migrationContract,
-        uint256 nonce,
-        uint256 deadline
-    ) public pure returns (UniversalPayload memory payload) {
+    function createMigrationPayload(address ueaAddress, address migrationContract, uint256 nonce, uint256 deadline)
+        public
+        pure
+        returns (UniversalPayload memory payload)
+    {
         // Note: migrationContract parameter is ignored as the migration contract
         // is now fetched from the factory by the UEA
         // Encode migration data: only MIGRATION_SELECTOR (no address needed)
         bytes memory migrationData = abi.encodePacked(MIGRATION_SELECTOR);
 
         return UniversalPayload({
-            to: ueaAddress,          // Migration targets the UEA itself
-            value: 0,                 // No value transfer during migration
+            to: ueaAddress, // Migration targets the UEA itself
+            value: 0, // No value transfer during migration
             data: migrationData,
             gasLimit: 1000000,
             maxFeePerGas: 0,

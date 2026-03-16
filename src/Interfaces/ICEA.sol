@@ -19,11 +19,7 @@ interface ICEA {
     /// @param target            Target contract address for this call step
     /// @param data              Calldata executed on target contract
     event UniversalTxExecuted(
-        bytes32 indexed txId,
-        bytes32 indexed universalTxId,
-        address indexed originCaller,
-        address target,
-        bytes data
+        bytes32 indexed txId, bytes32 indexed universalTxId, address indexed originCaller, address target, bytes data
     );
 
     /// @notice                  Emitted when funds are sent from CEA to its UEA on Push Chain.
@@ -31,12 +27,7 @@ interface ICEA {
     /// @param pushAccount       Address of the UEA on Push Chain
     /// @param token             Token address being sent
     /// @param amount            Amount of token being sent
-    event UniversalTxToUEA(
-        address indexed cea,
-        address indexed pushAccount,
-        address indexed token,
-        uint256 amount
-    );
+    event UniversalTxToUEA(address indexed cea, address indexed pushAccount, address indexed token, uint256 amount);
 
     // =========================
     //    CEA_1: VIEW FUNCTIONS
@@ -83,16 +74,14 @@ interface ICEA {
     //    CEA_3: SELF-CALL OPERATIONS
     // =========================
 
-    /// @notice             Sends funds (and optionally a payload) from CEA to its UEA.
-    /// @dev                Only callable via self-call through multicall execution.
-    /// @param token        Token address (address(0) for native)
-    /// @param amount       Amount to send
-    /// @param payload      Payload bytes for UEA execution (empty for funds-only)
-    function sendUniversalTxToUEA(
-        address token,
-        uint256 amount,
-        bytes calldata payload
-    ) external;
+    /// @notice                  Sends funds (and optionally a payload) from CEA to its UEA.
+    /// @dev                     Only callable via self-call through multicall execution.
+    /// @param token             Token address (address(0) for native)
+    /// @param amount            Amount to send
+    /// @param payload           Payload bytes for UEA execution (empty for funds-only)
+    /// @param revertRecipient   Address to receive funds if the tx reverts on Push Chain
+    function sendUniversalTxToUEA(address token, uint256 amount, bytes calldata payload, address revertRecipient)
+        external;
 
     // =========================
     //    CEA_4: INITIALIZER
@@ -103,10 +92,5 @@ interface ICEA {
     /// @param _vault               Address of the Vault on this chain
     /// @param _universalGateway    Address of the Universal Gateway
     /// @param _factory             Address of the CEA factory
-    function initializeCEA(
-        address _pushAccount,
-        address _vault,
-        address _universalGateway,
-        address _factory
-    ) external;
+    function initializeCEA(address _pushAccount, address _vault, address _universalGateway, address _factory) external;
 }

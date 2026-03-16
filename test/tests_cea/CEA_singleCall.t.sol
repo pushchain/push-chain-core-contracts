@@ -179,8 +179,7 @@ contract CEA_SingleCallTests is CEATest {
         ceaInstance.executeUniversalTx(txID, universalTxID, ueaOnPush, address(reverter), payload);
 
         assertFalse(
-            CEA(payable(address(ceaInstance))).isExecuted(txID),
-            "txID should not be marked executed on failure"
+            CEA(payable(address(ceaInstance))).isExecuted(txID), "txID should not be marked executed on failure"
         );
     }
 

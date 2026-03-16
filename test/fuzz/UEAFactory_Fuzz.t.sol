@@ -23,9 +23,8 @@ contract UEAFactory_Fuzz is Test {
     function setUp() public {
         ueaProxyImpl = new UEAProxy();
         UEAFactory factoryImpl = new UEAFactory();
-        bytes memory initData = abi.encodeWithSelector(
-            UEAFactory.initialize.selector, address(this), makeAddr("pauser")
-        );
+        bytes memory initData =
+            abi.encodeWithSelector(UEAFactory.initialize.selector, address(this), makeAddr("pauser"));
         ERC1967Proxy proxy = new ERC1967Proxy(address(factoryImpl), initData);
         factory = UEAFactory(address(proxy));
         factory.setUEAProxyImplementation(address(ueaProxyImpl));
@@ -41,11 +40,8 @@ contract UEAFactory_Fuzz is Test {
 
     function testFuzz_computeUEA_deterministic(address fuzzedOwner) public {
         vm.assume(fuzzedOwner != address(0));
-        UniversalAccountId memory id = UniversalAccountId({
-            chainNamespace: CHAIN_NS,
-            chainId: CHAIN_ID,
-            owner: abi.encodePacked(fuzzedOwner)
-        });
+        UniversalAccountId memory id =
+            UniversalAccountId({chainNamespace: CHAIN_NS, chainId: CHAIN_ID, owner: abi.encodePacked(fuzzedOwner)});
 
         address result1 = factory.computeUEA(id);
         address result2 = factory.computeUEA(id);
@@ -56,11 +52,8 @@ contract UEAFactory_Fuzz is Test {
 
     function testFuzz_computeUEA_matchesDeployUEA(address fuzzedOwner) public {
         vm.assume(fuzzedOwner != address(0));
-        UniversalAccountId memory id = UniversalAccountId({
-            chainNamespace: CHAIN_NS,
-            chainId: CHAIN_ID,
-            owner: abi.encodePacked(fuzzedOwner)
-        });
+        UniversalAccountId memory id =
+            UniversalAccountId({chainNamespace: CHAIN_NS, chainId: CHAIN_ID, owner: abi.encodePacked(fuzzedOwner)});
 
         address computed = factory.computeUEA(id);
         address deployed = factory.deployUEA(id);
@@ -73,16 +66,10 @@ contract UEAFactory_Fuzz is Test {
         vm.assume(owner1 != address(0));
         vm.assume(owner2 != address(0));
 
-        UniversalAccountId memory id1 = UniversalAccountId({
-            chainNamespace: CHAIN_NS,
-            chainId: CHAIN_ID,
-            owner: abi.encodePacked(owner1)
-        });
-        UniversalAccountId memory id2 = UniversalAccountId({
-            chainNamespace: CHAIN_NS,
-            chainId: CHAIN_ID,
-            owner: abi.encodePacked(owner2)
-        });
+        UniversalAccountId memory id1 =
+            UniversalAccountId({chainNamespace: CHAIN_NS, chainId: CHAIN_ID, owner: abi.encodePacked(owner1)});
+        UniversalAccountId memory id2 =
+            UniversalAccountId({chainNamespace: CHAIN_NS, chainId: CHAIN_ID, owner: abi.encodePacked(owner2)});
 
         address addr1 = factory.computeUEA(id1);
         address addr2 = factory.computeUEA(id2);
@@ -96,11 +83,8 @@ contract UEAFactory_Fuzz is Test {
 
     function testFuzz_generateSalt_deterministic(address fuzzedOwner) public {
         vm.assume(fuzzedOwner != address(0));
-        UniversalAccountId memory id = UniversalAccountId({
-            chainNamespace: CHAIN_NS,
-            chainId: CHAIN_ID,
-            owner: abi.encodePacked(fuzzedOwner)
-        });
+        UniversalAccountId memory id =
+            UniversalAccountId({chainNamespace: CHAIN_NS, chainId: CHAIN_ID, owner: abi.encodePacked(fuzzedOwner)});
 
         bytes32 salt1 = factory.generateSalt(id);
         bytes32 salt2 = factory.generateSalt(id);
@@ -113,16 +97,10 @@ contract UEAFactory_Fuzz is Test {
         vm.assume(owner1 != address(0));
         vm.assume(owner2 != address(0));
 
-        UniversalAccountId memory id1 = UniversalAccountId({
-            chainNamespace: CHAIN_NS,
-            chainId: CHAIN_ID,
-            owner: abi.encodePacked(owner1)
-        });
-        UniversalAccountId memory id2 = UniversalAccountId({
-            chainNamespace: CHAIN_NS,
-            chainId: CHAIN_ID,
-            owner: abi.encodePacked(owner2)
-        });
+        UniversalAccountId memory id1 =
+            UniversalAccountId({chainNamespace: CHAIN_NS, chainId: CHAIN_ID, owner: abi.encodePacked(owner1)});
+        UniversalAccountId memory id2 =
+            UniversalAccountId({chainNamespace: CHAIN_NS, chainId: CHAIN_ID, owner: abi.encodePacked(owner2)});
 
         bytes32 salt1 = factory.generateSalt(id1);
         bytes32 salt2 = factory.generateSalt(id2);
@@ -136,11 +114,8 @@ contract UEAFactory_Fuzz is Test {
 
     function testFuzz_deployUEA_hasCode(address fuzzedOwner) public {
         vm.assume(fuzzedOwner != address(0));
-        UniversalAccountId memory id = UniversalAccountId({
-            chainNamespace: CHAIN_NS,
-            chainId: CHAIN_ID,
-            owner: abi.encodePacked(fuzzedOwner)
-        });
+        UniversalAccountId memory id =
+            UniversalAccountId({chainNamespace: CHAIN_NS, chainId: CHAIN_ID, owner: abi.encodePacked(fuzzedOwner)});
 
         address deployed = factory.deployUEA(id);
 
@@ -149,11 +124,8 @@ contract UEAFactory_Fuzz is Test {
 
     function testFuzz_deployUEA_secondCall_reverts(address fuzzedOwner) public {
         vm.assume(fuzzedOwner != address(0));
-        UniversalAccountId memory id = UniversalAccountId({
-            chainNamespace: CHAIN_NS,
-            chainId: CHAIN_ID,
-            owner: abi.encodePacked(fuzzedOwner)
-        });
+        UniversalAccountId memory id =
+            UniversalAccountId({chainNamespace: CHAIN_NS, chainId: CHAIN_ID, owner: abi.encodePacked(fuzzedOwner)});
 
         factory.deployUEA(id);
 
@@ -164,11 +136,8 @@ contract UEAFactory_Fuzz is Test {
 
     function testFuzz_deployUEA_mappingConsistency(address fuzzedOwner) public {
         vm.assume(fuzzedOwner != address(0));
-        UniversalAccountId memory id = UniversalAccountId({
-            chainNamespace: CHAIN_NS,
-            chainId: CHAIN_ID,
-            owner: abi.encodePacked(fuzzedOwner)
-        });
+        UniversalAccountId memory id =
+            UniversalAccountId({chainNamespace: CHAIN_NS, chainId: CHAIN_ID, owner: abi.encodePacked(fuzzedOwner)});
 
         address deployed = factory.deployUEA(id);
 
@@ -195,11 +164,8 @@ contract UEAFactory_Fuzz is Test {
 
     function testFuzz_getUEAForOrigin_undeployed_returnsNotDeployed(address fuzzedOwner) public {
         vm.assume(fuzzedOwner != address(0));
-        UniversalAccountId memory id = UniversalAccountId({
-            chainNamespace: CHAIN_NS,
-            chainId: CHAIN_ID,
-            owner: abi.encodePacked(fuzzedOwner)
-        });
+        UniversalAccountId memory id =
+            UniversalAccountId({chainNamespace: CHAIN_NS, chainId: CHAIN_ID, owner: abi.encodePacked(fuzzedOwner)});
 
         (address uea, bool isDeployed) = factory.getUEAForOrigin(id);
 
@@ -231,11 +197,8 @@ contract UEAFactory_Fuzz is Test {
         vm.assume(fuzzedOwner != address(0));
 
         // Use a chain that is NOT registered in setUp
-        UniversalAccountId memory id = UniversalAccountId({
-            chainNamespace: "unregistered",
-            chainId: "9999",
-            owner: abi.encodePacked(fuzzedOwner)
-        });
+        UniversalAccountId memory id =
+            UniversalAccountId({chainNamespace: "unregistered", chainId: "9999", owner: abi.encodePacked(fuzzedOwner)});
 
         vm.expectRevert(UEAErrors.InvalidInputArgs.selector);
         factory.deployUEA(id);

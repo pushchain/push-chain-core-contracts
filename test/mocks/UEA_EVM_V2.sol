@@ -80,7 +80,6 @@ contract UEA_EVM_V2 is ReentrancyGuard, IUEA {
         return recoveredSigner == address(bytes20(universalAccountId.owner));
     }
 
-
     /**
      * @dev Checks whether the payload data uses the multicall format by verifying a magic selector prefix.
      * @param data The raw data from the UniversalPayload.
@@ -154,9 +153,9 @@ contract UEA_EVM_V2 is ReentrancyGuard, IUEA {
         emit PayloadExecuted(universalAccountId.owner, nonce);
     }
 
-    function _handleMulticall(UniversalPayload memory payload) 
-        internal 
-        returns (bool success, bytes memory returnData) 
+    function _handleMulticall(UniversalPayload memory payload)
+        internal
+        returns (bool success, bytes memory returnData)
     {
         Multicall[] memory calls = decodeCalls(payload.data);
 
@@ -174,9 +173,9 @@ contract UEA_EVM_V2 is ReentrancyGuard, IUEA {
         return (true, "");
     }
 
-    function _handleMigration(UniversalPayload memory payload) 
-        internal 
-        returns (bool success, bytes memory returnData) 
+    function _handleMigration(UniversalPayload memory payload)
+        internal
+        returns (bool success, bytes memory returnData)
     {
         if (payload.to != address(this)) {
             revert Errors.InvalidCall();
@@ -187,7 +186,7 @@ contract UEA_EVM_V2 is ReentrancyGuard, IUEA {
 
         // Fetch migration contract address from factory
         address migrationContract = ueaFactory.UEA_MIGRATION_CONTRACT();
-        
+
         if (migrationContract == address(0)) {
             revert Errors.InvalidCall();
         }
@@ -197,9 +196,9 @@ contract UEA_EVM_V2 is ReentrancyGuard, IUEA {
         (success, returnData) = migrationContract.delegatecall(migrateCallData);
     }
 
-    function _handleSingleCall(UniversalPayload memory payload) 
-        internal 
-        returns (bool success, bytes memory returnData) 
+    function _handleSingleCall(UniversalPayload memory payload)
+        internal
+        returns (bool success, bytes memory returnData)
     {
         (success, returnData) = payload.to.call{value: payload.value}(payload.data);
     }

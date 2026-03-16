@@ -43,7 +43,9 @@ contract CEAMigrationTest is Test {
 
         // Verify immutables set correctly
         assertEq(migration.CEA_IMPLEMENTATION(), address(ceaV2Implementation), "CEA_IMPLEMENTATION should match");
-        assertEq(migration.CEA_MIGRATION_IMPLEMENTATION(), address(migration), "CEA_MIGRATION_IMPLEMENTATION should be self");
+        assertEq(
+            migration.CEA_MIGRATION_IMPLEMENTATION(), address(migration), "CEA_MIGRATION_IMPLEMENTATION should be self"
+        );
     }
 
     function test_Constructor_RevertZeroAddress() public {
@@ -94,9 +96,12 @@ contract CEAMigrationTest is Test {
         assertEq(proxy.getImplementation(), address(ceaV1Implementation), "Initial implementation should be v1");
 
         // Delegatecall to migration contract from proxy
-        (bool success,) = address(proxy).call(
-            abi.encodeWithSignature("delegatecall(address,bytes)", address(migration), abi.encodeWithSignature("migrateCEA()"))
-        );
+        (bool success,) = address(proxy)
+            .call(
+                abi.encodeWithSignature(
+                    "delegatecall(address,bytes)", address(migration), abi.encodeWithSignature("migrateCEA()")
+                )
+            );
 
         // Note: This test requires a way to trigger delegatecall from proxy
         // In practice, this would happen through CEA._handleMigration()

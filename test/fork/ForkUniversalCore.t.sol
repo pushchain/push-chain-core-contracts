@@ -31,9 +31,7 @@ contract ForkUniversalCoreTest is Test, UpgradeableContractHelper, PushChainAddr
     // Events
     // =========================================================================
 
-    event SwapAndBurnGas(
-        address indexed gasToken, uint256 pcIn, uint256 gasFee, uint24 fee, address indexed caller
-    );
+    event SwapAndBurnGas(address indexed gasToken, uint256 pcIn, uint256 gasFee, uint24 fee, address indexed caller);
     event DepositPRC20WithAutoSwap(
         address prc20, uint256 amountIn, address pcToken, uint256 amountOut, uint24 fee, address recipient
     );
@@ -111,9 +109,7 @@ contract ForkUniversalCoreTest is Test, UpgradeableContractHelper, PushChainAddr
 
     function _updatePRC20UniversalCore(address token) private {
         vm.prank(UNIVERSAL_EXECUTOR_MODULE);
-        (bool ok,) = token.call(
-            abi.encodeWithSignature("updateUniversalCore(address)", address(universalCore))
-        );
+        (bool ok,) = token.call(abi.encodeWithSignature("updateUniversalCore(address)", address(universalCore)));
         require(ok, "Failed to update universalCore on PRC20");
     }
 
@@ -122,47 +118,46 @@ contract ForkUniversalCoreTest is Test, UpgradeableContractHelper, PushChainAddr
     // =========================================================================
 
     function test_fork_realPoolExists_pSOL_WPC() public view {
-        address pool = IUniswapV3Factory(UNISWAP_FACTORY).getPool(
-            PSOL_TOKEN < WPC_TOKEN ? PSOL_TOKEN : WPC_TOKEN,
-            PSOL_TOKEN < WPC_TOKEN ? WPC_TOKEN : PSOL_TOKEN,
-            500
-        );
+        address pool = IUniswapV3Factory(UNISWAP_FACTORY)
+            .getPool(
+                PSOL_TOKEN < WPC_TOKEN ? PSOL_TOKEN : WPC_TOKEN, PSOL_TOKEN < WPC_TOKEN ? WPC_TOKEN : PSOL_TOKEN, 500
+            );
         assertEq(pool, PSOL_WPC_POOL);
     }
 
     function test_fork_realPoolExists_pETH_WPC() public view {
-        address pool = IUniswapV3Factory(UNISWAP_FACTORY).getPool(
-            PETH_TOKEN < WPC_TOKEN ? PETH_TOKEN : WPC_TOKEN,
-            PETH_TOKEN < WPC_TOKEN ? WPC_TOKEN : PETH_TOKEN,
-            500
-        );
+        address pool = IUniswapV3Factory(UNISWAP_FACTORY)
+            .getPool(
+                PETH_TOKEN < WPC_TOKEN ? PETH_TOKEN : WPC_TOKEN, PETH_TOKEN < WPC_TOKEN ? WPC_TOKEN : PETH_TOKEN, 500
+            );
         assertEq(pool, PETH_WPC_POOL);
     }
 
     function test_fork_realPoolExists_USDT_eth_WPC() public view {
-        address pool = IUniswapV3Factory(UNISWAP_FACTORY).getPool(
-            USDT_ETH_TOKEN < WPC_TOKEN ? USDT_ETH_TOKEN : WPC_TOKEN,
-            USDT_ETH_TOKEN < WPC_TOKEN ? WPC_TOKEN : USDT_ETH_TOKEN,
-            500
-        );
+        address pool = IUniswapV3Factory(UNISWAP_FACTORY)
+            .getPool(
+                USDT_ETH_TOKEN < WPC_TOKEN ? USDT_ETH_TOKEN : WPC_TOKEN,
+                USDT_ETH_TOKEN < WPC_TOKEN ? WPC_TOKEN : USDT_ETH_TOKEN,
+                500
+            );
         assertEq(pool, USDT_ETH_WPC_POOL);
     }
 
     function test_fork_realPoolExists_pETH_arb_WPC() public view {
-        address pool = IUniswapV3Factory(UNISWAP_FACTORY).getPool(
-            PETH_ARB_TOKEN < WPC_TOKEN ? PETH_ARB_TOKEN : WPC_TOKEN,
-            PETH_ARB_TOKEN < WPC_TOKEN ? WPC_TOKEN : PETH_ARB_TOKEN,
-            3000
-        );
+        address pool = IUniswapV3Factory(UNISWAP_FACTORY)
+            .getPool(
+                PETH_ARB_TOKEN < WPC_TOKEN ? PETH_ARB_TOKEN : WPC_TOKEN,
+                PETH_ARB_TOKEN < WPC_TOKEN ? WPC_TOKEN : PETH_ARB_TOKEN,
+                3000
+            );
         assertEq(pool, PETH_ARB_WPC_POOL);
     }
 
     function test_fork_realPoolExists_pBNB_WPC() public view {
-        address pool = IUniswapV3Factory(UNISWAP_FACTORY).getPool(
-            PBNB_TOKEN < WPC_TOKEN ? PBNB_TOKEN : WPC_TOKEN,
-            PBNB_TOKEN < WPC_TOKEN ? WPC_TOKEN : PBNB_TOKEN,
-            500
-        );
+        address pool = IUniswapV3Factory(UNISWAP_FACTORY)
+            .getPool(
+                PBNB_TOKEN < WPC_TOKEN ? PBNB_TOKEN : WPC_TOKEN, PBNB_TOKEN < WPC_TOKEN ? WPC_TOKEN : PBNB_TOKEN, 500
+            );
         assertEq(pool, PBNB_WPC_POOL);
     }
 
@@ -189,11 +184,8 @@ contract ForkUniversalCoreTest is Test, UpgradeableContractHelper, PushChainAddr
     }
 
     function _assertPool(address token, uint24 fee, address expected) private view {
-        address pool = IUniswapV3Factory(UNISWAP_FACTORY).getPool(
-            token < WPC_TOKEN ? token : WPC_TOKEN,
-            token < WPC_TOKEN ? WPC_TOKEN : token,
-            fee
-        );
+        address pool = IUniswapV3Factory(UNISWAP_FACTORY)
+            .getPool(token < WPC_TOKEN ? token : WPC_TOKEN, token < WPC_TOKEN ? WPC_TOKEN : token, fee);
         assertEq(pool, expected);
     }
 
@@ -255,9 +247,7 @@ contract ForkUniversalCoreTest is Test, UpgradeableContractHelper, PushChainAddr
         // Set minPCOut absurdly high so swap fails
         vm.prank(UNIVERSAL_EXECUTOR_MODULE);
         vm.expectRevert(); // Uniswap "Too little received" or SlippageExceeded
-        universalCore.depositPRC20WithAutoSwap(
-            USDT_ETH_TOKEN, 1e18, user, 500, type(uint256).max, 0
-        );
+        universalCore.depositPRC20WithAutoSwap(USDT_ETH_TOKEN, 1e18, user, 500, type(uint256).max, 0);
     }
 
     function test_fork_autoSwap_minPCOutZero_reverts() public {
@@ -338,9 +328,8 @@ contract ForkUniversalCoreTest is Test, UpgradeableContractHelper, PushChainAddr
         uint256 sendAmount = 500 ether; // Send plenty of PC
 
         vm.prank(gateway);
-        (uint256 gasTokenOut, uint256 refund) = universalCore.swapAndBurnGas{value: sendAmount}(
-            gasToken, fee, gasFee, 0, user
-        );
+        (uint256 gasTokenOut, uint256 refund) =
+            universalCore.swapAndBurnGas{value: sendAmount}(gasToken, fee, gasFee, 0, user);
 
         assertEq(gasTokenOut, gasFee, "gasTokenOut should equal gasFee");
         assertGt(refund, 0, "Should have refund");
@@ -353,9 +342,8 @@ contract ForkUniversalCoreTest is Test, UpgradeableContractHelper, PushChainAddr
         uint256 userBalanceBefore = user.balance;
 
         vm.prank(gateway);
-        (uint256 gasTokenOut, uint256 refund) = universalCore.swapAndBurnGas{value: sendAmount}(
-            PETH_TOKEN, 500, gasFee, 0, user
-        );
+        (uint256 gasTokenOut, uint256 refund) =
+            universalCore.swapAndBurnGas{value: sendAmount}(PETH_TOKEN, 500, gasFee, 0, user);
 
         assertEq(gasTokenOut, gasFee);
         // refund = msg.value - amountInUsed
@@ -368,9 +356,7 @@ contract ForkUniversalCoreTest is Test, UpgradeableContractHelper, PushChainAddr
         uint256 gatewayBalanceBefore = gateway.balance;
 
         vm.prank(gateway);
-        (, uint256 refund) = universalCore.swapAndBurnGas{value: 500 ether}(
-            PETH_TOKEN, 500, 1e13, 0, user
-        );
+        (, uint256 refund) = universalCore.swapAndBurnGas{value: 500 ether}(PETH_TOKEN, 500, 1e13, 0, user);
 
         // Refund goes to `caller` (user), not msg.sender (gateway)
         assertEq(user.balance, userBalanceBefore + refund);
@@ -418,9 +404,7 @@ contract ForkUniversalCoreTest is Test, UpgradeableContractHelper, PushChainAddr
 
         vm.prank(gateway);
         vm.expectRevert(CommonErrors.DeadlineExpired.selector);
-        universalCore.swapAndBurnGas{value: 100 ether}(
-            USDT_ETH_TOKEN, 500, 1e18, pastDeadline, user
-        );
+        universalCore.swapAndBurnGas{value: 100 ether}(USDT_ETH_TOKEN, 500, 1e18, pastDeadline, user);
     }
 
     function test_fork_swapAndBurnGas_feeTierMismatch_reverts() public {
@@ -445,9 +429,7 @@ contract ForkUniversalCoreTest is Test, UpgradeableContractHelper, PushChainAddr
         uint256 gasFee = 1e13; // small pETH amount
 
         vm.prank(gateway);
-        (uint256 gasTokenOut,) = universalCore.swapAndBurnGas{value: 500 ether}(
-            PETH_TOKEN, 500, gasFee, 0, user
-        );
+        (uint256 gasTokenOut,) = universalCore.swapAndBurnGas{value: 500 ether}(PETH_TOKEN, 500, gasFee, 0, user);
 
         assertEq(gasTokenOut, gasFee, "Exact output should match gasFee precisely");
     }
@@ -455,16 +437,14 @@ contract ForkUniversalCoreTest is Test, UpgradeableContractHelper, PushChainAddr
     function test_fork_swapAndBurnGas_largeTrade_priceImpact() public {
         // Small trade
         vm.prank(gateway);
-        (uint256 smallOut, uint256 smallRefund) = universalCore.swapAndBurnGas{value: 500 ether}(
-            PETH_TOKEN, 500, 1e12, 0, user
-        );
+        (uint256 smallOut, uint256 smallRefund) =
+            universalCore.swapAndBurnGas{value: 500 ether}(PETH_TOKEN, 500, 1e12, 0, user);
         uint256 smallAmountIn = 500 ether - smallRefund;
 
         // Larger trade (10x gasFee)
         vm.prank(gateway);
-        (uint256 largeOut, uint256 largeRefund) = universalCore.swapAndBurnGas{value: 500 ether}(
-            PETH_TOKEN, 500, 1e13, 0, user
-        );
+        (uint256 largeOut, uint256 largeRefund) =
+            universalCore.swapAndBurnGas{value: 500 ether}(PETH_TOKEN, 500, 1e13, 0, user);
         uint256 largeAmountIn = 500 ether - largeRefund;
 
         assertEq(smallOut, 1e12);
@@ -503,19 +483,13 @@ contract ForkUniversalCoreTest is Test, UpgradeableContractHelper, PushChainAddr
         vm.prank(UNIVERSAL_EXECUTOR_MODULE);
         universalCore.refundUnusedGas(PSOL_TOKEN, 1e18, user, false, 0, 0);
 
-        assertEq(
-            IERC20(PSOL_TOKEN).balanceOf(user),
-            balanceBefore + 1e18,
-            "Should deposit PRC20 directly"
-        );
+        assertEq(IERC20(PSOL_TOKEN).balanceOf(user), balanceBefore + 1e18, "Should deposit PRC20 directly");
     }
 
     function test_fork_refundGas_withSwap_minPCOutEnforced() public {
         vm.prank(UNIVERSAL_EXECUTOR_MODULE);
         vm.expectRevert(); // Uniswap slippage or SlippageExceeded
-        universalCore.refundUnusedGas(
-            USDT_ETH_TOKEN, 1e18, user, true, 500, type(uint256).max
-        );
+        universalCore.refundUnusedGas(USDT_ETH_TOKEN, 1e18, user, true, 500, type(uint256).max);
     }
 
     function test_fork_refundGas_withSwap_feeResolution() public {
@@ -544,9 +518,7 @@ contract ForkUniversalCoreTest is Test, UpgradeableContractHelper, PushChainAddr
         vm.prank(UNIVERSAL_EXECUTOR_MODULE);
         universalCore.refundUnusedGas(USDT_ETH_TOKEN, 1e18, user, true, 500, 1);
 
-        uint256 allowance = IERC20(USDT_ETH_TOKEN).allowance(
-            address(universalCore), UNISWAP_ROUTER
-        );
+        uint256 allowance = IERC20(USDT_ETH_TOKEN).allowance(address(universalCore), UNISWAP_ROUTER);
         assertEq(allowance, 0, "Approval should be revoked after swap");
     }
 
@@ -561,9 +533,7 @@ contract ForkUniversalCoreTest is Test, UpgradeableContractHelper, PushChainAddr
         uint256 pastDeadline = block.timestamp - 1;
         vm.prank(UNIVERSAL_EXECUTOR_MODULE);
         vm.expectRevert(CommonErrors.DeadlineExpired.selector);
-        universalCore.depositPRC20WithAutoSwap(
-            PSOL_TOKEN, 1e18, user, 0, 1, pastDeadline
-        );
+        universalCore.depositPRC20WithAutoSwap(PSOL_TOKEN, 1e18, user, 0, 1, pastDeadline);
     }
 
     // =========================================================================
@@ -597,9 +567,7 @@ contract ForkUniversalCoreTest is Test, UpgradeableContractHelper, PushChainAddr
         IWPC(WPC_TOKEN).deposit{value: amount}();
 
         assertEq(
-            IERC20(WPC_TOKEN).totalSupply(),
-            address(WPC_TOKEN).balance,
-            "WPC totalSupply must equal contract balance"
+            IERC20(WPC_TOKEN).totalSupply(), address(WPC_TOKEN).balance, "WPC totalSupply must equal contract balance"
         );
     }
 

@@ -76,4 +76,6 @@ library CEAErrors {
     error ExecutionFailed();
     error InvalidCall();
     error InvalidRecipient();
+    error InvalidImplementation();
+    error CEAAlreadyDeployed();
 }
