@@ -82,7 +82,7 @@ contract PRC20Test is Test, UpgradeableContractHelper {
 
         // Configure universalCore
         vm.startPrank(uExec);
-        universalCore.setChainMeta(SOURCE_CHAIN_NAMESPACE, GAS_PRICE, 0, 0);
+        universalCore.setChainMeta(SOURCE_CHAIN_NAMESPACE, GAS_PRICE, 0);
         universalCore.setGasTokenPRC20(SOURCE_CHAIN_NAMESPACE, address(gasToken));
         vm.stopPrank();
 
