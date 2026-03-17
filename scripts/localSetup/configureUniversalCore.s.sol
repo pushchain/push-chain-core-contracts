@@ -2,7 +2,7 @@
 pragma solidity ^0.8.20;
 
 import "forge-std/Script.sol";
-import {UniversalCoreV0} from "../../src/UniversalCoreV0.sol";
+import {UniversalCoreV0} from "../../src/testnetV0/UniversalCoreV0.sol";
 
 contract ConfigureUniversalCoreScript is Script {
     // UniversalCore contract address

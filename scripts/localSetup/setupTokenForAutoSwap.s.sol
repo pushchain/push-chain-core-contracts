@@ -2,7 +2,7 @@
 pragma solidity ^0.8.20;
 
 import "forge-std/Script.sol";
-import {UniversalCoreV0} from "../../src/UniversalCoreV0.sol";
+import {UniversalCoreV0} from "../../src/testnetV0/UniversalCoreV0.sol";
 
 contract SetupTokenForAutoSwapScript is Script {
 	// Fee tiers: 500 (0.05%), 3000 (0.3%), 10000 (1%)
