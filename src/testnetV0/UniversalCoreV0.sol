@@ -384,18 +384,19 @@ contract UniversalCoreV0 is
     }
 
     /// @notice                  Set gas price, chain height, and observation timestamp for a chain.
+    /// @dev                     `observedAt` is set to `block.timestamp` of the Push Chain block
+    ///                          in which this call is included.
     /// @param chainNamespace    Chain Namespace (e.g. "eip155:1" for Ethereum Mainnet)
     /// @param price             Gas price on the external chain
     /// @param chainHeight       Block height observed on the external chain
-    /// @param observedAt        Timestamp when the observation was made
-    function setChainMeta(string memory chainNamespace, uint256 price, uint256 chainHeight, uint256 observedAt)
+    function setChainMeta(string memory chainNamespace, uint256 price, uint256 chainHeight)
         external
         onlyUEModule
     {
         gasPriceByChainNamespace[chainNamespace] = price;
         chainHeightByChainNamespace[chainNamespace] = chainHeight;
-        timestampObservedAtByChainNamespace[chainNamespace] = observedAt;
-        emit SetChainMeta(chainNamespace, price, chainHeight, observedAt);
+        timestampObservedAtByChainNamespace[chainNamespace] = block.timestamp;
+        emit SetChainMeta(chainNamespace, price, chainHeight, block.timestamp);
     }
 
     /// @notice                  Setter for gasTokenPRC20ByChainNamespace map.
