@@ -38,8 +38,7 @@ contract UEA_SVM_FuzzTest is Test {
         ueaProxyImpl = new UEAProxy();
 
         UEAFactory factoryImpl = new UEAFactory();
-        bytes memory initData =
-            abi.encodeWithSelector(UEAFactory.initialize.selector, address(this), makeAddr("pauser"));
+        bytes memory initData = abi.encodeWithSelector(UEAFactory.initialize.selector, address(this));
         ERC1967Proxy proxy = new ERC1967Proxy(address(factoryImpl), initData);
         factory = UEAFactory(address(proxy));
         factory.setUEAProxyImplementation(address(ueaProxyImpl));
@@ -96,7 +95,7 @@ contract UEA_SVM_FuzzTest is Test {
         UEA_SVM freshSVM = new UEA_SVM();
         bytes memory ownerB = abi.encodePacked(bytes32(uint256(0xabcd)));
         UniversalAccountId memory id = UniversalAccountId({chainNamespace: "solana", chainId: chainId, owner: ownerB});
-        freshSVM.initialize(id, address(factory));
+        freshSVM.initialize(id);
 
         bytes32 ds = freshSVM.domainSeparator();
 
@@ -110,7 +109,7 @@ contract UEA_SVM_FuzzTest is Test {
         UEA_SVM otherSVM = new UEA_SVM();
         UniversalAccountId memory otherId =
             UniversalAccountId({chainNamespace: "solana", chainId: differentChainId, owner: ownerB});
-        otherSVM.initialize(otherId, address(factory));
+        otherSVM.initialize(otherId);
 
         bytes32 dsOther = otherSVM.domainSeparator();
         assertTrue(ds != dsOther, "Different chainIds must yield different domain separators");
@@ -124,7 +123,7 @@ contract UEA_SVM_FuzzTest is Test {
         vm.assume(signature.length != 64);
 
         UniversalPayload memory payload = _buildPayload(address(target), 0, "", 0);
-        bytes32 h = svmSmartAccountInstance.getUniversalPayloadHash(payload);
+        bytes32 h = svmSmartAccountInstance.getPayloadHash(payload);
 
         // The precompile call will fail for wrong-length signatures
         // Mock the precompile to return failure (staticcall fails)
@@ -135,7 +134,7 @@ contract UEA_SVM_FuzzTest is Test {
         );
 
         vm.expectRevert(UEAErrors.PrecompileCallFailed.selector);
-        svmSmartAccountInstance.verifyUniversalPayloadSignature(h, signature);
+        svmSmartAccountInstance.verifyPayloadSignature(h, signature);
     }
 
     // =========================================================================
@@ -161,8 +160,8 @@ contract UEA_SVM_FuzzTest is Test {
         // Both SVM and EVM use UNIVERSAL_PAYLOAD_TYPEHASH — compute what it should be
         // The struct hash portion is identical; only domain separator differs
         // Verify SVM hash is deterministic and non-zero
-        bytes32 svmHash = svmSmartAccountInstance.getUniversalPayloadHash(payload);
-        bytes32 svmHash2 = svmSmartAccountInstance.getUniversalPayloadHash(payload);
+        bytes32 svmHash = svmSmartAccountInstance.getPayloadHash(payload);
+        bytes32 svmHash2 = svmSmartAccountInstance.getPayloadHash(payload);
         assertEq(svmHash, svmHash2);
         assertTrue(svmHash != bytes32(0));
     }
@@ -180,7 +179,7 @@ contract UEA_SVM_FuzzTest is Test {
 
         // Use UNIVERSAL_EXECUTOR_MODULE to bypass Ed25519 signature check
         vm.prank(UNIVERSAL_EXECUTOR_MODULE);
-        svmSmartAccountInstance.executeUniversalTx(payload, "");
+        svmSmartAccountInstance.executePayload(payload, "");
 
         assertEq(svmSmartAccountInstance.nonce(), nonceBefore + 1);
         assertEq(target.magicNumber(), magicNum);
@@ -201,7 +200,7 @@ contract UEA_SVM_FuzzTest is Test {
 
         vm.prank(UNIVERSAL_EXECUTOR_MODULE);
         vm.expectRevert(UEAErrors.ExpiredDeadline.selector);
-        svmSmartAccountInstance.executeUniversalTx(payload, "");
+        svmSmartAccountInstance.executePayload(payload, "");
     }
 
     // =========================================================================
@@ -217,7 +216,7 @@ contract UEA_SVM_FuzzTest is Test {
 
         // Non-multicall, non-migration: should route to single call (succeeds for address(0))
         vm.prank(UNIVERSAL_EXECUTOR_MODULE);
-        svmSmartAccountInstance.executeUniversalTx(payload, "");
+        svmSmartAccountInstance.executePayload(payload, "");
         assertEq(svmSmartAccountInstance.nonce(), 1);
     }
 
@@ -237,6 +236,6 @@ contract UEA_SVM_FuzzTest is Test {
 
         vm.prank(UNIVERSAL_EXECUTOR_MODULE);
         vm.expectRevert(UEAErrors.InvalidCall.selector);
-        svmSmartAccountInstance.executeUniversalTx(payload, "");
+        svmSmartAccountInstance.executePayload(payload, "");
     }
 }

@@ -23,8 +23,7 @@ contract UEAFactory_Fuzz is Test {
     function setUp() public {
         ueaProxyImpl = new UEAProxy();
         UEAFactory factoryImpl = new UEAFactory();
-        bytes memory initData =
-            abi.encodeWithSelector(UEAFactory.initialize.selector, address(this), makeAddr("pauser"));
+        bytes memory initData = abi.encodeWithSelector(UEAFactory.initialize.selector, address(this));
         ERC1967Proxy proxy = new ERC1967Proxy(address(factoryImpl), initData);
         factory = UEAFactory(address(proxy));
         factory.setUEAProxyImplementation(address(ueaProxyImpl));

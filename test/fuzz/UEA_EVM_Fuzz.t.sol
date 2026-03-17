@@ -41,8 +41,7 @@ contract UEA_EVM_FuzzTest is Test {
         ueaProxyImpl = new UEAProxy();
 
         UEAFactory factoryImpl = new UEAFactory();
-        bytes memory initData =
-            abi.encodeWithSelector(UEAFactory.initialize.selector, address(this), makeAddr("pauser"));
+        bytes memory initData = abi.encodeWithSelector(UEAFactory.initialize.selector, address(this));
         ERC1967Proxy proxy = new ERC1967Proxy(address(factoryImpl), initData);
         factory = UEAFactory(address(proxy));
         factory.setUEAProxyImplementation(address(ueaProxyImpl));
@@ -95,7 +94,7 @@ contract UEA_EVM_FuzzTest is Test {
         view
         returns (bytes memory)
     {
-        bytes32 h = uea.getUniversalPayloadHash(payload);
+        bytes32 h = uea.getPayloadHash(payload);
         (uint8 v, bytes32 r, bytes32 s) = vm.sign(pk, h);
         return abi.encodePacked(r, s, v);
     }
@@ -133,11 +132,11 @@ contract UEA_EVM_FuzzTest is Test {
         toAddr = address(uint160(bound(uint256(uint160(toAddr)), 1, type(uint160).max)));
 
         UniversalPayload memory payload = _buildPayload(toAddr, 0, "", deadline);
-        bytes32 h = signerUEA.getUniversalPayloadHash(payload);
+        bytes32 h = signerUEA.getPayloadHash(payload);
         (uint8 v, bytes32 r, bytes32 s) = vm.sign(privateKey, h);
         bytes memory sig = abi.encodePacked(r, s, v);
 
-        assertTrue(signerUEA.verifyUniversalPayloadSignature(h, sig));
+        assertTrue(signerUEA.verifyPayloadSignature(h, sig));
     }
 
     function testFuzz_invalidSignature_alwaysRejects(uint256 signerKey) public deployEvmSmartAccount {
@@ -148,12 +147,12 @@ contract UEA_EVM_FuzzTest is Test {
         vm.assume(vm.addr(signerKey) != owner);
 
         UniversalPayload memory payload = _buildPayload(address(target), 0, "", 0);
-        bytes32 h = evmSmartAccountInstance.getUniversalPayloadHash(payload);
+        bytes32 h = evmSmartAccountInstance.getPayloadHash(payload);
         (uint8 v, bytes32 r, bytes32 s) = vm.sign(signerKey, h);
         bytes memory sig = abi.encodePacked(r, s, v);
 
         // The UEA is owned by `owner` (ownerPK), so signing with a different key should fail
-        assertFalse(evmSmartAccountInstance.verifyUniversalPayloadSignature(h, sig));
+        assertFalse(evmSmartAccountInstance.verifyPayloadSignature(h, sig));
     }
 
     function testFuzz_samePayload_sameHash(address toAddr, uint256 value, bytes memory data, uint256 deadline)
@@ -172,8 +171,8 @@ contract UEA_EVM_FuzzTest is Test {
             vType: VerificationType(0)
         });
 
-        bytes32 h1 = evmSmartAccountInstance.getUniversalPayloadHash(payload);
-        bytes32 h2 = evmSmartAccountInstance.getUniversalPayloadHash(payload);
+        bytes32 h1 = evmSmartAccountInstance.getPayloadHash(payload);
+        bytes32 h2 = evmSmartAccountInstance.getPayloadHash(payload);
         assertEq(h1, h2);
     }
 
@@ -186,8 +185,8 @@ contract UEA_EVM_FuzzTest is Test {
         UniversalPayload memory p1 = _buildPayload(to1, value1, "", 0);
         UniversalPayload memory p2 = _buildPayload(to2, value2, "", 0);
 
-        bytes32 h1 = evmSmartAccountInstance.getUniversalPayloadHash(p1);
-        bytes32 h2 = evmSmartAccountInstance.getUniversalPayloadHash(p2);
+        bytes32 h1 = evmSmartAccountInstance.getPayloadHash(p1);
+        bytes32 h2 = evmSmartAccountInstance.getPayloadHash(p2);
         assertTrue(h1 != h2);
     }
 
@@ -209,7 +208,7 @@ contract UEA_EVM_FuzzTest is Test {
             _buildPayload(address(target), 0, abi.encodeWithSignature("setMagicNumber(uint256)", magicNum), 0);
         bytes memory sig = _signPayload(evmSmartAccountInstance, payload, ownerPK);
 
-        evmSmartAccountInstance.executeUniversalTx(payload, sig);
+        evmSmartAccountInstance.executePayload(payload, sig);
 
         assertEq(evmSmartAccountInstance.nonce(), nonceBefore + 1);
     }
@@ -224,7 +223,7 @@ contract UEA_EVM_FuzzTest is Test {
         UniversalPayload memory payload = _buildPayload(address(0), 0, "", 0);
         bytes memory sig = _signPayload(evmSmartAccountInstance, payload, ownerPK);
 
-        evmSmartAccountInstance.executeUniversalTx(payload, sig);
+        evmSmartAccountInstance.executePayload(payload, sig);
 
         assertEq(evmSmartAccountInstance.nonce(), nonceBefore + 1);
     }
@@ -236,13 +235,13 @@ contract UEA_EVM_FuzzTest is Test {
         bytes memory callData = abi.encodeWithSignature("setMagicNumber(uint256)", 1);
         UniversalPayload memory firstPayload = _buildPayload(address(target), 0, callData, 0);
         bytes memory firstSig = _signPayload(evmSmartAccountInstance, firstPayload, ownerPK);
-        evmSmartAccountInstance.executeUniversalTx(firstPayload, firstSig);
+        evmSmartAccountInstance.executePayload(firstPayload, firstSig);
         assertEq(evmSmartAccountInstance.nonce(), 1);
 
         // Replay the old signature (signed at nonce 0) — the hash no longer matches
         // because the contract nonce is now 1, so signature verification fails
         vm.expectRevert(UEAErrors.InvalidEVMSignature.selector);
-        evmSmartAccountInstance.executeUniversalTx(firstPayload, firstSig);
+        evmSmartAccountInstance.executePayload(firstPayload, firstSig);
     }
 
     // =========================================================================
@@ -261,7 +260,7 @@ contract UEA_EVM_FuzzTest is Test {
         bytes memory sig = _signPayload(evmSmartAccountInstance, payload, ownerPK);
 
         // Should not revert due to deadline
-        evmSmartAccountInstance.executeUniversalTx(payload, sig);
+        evmSmartAccountInstance.executePayload(payload, sig);
         assertEq(evmSmartAccountInstance.nonce(), 1);
     }
 
@@ -274,7 +273,7 @@ contract UEA_EVM_FuzzTest is Test {
         bytes memory sig = _signPayload(evmSmartAccountInstance, payload, ownerPK);
 
         // Should pass — deadline is in the future
-        evmSmartAccountInstance.executeUniversalTx(payload, sig);
+        evmSmartAccountInstance.executePayload(payload, sig);
         assertEq(evmSmartAccountInstance.nonce(), 1);
     }
 
@@ -289,7 +288,7 @@ contract UEA_EVM_FuzzTest is Test {
         bytes memory sig = _signPayload(evmSmartAccountInstance, payload, ownerPK);
 
         vm.expectRevert(UEAErrors.ExpiredDeadline.selector);
-        evmSmartAccountInstance.executeUniversalTx(payload, sig);
+        evmSmartAccountInstance.executePayload(payload, sig);
     }
 
     // =========================================================================
@@ -312,14 +311,14 @@ contract UEA_EVM_FuzzTest is Test {
             bytes memory sig = _signPayload(evmSmartAccountInstance, payload, ownerPK);
             // Invalid multicall data will cause abi.decode to revert
             vm.expectRevert();
-            evmSmartAccountInstance.executeUniversalTx(payload, sig);
+            evmSmartAccountInstance.executePayload(payload, sig);
         } else if (selector == MIGRATION_SELECTOR) {
             // Migration path taken — already handled
         } else {
             // Single call path — should succeed (call to address(0) with arbitrary data succeeds)
             UniversalPayload memory payload = _buildPayload(address(0), 0, data, 0);
             bytes memory sig = _signPayload(evmSmartAccountInstance, payload, ownerPK);
-            evmSmartAccountInstance.executeUniversalTx(payload, sig);
+            evmSmartAccountInstance.executePayload(payload, sig);
             assertEq(evmSmartAccountInstance.nonce(), 1);
         }
     }
@@ -333,7 +332,7 @@ contract UEA_EVM_FuzzTest is Test {
         // Should go to single call path, not migration
         UniversalPayload memory payload = _buildPayload(address(0), 0, data, 0);
         bytes memory sig = _signPayload(evmSmartAccountInstance, payload, ownerPK);
-        evmSmartAccountInstance.executeUniversalTx(payload, sig);
+        evmSmartAccountInstance.executePayload(payload, sig);
         assertEq(evmSmartAccountInstance.nonce(), 1);
 
         // Now test migration selector goes to migration path
@@ -343,7 +342,7 @@ contract UEA_EVM_FuzzTest is Test {
         UniversalPayload memory migPayload = _buildPayload(address(target), 0, migData, 0);
         bytes memory migSig = _signPayload(evmSmartAccountInstance, migPayload, ownerPK);
         vm.expectRevert(UEAErrors.InvalidCall.selector);
-        evmSmartAccountInstance.executeUniversalTx(migPayload, migSig);
+        evmSmartAccountInstance.executePayload(migPayload, migSig);
     }
 
     function testFuzz_selectorDetection_mutualExclusion(bytes memory payloadData) public view {
@@ -368,7 +367,7 @@ contract UEA_EVM_FuzzTest is Test {
         UniversalPayload memory payload = _buildPayload(address(target), 0, callData, 0);
         bytes memory sig = _signPayload(evmSmartAccountInstance, payload, ownerPK);
 
-        evmSmartAccountInstance.executeUniversalTx(payload, sig);
+        evmSmartAccountInstance.executePayload(payload, sig);
         assertEq(target.magicNumber(), magicNum);
     }
 
@@ -391,7 +390,7 @@ contract UEA_EVM_FuzzTest is Test {
         UniversalPayload memory payload = _buildPayload(address(0), 0, encodedCalls, 0);
         bytes memory sig = _signPayload(evmSmartAccountInstance, payload, ownerPK);
 
-        evmSmartAccountInstance.executeUniversalTx(payload, sig);
+        evmSmartAccountInstance.executePayload(payload, sig);
 
         // The last call determines final magic number
         uint256 lastVal = uint256(keccak256(abi.encode(seed, numCalls - 1))) % 1000;
@@ -430,7 +429,7 @@ contract UEA_EVM_FuzzTest is Test {
 
         // Calling deadbeef on this test contract will revert, causing entire multicall to revert
         vm.expectRevert();
-        evmSmartAccountInstance.executeUniversalTx(payload, sig);
+        evmSmartAccountInstance.executePayload(payload, sig);
 
         // State unchanged: magic number still at initial value
         assertEq(target.magicNumber(), initialMagic);
@@ -448,7 +447,7 @@ contract UEA_EVM_FuzzTest is Test {
         bytes memory sig = _signPayload(evmSmartAccountInstance, payload, ownerPK);
 
         vm.expectRevert(UEAErrors.InvalidCall.selector);
-        evmSmartAccountInstance.executeUniversalTx(payload, sig);
+        evmSmartAccountInstance.executePayload(payload, sig);
     }
 
     function testFuzz_migration_nonZeroValue_reverts(uint256 value) public deployEvmSmartAccount {
@@ -460,7 +459,7 @@ contract UEA_EVM_FuzzTest is Test {
         bytes memory sig = _signPayload(evmSmartAccountInstance, payload, ownerPK);
 
         vm.expectRevert(UEAErrors.InvalidCall.selector);
-        evmSmartAccountInstance.executeUniversalTx(payload, sig);
+        evmSmartAccountInstance.executePayload(payload, sig);
     }
 
     // =========================================================================
@@ -477,7 +476,7 @@ contract UEA_EVM_FuzzTest is Test {
         bytes memory emptySig = "";
 
         vm.prank(UNIVERSAL_EXECUTOR_MODULE);
-        evmSmartAccountInstance.executeUniversalTx(payload, emptySig);
+        evmSmartAccountInstance.executePayload(payload, emptySig);
 
         assertEq(target.magicNumber(), magicNum);
     }
@@ -496,7 +495,7 @@ contract UEA_EVM_FuzzTest is Test {
 
         vm.prank(caller);
         vm.expectRevert();
-        evmSmartAccountInstance.executeUniversalTx(payload, badSig);
+        evmSmartAccountInstance.executePayload(payload, badSig);
 
         // State must not have changed — nonce still 0
         assertEq(evmSmartAccountInstance.nonce(), 0);

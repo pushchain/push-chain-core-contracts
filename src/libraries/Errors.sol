@@ -37,6 +37,7 @@ library PRC20Errors {
 
 library UniversalCoreErrors {
     error ZeroGasPrice();
+    error ZeroRescueGasLimit();
     error PoolNotFound();
     error InvalidTarget();
     error InvalidFeeTier();
@@ -47,7 +48,6 @@ library UniversalCoreErrors {
     error InvalidSlippageTolerance();
     error MinPCOutRequired();
     error GasLimitBelowBase(uint256 provided, uint256 minimum);
-    error ZeroRescueGasLimit();
 }
 
 // =========================
@@ -55,6 +55,7 @@ library UniversalCoreErrors {
 // =========================
 library UEAErrors {
     error InvalidCall();
+    error InvalidTxHash();
     error ExecutionFailed();
     error ExpiredDeadline();
     error InvalidInputArgs();
@@ -66,8 +67,10 @@ library UEAErrors {
 
 library CEAErrors {
     error AlreadyInitialized();
+    error CEAAlreadyDeployed();
     error ZeroAddress();
     error NotVault();
+    error InvalidImplementation();
     error InvalidTarget();
     error InsufficientBalance();
     error PayloadExecuted();
@@ -76,6 +79,4 @@ library CEAErrors {
     error ExecutionFailed();
     error InvalidCall();
     error InvalidRecipient();
-    error InvalidImplementation();
-    error CEAAlreadyDeployed();
 }
