@@ -61,7 +61,7 @@ contract UniversalCore_Fuzz is Test, UpgradeableContractHelper {
 
         // Configure chain gas — setChainMeta is onlyUEModule
         vm.prank(uExec);
-        universalCore.setChainMeta(CHAIN_NS, 50 gwei, 0, 0);
+        universalCore.setChainMeta(CHAIN_NS, 50 gwei, 0);
 
         // setGasTokenPRC20 is onlyRole(MANAGER_ROLE), uExec has it
         vm.prank(uExec);
@@ -80,7 +80,7 @@ contract UniversalCore_Fuzz is Test, UpgradeableContractHelper {
         vm.assume(gasLimit >= baseLimit);
 
         vm.prank(uExec);
-        universalCore.setChainMeta(CHAIN_NS, gasPrice, 0, 0);
+        universalCore.setChainMeta(CHAIN_NS, gasPrice, 0);
 
         vm.prank(uExec);
         universalCore.setBaseGasLimitByChain(CHAIN_NS, baseLimit);
@@ -95,7 +95,7 @@ contract UniversalCore_Fuzz is Test, UpgradeableContractHelper {
         vm.assume(baseLimit > 0);
 
         vm.prank(uExec);
-        universalCore.setChainMeta(CHAIN_NS, gasPrice, 0, 0);
+        universalCore.setChainMeta(CHAIN_NS, gasPrice, 0);
 
         vm.prank(uExec);
         universalCore.setBaseGasLimitByChain(CHAIN_NS, baseLimit);
@@ -122,7 +122,7 @@ contract UniversalCore_Fuzz is Test, UpgradeableContractHelper {
 
         // Set gas price to 0 — setChainMeta is onlyUEModule
         vm.prank(uExec);
-        universalCore.setChainMeta(CHAIN_NS, 0, 0, 0);
+        universalCore.setChainMeta(CHAIN_NS, 0, 0);
 
         vm.expectRevert(UniversalCoreErrors.ZeroGasPrice.selector);
         universalCore.getOutboundTxGasAndFees(address(prc20), gasLimit);
@@ -148,7 +148,7 @@ contract UniversalCore_Fuzz is Test, UpgradeableContractHelper {
 
         // Set gas price for "nogas" chain but leave gas token as address(0)
         vm.prank(uExec);
-        universalCore.setChainMeta("nogas", 50 gwei, 0, 0);
+        universalCore.setChainMeta("nogas", 50 gwei, 0);
 
         vm.expectRevert(CommonErrors.ZeroAddress.selector);
         universalCore.getOutboundTxGasAndFees(address(noGasPRC20), gasLimit);
@@ -163,7 +163,7 @@ contract UniversalCore_Fuzz is Test, UpgradeableContractHelper {
         vm.assume(rescueLimit > 0);
 
         vm.prank(uExec);
-        universalCore.setChainMeta(CHAIN_NS, gasPrice, 0, 0);
+        universalCore.setChainMeta(CHAIN_NS, gasPrice, 0);
 
         vm.prank(uExec);
         universalCore.setRescueFundsGasLimitByChain(CHAIN_NS, rescueLimit);
