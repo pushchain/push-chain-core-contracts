@@ -108,7 +108,7 @@ contract UEA_EVM is ReentrancyGuard, IUEA {
     /**
      * @inheritdoc IUEA
      */
-    function executePayload(UniversalPayload calldata payload, bytes calldata verificationData) public nonReentrant {
+    function executePayload(UniversalPayload calldata payload, bytes calldata verificationData) external nonReentrant {
         bytes32 payloadHash = getPayloadHash(payload);
 
         if (payload.vType == VerificationType.universalTxVerification) {
@@ -243,21 +243,6 @@ contract UEA_EVM is ReentrancyGuard, IUEA {
         bytes32 _domainSeparator = domainSeparator();
 
         return keccak256(abi.encodePacked("\x19\x01", _domainSeparator, structHash));
-    }
-
-    /// @notice Backward-compatible alias for older tests and integrations.
-    function getUniversalPayloadHash(UniversalPayload calldata payload) public view returns (bytes32) {
-        return getPayloadHash(payload);
-    }
-
-    /// @notice Backward-compatible alias for older tests and integrations.
-    function verifyUniversalPayloadSignature(bytes32 payloadHash, bytes memory signature) public view returns (bool) {
-        return verifyPayloadSignature(payloadHash, signature);
-    }
-
-    /// @notice Backward-compatible alias for older tests and integrations.
-    function executeUniversalTx(UniversalPayload calldata payload, bytes calldata verificationData) external {
-        executePayload(payload, verificationData);
     }
 
     /**
