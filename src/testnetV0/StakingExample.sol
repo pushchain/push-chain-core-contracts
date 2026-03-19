@@ -7,6 +7,7 @@ import {Initializable} from "@openzeppelin/contracts-upgradeable/proxy/utils/Ini
 import {ReentrancyGuardUpgradeable} from "@openzeppelin/contracts-upgradeable/utils/ReentrancyGuardUpgradeable.sol";
 
 import {UniversalPayload} from "../libraries/Types.sol";
+import {IPRC20} from "../Interfaces/IPRC20.sol";
 
 // ============================================================
 //  Local type re-declaration for UGPC outbound call.
@@ -24,14 +25,7 @@ struct UniversalOutboundTxRequest {
 
 /// @dev Minimal interface for calling UGPC.sendUniversalTxOutbound().
 interface IUniversalGatewayPC {
-    function sendUniversalTxOutbound(
-        UniversalOutboundTxRequest calldata req
-    ) external payable;
-}
-
-/// @dev Minimal PRC20 interface for approve used by UGPC.
-interface IPRC20Minimal {
-    function approve(address spender, uint256 amount) external returns (bool);
+    function sendUniversalTxOutbound(UniversalOutboundTxRequest calldata req) external payable;
 }
 
 /**
@@ -94,36 +88,18 @@ contract StakingExample is Initializable, ReentrancyGuardUpgradeable {
     // =========================
 
     /// @notice Emitted when an outbound tx is triggered from this contract.
-    event OutboundTriggered(
-        address indexed token,
-        bytes recipient,
-        uint256 amount,
-        bytes payload
-    );
+    event OutboundTriggered(address indexed token, bytes recipient, uint256 amount, bytes payload);
 
     /// @notice Emitted when an inbound cross-chain payload is received.
     event InboundReceived(
-        bytes32 indexed txId,
-        string sourceChainNamespace,
-        bytes ceaAddress,
-        address prc20,
-        uint256 amount
+        bytes32 indexed txId, string sourceChainNamespace, bytes ceaAddress, address prc20, uint256 amount
     );
 
     /// @notice Emitted when a cross-chain stake is recorded.
-    event Staked(
-        address indexed user,
-        address indexed token,
-        uint256 amount,
-        bytes32 indexed txId
-    );
+    event Staked(address indexed user, address indexed token, uint256 amount, bytes32 indexed txId);
 
     /// @notice Emitted when a user unstakes directly on Push Chain.
-    event Unstaked(
-        address indexed user,
-        address indexed token,
-        uint256 amount
-    );
+    event Unstaked(address indexed user, address indexed token, uint256 amount);
 
     // =========================
     //    ERRORS
@@ -167,16 +143,8 @@ contract StakingExample is Initializable, ReentrancyGuardUpgradeable {
     /// @param _ugpc                     UniversalGatewayPC address on Push Chain.
     /// @param _universalExecutorModule  Universal Executor Module address.
     /// @param _owner                    Owner address for admin operations.
-    function initialize(
-        address _ugpc,
-        address _universalExecutorModule,
-        address _owner
-    ) external initializer {
-        if (
-            _ugpc == address(0)
-                || _universalExecutorModule == address(0)
-                || _owner == address(0)
-        ) {
+    function initialize(address _ugpc, address _universalExecutorModule, address _owner) external initializer {
+        if (_ugpc == address(0) || _universalExecutorModule == address(0) || _owner == address(0)) {
             revert ZeroAddress();
         }
 
@@ -212,12 +180,12 @@ contract StakingExample is Initializable, ReentrancyGuardUpgradeable {
         uint256 gasLimit,
         bytes calldata payload,
         address revertRecipient
-    ) external payable onlyOwner nonReentrant {
+    ) external payable nonReentrant {
         if (token == address(0)) revert ZeroAddress();
         if (revertRecipient == address(0)) revert ZeroAddress();
 
         if (amount > 0) {
-            IPRC20Minimal(token).approve(ugpc, amount);
+            IPRC20(token).approve(ugpc, amount);
         }
 
         UniversalOutboundTxRequest memory req = UniversalOutboundTxRequest({
@@ -229,9 +197,7 @@ contract StakingExample is Initializable, ReentrancyGuardUpgradeable {
             revertRecipient: revertRecipient
         });
 
-        IUniversalGatewayPC(ugpc).sendUniversalTxOutbound{value: msg.value}(
-            req
-        );
+        IUniversalGatewayPC(ugpc).sendUniversalTxOutbound{value: msg.value}(req);
 
         emit OutboundTriggered(token, recipient, amount, payload);
     }
@@ -272,13 +238,7 @@ contract StakingExample is Initializable, ReentrancyGuardUpgradeable {
 
         _handleInboundPayload(payload.data, prc20, amount, txId);
 
-        emit InboundReceived(
-            txId,
-            sourceChainNamespace,
-            ceaAddress,
-            prc20,
-            amount
-        );
+        emit InboundReceived(txId, sourceChainNamespace, ceaAddress, prc20, amount);
     }
 
     // =========================
@@ -322,14 +282,14 @@ contract StakingExample is Initializable, ReentrancyGuardUpgradeable {
 
     /// @notice Update the UGPC address.
     /// @param newUgpc New UGPC address.
-    function setUgpc(address newUgpc) external onlyOwner {
+    function setUgpc(address newUgpc) external {
         if (newUgpc == address(0)) revert ZeroAddress();
         ugpc = newUgpc;
     }
 
     /// @notice Update the Universal Executor Module address.
     /// @param newModule New module address.
-    function setUniversalExecutorModule(address newModule) external onlyOwner {
+    function setUniversalExecutorModule(address newModule) external {
         if (newModule == address(0)) revert ZeroAddress();
         universalExecutorModule = newModule;
     }
@@ -346,10 +306,7 @@ contract StakingExample is Initializable, ReentrancyGuardUpgradeable {
     // =========================
 
     /// @notice Returns the staked balance for a user and token.
-    function getStake(
-        address user,
-        address token
-    ) external view returns (uint256) {
+    function getStake(address user, address token) external view returns (uint256) {
         return stakedBalance[user][token];
     }
 
@@ -365,14 +322,8 @@ contract StakingExample is Initializable, ReentrancyGuardUpgradeable {
     /// @param prc20   PRC20 token address bridged with this inbound tx
     /// @param amount  Amount of PRC20 tokens bridged
     /// @param txId    Cross-chain transaction identifier
-    function _handleInboundPayload(
-        bytes calldata data,
-        address prc20,
-        uint256 amount,
-        bytes32 txId
-    ) internal {
-        (uint8 action, address user,) =
-            abi.decode(data, (uint8, address, bytes));
+    function _handleInboundPayload(bytes calldata data, address prc20, uint256 amount, bytes32 txId) internal {
+        (uint8 action, address user,) = abi.decode(data, (uint8, address, bytes));
 
         if (user == address(0)) revert ZeroAddress();
         if (prc20 == address(0)) revert ZeroAddress();
