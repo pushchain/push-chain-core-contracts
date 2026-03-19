@@ -347,7 +347,7 @@ contract CEA_ComprehensiveTests is CEATest {
     // 2) Input Validation (Amount / Token / Payload)
     // =========================================================================
 
-    function test_FundsAndPayload_RevertWhen_ZeroAmount_ERC20() public deployCEA {
+    function test_FundsAndPayload_ZeroAmount_ERC20_Succeeds() public deployCEA {
         MockGasToken token = new MockGasToken();
         fundCEAWithTokens(address(token), 1000 ether);
 
@@ -358,13 +358,15 @@ contract CEA_ComprehensiveTests is CEATest {
             makeCall(address(ceaInstance), 0, buildSendToUEAPayloadWithData(address(token), 0, ueaPayload, ueaOnPush));
 
         vm.prank(vault);
-        vm.expectRevert(Errors.ExecutionFailed.selector);
         ceaInstance.executeUniversalTx(
             generateTxID(1), generateUniversalTxID(1), ueaOnPush, address(0), encodeCalls(calls)
         );
+
+        assertEq(mockUniversalGateway.lastAmount(), 0, "Should allow zero amount for ERC20");
+        assertEq(mockUniversalGateway.lastToken(), address(token), "Token should match");
     }
 
-    function test_FundsAndPayload_RevertWhen_ZeroAmount_Native() public deployCEA {
+    function test_FundsAndPayload_ZeroAmount_Native_Succeeds() public deployCEA {
         fundCEAWithNative(1 ether);
 
         bytes memory ueaPayload = abi.encodeWithSignature("someFunction()");
@@ -374,10 +376,12 @@ contract CEA_ComprehensiveTests is CEATest {
             makeCall(address(ceaInstance), 0, buildSendToUEAPayloadWithData(address(0), 0, ueaPayload, ueaOnPush));
 
         vm.prank(vault);
-        vm.expectRevert(Errors.ExecutionFailed.selector);
         ceaInstance.executeUniversalTx{value: 0}(
             generateTxID(1), generateUniversalTxID(1), ueaOnPush, address(0), encodeCalls(calls)
         );
+
+        assertEq(mockUniversalGateway.lastAmount(), 0, "Should allow zero amount for native");
+        assertEq(mockUniversalGateway.lastToken(), address(0), "Token should be zero address for native");
     }
 
     function test_FundsAndPayload_RevertWhen_InsufficientNativeBalance() public deployCEA {

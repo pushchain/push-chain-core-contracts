@@ -114,7 +114,6 @@ contract CEA is ICEA, ReentrancyGuard {
         if (msg.sender != address(this)) {
             revert CommonErrors.Unauthorized();
         }
-        if (amount == 0) revert CEAErrors.InvalidInput();
         if (revertRecipient == address(0)) {
             revert CEAErrors.InvalidInput();
         }
