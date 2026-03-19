@@ -384,6 +384,27 @@ contract CEA_ComprehensiveTests is CEATest {
         assertEq(mockUniversalGateway.lastToken(), address(0), "Token should be zero address for native");
     }
 
+    function test_FundsAndPayload_ZeroAmount_NonContractToken_Succeeds() public deployCEA {
+        // Zero amount with a non-contract token address should succeed
+        // because the zero-amount path skips balanceOf entirely
+        address fakeToken = makeAddr("nonContractToken");
+
+        bytes memory ueaPayload = abi.encodeWithSignature("someFunction()");
+
+        Multicall[] memory calls = new Multicall[](1);
+        calls[0] =
+            makeCall(address(ceaInstance), 0, buildSendToUEAPayloadWithData(fakeToken, 0, ueaPayload, ueaOnPush));
+
+        vm.prank(vault);
+        ceaInstance.executeUniversalTx(
+            generateTxID(1), generateUniversalTxID(1), ueaOnPush, address(0), encodeCalls(calls)
+        );
+
+        assertEq(mockUniversalGateway.lastAmount(), 0, "Should allow zero amount");
+        assertEq(mockUniversalGateway.lastToken(), fakeToken, "Token should match non-contract address");
+        assertEq(mockUniversalGateway.lastValue(), 0, "No native value should be sent");
+    }
+
     function test_FundsAndPayload_RevertWhen_InsufficientNativeBalance() public deployCEA {
         fundCEAWithNative(0.1 ether);
 

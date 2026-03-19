@@ -127,15 +127,19 @@ contract CEA is ICEA, ReentrancyGuard {
             signatureData: ""
         });
 
-        if (token == address(0)) {
-            if (address(this).balance < amount) {
-                revert CEAErrors.InsufficientBalance();
+        if (amount > 0) {
+            if (token == address(0)) {
+                if (address(this).balance < amount) {
+                    revert CEAErrors.InsufficientBalance();
+                }
+                IUniversalGateway(UNIVERSAL_GATEWAY).sendUniversalTxFromCEA{value: amount}(req);
+            } else {
+                if (IERC20(token).balanceOf(address(this)) < amount) {
+                    revert CEAErrors.InsufficientBalance();
+                }
+                IUniversalGateway(UNIVERSAL_GATEWAY).sendUniversalTxFromCEA(req);
             }
-            IUniversalGateway(UNIVERSAL_GATEWAY).sendUniversalTxFromCEA{value: amount}(req);
         } else {
-            if (IERC20(token).balanceOf(address(this)) < amount) {
-                revert CEAErrors.InsufficientBalance();
-            }
             IUniversalGateway(UNIVERSAL_GATEWAY).sendUniversalTxFromCEA(req);
         }
 

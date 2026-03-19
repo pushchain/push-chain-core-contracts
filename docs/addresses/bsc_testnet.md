@@ -2,7 +2,7 @@
 
   | Contract                    | Address                                      |
   | --------------------------- | -------------------------------------------- |
-  | CEA (logic)                 | `0x2fAB4C65529f3b18756f943b56eFf01772457304` |
+  | CEA (logic)                 | `0xdC3A3a18a17EB4FDa9cF34a8CEee8540e6F2b5Fd` |
   | CEAProxy (clone template)   | `0xBDF06996BA23AE797a4aA9C8C5994D313D763a7c` |
   | CEAFactory (implementation) | `0xC0D35725Dd054B09931740DC231cDea89B0FEd3b` |
   | ProxyAdmin                  | `0xf33CBb6a1c1D511dF40764063a11978D640C41A7` |
