@@ -224,7 +224,7 @@ contract StakingExample is Initializable, ReentrancyGuardUpgradeable {
     function executeUniversalTx(
         string calldata sourceChainNamespace,
         bytes calldata ceaAddress,
-        UniversalPayload calldata payload,
+        bytes calldata payload,
         uint256 amount,
         address prc20,
         bytes32 txId
@@ -232,11 +232,11 @@ contract StakingExample is Initializable, ReentrancyGuardUpgradeable {
         if (executedTxIds[txId]) revert TxAlreadyExecuted();
         executedTxIds[txId] = true;
 
-        if (payload.deadline > 0 && block.timestamp > payload.deadline) {
-            revert ExpiredDeadline();
-        }
+        // if (payload.deadline > 0 && block.timestamp > payload.deadline) {
+        //     revert ExpiredDeadline();
+        // }
 
-        _handleInboundPayload(payload.data, prc20, amount, txId);
+        _handleInboundPayload(payload, prc20, amount, txId);
 
         emit InboundReceived(txId, sourceChainNamespace, ceaAddress, prc20, amount);
     }
