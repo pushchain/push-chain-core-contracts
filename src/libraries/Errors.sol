@@ -28,7 +28,6 @@ library CommonErrors {
 library PRC20Errors {
     error LowAllowance();
     error InvalidSender();
-    error GasFeeTransferFailed();
     error CallerIsNotUniversalExecutor();
 }
 
@@ -43,8 +42,12 @@ library UniversalCoreErrors {
     error InvalidFeeTier();
     error SlippageExceeded();
     error CallerIsNotUEModule();
+    error CallerIsNotGatewayPC();
     error AutoSwapNotSupported();
     error InvalidSlippageTolerance();
+    error MinPCOutRequired();
+    error GasLimitBelowBase(uint256 provided, uint256 minimum);
+    error ZeroRescueGasLimit();
 }
 
 // =========================
@@ -52,7 +55,6 @@ library UniversalCoreErrors {
 // =========================
 library UEAErrors {
     error InvalidCall();
-    error InvalidAccount();
     error ExecutionFailed();
     error ExpiredDeadline();
     error InvalidInputArgs();
@@ -66,7 +68,6 @@ library CEAErrors {
     error AlreadyInitialized();
     error ZeroAddress();
     error NotVault();
-    error InvalidAmount();
     error InvalidTarget();
     error InsufficientBalance();
     error PayloadExecuted();
@@ -74,4 +75,7 @@ library CEAErrors {
     error InvalidInput();
     error ExecutionFailed();
     error InvalidCall();
+    error InvalidRecipient();
+    error InvalidImplementation();
+    error CEAAlreadyDeployed();
 }

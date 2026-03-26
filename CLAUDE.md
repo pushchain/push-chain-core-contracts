@@ -2,333 +2,124 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
-## Project Overview
+## Commands
 
-Push Chain Core Contracts implement a universal interoperability protocol enabling cross-chain interactions through deterministic smart account systems. The protocol bridges external chains (Ethereum, Solana, etc.) with Push Chain through two complementary account types:
-
-- **UEA (Universal Executor Account)**: Deployed on Push Chain, represents external-chain users with native signature verification
-- **CEA (Chain Executor Account)**: Deployed on external chains, represents Push Chain UEAs for outbound execution
-
-## Development Commands
-
-### Build and Compilation
 ```bash
-# Build all contracts
+# Setup
+git submodule update --init --recursive
 forge build
 
-# Clean build artifacts
-forge clean
+# Test
+forge test                          # all tests
+forge test -vvv                     # verbose output
+forge test --match-test testName    # single test by name
+forge test --match-contract ContractTest  # single contract
+forge test --match-path test/tests_uea_and_factory/UEA_EVM.t.sol  # single file
+forge test --gas-report             # with gas report
 
-# Update git submodules (required after clone)
-git submodule update --init --recursive
-```
+# Fork tests (require RPC)
+forge test --match-path test/fork/* --fork-url $PUSH_CHAIN_TESTNET_RPC_URL
 
-### Testing
-```bash
-# Run all tests
-forge test
+# Build with size output (as CI does)
+forge build --sizes
 
-# Run tests with verbosity levels
-forge test -vv      # Show stack traces for failing tests
-forge test -vvv     # Show stack traces for all tests
-forge test -vvvv    # Show stack traces and setup
-forge test -vvvvv   # Maximum verbosity with internal calls
-
-# Run specific test file
-forge test --match-path test/tests_uea_and_factory/UEA_EVM.t.sol
-
-# Run specific test contract
-forge test --match-contract UEA_EVMTest
-
-# Run specific test function
-forge test --match-test testExecuteUniversalTx
-
-# Run tests with gas reporting
-forge test --gas-report
-
-# Run tests with coverage
-forge coverage
-
-# Generate detailed coverage report
-forge coverage --report lcov
-```
-
-### Deployment
-```bash
-# Deploy UEAFactory (example)
-forge script scripts/deployFactory.s.sol --rpc-url <RPC_URL> --private-key <PRIVATE_KEY> --broadcast
-
-# Deploy UniversalCore
-forge script scripts/deployUniversalCore.s.sol --rpc-url <RPC_URL> --private-key <PRIVATE_KEY> --broadcast
-
-# Upgrade contracts
-forge script scripts/upgradeFactory.s.sol --rpc-url <RPC_URL> --private-key <PRIVATE_KEY> --broadcast
-```
-
-### Code Quality
-```bash
-# Format code (if formatter is configured)
+# Format
 forge fmt
 
-# Check code formatting
-forge fmt --check
+# Coverage
+forge coverage --no-match-coverage "(PRC20V0\.sol|UniversalCoreV0\.sol|src/(libraries|[Ii]nterfaces|mocks)/|test/)"
+
+# Deploy (example)
+forge script scripts/uea/deployFactory.s.sol --rpc-url <RPC_URL> --private-key <PRIVATE_KEY> --broadcast
 ```
 
-## Architecture Overview
+Compiler: Solidity 0.8.26, EVM target: shanghai, `via_ir = true`, `optimizer_runs = 99999`.
 
-### Account System: UEA vs CEA
+CI uses `FOUNDRY_PROFILE=ci` which raises fuzz runs from 1024 to 4096.
 
-**Universal Executor Account (UEA)**
-- Location: Push Chain
-- Purpose: Represents external-chain users on Push Chain
-- Control: User-authenticated via native signatures (ECDSA for EVM, Ed25519 for Solana)
-- Implementations: `UEA_EVM` (src/UEA/UEA_EVM.sol:28) and `UEA_SVM` (src/UEA/UEA_SVM.sol)
-- Deployment: Deterministic via `UEAFactory` using CREATE2 (src/UEA/UEAFactory.sol:35)
-- Identity: One external identity → one stable UEA address
+## Architecture
 
-**Chain Executor Account (CEA)**
-- Location: External chains (Ethereum, Base, etc.)
-- Purpose: Represents Push Chain UEAs on external chains
-- Control: Vault-driven (no user signatures in v1)
-- Implementation: `CEA` (src/CEA/CEA.sol)
-- Deployment: Deterministic via `CEAFactory` using CREATE2 (src/CEA/CEAFactory.sol:32)
-- Identity: One UEA → one CEA per external chain
-- Gateway integration: Routes CEA→UEA transfers through `IUniversalGateway.sendUniversalTxViaCEA()` for FUNDS and FUNDS_AND_PAYLOAD tx types
+This is a cross-chain interoperability protocol for Push Chain. Two account types bridge external chains to Push Chain:
 
-### Proxy Pattern Architecture
+### UEA (Universal Executor Account) — lives on Push Chain
 
-Both UEA and CEA use minimal proxy (EIP-1167 clone) architecture:
+Represents external-chain users on Push Chain. Each user gets a `UEAProxy` (minimal clone via CREATE2) that delegates to a shared implementation contract. Two implementations exist:
 
-**UEA Proxy Flow:**
-1. `UEAFactory` clones `UEAProxy` template using `Clones.cloneDeterministic(salt)`
-2. Salt = `keccak256(abi.encode(chainNamespace, chainId, owner))`
-3. `UEAProxy.initializeUEA(UEA_IMPLEMENTATION)` sets implementation in custom slot `UEA_LOGIC_SLOT` (src/UEA/UEAProxy.sol:20)
-4. Implementation is either `UEA_EVM` or `UEA_SVM` based on VM type
-5. All state lives in the proxy, logic is delegatecalled
+- `UEA_EVM` — ECDSA (secp256k1) for EVM chains
+- `UEA_SVM` — Ed25519 via precompile at `0x...ca` for Solana
 
-**CEA Proxy Flow:**
-1. `CEAFactory` clones `CEAProxy` template using `Clones.cloneDeterministic(salt)`
-2. `CEAProxy.initializeCEAProxy(CEA_IMPLEMENTATION)` sets implementation
-3. `CEA.initializeCEA(pushAccount, VAULT, UNIVERSAL_GATEWAY)` initializes CEA state
-4. All state lives in the proxy, logic is delegatecalled
+`UEAFactory` (`src/uea/`) manages deployment and chain→VM→implementation mappings. The salt for CREATE2 is `keccak256(abi.encode(UniversalAccountId))`, where `UniversalAccountId` contains `{chainNamespace, chainId, owner}`. The factory is upgradeable (ERC1967 proxy pattern via OZ).
 
-### Migration System
+**UEA execution flow**: `executeUniversalTx(payload, signature)` → verify ECDSA/Ed25519 unless caller is `UNIVERSAL_EXECUTOR_MODULE` → dispatch on payload prefix: `MULTICALL_SELECTOR` (batch calls), `MIGRATION_SELECTOR` (delegatecall migration), or plain single call.
 
-**UEA Migration:**
-- Implemented via `UEAMigration` contract (src/UEA/UEAMigration.sol)
-- Allows upgrading UEA implementation logic through delegatecall
-- Factory tracks current migration contract at `UEA_MIGRATION_CONTRACT`
-- Migration preserves all proxy state while updating logic contract
+**UEA migration**: `UEAMigration` is a delegatecall-only singleton that updates the implementation slot (`keccak256("uea.proxy.implementation") - 1`) in the proxy. A new `UEAMigration` contract is deployed per version; `UEAFactory.UEA_MIGRATION_CONTRACT` points to the current one.
 
-**CEA Migration:**
-- Mirrors UEA migration pattern for safe proxy upgrades (v1 → v2)
-- `CEAMigration` (src/CEA/CEAMigration.sol) - Slot-writer migration singleton
-- CEA detects `MIGRATION_SELECTOR` at top-level payload (three-way branch in `_handleExecution`, aligned with UEA_EVM pattern)
-- Migration payload format: `MIGRATION_SELECTOR` directly (no Multicall wrapper)
-- Factory tracks migration contract via `CEA_MIGRATION_CONTRACT` state variable
-- Migration executed via delegatecall (preserves all state and funds)
-- Explicit prevention: `MIGRATION_SELECTOR` inside a Multicall array reverts with `InvalidCall`
-- CEA stores factory reference to fetch migration contract at runtime
+### CEA (Chain Executor Account) — lives on external chains
+
+Represents a specific UEA on a specific external chain. `CEAFactory` (`src/cea/`) deploys `CEAProxy` clones that delegate to a shared `CEA` implementation. Only the `VAULT` contract can call `executeUniversalTx` on a CEA. The CEA can also initiate outbound transactions back to Push Chain via `sendUniversalTxToUEA` (self-call only, routes through `UniversalGateway`).
+
+CEA migration uses the same delegatecall pattern: `CEAMigration.migrateCEA()` updates the implementation pointer in `CEAProxy`.
+
+### UniversalCore — coordinator on Push Chain
+
+`src/UniversalCore.sol` is upgradeable (OZ `Initializable` + `AccessControlUpgradeable`). Three caller tiers:
+
+- `UNIVERSAL_EXECUTOR_MODULE` (hardcoded: `0x14191Ea54B4c176fCf86f51b0FAc7CB1E71Df7d7`) — deposits PRC20 tokens, triggers auto-swaps, refunds unused gas, updates chain metadata
+- `universalGatewayPC` — calls `swapAndBurnGas` to pay gas fees by swapping native PC→gasToken via Uniswap V3
+- `MANAGER_ROLE` — configures chain metadata, gas tokens, supported tokens, Uniswap pools
+- `DEFAULT_ADMIN_ROLE` — configures AMM addresses, slippage, fee tiers, WPC address
+
+Chain namespaces follow CAIP-2 format (e.g., `"eip155:1"` for Ethereum mainnet).
 
 ### Token Primitives
 
-**PRC20 (src/PRC20.sol)**
-- Synthetic token representing external chain assets on Push Chain
-- Minted/burned by protocol flows through `UniversalCore`
-- Examples: pETH (Ethereum), pBNB (BSC), pUSDC, etc.
+- **PRC20** (`src/PRC20.sol`): Upgradeable ERC-20 synthetic representing an external-chain token. Minted via `deposit()` (called by `UniversalCore` or `UNIVERSAL_EXECUTOR_MODULE`), burned via `burn()`. Stores `SOURCE_CHAIN_NAMESPACE` and `SOURCE_TOKEN_ADDRESS`.
+- **WPC** (`src/WPC.sol`): Non-upgradeable WETH-style wrapper for native PC. Used by `UniversalCore` for Uniswap V3 swaps.
 
-**WPC (src/WPC.sol)**
-- Wrapped native PC token
-- ERC-20 compatible primitive for DEX integrations
-- Used in Uniswap V3 pools for gas token swaps
+### Key Shared Types (`src/libraries/Types.sol`)
 
-**UniversalCore (src/UniversalCore.sol:26)**
-- Protocol coordinator on Push Chain
-- Operated by Universal Executor Module at fixed address `0x14191Ea54B4c176fCf86f51b0FAc7CB1E71Df7d7`
-- Manages PRC20 minting/burning, gas price configuration, and Uniswap V3 integration
-- Upgradeable via proxy pattern
+- `UniversalAccountId` — `{chainNamespace, chainId, owner bytes}`
+- `UniversalPayload` — EIP-712 signed struct for UEA execution
+- `Multicall` — `{to, value, data}` entry for batch execution
+- `MULTICALL_SELECTOR` = `bytes4(keccak256("UEA_MULTICALL"))`
+- `MIGRATION_SELECTOR` = `bytes4(keccak256("UEA_MIGRATION"))`
 
-### Chain Identification
+### Access Control Pattern
 
-Uses CAIP-2 standard for chain identifiers:
-- Format: `{chainNamespace}:{chainId}`
-- Examples: `eip155:1` (Ethereum mainnet), `eip155:8453` (Base), `solana:mainnet`
-- Internally hashed: `chainHash = keccak256(abi.encode(chainNamespace, chainId))`
-- VM types mapped via `CHAIN_to_VM` in UEAFactory
+Both `UEAFactory` and `CEAFactory` and `UniversalCore` use OZ `AccessControlUpgradeable` with:
+- `DEFAULT_ADMIN_ROLE`: governance
+- `PAUSER_ROLE`: guardian (can pause/unpause only)
 
-### Signature Verification
+`UniversalCore` additionally has `MANAGER_ROLE` for operational config.
 
-**UEA_EVM Signatures:**
-- Uses EIP-712 typed data hashing
-- Payload hash: `UNIVERSAL_PAYLOAD_TYPEHASH` (src/libraries/Types.sol:48)
-- Domain separator includes version, chainId, and verifying contract
-- Recovery via ECDSA `ecrecover`
-- Special case: `UNIVERSAL_EXECUTOR_MODULE` (0x14191Ea54B4c176fCf86f51b0FAc7CB1E71Df7d7) can execute without signature
+### Test Layout
 
-**UEA_SVM Signatures:**
-- Uses Ed25519 signature verification
-- Verified via precompile at `0x00000000000000000000000000000000000000ca`
-- Payload hash: Same `UNIVERSAL_PAYLOAD_TYPEHASH` for consistency
-- Special case: Same `UNIVERSAL_EXECUTOR_MODULE` bypass
-
-### Payload Execution
-
-**UniversalPayload Structure (src/libraries/Types.sol:14):**
-```solidity
-struct UniversalPayload {
-    address to;                     // Target contract
-    uint256 value;                  // Native token amount
-    bytes data;                     // Call data
-    uint256 gasLimit;               // Gas cap
-    uint256 maxFeePerGas;
-    uint256 maxPriorityFeePerGas;
-    uint256 nonce;                  // UEA nonce
-    uint256 deadline;               // Expiration timestamp
-}
+```
+test/
+├── tests_uea_and_factory/   # UEA_EVM, UEA_SVM, UEAFactory, UEAProxy unit tests
+├── tests_ueaMigration/      # UEA migration flow
+├── tests_cea/               # CEA, CEAFactory, single/multi/self-call tests
+├── tests_ceaMigration/      # CEA migration flow
+├── tests_token_and_core/    # PRC20, WPC, UniversalCore unit tests
+├── fuzz/                    # Fuzz suites for all major contracts
+├── fork/                    # Fork tests against Push Chain Donut Testnet
+├── helpers/
+│   ├── PushChainAddresses.sol   # Testnet address book (update when addresses change)
+│   └── UpgradeableContractHelper.sol
+└── mocks/                   # Mock tokens, gateways, Uniswap mocks, V2 implementations
 ```
 
-**Special Selectors:**
-- `MULTICALL_SELECTOR = bytes4(keccak256("UEA_MULTICALL"))` - Batch multiple calls (0xc25b8d90)
-- `MIGRATION_SELECTOR = bytes4(keccak256("UEA_MIGRATION"))` - Trigger migration (0xb0c47dc5)
+Fork tests inherit from `PushChainAddresses` for testnet addresses. Set `PUSH_CHAIN_TESTNET_RPC_URL` to run them.
 
-**UEA_EVM Execution Routing (`UEA_EVM._handleExecution`):**
-- Three-way dispatch based on `payload.data`:
-  1. `isMulticall(payload.data)` → `_handleMulticall(payload)` — batch execution
-  2. `isMigration(payload.data)` → `_handleMigration(payload)` — delegatecall to factory's migration contract
-  3. else → `_handleSingleCall(payload)` — single target call
-- `UNIVERSAL_EXECUTOR_MODULE` (0x14191Ea54B4c176fCf86f51b0FAc7CB1E71Df7d7) can execute without signature verification
-- `ueaFactory` reference stored for fetching migration contract at runtime
+### Deployment Scripts
 
-### CEA Execution Flow
-
-**CEA uses multicall-based execution (similar to UEA):**
-
-**Payload Format:**
-- New format: `MULTICALL_SELECTOR + abi.encode(Multicall[])`
-- Old format: Direct `abi.encode(Multicall[])` (backwards compatible)
-- Migration format: `MIGRATION_SELECTOR` at top level (no Multicall wrapper)
-
-**Multicall Structure (src/libraries/Types.sol:31):**
-```solidity
-struct Multicall {
-    address to;      // Target contract address
-    uint256 value;   // Native token amount
-    bytes data;      // Call data
-}
+```
+scripts/
+├── uea/    deployFactory.s.sol, upgradeFactory.s.sol
+├── cea/    deployCEAFactory.s.sol, upgradeCEAFactory.s.sol
+└── uvcore/ deployUniversalCore.s.sol, upgradeUniversalCore.s.sol
 ```
 
-**Execution Routing (`CEA._handleExecution`):**
-1. Check if payload starts with `MULTICALL_SELECTOR` → decode as `Multicall[]`, route to `_handleMulticall()`
-2. Check if payload starts with `MIGRATION_SELECTOR` → route to `_handleMigration()` (no params, top-level)
-3. Otherwise → route to `_handleSingleCall()` (backwards compatibility)
+### Legacy / Testnet V0
 
-**Self-Call Pattern:**
-- `sendUniversalTxToUEA(token, amount, payload)` - Transfer funds/payload from CEA to UEA via gateway
-- Only callable via self-call (`msg.sender == address(this)`)
-- Must be included in multicall array for execution
-- Supports two tx types:
-  - **FUNDS**: amount > 0, payload empty
-  - **FUNDS_AND_PAYLOAD**: amount > 0, payload non-empty
-- Both tx types route through `IUniversalGateway.sendUniversalTxViaCEA()`
-- SDK must include ERC20 approval steps before this call
-
-**Safety Constraints:**
-- Self-calls must have `value == 0` (enforced in `_handleMulticall`)
-- Migration must be standalone (cannot appear inside multicall arrays — `isMigration` check in loop)
-- All calls executed sequentially via `.call()`
-- No strict `msg.value == totalValue` enforcement (CEA can spend pre-existing balance)
-
-## Key Contracts Reference
-
-### Core Contracts
-- `UEAFactory`: src/UEA/UEAFactory.sol:35 - Factory for deploying UEAs
-- `UEA_EVM`: src/UEA/UEA_EVM.sol:28 - EVM account implementation
-- `UEA_SVM`: src/UEA/UEA_SVM.sol - Solana account implementation
-- `UEAProxy`: src/UEA/UEAProxy.sol:17 - Minimal proxy for UEAs
-- `UEAMigration`: src/UEA/UEAMigration.sol - UEA migration singleton
-- `CEAFactory`: src/CEA/CEAFactory.sol:32 - Factory for deploying CEAs
-- `CEA`: src/CEA/CEA.sol - External chain account implementation
-- `CEAProxy`: src/CEA/CEAProxy.sol - Minimal proxy for CEAs
-- `CEAMigration`: src/CEA/CEAMigration.sol - CEA migration singleton
-- `UniversalCore`: src/UniversalCore.sol:26 - Protocol coordinator
-- `PRC20`: src/PRC20.sol - Synthetic token standard
-- `WPC`: src/WPC.sol - Wrapped PC token
-
-### Libraries
-- `Types`: src/libraries/Types.sol - Struct definitions and constants
-- `Errors`: src/libraries/Errors.sol - Custom error definitions
-- `Utils`: src/libraries/Utils.sol - Helper functions
-
-### Interfaces
-- `IUEA`: src/Interfaces/IUEA.sol
-- `IUEAFactory`: src/Interfaces/IUEAFactory.sol
-- `ICEA`: src/Interfaces/ICEA.sol
-- `ICEAFactory`: src/Interfaces/ICEAFactory.sol
-- `IUniversalCore`: src/Interfaces/IUniversalCore.sol
-- `IUniversalGateway`: src/Interfaces/IUniversalGateway.sol - UniversalTxRequest struct, sendUniversalTx/sendUniversalTxViaCEA
-- `IPRC20`: src/Interfaces/IPRC20.sol
-
-## Test Structure
-
-Tests are organized by component:
-- `test/tests_uea_and_factory/` - UEA and factory tests
-- `test/tests_cea/` - CEA and factory tests
-  - `CEA.t.sol` - Core CEA tests (82 tests, canonical helpers)
-  - `CEA_multicalls.t.sol` - Multicall execution tests (132 tests)
-  - `CEA_selfCalls.t.sol` - Self-call pattern tests (120 tests)
-  - `CEAFactory.t.sol` - Factory tests (116 tests)
-  - Total: 450 CEA tests
-- `test/tests_ceaMigration/` - CEA migration tests (43 tests)
-  - `CEAMigration.t.sol` - Unit tests for migration contract
-  - `CEAFactory_Migration.t.sol` - Factory migration management
-  - `CEA_Migration.t.sol` - CEA migration logic tests
-  - `CEAMigration_Integration.t.sol` - End-to-end migration tests
-- `test/tests_token_and_core/` - PRC20, WPC, and UniversalCore tests
-- `test/tests_ueaMigration/` - UEA migration tests
-- `test/tests_utils/` - Utility function tests
-- `test/mocks/` - Mock contracts for testing
-- `test/helpers/` - Test helper contracts
-
-Test files follow the pattern `ContractName.t.sol` and use Foundry's testing framework with `forge-std/Test.sol`.
-
-**Key Test Helpers (CEA.t.sol):**
-- `makeCall(to, value, data)` - Create Multicall struct
-- `encodeCalls(Multicall[])` - Encode with MULTICALL_SELECTOR
-- `buildSendToUEAPayload(token, amount)` - Build sendUniversalTxToUEA payload (funds-only, empty payload)
-- `buildSendToUEAPayloadWithData(token, amount, payload)` - Build sendUniversalTxToUEA with UEA payload (FUNDS_AND_PAYLOAD)
-- `buildExternalSingleCall(to, value, data)` - Single external call
-- `buildSelfSendToUEACall(token, amount)` - Self-call Multicall with value=0
-- `buildSendToUEAMulticallPayload(token, amount, approveGateway)` - Full multicall with optional ERC20 approval
-
-## Important Constants
-
-- **UNIVERSAL_EXECUTOR_MODULE**: `0x14191Ea54B4c176fCf86f51b0FAc7CB1E71Df7d7` - Universal Executor Module (bypasses signature checks)
-- **UEA_LOGIC_SLOT**: `0x868a771a75a4aa6c2be13e9a9617cb8ea240ed84a3a90c8469537393ec3e115d` - Storage slot for UEA implementation
-- **CEA_LOGIC_SLOT**: `0x8b2ae8ee8c8678fc65d38e03fd33865426627999aa5e8fab985583dec5888813` - Storage slot for CEA implementation
-- **UNIVERSAL_PAYLOAD_TYPEHASH**: `0x102a0b05d0844e7ea580bbdbe2cfe69c4fa4bfac4cf45919f6b24381a1235844` - EIP-712 payload hash
-- **MULTICALL_SELECTOR**: `bytes4(keccak256("UEA_MULTICALL"))` - 0xc25b8d90 - Multicall batch prefix
-- **MIGRATION_SELECTOR**: `bytes4(keccak256("UEA_MIGRATION"))` - 0xb0c47dc5 - Migration request prefix
-- **EVM_HASH**: `keccak256("EVM")` - VM type identifier for EVM chains
-- **SVM_HASH**: `keccak256("SVM")` - VM type identifier for Solana chains
-
-## Solidity Configuration
-
-- Compiler: Solidity 0.8.26 (exact version, no auto-detection)
-- EVM Version: Shanghai
-- Optimizer: Enabled with 99,999 runs (optimized for runtime efficiency)
-- Dependencies: OpenZeppelin Contracts & Contracts-Upgradeable via git submodules
-
-## Working with Upgradeable Contracts
-
-Most core contracts (`UEAFactory`, `CEAFactory`, `UniversalCore`) use OpenZeppelin's upgradeable proxy pattern:
-
-- Inherit from `Initializable`, `OwnableUpgradeable`, etc.
-- Use `initialize()` instead of `constructor()`
-- Constructor calls `_disableInitializers()` to prevent direct implementation initialization
-- Deploy via `ERC1967Proxy` with initialization data
-
-When modifying upgradeable contracts:
-- Never add storage variables before existing ones (breaks storage layout)
-- Add new storage at the end
-- Use storage gaps (`uint256[50] private __gap`) if implementing inheritance
-- Test upgrades with `test/helpers/UpgradeableContractHelper.sol`
+`src/testnetV0/` contains deprecated `PRC20V0`, `UniversalCoreV0`, `UEAFactoryV0`. These are excluded from coverage and not used in v1 flows.

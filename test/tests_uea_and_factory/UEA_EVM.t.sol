@@ -53,7 +53,8 @@ contract UEA_EVMTest is Test {
         UEAFactory factoryImpl = new UEAFactory();
 
         // Deploy and initialize the proxy with initialOwner
-        bytes memory initData = abi.encodeWithSelector(UEAFactory.initialize.selector, address(this));
+        bytes memory initData =
+            abi.encodeWithSelector(UEAFactory.initialize.selector, address(this), makeAddr("pauser"));
         ERC1967Proxy proxy = new ERC1967Proxy(address(factoryImpl), initData);
         factory = UEAFactory(address(proxy));
 
@@ -167,7 +168,8 @@ contract UEA_EVMTest is Test {
             maxFeePerGas: 0,
             nonce: 0,
             deadline: block.timestamp + 1000,
-            maxPriorityFeePerGas: 0
+            maxPriorityFeePerGas: 0,
+            vType: VerificationType(0)
         });
 
         bytes32 txHash = getCrosschainTxhash(evmSmartAccountInstance, payload);
@@ -180,7 +182,7 @@ contract UEA_EVMTest is Test {
         emit IUEA.PayloadExecuted(ownerBytes, 1);
 
         // Execute the payload
-        evmSmartAccountInstance.executeUniversalTx(abi.encode(payload), signature);
+        evmSmartAccountInstance.executeUniversalTx(payload, signature);
 
         // Verify state changes
         uint256 magicValueAfter = target.getMagicNumber();
@@ -200,7 +202,8 @@ contract UEA_EVMTest is Test {
             maxFeePerGas: 0,
             nonce: 0,
             deadline: block.timestamp + 1000,
-            maxPriorityFeePerGas: 0
+            maxPriorityFeePerGas: 0,
+            vType: VerificationType(0)
         });
 
         bytes32 txHash = getCrosschainTxhash(evmSmartAccountInstance, payload);
@@ -208,7 +211,7 @@ contract UEA_EVMTest is Test {
         bytes memory signature = abi.encodePacked(r, s, v);
 
         // Execute the payload
-        evmSmartAccountInstance.executeUniversalTx(abi.encode(payload), signature);
+        evmSmartAccountInstance.executeUniversalTx(payload, signature);
 
         // Verify state changes
         uint256 magicValueAfter = target.getMagicNumber();
@@ -226,7 +229,8 @@ contract UEA_EVMTest is Test {
             maxFeePerGas: 0,
             nonce: 0,
             deadline: 0, // Zero deadline - should not check timestamp
-            maxPriorityFeePerGas: 0
+            maxPriorityFeePerGas: 0,
+            vType: VerificationType(0)
         });
 
         bytes32 txHash = getCrosschainTxhash(evmSmartAccountInstance, payload);
@@ -235,7 +239,7 @@ contract UEA_EVMTest is Test {
 
         // Execute the payload - should work even if we warp far into the future
         vm.warp(block.timestamp + 1000000);
-        evmSmartAccountInstance.executeUniversalTx(abi.encode(payload), signature);
+        evmSmartAccountInstance.executeUniversalTx(payload, signature);
 
         // Verify state changes
         uint256 magicValueAfter = target.getMagicNumber();
@@ -259,7 +263,8 @@ contract UEA_EVMTest is Test {
             maxFeePerGas: 0,
             nonce: 0,
             deadline: block.timestamp + 1000,
-            maxPriorityFeePerGas: 0
+            maxPriorityFeePerGas: 0,
+            vType: VerificationType(0)
         });
 
         bytes32 txHash = getCrosschainTxhash(evmSmartAccountInstance, payload);
@@ -267,10 +272,35 @@ contract UEA_EVMTest is Test {
         bytes memory signature = abi.encodePacked(r, s, v);
 
         // Execute the payload
-        evmSmartAccountInstance.executeUniversalTx(abi.encode(payload), signature);
+        evmSmartAccountInstance.executeUniversalTx(payload, signature);
 
         // Verify ETH was transferred
         assertEq(recipient.balance - initialBalance, 0.05 ether, "Recipient should have received 0.05 ETH");
+    }
+
+    function testExecute_WithShortData_ExecutesSingleCall() public deployEvmSmartAccount {
+        vm.deal(address(evmSmartAccountInstance), 1 ether);
+        address payable recipient = payable(makeAddr("recipient"));
+
+        // Data shorter than 4 bytes - both _isMulticall and _isMigration return false
+        UniversalPayload memory payload = UniversalPayload({
+            to: recipient,
+            value: 0.01 ether,
+            data: hex"0102",
+            gasLimit: 1000000,
+            maxFeePerGas: 0,
+            nonce: 0,
+            deadline: block.timestamp + 1000,
+            maxPriorityFeePerGas: 0,
+            vType: VerificationType(0)
+        });
+
+        bytes32 txHash = getCrosschainTxhash(evmSmartAccountInstance, payload);
+        (uint8 v, bytes32 r, bytes32 s) = vm.sign(ownerPK, txHash);
+        bytes memory signature = abi.encodePacked(r, s, v);
+
+        evmSmartAccountInstance.executeUniversalTx(payload, signature);
+        assertEq(recipient.balance, 0.01 ether);
     }
 
     function testExecutionWithRevertingTarget() public deployEvmSmartAccount {
@@ -286,7 +316,8 @@ contract UEA_EVMTest is Test {
             maxFeePerGas: 0,
             nonce: 0,
             deadline: block.timestamp + 1000,
-            maxPriorityFeePerGas: 0
+            maxPriorityFeePerGas: 0,
+            vType: VerificationType(0)
         });
 
         bytes32 txHash = getCrosschainTxhash(evmSmartAccountInstance, payload);
@@ -295,7 +326,7 @@ contract UEA_EVMTest is Test {
 
         // Execute the payload - should revert with the target's revert message
         vm.expectRevert("This function always reverts with reason");
-        evmSmartAccountInstance.executeUniversalTx(abi.encode(payload), signature);
+        evmSmartAccountInstance.executeUniversalTx(payload, signature);
     }
 
     function testExecutionWithSilentRevertingTarget() public deployEvmSmartAccount {
@@ -311,7 +342,8 @@ contract UEA_EVMTest is Test {
             maxFeePerGas: 0,
             nonce: 0,
             deadline: block.timestamp + 1000,
-            maxPriorityFeePerGas: 0
+            maxPriorityFeePerGas: 0,
+            vType: VerificationType(0)
         });
 
         bytes32 txHash = getCrosschainTxhash(evmSmartAccountInstance, payload);
@@ -320,7 +352,7 @@ contract UEA_EVMTest is Test {
 
         // Execute the payload - should revert with ExecutionFailed
         vm.expectRevert(Errors.ExecutionFailed.selector);
-        evmSmartAccountInstance.executeUniversalTx(abi.encode(payload), signature);
+        evmSmartAccountInstance.executeUniversalTx(payload, signature);
     }
 
     function testExecuteMulticallSuccess() public deployEvmSmartAccount {
@@ -333,9 +365,7 @@ contract UEA_EVMTest is Test {
             Multicall({to: address(target), value: 0, data: abi.encodeWithSignature("setMagicNumber(uint256)", 123)});
 
         calls[1] = Multicall({
-            to: address(target),
-            value: 0.1 ether,
-            data: abi.encodeWithSignature("setMagicNumberWithFee(uint256)", 456)
+            to: address(target), value: 0.1 ether, data: abi.encodeWithSignature("setMagicNumberWithFee(uint256)", 456)
         });
 
         // Encode with multicall prefix (0x4e2d2ff6 is keccak256("MulticallPayload")[0:4])
@@ -352,7 +382,8 @@ contract UEA_EVMTest is Test {
             maxFeePerGas: 0,
             nonce: 0,
             deadline: block.timestamp + 1000,
-            maxPriorityFeePerGas: 0
+            maxPriorityFeePerGas: 0,
+            vType: VerificationType(0)
         });
 
         // Sign the payload
@@ -365,7 +396,7 @@ contract UEA_EVMTest is Test {
         emit IUEA.PayloadExecuted(ownerBytes, 1);
 
         // Execute
-        evmSmartAccountInstance.executeUniversalTx(abi.encode(payload), signature);
+        evmSmartAccountInstance.executeUniversalTx(payload, signature);
 
         // Check both calls executed
         uint256 magic = target.getMagicNumber();
@@ -393,7 +424,8 @@ contract UEA_EVMTest is Test {
             maxFeePerGas: 0,
             nonce: 0,
             deadline: block.timestamp + 1000,
-            maxPriorityFeePerGas: 0
+            maxPriorityFeePerGas: 0,
+            vType: VerificationType(0)
         });
 
         bytes32 txHash = getCrosschainTxhash(evmSmartAccountInstance, payload);
@@ -402,7 +434,7 @@ contract UEA_EVMTest is Test {
 
         // Should bubble up revert reason from revertingTarget
         vm.expectRevert("This function always reverts with reason");
-        evmSmartAccountInstance.executeUniversalTx(abi.encode(payload), signature);
+        evmSmartAccountInstance.executeUniversalTx(payload, signature);
     }
 
     function testExecuteMulticallSuccessWithPayload() public deployEvmSmartAccount {
@@ -412,15 +444,11 @@ contract UEA_EVMTest is Test {
         // Prepare multiple calls with different values
         Multicall[] memory calls = new Multicall[](3);
         calls[0] = Multicall({
-            to: address(target),
-            value: 0.1 ether,
-            data: abi.encodeWithSignature("setMagicNumberWithFee(uint256)", 111)
+            to: address(target), value: 0.1 ether, data: abi.encodeWithSignature("setMagicNumberWithFee(uint256)", 111)
         });
 
         calls[1] = Multicall({
-            to: address(target),
-            value: 0.1 ether,
-            data: abi.encodeWithSignature("setMagicNumberWithFee(uint256)", 222)
+            to: address(target), value: 0.1 ether, data: abi.encodeWithSignature("setMagicNumberWithFee(uint256)", 222)
         });
 
         calls[2] =
@@ -440,7 +468,8 @@ contract UEA_EVMTest is Test {
             maxFeePerGas: 0,
             nonce: 0,
             deadline: block.timestamp + 1000,
-            maxPriorityFeePerGas: 0
+            maxPriorityFeePerGas: 0,
+            vType: VerificationType(0)
         });
 
         // Sign the payload
@@ -453,7 +482,7 @@ contract UEA_EVMTest is Test {
         emit IUEA.PayloadExecuted(ownerBytes, 1);
 
         // Execute
-        evmSmartAccountInstance.executeUniversalTx(abi.encode(payload), signature);
+        evmSmartAccountInstance.executeUniversalTx(payload, signature);
 
         // Check all calls executed
         uint256 magic = target.getMagicNumber();
@@ -490,7 +519,8 @@ contract UEA_EVMTest is Test {
             maxFeePerGas: 0,
             nonce: 0,
             deadline: block.timestamp + 1000,
-            maxPriorityFeePerGas: 0
+            maxPriorityFeePerGas: 0,
+            vType: VerificationType(0)
         });
 
         // Sign the payload
@@ -503,7 +533,7 @@ contract UEA_EVMTest is Test {
         emit IUEA.PayloadExecuted(ownerBytes, 1);
 
         // Execute
-        evmSmartAccountInstance.executeUniversalTx(abi.encode(payload), signature);
+        evmSmartAccountInstance.executeUniversalTx(payload, signature);
 
         // Check both targets were called correctly
         uint256 magic1 = target.getMagicNumber();
@@ -522,15 +552,11 @@ contract UEA_EVMTest is Test {
         // Prepare multiple calls to different targets with different values
         Multicall[] memory calls = new Multicall[](3);
         calls[0] = Multicall({
-            to: address(target),
-            value: 0.1 ether,
-            data: abi.encodeWithSignature("setMagicNumberWithFee(uint256)", 555)
+            to: address(target), value: 0.1 ether, data: abi.encodeWithSignature("setMagicNumberWithFee(uint256)", 555)
         });
 
         calls[1] = Multicall({
-            to: address(target2),
-            value: 0.1 ether,
-            data: abi.encodeWithSignature("setMagicNumberWithFee(uint256)", 666)
+            to: address(target2), value: 0.1 ether, data: abi.encodeWithSignature("setMagicNumberWithFee(uint256)", 666)
         });
 
         calls[2] =
@@ -550,7 +576,8 @@ contract UEA_EVMTest is Test {
             maxFeePerGas: 0,
             nonce: 0,
             deadline: block.timestamp + 1000,
-            maxPriorityFeePerGas: 0
+            maxPriorityFeePerGas: 0,
+            vType: VerificationType(0)
         });
 
         // Sign the payload
@@ -563,7 +590,7 @@ contract UEA_EVMTest is Test {
         emit IUEA.PayloadExecuted(ownerBytes, 1);
 
         // Execute
-        evmSmartAccountInstance.executeUniversalTx(abi.encode(payload), signature);
+        evmSmartAccountInstance.executeUniversalTx(payload, signature);
 
         // Check both targets were called correctly and received the right amounts
         uint256 magic1 = target.getMagicNumber();
@@ -572,6 +599,67 @@ contract UEA_EVMTest is Test {
         assertEq(magic2, 666, "Second target should have magic number 666");
         assertEq(address(target).balance, 0.1 ether, "First target should have received 0.1 ETH");
         assertEq(address(target2).balance, 0.1 ether, "Second target should have received 0.1 ETH");
+    }
+
+    function testMulticall_EmptyArray_Succeeds() public deployEvmSmartAccount {
+        Multicall[] memory calls = new Multicall[](0);
+
+        bytes4 selector = bytes4(keccak256("UEA_MULTICALL"));
+        bytes memory callData = abi.encode(calls);
+        bytes memory multicallData = abi.encodePacked(selector, callData);
+
+        UniversalPayload memory payload = UniversalPayload({
+            to: address(0),
+            value: 0,
+            data: multicallData,
+            gasLimit: 1000000,
+            maxFeePerGas: 0,
+            nonce: 0,
+            deadline: block.timestamp + 1000,
+            maxPriorityFeePerGas: 0,
+            vType: VerificationType(0)
+        });
+
+        bytes32 txHash = getCrosschainTxhash(evmSmartAccountInstance, payload);
+        (uint8 v, bytes32 r, bytes32 s) = vm.sign(ownerPK, txHash);
+        bytes memory signature = abi.encodePacked(r, s, v);
+
+        evmSmartAccountInstance.executeUniversalTx(payload, signature);
+        assertEq(evmSmartAccountInstance.nonce(), 1);
+    }
+
+    function testMulticall_FailsOnSilentRevertMiddleCall() public deployEvmSmartAccount {
+        Multicall[] memory calls = new Multicall[](3);
+        calls[0] =
+            Multicall({to: address(target), value: 0, data: abi.encodeWithSignature("setMagicNumber(uint256)", 111)});
+        calls[1] = Multicall({
+            to: address(silentRevertingTarget), value: 0, data: abi.encodeWithSignature("revertSilently()")
+        });
+        calls[2] =
+            Multicall({to: address(target), value: 0, data: abi.encodeWithSignature("setMagicNumber(uint256)", 333)});
+
+        bytes4 selector = bytes4(keccak256("UEA_MULTICALL"));
+        bytes memory callData = abi.encode(calls);
+        bytes memory multicallData = abi.encodePacked(selector, callData);
+
+        UniversalPayload memory payload = UniversalPayload({
+            to: address(0),
+            value: 0,
+            data: multicallData,
+            gasLimit: 1000000,
+            maxFeePerGas: 0,
+            nonce: 0,
+            deadline: block.timestamp + 1000,
+            maxPriorityFeePerGas: 0,
+            vType: VerificationType(0)
+        });
+
+        bytes32 txHash = getCrosschainTxhash(evmSmartAccountInstance, payload);
+        (uint8 v, bytes32 r, bytes32 s) = vm.sign(ownerPK, txHash);
+        bytes memory signature = abi.encodePacked(r, s, v);
+
+        vm.expectRevert(Errors.ExecutionFailed.selector);
+        evmSmartAccountInstance.executeUniversalTx(payload, signature);
     }
 
     function testRevertWhenIncorrectNonce() public deployEvmSmartAccount {
@@ -586,7 +674,8 @@ contract UEA_EVMTest is Test {
             maxFeePerGas: 0,
             nonce: 100, // Incorrect nonce
             deadline: block.timestamp + 1000,
-            maxPriorityFeePerGas: 0
+            maxPriorityFeePerGas: 0,
+            vType: VerificationType(0)
         });
 
         // Create a signature - Note: The nonce in the payload and the nonce used in getUniversalPayloadHash need to match
@@ -605,7 +694,8 @@ contract UEA_EVMTest is Test {
                         payload.maxFeePerGas,
                         payload.maxPriorityFeePerGas,
                         payload.nonce, // Using payload nonce, not account nonce
-                        payload.deadline
+                        payload.deadline,
+                        uint8(payload.vType)
                     )
                 )
             )
@@ -616,7 +706,7 @@ contract UEA_EVMTest is Test {
 
         // The execution should fail because the account expects nonce to be 0, not 100
         vm.expectRevert(Errors.InvalidEVMSignature.selector);
-        evmSmartAccountInstance.executeUniversalTx(abi.encode(payload), signature);
+        evmSmartAccountInstance.executeUniversalTx(payload, signature);
 
         // Verify state hasn't changed
         uint256 magicValueAfter = target.getMagicNumber();
@@ -634,7 +724,8 @@ contract UEA_EVMTest is Test {
             maxFeePerGas: 0,
             nonce: 0,
             deadline: block.timestamp + 1000,
-            maxPriorityFeePerGas: 0
+            maxPriorityFeePerGas: 0,
+            vType: VerificationType(0)
         });
 
         bytes32 txHash = getCrosschainTxhash(evmSmartAccountInstance, payload);
@@ -642,13 +733,13 @@ contract UEA_EVMTest is Test {
         bytes memory signature = abi.encodePacked(r, s, v);
 
         // First execution should succeed
-        evmSmartAccountInstance.executeUniversalTx(abi.encode(payload), signature);
+        evmSmartAccountInstance.executeUniversalTx(payload, signature);
 
         uint256 previousNonce = evmSmartAccountInstance.nonce();
 
         // Try to execute with same nonce again
         vm.expectRevert(Errors.InvalidEVMSignature.selector);
-        evmSmartAccountInstance.executeUniversalTx(abi.encode(payload), signature);
+        evmSmartAccountInstance.executeUniversalTx(payload, signature);
 
         // Verify state hasn't changed
         assertEq(previousNonce, evmSmartAccountInstance.nonce(), "Nonce should not have changed");
@@ -666,7 +757,8 @@ contract UEA_EVMTest is Test {
             maxFeePerGas: 0,
             nonce: 0,
             deadline: block.timestamp - 1, // Expired deadline
-            maxPriorityFeePerGas: 0
+            maxPriorityFeePerGas: 0,
+            vType: VerificationType(0)
         });
 
         bytes32 txHash = getCrosschainTxhash(evmSmartAccountInstance, payload);
@@ -674,7 +766,7 @@ contract UEA_EVMTest is Test {
         bytes memory signature = abi.encodePacked(r, s, v);
 
         vm.expectRevert(Errors.ExpiredDeadline.selector);
-        evmSmartAccountInstance.executeUniversalTx(abi.encode(payload), signature);
+        evmSmartAccountInstance.executeUniversalTx(payload, signature);
     }
 
     function testRevertWhenInvalidSignature() public deployEvmSmartAccount {
@@ -686,14 +778,15 @@ contract UEA_EVMTest is Test {
             maxFeePerGas: 0,
             nonce: 0,
             deadline: block.timestamp + 1000,
-            maxPriorityFeePerGas: 0
+            maxPriorityFeePerGas: 0,
+            vType: VerificationType(0)
         });
 
         // Create an invalid signature
         bytes memory invalidSignature = abi.encodePacked(bytes32(0), bytes32(0), uint8(0));
 
         vm.expectRevert(abi.encodeWithSelector(ECDSA.ECDSAInvalidSignature.selector));
-        evmSmartAccountInstance.executeUniversalTx(abi.encode(payload), invalidSignature);
+        evmSmartAccountInstance.executeUniversalTx(payload, invalidSignature);
     }
 
     function testRevertWithMalformedSignature() public deployEvmSmartAccount {
@@ -705,14 +798,15 @@ contract UEA_EVMTest is Test {
             maxFeePerGas: 0,
             nonce: 0,
             deadline: block.timestamp + 1000,
-            maxPriorityFeePerGas: 0
+            maxPriorityFeePerGas: 0,
+            vType: VerificationType(0)
         });
 
         // Create a malformed signature (too short)
         bytes memory malformedSignature = abi.encodePacked(bytes16(0), bytes16(0));
 
         vm.expectRevert();
-        evmSmartAccountInstance.executeUniversalTx(abi.encode(payload), malformedSignature);
+        evmSmartAccountInstance.executeUniversalTx(payload, malformedSignature);
     }
 
     function testReceiveFunction() public {
@@ -753,7 +847,8 @@ contract UEA_EVMTest is Test {
             maxFeePerGas: 0,
             maxPriorityFeePerGas: 0,
             nonce: payload.nonce,
-            deadline: payload.deadline
+            deadline: payload.deadline,
+            vType: VerificationType(0)
         });
 
         // Create an invalid signature (wrong private key)
@@ -763,7 +858,7 @@ contract UEA_EVMTest is Test {
         bytes memory sig = abi.encodePacked(r, s, v);
 
         vm.expectRevert(Errors.InvalidEVMSignature.selector);
-        evmSmartAccountInstance.executeUniversalTx(abi.encode(universalPayload), sig);
+        evmSmartAccountInstance.executeUniversalTx(universalPayload, sig);
     }
 
     function test_RevertWhen_ExpiredDeadlineOnMigration() public deployEvmSmartAccount {
@@ -780,7 +875,8 @@ contract UEA_EVMTest is Test {
             maxFeePerGas: 0,
             maxPriorityFeePerGas: 0,
             nonce: payload.nonce,
-            deadline: payload.deadline
+            deadline: payload.deadline,
+            vType: VerificationType(0)
         });
         bytes32 payloadHash = evmSmartAccountInstance.getUniversalPayloadHash(universalPayload);
 
@@ -792,13 +888,13 @@ contract UEA_EVMTest is Test {
         bytes memory sig = abi.encodePacked(r, s, v);
 
         vm.expectRevert(Errors.ExpiredDeadline.selector);
-        evmSmartAccountInstance.executeUniversalTx(abi.encode(universalPayload), sig);
+        evmSmartAccountInstance.executeUniversalTx(universalPayload, sig);
     }
 
     function test_SuccessfulMigrationUpdatesImplementation() public deployEvmSmartAccount {
         // Set migration contract in factory
         factory.setUEAMigrationContract(address(migration));
-        
+
         MigrationPayload memory payload =
             MigrationPayload({migration: address(migration), nonce: 0, deadline: block.timestamp + 1000});
 
@@ -812,7 +908,8 @@ contract UEA_EVMTest is Test {
             maxFeePerGas: 0,
             maxPriorityFeePerGas: 0,
             nonce: payload.nonce,
-            deadline: payload.deadline
+            deadline: payload.deadline,
+            vType: VerificationType(0)
         });
         bytes32 payloadHash = evmSmartAccountInstance.getUniversalPayloadHash(universalPayload);
 
@@ -821,7 +918,7 @@ contract UEA_EVMTest is Test {
         bytes memory sig = abi.encodePacked(r, s, v);
 
         // Call migrateUEA
-        evmSmartAccountInstance.executeUniversalTx(abi.encode(universalPayload), sig);
+        evmSmartAccountInstance.executeUniversalTx(universalPayload, sig);
 
         // Verify proxy's storage slot now updated
         bytes32 slot = UEA_LOGIC_SLOT;
@@ -829,6 +926,75 @@ contract UEA_EVMTest is Test {
         address newImpl = address(uint160(uint256(raw)));
 
         assertEq(newImpl, migration.UEA_EVM_IMPLEMENTATION(), "Migration should update implementation");
+    }
+
+    function testMigration_RevertsWhenValueNonZero() public deployEvmSmartAccount {
+        factory.setUEAMigrationContract(address(migration));
+
+        UniversalPayload memory payload = UniversalPayload({
+            to: address(evmSmartAccountInstance),
+            value: 1 ether,
+            data: abi.encodePacked(MIGRATION_SELECTOR),
+            gasLimit: 1000000,
+            maxFeePerGas: 0,
+            nonce: 0,
+            deadline: block.timestamp + 1000,
+            maxPriorityFeePerGas: 0,
+            vType: VerificationType(0)
+        });
+
+        bytes32 txHash = getCrosschainTxhash(evmSmartAccountInstance, payload);
+        (uint8 v, bytes32 r, bytes32 s) = vm.sign(ownerPK, txHash);
+        bytes memory signature = abi.encodePacked(r, s, v);
+
+        vm.expectRevert(Errors.InvalidCall.selector);
+        evmSmartAccountInstance.executeUniversalTx(payload, signature);
+    }
+
+    function testMigration_RevertsWhenTargetNotSelf() public deployEvmSmartAccount {
+        factory.setUEAMigrationContract(address(migration));
+
+        UniversalPayload memory payload = UniversalPayload({
+            to: address(target),
+            value: 0,
+            data: abi.encodePacked(MIGRATION_SELECTOR),
+            gasLimit: 1000000,
+            maxFeePerGas: 0,
+            nonce: 0,
+            deadline: block.timestamp + 1000,
+            maxPriorityFeePerGas: 0,
+            vType: VerificationType(0)
+        });
+
+        bytes32 txHash = getCrosschainTxhash(evmSmartAccountInstance, payload);
+        (uint8 v, bytes32 r, bytes32 s) = vm.sign(ownerPK, txHash);
+        bytes memory signature = abi.encodePacked(r, s, v);
+
+        vm.expectRevert(Errors.InvalidCall.selector);
+        evmSmartAccountInstance.executeUniversalTx(payload, signature);
+    }
+
+    function testMigration_RevertsWhenMigrationContractIsZero() public deployEvmSmartAccount {
+        // Do NOT set migration contract in factory
+
+        UniversalPayload memory payload = UniversalPayload({
+            to: address(evmSmartAccountInstance),
+            value: 0,
+            data: abi.encodePacked(MIGRATION_SELECTOR),
+            gasLimit: 1000000,
+            maxFeePerGas: 0,
+            nonce: 0,
+            deadline: block.timestamp + 1000,
+            maxPriorityFeePerGas: 0,
+            vType: VerificationType(0)
+        });
+
+        bytes32 txHash = getCrosschainTxhash(evmSmartAccountInstance, payload);
+        (uint8 v, bytes32 r, bytes32 s) = vm.sign(ownerPK, txHash);
+        bytes memory signature = abi.encodePacked(r, s, v);
+
+        vm.expectRevert(Errors.InvalidCall.selector);
+        evmSmartAccountInstance.executeUniversalTx(payload, signature);
     }
 
     // =========================================================================
@@ -858,7 +1024,7 @@ contract UEA_EVMTest is Test {
         // If the UniversalPayload struct definition changes, this test will fail
 
         bytes32 expectedHash = keccak256(
-            "UniversalPayload(address to,uint256 value,bytes data,uint256 gasLimit,uint256 maxFeePerGas,uint256 maxPriorityFeePerGas,uint256 nonce,uint256 deadline)"
+            "UniversalPayload(address to,uint256 value,bytes data,uint256 gasLimit,uint256 maxFeePerGas,uint256 maxPriorityFeePerGas,uint256 nonce,uint256 deadline,uint8 vType)"
         );
 
         // Access the actual hash from the imported constant
@@ -880,7 +1046,7 @@ contract UEA_EVMTest is Test {
         assertTrue(isValid, "Signature should be valid for the owner");
 
         // Test with wrong signer
-        ( /*address wrongSigner*/ , uint256 wrongPK) = makeAddrAndKey("wrongSigner");
+        (/*address wrongSigner*/, uint256 wrongPK) = makeAddrAndKey("wrongSigner");
         (v, r, s) = vm.sign(wrongPK, messageHash);
         bytes memory wrongSignature = abi.encodePacked(r, s, v);
 
@@ -892,11 +1058,7 @@ contract UEA_EVMTest is Test {
     // Verify Payload TxHash Tests
     // =========================================================================
     // Note: mock calls are used to test the TX_BASED_VERIFIER precompile call.
-    
-    
-    
-    
-    
+
     function testgetUniversalPayloadHash() public deployEvmSmartAccount {
         // Create a payload
         UniversalPayload memory payload = UniversalPayload({
@@ -907,7 +1069,8 @@ contract UEA_EVMTest is Test {
             maxFeePerGas: 0,
             nonce: 0,
             deadline: block.timestamp + 1000,
-            maxPriorityFeePerGas: 0
+            maxPriorityFeePerGas: 0,
+            vType: VerificationType(0)
         });
 
         // Get the transaction hash directly
@@ -924,7 +1087,8 @@ contract UEA_EVMTest is Test {
                 payload.maxFeePerGas,
                 payload.maxPriorityFeePerGas,
                 evmSmartAccountInstance.nonce(),
-                payload.deadline
+                payload.deadline,
+                uint8(payload.vType)
             )
         );
 
@@ -955,7 +1119,8 @@ contract UEA_EVMTest is Test {
                 payload.maxFeePerGas,
                 payload.maxPriorityFeePerGas,
                 _smartAccountInstance.nonce(),
-                payload.deadline
+                payload.deadline,
+                uint8(payload.vType)
             )
         );
 
@@ -969,7 +1134,7 @@ contract UEA_EVMTest is Test {
     function testExecutePayloadAsUEModuleWithoutSignature() public deployEvmSmartAccount {
         // Fund UEA
         vm.deal(address(evmSmartAccountInstance), 1 ether);
-        
+
         UniversalPayload memory payload = UniversalPayload({
             to: address(target),
             value: 0,
@@ -978,12 +1143,13 @@ contract UEA_EVMTest is Test {
             maxFeePerGas: 0,
             nonce: 0,
             deadline: block.timestamp + 1000,
-            maxPriorityFeePerGas: 0
+            maxPriorityFeePerGas: 0,
+            vType: VerificationType(0)
         });
-        
+
         // Prank as UNIVERSAL_EXECUTOR_MODULE
         vm.prank(evmSmartAccountInstance.UNIVERSAL_EXECUTOR_MODULE());
-        evmSmartAccountInstance.executeUniversalTx(abi.encode(payload), "");
+        evmSmartAccountInstance.executeUniversalTx(payload, "");
 
         // Verify execution succeeded
         assertEq(target.getMagicNumber(), 999, "Execution should succeed for UNIVERSAL_EXECUTOR_MODULE");
@@ -992,7 +1158,7 @@ contract UEA_EVMTest is Test {
     function testExecutePayloadAsUserRequiresSignature() public deployEvmSmartAccount {
         // Fund UEA
         vm.deal(address(evmSmartAccountInstance), 1 ether);
-        
+
         UniversalPayload memory payload = UniversalPayload({
             to: address(target),
             value: 0,
@@ -1001,23 +1167,24 @@ contract UEA_EVMTest is Test {
             maxFeePerGas: 0,
             nonce: 0,
             deadline: block.timestamp + 1000,
-            maxPriorityFeePerGas: 0
+            maxPriorityFeePerGas: 0,
+            vType: VerificationType(0)
         });
-        
+
         // Try to execute with wrong signer's signature as regular user
         (address wrongSigner, uint256 wrongPK) = makeAddrAndKey("wrongSigner");
         bytes32 txHash = getCrosschainTxhash(evmSmartAccountInstance, payload);
         (uint8 v, bytes32 r, bytes32 s) = vm.sign(wrongPK, txHash);
         bytes memory wrongSignature = abi.encodePacked(r, s, v);
-        
+
         vm.expectRevert(Errors.InvalidEVMSignature.selector);
-        evmSmartAccountInstance.executeUniversalTx(abi.encode(payload), wrongSignature);
+        evmSmartAccountInstance.executeUniversalTx(payload, wrongSignature);
     }
 
     function testExecutePayloadAsUserWithValidSignature() public deployEvmSmartAccount {
         // Fund UEA
         vm.deal(address(evmSmartAccountInstance), 1 ether);
-        
+
         UniversalPayload memory payload = UniversalPayload({
             to: address(target),
             value: 0,
@@ -1026,16 +1193,17 @@ contract UEA_EVMTest is Test {
             maxFeePerGas: 0,
             nonce: 0,
             deadline: block.timestamp + 1000,
-            maxPriorityFeePerGas: 0
+            maxPriorityFeePerGas: 0,
+            vType: VerificationType(0)
         });
-        
+
         bytes32 txHash = getCrosschainTxhash(evmSmartAccountInstance, payload);
         (uint8 v, bytes32 r, bytes32 s) = vm.sign(ownerPK, txHash);
         bytes memory signature = abi.encodePacked(r, s, v);
-        
+
         // Execute with valid signature
-        evmSmartAccountInstance.executeUniversalTx(abi.encode(payload), signature);
-        
+        evmSmartAccountInstance.executeUniversalTx(payload, signature);
+
         // Verify execution succeeded
         assertEq(target.getMagicNumber(), 999, "Execution should succeed with valid signature");
     }

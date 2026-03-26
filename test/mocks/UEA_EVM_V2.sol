@@ -2,8 +2,8 @@
 pragma solidity 0.8.26;
 
 import {UEAErrors as Errors} from "../../src/libraries/Errors.sol";
-import {IUEA} from "../../src/Interfaces/IUEA.sol";
-import {IUEAFactory} from "../../src/Interfaces/IUEAFactory.sol";
+import {IUEA} from "../../src/interfaces/IUEA.sol";
+import {IUEAFactory} from "../../src/interfaces/IUEAFactory.sol";
 import {ECDSA} from "@openzeppelin/contracts/utils/cryptography/ECDSA.sol";
 import {ReentrancyGuard} from "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
 import {StringUtils} from "../../src/libraries/Utils.sol";
@@ -80,7 +80,6 @@ contract UEA_EVM_V2 is ReentrancyGuard, IUEA {
         return recoveredSigner == address(bytes20(universalAccountId.owner));
     }
 
-
     /**
      * @dev Checks whether the payload data uses the multicall format by verifying a magic selector prefix.
      * @param data The raw data from the UniversalPayload.
@@ -154,9 +153,9 @@ contract UEA_EVM_V2 is ReentrancyGuard, IUEA {
         emit PayloadExecuted(universalAccountId.owner, nonce);
     }
 
-    function _handleMulticall(UniversalPayload memory payload) 
-        internal 
-        returns (bool success, bytes memory returnData) 
+    function _handleMulticall(UniversalPayload memory payload)
+        internal
+        returns (bool success, bytes memory returnData)
     {
         Multicall[] memory calls = decodeCalls(payload.data);
 
@@ -174,9 +173,9 @@ contract UEA_EVM_V2 is ReentrancyGuard, IUEA {
         return (true, "");
     }
 
-    function _handleMigration(UniversalPayload memory payload) 
-        internal 
-        returns (bool success, bytes memory returnData) 
+    function _handleMigration(UniversalPayload memory payload)
+        internal
+        returns (bool success, bytes memory returnData)
     {
         if (payload.to != address(this)) {
             revert Errors.InvalidCall();
@@ -187,7 +186,7 @@ contract UEA_EVM_V2 is ReentrancyGuard, IUEA {
 
         // Fetch migration contract address from factory
         address migrationContract = ueaFactory.UEA_MIGRATION_CONTRACT();
-        
+
         if (migrationContract == address(0)) {
             revert Errors.InvalidCall();
         }
@@ -197,9 +196,9 @@ contract UEA_EVM_V2 is ReentrancyGuard, IUEA {
         (success, returnData) = migrationContract.delegatecall(migrateCallData);
     }
 
-    function _handleSingleCall(UniversalPayload memory payload) 
-        internal 
-        returns (bool success, bytes memory returnData) 
+    function _handleSingleCall(UniversalPayload memory payload)
+        internal
+        returns (bool success, bytes memory returnData)
     {
         (success, returnData) = payload.to.call{value: payload.value}(payload.data);
     }
@@ -207,20 +206,17 @@ contract UEA_EVM_V2 is ReentrancyGuard, IUEA {
     /**
      * @inheritdoc IUEA
      */
-    function executeUniversalTx(bytes calldata payload, bytes calldata signature) external nonReentrant {
-        // Decode the raw bytes payload into UniversalPayload struct
-        UniversalPayload memory decodedPayload = abi.decode(payload, (UniversalPayload));
-
+    function executeUniversalTx(UniversalPayload calldata payload, bytes calldata signature) external nonReentrant {
         // Caller-based verification: UEModule can execute without signature, others need signature
         if (msg.sender != UNIVERSAL_EXECUTOR_MODULE) {
-            bytes32 payloadHash = getUniversalPayloadHash(decodedPayload);
+            bytes32 payloadHash = getUniversalPayloadHash(payload);
             if (!verifyUniversalPayloadSignature(payloadHash, signature)) {
                 revert Errors.InvalidEVMSignature();
             }
         }
 
         // Delegate to internal handler
-        _handleExecution(decodedPayload);
+        _handleExecution(payload);
     }
 
     /**
@@ -240,7 +236,8 @@ contract UEA_EVM_V2 is ReentrancyGuard, IUEA {
                 payload.maxFeePerGas,
                 payload.maxPriorityFeePerGas,
                 nonce,
-                payload.deadline
+                payload.deadline,
+                uint8(payload.vType)
             )
         );
 

@@ -2,8 +2,8 @@
 pragma solidity 0.8.26;
 
 import {UEAErrors as Errors} from "../../src/libraries/Errors.sol";
-import {IUEA} from "../../src/Interfaces/IUEA.sol";
-import {IUEAFactory} from "../../src/Interfaces/IUEAFactory.sol";
+import {IUEA} from "../../src/interfaces/IUEA.sol";
+import {IUEAFactory} from "../../src/interfaces/IUEAFactory.sol";
 import {ReentrancyGuard} from "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
 import {StringUtils} from "../../src/libraries/Utils.sol";
 import {
@@ -48,10 +48,7 @@ contract UEA_SVM_V2 is ReentrancyGuard, IUEA {
     function domainSeparator() public view returns (bytes32) {
         return keccak256(
             abi.encode(
-                DOMAIN_SEPARATOR_TYPEHASH_SVM,
-                keccak256(bytes(VERSION)),
-                universalAccountId.chainId,
-                address(this)
+                DOMAIN_SEPARATOR_TYPEHASH_SVM, keccak256(bytes(VERSION)), universalAccountId.chainId, address(this)
             )
         );
     }
@@ -228,20 +225,17 @@ contract UEA_SVM_V2 is ReentrancyGuard, IUEA {
     /**
      * @inheritdoc IUEA
      */
-    function executeUniversalTx(bytes calldata payload, bytes calldata signature) external nonReentrant {
-        // Decode the raw bytes payload into UniversalPayload struct
-        UniversalPayload memory decodedPayload = abi.decode(payload, (UniversalPayload));
-
+    function executeUniversalTx(UniversalPayload calldata payload, bytes calldata signature) external nonReentrant {
         // Caller-based verification: UEModule can execute without signature, others need signature
         if (msg.sender != UNIVERSAL_EXECUTOR_MODULE) {
-            bytes32 payloadHash = getUniversalPayloadHash(decodedPayload);
+            bytes32 payloadHash = getUniversalPayloadHash(payload);
             if (!verifyUniversalPayloadSignature(payloadHash, signature)) {
                 revert Errors.InvalidSVMSignature();
             }
         }
 
         // Delegate to internal handler
-        _handleExecution(decodedPayload);
+        _handleExecution(payload);
     }
 
     /**
@@ -261,7 +255,8 @@ contract UEA_SVM_V2 is ReentrancyGuard, IUEA {
                 payload.maxFeePerGas,
                 payload.maxPriorityFeePerGas,
                 nonce,
-                payload.deadline
+                payload.deadline,
+                uint8(payload.vType)
             )
         );
 

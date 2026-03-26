@@ -1,161 +1,75 @@
 # Push Chain Core Contracts
 
-This repository contains the core smart contracts powering Push Chain’s universal interoperability protocol. The system enables users and applications across chains to interact with Push Chain through a set of deterministic accounts, protocol coordinators, and token primitives.
-
-## Architecture Overview
-
-At a high level, the protocol is composed of:
-
-- **Universal Executor Accounts (UEAs)**: smart accounts on Push Chain representing external-chain users.
-- **Chain Executor Accounts (CEAs)**: smart accounts on external chains that execute on behalf of a UEA in a vault-driven model.
-- **UniversalCore**: protocol coordinator contract on Push Chain, operated by the Universal Executor Module.
-- **PRC20**: synthetic token primitive representing assets from external chains.
-- **WPC**: wrapped native PC token used as an ERC-20 compatible primitive.
+This repository contains the core smart contracts powering Push Chain's universal interoperability protocol. The system enables users and applications from any supported chain to interact with Push Chain through deterministic smart accounts, a protocol coordinator, and synthetic token primitives — all without requiring a native Push Chain wallet.
 
 ## Getting Started
 
-### Prerequisites
+### Dependencies
 
 - [Foundry](https://book.getfoundry.sh/getting-started/installation)
-- Git
-- Solidity 0.8.26
+- Solidity 0.8.26 (auto-pinned via `foundry.toml`)
 
 ### Setup
 
 ```bash
-git submodule update --init --recursive
 forge build
 ```
 
-Example deployment:
+### Test
 
 ```bash
-forge script scripts/deployFactory.s.sol --rpc-url <RPC_URL> --private-key <PRIVATE_KEY> --broadcast
+forge test                                    # all tests
+forge test -vvv                               # verbose output
+forge test --match-test testName              # single test by name
+forge test --match-contract ContractTest      # single contract
+forge test --match-path test/tests_uea_and_factory/UEA_EVM.t.sol  # single file
+forge test --gas-report                       # with gas report
 ```
 
-## Repository Structure
+### Coverage
 
-```
-push-chain-core-contracts/
-├── src/
-│   ├── UEA/
-│   │   ├── UEA_EVM.sol
-│   │   ├── UEA_SVM.sol
-│   │   ├── UEAFactoryV1.sol
-│   │   ├── UEAProxy.sol
-│   │   └── UEAMigration.sol
-│   ├── CEA/
-│   │   ├── CEA.sol
-│   │   ├── CEAFactory.sol
-│   │   └── CEAProxy.sol
-│   ├── UniversalCore.sol
-│   ├── PRC20.sol
-│   ├── WPC.sol
-│   ├── Interfaces/
-│   │   ├── IUEA.sol
-│   │   ├── IUEAFactory.sol
-│   │   ├── ICEA.sol
-│   │   ├── ICEAFactory.sol
-│   │   ├── ICEAProxy.sol
-│   │   ├── IUniversalCore.sol
-│   │   ├── IUniversalGateway.sol
-│   │   ├── IPRC20.sol
-│   │   ├── IWPC.sol
-│   │   └── IUniswapV3.sol
-│   ├── libraries/
-│   │   ├── Types.sol
-│   │   ├── Errors.sol
-│   │   └── Utils.sol
-│   └── mocks/
-├── scripts/
-└── test/
+Coverage requires `lcov` for HTML report generation (optional):
+
+```bash
+# Ubuntu
+sudo apt install lcov
+
+# macOS
+brew install lcov
 ```
 
-## Core Contract 1: Universal Executor Accounts (UEAs)
-
-UEAs are smart accounts deployed on Push Chain that represent users from external chains. A UEA verifies execution authorization using the user’s native signing scheme and then executes calls on Push Chain.
-
-### UEA Implementations
-
-Two implementation variants are provided to support different external signing schemes:
-
-| Implementation | Intended external VM | Signature verification |
-|---|---|---|
-| `UEA_EVM` | EVM chains | ECDSA (secp256k1) |
-| `UEA_SVM` | Solana | Ed25519 (via verifier precompile) |
-
-### UEAFactoryV1
-
-`UEAFactoryV1` is responsible for deploying UEAs deterministically and managing the mapping between an external user identity and their UEA on Push Chain. It deploys per-user proxies (clones) and points them to the correct UEA implementation for the user’s VM type.
-
-### UEA Proxy Architecture
-
-UEAs use a minimal proxy pattern: each user gets a dedicated `UEAProxy` (storage lives in the proxy), while logic is shared via a UEA implementation.
-
-```mermaid
-flowchart TD
-  UEAFactoryV1 -->|cloneDeterministic| UEAProxy_User
-  UEAProxy_User -->|delegatecall| UEAImplementation
-  UEAImplementation --> UEA_EVM
-  UEAImplementation --> UEA_SVM
+```bash
+forge coverage --ir-minimum --no-match-coverage "(PRC20V0\.sol|UniversalCoreV0\.sol|ReceiverExample\.sol|src/(libraries|[Ii]nterfaces|mocks)/|test/)"
 ```
 
-## Core Contract 2: Chain Executor Accounts (CEAs)
+> **Note:** The `--ir-minimum` flag is required because the codebase uses `via_ir = true`. Without it, `forge coverage` disables the optimizer and hits "Stack too deep" errors in some fuzz tests. The `--ir-minimum` flag re-enables `viaIR` with minimal optimization, producing accurate coverage without stack issues.
 
-CEAs are smart accounts deployed on external chains. A CEA represents a specific UEA (on Push Chain) on a specific external chain and is driven by an external-chain Vault / gateway flow (no end-user signatures and no direct user interaction model in v1).
+---
 
-### CEAFactory
+## Docs and Tooling
 
-`CEAFactory` deploys CEAs deterministically as minimal proxies and maintains a mapping between:
-- **UEA on Push Chain** ↔ **CEA on the external chain**
+### Protocol Documentation
 
-It also tracks the proxy template and the shared CEA logic implementation used for new deployments.
+- [Push Chain Overview](docs/1_PUSH_CHAIN.md) — what Push Chain is and how cross-chain flows work
+- [Universal Executor Accounts (UEA)](docs/2_UEA.md) — UEA architecture, execution model, and migration
+- [Chain Executor Accounts (CEA)](docs/3_CEA.md) — CEA architecture, outbound flows, and migration
+- [UniversalCore](docs/UniversalCore.md) — protocol coordinator, fee model, and role breakdown
+- [CEA + UEA Migration Flow](docs/CEA_UEA_MIGRATION_FLOW.md) — step-by-step proxy migration diagrams
+- [Threat Model](docs/THREAT_MODELLING_DOC.md) — STRIDE threat tables, invariants, and trust boundaries
 
-### CEA Proxy Architecture
+### Deployed Addresses
 
-Each deployed CEA is a `CEAProxy` clone that delegates to a shared `CEA` implementation. All account state is stored in the proxy via delegatecall.
+- [Sepolia Testnet](docs/addresses/sepolia.md)
+- [BSC Testnet](docs/addresses/bsc_testnet.md)
 
-```mermaid
-flowchart TD
-  CEAFactory -->|cloneDeterministic| CEAProxy_UEA
-  CEAProxy_UEA -->|delegatecall| CEAImplementation
-  CEAImplementation --> CEA
-```
+### Push Chain Testnet
 
-## CEA vs UEA (Quick Differences)
+RPC: `https://rpc.push.org/testnet`
 
-| Aspect | UEA | CEA |
-|--------|-----|-----|
-| **Deployment location** | Push Chain | External chain |
-| **Control model** | User-authenticated (via native signatures) | Vault-driven (no user signatures in v1) |
-| **Identity** | Represents an external-chain user | Represents a specific UEA on a specific external chain |
-| **Execution scope** | Executes on Push Chain | Executes on external chain using balances held on that chain |
+Push Chain Docs: [https://push.org/docs/](https://push.org/docs/)
 
-## UniversalCore (Protocol Coordinator)
-
-`UniversalCore` is the protocol coordinator contract on Push Chain. It is primarily operated by the Universal Executor Module and provides the core coordination layer that interacts with token primitives and chain configuration needed for interoperability flows.
-
-## Token Primitives: PRC20 and WPC
-
-- **PRC20**: Push Chain synthetic token representing assets from external chains. These tokens are minted/burned as part of protocol flows and integrate with the core protocol contracts.
-- **WPC**: wrapped native PC token, used as an ERC-20 compatible primitive (e.g., for integrations that expect ERC-20 behavior).
-
-## Migration (UEA + CEA)
-
-### UEA migration
-
-UEAs are deployed via `UEAProxy` and can be migrated to newer implementation logic using the `UEAMigration` pattern (delegatecall-based migration invoked through the proxy). `UEAFactoryV1` maintains the current `UEA_MIGRATION_CONTRACT` used for migrations.
-
-### CEA migration
-
-CEAs are deployed as `CEAProxy` clones that are initialized once with a CEA logic implementation. `CEAFactory` can update template addresses for **new deployments**, while already-deployed CEAs keep their configured implementation (any change for existing CEAs would require an explicit redeploy/move strategy at the protocol level).
+---
 
 ## License
 
-This project is licensed under the MIT License.
-
-## Additional Resources
-
-- [Push Protocol Documentation](https://docs.push.org)
-
----
+MIT

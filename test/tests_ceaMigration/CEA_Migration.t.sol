@@ -4,10 +4,10 @@ pragma solidity 0.8.26;
 import "forge-std/Test.sol";
 import "forge-std/console.sol";
 
-import "../../src/CEA/CEA.sol";
-import "../../src/CEA/CEAFactory.sol";
-import {CEAProxy} from "../../src/CEA/CEAProxy.sol";
-import "../../src/CEA/CEAMigration.sol";
+import "../../src/cea/CEA.sol";
+import "../../src/cea/CEAFactory.sol";
+import {CEAProxy} from "../../src/cea/CEAProxy.sol";
+import "../../src/cea/CEAMigration.sol";
 import {CEAErrors as Errors} from "../../src/libraries/Errors.sol";
 import {Multicall, MULTICALL_SELECTOR, MIGRATION_SELECTOR} from "../../src/libraries/Types.sol";
 import {ERC1967Proxy} from "@openzeppelin/contracts/proxy/ERC1967/ERC1967Proxy.sol";
@@ -45,6 +45,7 @@ contract CEA_MigrationTest is Test {
         bytes memory initData = abi.encodeWithSelector(
             CEAFactory.initialize.selector,
             owner,
+            makeAddr("pauser"),
             vault,
             address(ceaProxyImplementation),
             address(ceaImplementation),
@@ -115,7 +116,7 @@ contract CEA_MigrationTest is Test {
 
         // Execute migration (will test isMigration detection internally)
         vm.prank(vault);
-        ceaInstance.executeUniversalTx(txID, universalTxID, ueaOnPush, payload);
+        ceaInstance.executeUniversalTx(txID, universalTxID, ueaOnPush, address(0), payload);
 
         // If execution reaches here without reverting, isMigration worked
         assertTrue(true, "Migration selector detected successfully");
@@ -136,7 +137,7 @@ contract CEA_MigrationTest is Test {
         bytes memory payload = abi.encodePacked(MIGRATION_SELECTOR);
 
         vm.prank(vault);
-        ceaInstance.executeUniversalTx(txID, universalTxID, ueaOnPush, payload);
+        ceaInstance.executeUniversalTx(txID, universalTxID, ueaOnPush, address(0), payload);
 
         // Verify implementation changed
         address implAfter = CEAProxy(payable(address(ceaInstance))).getImplementation();
@@ -154,7 +155,7 @@ contract CEA_MigrationTest is Test {
 
         vm.prank(vault);
         vm.expectRevert(Errors.InvalidInput.selector);
-        ceaInstance.executeUniversalTx{value: 1 ether}(txID, universalTxID, ueaOnPush, payload);
+        ceaInstance.executeUniversalTx{value: 1 ether}(txID, universalTxID, ueaOnPush, address(0), payload);
     }
 
     function test_handleMigration_MigrationInsideMulticall_Reverts() public {
@@ -167,16 +168,12 @@ contract CEA_MigrationTest is Test {
         // MIGRATION_SELECTOR wrapped in multicall fails as generic execution failure
         // (CEA has no function matching the migration selector, so .call() reverts)
         Multicall[] memory calls = new Multicall[](1);
-        calls[0] = Multicall({
-            to: address(ceaInstance),
-            value: 0,
-            data: abi.encodePacked(MIGRATION_SELECTOR)
-        });
+        calls[0] = Multicall({to: address(ceaInstance), value: 0, data: abi.encodePacked(MIGRATION_SELECTOR)});
         bytes memory payload = abi.encodePacked(MULTICALL_SELECTOR, abi.encode(calls));
 
         vm.prank(vault);
         vm.expectRevert(Errors.ExecutionFailed.selector);
-        ceaInstance.executeUniversalTx(txID, universalTxID, ueaOnPush, payload);
+        ceaInstance.executeUniversalTx(txID, universalTxID, ueaOnPush, address(0), payload);
     }
 
     function test_handleMigration_NoMigrationContract() public {
@@ -191,7 +188,7 @@ contract CEA_MigrationTest is Test {
         // Expect InvalidCall revert
         vm.prank(vault);
         vm.expectRevert(Errors.InvalidCall.selector);
-        ceaInstance.executeUniversalTx(txID, universalTxID, ueaOnPush, payload);
+        ceaInstance.executeUniversalTx(txID, universalTxID, ueaOnPush, address(0), payload);
     }
 
     // =========================================================================
@@ -207,22 +204,18 @@ contract CEA_MigrationTest is Test {
 
         // Build batched payload with migration
         Multicall[] memory calls = new Multicall[](2);
-        calls[0] = Multicall({
-            to: makeAddr("external"),
-            value: 0,
-            data: abi.encodeWithSignature("someFunction()")
-        });
+        calls[0] = Multicall({to: makeAddr("external"), value: 0, data: abi.encodeWithSignature("someFunction()")});
         calls[1] = Multicall({
             to: address(ceaInstance),
             value: 0,
-            data: abi.encodePacked(MIGRATION_SELECTOR)  // Migration in batch!
+            data: abi.encodePacked(MIGRATION_SELECTOR) // Migration in batch!
         });
         bytes memory payload = abi.encodePacked(MULTICALL_SELECTOR, abi.encode(calls));
 
         // Migration selector in multicall fails as generic execution failure
         vm.prank(vault);
         vm.expectRevert(Errors.ExecutionFailed.selector);
-        ceaInstance.executeUniversalTx(txID, universalTxID, ueaOnPush, payload);
+        ceaInstance.executeUniversalTx(txID, universalTxID, ueaOnPush, address(0), payload);
     }
 
     function test_handleMulticall_MigrationInBatch_FirstPosition() public {
@@ -237,19 +230,15 @@ contract CEA_MigrationTest is Test {
         calls[0] = Multicall({
             to: address(ceaInstance),
             value: 0,
-            data: abi.encodePacked(MIGRATION_SELECTOR)  // Migration first!
+            data: abi.encodePacked(MIGRATION_SELECTOR) // Migration first!
         });
-        calls[1] = Multicall({
-            to: makeAddr("external"),
-            value: 0,
-            data: abi.encodeWithSignature("someFunction()")
-        });
+        calls[1] = Multicall({to: makeAddr("external"), value: 0, data: abi.encodeWithSignature("someFunction()")});
         bytes memory payload = abi.encodePacked(MULTICALL_SELECTOR, abi.encode(calls));
 
         // Migration selector in multicall fails as generic execution failure
         vm.prank(vault);
         vm.expectRevert(Errors.ExecutionFailed.selector);
-        ceaInstance.executeUniversalTx(txID, universalTxID, ueaOnPush, payload);
+        ceaInstance.executeUniversalTx(txID, universalTxID, ueaOnPush, address(0), payload);
     }
 
     // =========================================================================
@@ -271,7 +260,7 @@ contract CEA_MigrationTest is Test {
 
         // Execute migration
         vm.prank(vault);
-        ceaInstance.executeUniversalTx(txID, universalTxID, ueaOnPush, payload);
+        ceaInstance.executeUniversalTx(txID, universalTxID, ueaOnPush, address(0), payload);
 
         // Get updated implementation
         address implAfter = CEAProxy(payable(address(ceaInstance))).getImplementation();
@@ -279,5 +268,28 @@ contract CEA_MigrationTest is Test {
         // Verify implementation changed
         assertTrue(implBefore != implAfter, "Implementation should have changed");
         assertEq(implAfter, migration.CEA_IMPLEMENTATION(), "Implementation should be CEA v2");
+    }
+
+    function test_handleMigration_DelegatecallFailure_Reverts() public {
+        // Deploy a migration contract that points to an EOA (no code to delegatecall)
+        // We need a contract whose migrateCEA() will fail when delegatecalled.
+        // Use a mock that reverts on migrateCEA().
+        FailingMigration failMigration = new FailingMigration();
+        factory.setCEAMigrationContract(address(failMigration));
+
+        bytes32 txID = generateTxID(1);
+        bytes32 universalTxID = generateUniversalTxID(1);
+        bytes memory payload = buildMigrationPayload(address(ceaInstance));
+
+        vm.prank(vault);
+        vm.expectRevert(Errors.ExecutionFailed.selector);
+        ceaInstance.executeUniversalTx(txID, universalTxID, ueaOnPush, address(0), payload);
+    }
+}
+
+/// @notice Mock migration contract whose migrateCEA() always reverts
+contract FailingMigration {
+    function migrateCEA() external pure {
+        revert("migration failed");
     }
 }

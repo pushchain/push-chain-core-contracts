@@ -3,7 +3,7 @@ pragma solidity 0.8.26;
 
 import "forge-std/Test.sol";
 import "../../src/WPC.sol";
-import "../../src/Interfaces/IWPC.sol";
+import "../../src/interfaces/IWPC.sol";
 
 /**
  * @title WPCTest

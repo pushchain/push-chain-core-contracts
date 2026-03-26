@@ -11,7 +11,8 @@ import {UEA_SVM} from "../../src/uea/UEA_SVM.sol";
 import {UEAMigration} from "../../src/uea/UEAMigration.sol";
 import {UEAErrors as Errors} from "../../src/libraries/Errors.sol";
 import {IUEA} from "../../src/interfaces/IUEA.sol";
-import {OwnableUpgradeable} from "@openzeppelin/contracts-upgradeable/access/OwnableUpgradeable.sol";
+import {IAccessControl} from "@openzeppelin/contracts/access/IAccessControl.sol";
+import {PausableUpgradeable} from "@openzeppelin/contracts-upgradeable/utils/PausableUpgradeable.sol";
 import {ERC1967Proxy} from "@openzeppelin/contracts/proxy/ERC1967/ERC1967Proxy.sol";
 import {UEAProxy} from "../../src/uea/UEAProxy.sol";
 
@@ -24,6 +25,7 @@ contract UEAFactoryTest is Test {
     address deployer;
     address nonOwner;
     address owner;
+    address pauser;
     bytes ownerBytes;
 
     // VM Hash constants
@@ -43,6 +45,7 @@ contract UEAFactoryTest is Test {
     function setUp() public {
         deployer = address(this);
         nonOwner = makeAddr("nonOwner");
+        pauser = makeAddr("pauser");
 
         // Deploy implementations for different VM types
         ueaEVMImpl = new UEA_EVM();
@@ -55,8 +58,8 @@ contract UEAFactoryTest is Test {
         // Deploy the factory implementation
         UEAFactory factoryImpl = new UEAFactory();
 
-        // Deploy and initialize the proxy with initialOwner
-        bytes memory initData = abi.encodeWithSelector(UEAFactory.initialize.selector, deployer);
+        // Deploy and initialize the proxy with initialOwner and initialPauser
+        bytes memory initData = abi.encodeWithSelector(UEAFactory.initialize.selector, deployer, pauser);
         ERC1967Proxy proxy = new ERC1967Proxy(address(factoryImpl), initData);
         factory = UEAFactory(address(proxy));
 
@@ -89,6 +92,14 @@ contract UEAFactoryTest is Test {
         assertEq(factory.UEA_VERSION(SVM_HASH), "1.0.0", "UEA_SVM version mismatch");
     }
 
+    function testUEAVersion_RevertsOnUnregisteredVM() public {
+        vm.expectRevert(Errors.InvalidInputArgs.selector);
+        factory.UEA_VERSION(bytes32(0));
+
+        vm.expectRevert(Errors.InvalidInputArgs.selector);
+        factory.UEA_VERSION(keccak256("NONEXISTENT_VM"));
+    }
+
     function testRegisterNewChain() public {
         bytes32 chainHash = keccak256(abi.encode("KOVAN", "42"));
         factory.registerNewChain(chainHash, EVM_HASH);
@@ -112,8 +123,11 @@ contract UEAFactoryTest is Test {
         UEAMigration migration = new UEAMigration(address(ueaEVMImpl), address(ueaSVMImpl));
 
         // Non-owner should revert
+        bytes32 adminRole = factory.DEFAULT_ADMIN_ROLE();
+        vm.expectRevert(
+            abi.encodeWithSelector(IAccessControl.AccessControlUnauthorizedAccount.selector, nonOwner, adminRole)
+        );
         vm.prank(nonOwner);
-        vm.expectRevert(abi.encodeWithSelector(OwnableUpgradeable.OwnableUnauthorizedAccount.selector, nonOwner));
         factory.setUEAMigrationContract(address(migration));
 
         // Owner can set and value is stored
@@ -378,10 +392,27 @@ contract UEAFactoryTest is Test {
         assertTrue(isNewUEA);
     }
 
+    function testSetUEAProxyImplementation_RevertsOnZeroAddress() public {
+        vm.expectRevert(Errors.InvalidInputArgs.selector);
+        factory.setUEAProxyImplementation(address(0));
+    }
+
+    function testSetUEAProxyImplementation_OnlyOwner() public {
+        bytes32 adminRole = factory.DEFAULT_ADMIN_ROLE();
+        vm.expectRevert(
+            abi.encodeWithSelector(IAccessControl.AccessControlUnauthorizedAccount.selector, nonOwner, adminRole)
+        );
+        vm.prank(nonOwner);
+        factory.setUEAProxyImplementation(address(ueaEVMImpl));
+    }
+
     function testOwnershipFunctions() public {
         // Test that only owner can register implementations
+        bytes32 adminRole = factory.DEFAULT_ADMIN_ROLE();
+        vm.expectRevert(
+            abi.encodeWithSelector(IAccessControl.AccessControlUnauthorizedAccount.selector, nonOwner, adminRole)
+        );
         vm.prank(nonOwner);
-        vm.expectRevert(abi.encodeWithSelector(OwnableUpgradeable.OwnableUnauthorizedAccount.selector, nonOwner));
 
         bytes32 chainHash = keccak256(abi.encode("APTOS", "1"));
         factory.registerNewChain(chainHash, MOVE_VM_HASH);
@@ -473,15 +504,21 @@ contract UEAFactoryTest is Test {
     function testOwnershipTransfer() public {
         address newOwner = makeAddr("newOwner");
 
-        // Transfer ownership to new owner
-        factory.transferOwnership(newOwner);
+        // Grant DEFAULT_ADMIN_ROLE to new owner, then revoke from old owner
+        factory.grantRole(factory.DEFAULT_ADMIN_ROLE(), newOwner);
+        factory.revokeRole(factory.DEFAULT_ADMIN_ROLE(), address(this));
 
-        // Verify new owner
-        assertEq(factory.owner(), newOwner);
+        // Verify new owner has role, old does not
+        assertTrue(factory.hasRole(factory.DEFAULT_ADMIN_ROLE(), newOwner));
+        assertFalse(factory.hasRole(factory.DEFAULT_ADMIN_ROLE(), address(this)));
 
-        // Try to register a chain with old owner, should fail
+        // Try to register a chain with old owner — should fail
         bytes32 chainHash = keccak256(abi.encode("TestChain", "123"));
-        vm.expectRevert(abi.encodeWithSelector(OwnableUpgradeable.OwnableUnauthorizedAccount.selector, address(this)));
+        vm.expectRevert(
+            abi.encodeWithSelector(
+                IAccessControl.AccessControlUnauthorizedAccount.selector, address(this), factory.DEFAULT_ADMIN_ROLE()
+            )
+        );
         factory.registerNewChain(chainHash, MOVE_VM_HASH);
 
         // New owner should be able to register a chain
@@ -778,6 +815,46 @@ contract UEAFactoryTest is Test {
         factory.deployUEA(_id);
     }
 
+    function testComputeUEA_RevertsWhenNoProxyImplementation() public {
+        // Deploy a fresh factory without proxy implementation
+        UEAFactory freshFactoryImpl = new UEAFactory();
+        bytes memory initData = abi.encodeWithSelector(UEAFactory.initialize.selector, address(this), pauser);
+        ERC1967Proxy freshProxy = new ERC1967Proxy(address(freshFactoryImpl), initData);
+        UEAFactory freshFactory = UEAFactory(address(freshProxy));
+
+        // Register a chain but do NOT set proxy implementation
+        bytes32 chainHash = keccak256(abi.encode("eip155", "1"));
+        freshFactory.registerNewChain(chainHash, EVM_HASH);
+        freshFactory.registerUEA(chainHash, EVM_HASH, address(ueaEVMImpl));
+
+        bytes memory testOwnerBytes = abi.encodePacked(makeAddr("testowner"));
+        UniversalAccountId memory _id =
+            UniversalAccountId({chainNamespace: "eip155", chainId: "1", owner: testOwnerBytes});
+
+        vm.expectRevert(Errors.InvalidInputArgs.selector);
+        freshFactory.computeUEA(_id);
+    }
+
+    function testDeployUEA_RevertsWhenNoProxyImplementation() public {
+        // Deploy a fresh factory without proxy implementation
+        UEAFactory freshFactoryImpl = new UEAFactory();
+        bytes memory initData = abi.encodeWithSelector(UEAFactory.initialize.selector, address(this), pauser);
+        ERC1967Proxy freshProxy = new ERC1967Proxy(address(freshFactoryImpl), initData);
+        UEAFactory freshFactory = UEAFactory(address(freshProxy));
+
+        // Register a chain but do NOT set proxy implementation
+        bytes32 chainHash = keccak256(abi.encode("eip155", "1"));
+        freshFactory.registerNewChain(chainHash, EVM_HASH);
+        freshFactory.registerUEA(chainHash, EVM_HASH, address(ueaEVMImpl));
+
+        bytes memory testOwnerBytes = abi.encodePacked(makeAddr("testowner"));
+        UniversalAccountId memory _id =
+            UniversalAccountId({chainNamespace: "eip155", chainId: "1", owner: testOwnerBytes});
+
+        vm.expectRevert(Errors.InvalidInputArgs.selector);
+        freshFactory.deployUEA(_id);
+    }
+
     // Salt Generation Consistency
     function testSaltGenerationConsistency() public {
         // Create two identical accounts
@@ -884,6 +961,131 @@ contract UEAFactoryTest is Test {
         (address uea, bool isDeployed) = factory.getUEAForOrigin(_id);
         assertEq(uea, mockUEAAddress);
         assertFalse(isDeployed); // No code at this address
+    }
+
+    // =========================================================================
+    // Pause / Unpause Tests
+    // =========================================================================
+
+    function testPause_OnlyPauser() public {
+        bytes32 role = factory.PAUSER_ROLE();
+
+        // Non-pauser cannot pause
+        vm.expectRevert(
+            abi.encodeWithSelector(IAccessControl.AccessControlUnauthorizedAccount.selector, nonOwner, role)
+        );
+        vm.prank(nonOwner);
+        factory.pause();
+    }
+
+    function testPause_AdminCannotPause() public {
+        bytes32 role = factory.PAUSER_ROLE();
+
+        // Admin (deployer) also cannot pause — pauser role is separated from admin
+        vm.expectRevert(
+            abi.encodeWithSelector(IAccessControl.AccessControlUnauthorizedAccount.selector, deployer, role)
+        );
+        vm.prank(deployer);
+        factory.pause();
+    }
+
+    function testPause_HappyPath() public {
+        assertFalse(factory.paused());
+
+        vm.prank(pauser);
+        factory.pause();
+
+        assertTrue(factory.paused());
+    }
+
+    function testUnpause_OnlyPauser() public {
+        bytes32 role = factory.PAUSER_ROLE();
+        vm.prank(pauser);
+        factory.pause();
+
+        vm.expectRevert(
+            abi.encodeWithSelector(IAccessControl.AccessControlUnauthorizedAccount.selector, nonOwner, role)
+        );
+        vm.prank(nonOwner);
+        factory.unpause();
+    }
+
+    function testUnpause_HappyPath() public {
+        vm.prank(pauser);
+        factory.pause();
+        assertTrue(factory.paused());
+
+        vm.prank(pauser);
+        factory.unpause();
+        assertFalse(factory.paused());
+    }
+
+    function testDeployUEA_WhenPaused_Reverts() public {
+        vm.prank(pauser);
+        factory.pause();
+
+        bytes memory testOwnerBytes = abi.encodePacked(makeAddr("pausedOwner"));
+        UniversalAccountId memory _id =
+            UniversalAccountId({chainNamespace: "eip155", chainId: "1", owner: testOwnerBytes});
+
+        vm.expectRevert(abi.encodeWithSelector(PausableUpgradeable.EnforcedPause.selector));
+        factory.deployUEA(_id);
+    }
+
+    function testDeployUEA_AfterUnpause_Works() public {
+        vm.prank(pauser);
+        factory.pause();
+        vm.prank(pauser);
+        factory.unpause();
+
+        bytes memory testOwnerBytes = abi.encodePacked(makeAddr("unpausedOwner"));
+        UniversalAccountId memory _id =
+            UniversalAccountId({chainNamespace: "eip155", chainId: "1", owner: testOwnerBytes});
+
+        address ueaAddress = factory.deployUEA(_id);
+        assertTrue(factory.hasCode(ueaAddress));
+    }
+
+    function testSetPauserRole_OnlyOwner() public {
+        address newPauser = makeAddr("newPauser");
+
+        bytes32 adminRole = factory.DEFAULT_ADMIN_ROLE();
+        vm.expectRevert(
+            abi.encodeWithSelector(IAccessControl.AccessControlUnauthorizedAccount.selector, nonOwner, adminRole)
+        );
+        vm.prank(nonOwner);
+        factory.setPauserRole(newPauser);
+
+        // Admin can grant pauser role
+        factory.setPauserRole(newPauser);
+        assertTrue(factory.hasRole(factory.PAUSER_ROLE(), newPauser));
+    }
+
+    function testSetPauserRole_ZeroAddressReverts() public {
+        vm.expectRevert(Errors.InvalidInputArgs.selector);
+        factory.setPauserRole(address(0));
+    }
+
+    function testSetPauserRole_NewPauserCanPause() public {
+        address newPauser = makeAddr("newPauser2");
+        factory.setPauserRole(newPauser);
+
+        vm.prank(newPauser);
+        factory.pause();
+        assertTrue(factory.paused());
+    }
+
+    function testInitialize_SetsPauserRole() public {
+        assertTrue(factory.hasRole(factory.PAUSER_ROLE(), pauser));
+    }
+
+    function testInitialize_ZeroPauserReverts() public {
+        UEAFactory newImpl = new UEAFactory();
+        bytes memory initData = abi.encodeWithSelector(UEAFactory.initialize.selector, deployer, address(0));
+        ERC1967Proxy newProxy = new ERC1967Proxy(address(newImpl), "");
+
+        vm.expectRevert(Errors.InvalidInputArgs.selector);
+        UEAFactory(address(newProxy)).initialize(deployer, address(0));
     }
 
     // Test for the case where getOriginForUEA is called with an address that has an owner
