@@ -5,6 +5,7 @@ import "forge-std/Script.sol";
 import {CEAFactory} from "../../src/cea/CEAFactory.sol";
 import {CEA} from "../../src/cea/CEA.sol";
 import {CEAProxy} from "../../src/cea/CEAProxy.sol";
+import {CEAChainConfig} from "../config/CEAChainConfig.sol";
 import {TransparentUpgradeableProxy} from "@openzeppelin/contracts/proxy/transparent/TransparentUpgradeableProxy.sol";
 import {ProxyAdmin} from "@openzeppelin/contracts/proxy/transparent/ProxyAdmin.sol";
 
@@ -21,37 +22,25 @@ import {ProxyAdmin} from "@openzeppelin/contracts/proxy/transparent/ProxyAdmin.s
  *  6. Initializes CEAFactory with all required addresses
  *
  * CONFIGURATION:
- *  Update the state variables below with your deployment parameters.
+ *  Chain-specific addresses are resolved from scripts/config/CEAChainConfig.sol
  *  Environment variables needed: KEY, RPC_URL, ETHERSCAN_API_KEY
  */
-contract DeployCEAFactoryScript is Script {
-    // ============================================================================
-    // DEPLOYMENT PARAMETERS - Pre-Deployement Checklist
-    // ============================================================================
-
-    // Owner of the CEAFactory (can update implementations, pause, etc.)
-    address public OWNER_ADDRESS = 0x6dD2cA20ec82E819541EB43e1925DbE46a441970;
-
-    // Vault contract address on this chain (handles cross-chain funds)
-    address public VAULT_ADDRESS = 0xE52AC4f8DD3e0263bDF748F3390cdFA1f02be881;
-
-    // UniversalGateway contract address on this chain (handles cross-chain messages)
-    address public UNIVERSAL_GATEWAY_ADDRESS = 0x44aFFC61983F4348DdddB886349eb992C061EaC0;
-
+contract DeployCEAFactoryScript is Script, CEAChainConfig {
     function run() external {
         // Get chain ID and deployer info
         uint256 chainId = block.chainid;
         uint256 deployerKey = uint256(vm.envBytes32("KEY"));
         address deployer = vm.addr(deployerKey);
 
+        // Load chain-specific config
+        Config memory cfg = getConfig();
+        address owner = cfg.owner;
+        address vault = cfg.vault;
+        address universalGateway = cfg.universalGateway;
+
         console.log("=== CEAFactory Deployment Configuration ===");
         console.log("Chain ID:", chainId);
         console.log("Deployer:", deployer);
-
-        // Use state variables as deployment parameters
-        address owner = OWNER_ADDRESS;
-        address vault = VAULT_ADDRESS;
-        address universalGateway = UNIVERSAL_GATEWAY_ADDRESS;
 
         // Validate addresses
         require(owner != address(0), "Invalid owner address");

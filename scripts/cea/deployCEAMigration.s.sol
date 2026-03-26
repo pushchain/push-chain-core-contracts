@@ -5,6 +5,7 @@ import "forge-std/Script.sol";
 import {CEA_V2} from "../../src/testnetV0/CEA_V2.sol";
 import {CEAMigration} from "../../src/cea/CEAMigration.sol";
 import {CEAFactory} from "../../src/cea/CEAFactory.sol";
+import {CEAChainConfig} from "../config/CEAChainConfig.sol";
 
 /**
  * @title DeployCEAMigrationScript
@@ -16,23 +17,23 @@ import {CEAFactory} from "../../src/cea/CEAFactory.sol";
  *  3. Call CEAFactory.setCEAMigrationContract(migrationAddress)
  *
  * CONFIGURATION:
+ *  Chain-specific addresses are resolved from scripts/config/CEAChainConfig.sol
  *  Environment variables needed: KEY, RPC_URL
  */
-contract DeployCEAMigrationScript is Script {
-    // ============================================================================
-    // DEPLOYMENT PARAMETERS
-    // ============================================================================
-
-    address public CEA_FACTORY_PROXY = 0xe2182dae2dc11cBF6AA6c8B1a7f9c8315A6B0719;
-
+contract DeployCEAMigrationScript is Script, CEAChainConfig {
     function run() external {
         uint256 chainId = block.chainid;
         uint256 deployerKey = uint256(vm.envBytes32("KEY"));
         address deployer = vm.addr(deployerKey);
 
+        // Load chain-specific config
+        Config memory cfg = getConfig();
+        address CEA_FACTORY_PROXY = cfg.ceaFactoryProxy;
+
         console.log("=== CEA Migration Deployment ===");
         console.log("Chain ID:", chainId);
         console.log("Deployer:", deployer);
+        require(CEA_FACTORY_PROXY != address(0), "CEAFactory proxy not set in config");
         console.log("CEAFactory Proxy:", CEA_FACTORY_PROXY);
         console.log("");
 
