@@ -18,11 +18,7 @@ abstract contract CEAChainConfig {
 
     /// @notice Resolves the config for the current chain.
     /// @dev    Reverts if block.chainid is not supported.
-    function getConfig()
-        internal
-        view
-        returns (Config memory)
-    {
+    function getConfig() internal view returns (Config memory) {
         uint256 id = block.chainid;
 
         if (id == 97) return _bscTestnet();
@@ -37,11 +33,7 @@ abstract contract CEAChainConfig {
     //  BSC Testnet (Chain ID: 97)
     // =====================================================================
 
-    function _bscTestnet()
-        private
-        pure
-        returns (Config memory)
-    {
+    function _bscTestnet() private pure returns (Config memory) {
         return Config({
             owner: 0x6dD2cA20ec82E819541EB43e1925DbE46a441970,
             vault: 0xE52AC4f8DD3e0263bDF748F3390cdFA1f02be881,
@@ -54,16 +46,12 @@ abstract contract CEAChainConfig {
     //  Arbitrum Sepolia (Chain ID: 421614)
     // =====================================================================
 
-    function _arbitrumSepolia()
-        private
-        pure
-        returns (Config memory)
-    {
+    function _arbitrumSepolia() private pure returns (Config memory) {
         return Config({
-            owner: address(0),             // TODO: set before deploying
-            vault: address(0),             // TODO: set before deploying
-            universalGateway: address(0),  // TODO: set before deploying
-            ceaFactoryProxy: address(0)    // Set after CEAFactory deploy
+            owner: 0xD854DDe7C58eC1B405E6577F48a7cC5b5E6EF317,
+            vault: 0xE52AC4f8DD3e0263bDF748F3390cdFA1f02be881,
+            universalGateway: 0x2cd870e0166Ba458dEC615168Fd659AacD795f34,
+            ceaFactoryProxy: 0x88DC189275078Cf509E4Cc773F089c8ad07b7EA2
         });
     }
 
@@ -71,16 +59,12 @@ abstract contract CEAChainConfig {
     //  Ethereum Sepolia (Chain ID: 11155111)
     // =====================================================================
 
-    function _ethSepolia()
-        private
-        pure
-        returns (Config memory)
-    {
+    function _ethSepolia() private pure returns (Config memory) {
         return Config({
-            owner: address(0),             // TODO: set before deploying
-            vault: address(0),             // TODO: set before deploying
-            universalGateway: address(0),  // TODO: set before deploying
-            ceaFactoryProxy: address(0)    // Set after CEAFactory deploy
+            owner: 0xe520d4A985A2356Fa615935a822Ce4eFAcA24aB6,
+            vault: 0xE52AC4f8DD3e0263bDF748F3390cdFA1f02be881,
+            universalGateway: 0x05bD7a3D18324c1F7e216f7fBF2b15985aE5281A,
+            ceaFactoryProxy: 0x8ED594A83301FEc545fC6c19fc12cF7111777029
         });
     }
 
@@ -88,16 +72,12 @@ abstract contract CEAChainConfig {
     //  Base Sepolia (Chain ID: 84532)
     // =====================================================================
 
-    function _baseSepolia()
-        private
-        pure
-        returns (Config memory)
-    {
+    function _baseSepolia() private pure returns (Config memory) {
         return Config({
-            owner: address(0),             // TODO: set before deploying
-            vault: address(0),             // TODO: set before deploying
-            universalGateway: address(0),  // TODO: set before deploying
-            ceaFactoryProxy: address(0)    // Set after CEAFactory deploy
+            owner: 0x52DEA34AfAaD33Bb16675ED527b1ed80E83ffb09,
+            vault: 0xE52AC4f8DD3e0263bDF748F3390cdFA1f02be881,
+            universalGateway: 0xFD4fef1F43aFEc8b5bcdEEc47f35a1431479aC16,
+            ceaFactoryProxy: 0x0A75ca7736b488Eb41675ADc3b3156BACF659F55
         });
     }
 }
