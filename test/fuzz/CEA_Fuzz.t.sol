@@ -384,26 +384,45 @@ contract CEA_FuzzTest is Test {
     // 8.7 SendUniversalTxToUEA Properties
     // =========================================================================
 
-    /// @dev amount == 0 always reverts with InvalidInput.
-    function testFuzz_sendUniversalTxToUEA_zeroAmount_reverts(address token) public {
-        // Must call as self to bypass Unauthorized, but amount == 0 still reverts
-        // We can test this via a multicall that calls sendUniversalTxToUEA(token, 0, "")
+    /// @dev amount == 0 is allowed for both native and ERC20 — no revert expected.
+    function testFuzz_sendUniversalTxToUEA_zeroAmount_succeeds_native() public {
         Multicall[] memory calls = new Multicall[](1);
         calls[0] = makeCall(
             address(ceaInstance),
             0,
             abi.encodeWithSignature(
-                "sendUniversalTxToUEA(address,uint256,bytes,address)", token, uint256(0), "", ueaOnPush
+                "sendUniversalTxToUEA(address,uint256,bytes,address)", address(0), uint256(0), "", ueaOnPush
             )
         );
 
         bytes memory payload = encodeCalls(calls);
-        bytes32 txId = keccak256(abi.encode("zero_amount", token));
+        bytes32 txId = keccak256(abi.encode("zero_amount_native"));
 
-        // The inner call reverts with InvalidInput, causing ExecutionFailed at multicall level
-        vm.expectRevert(CEAErrors.ExecutionFailed.selector);
         vm.prank(vault);
         ceaInstance.executeUniversalTx(txId, bytes32(0), ueaOnPush, address(0), payload);
+
+        assertEq(mockUniversalGateway.lastAmount(), 0, "Should allow zero amount for native");
+    }
+
+    function testFuzz_sendUniversalTxToUEA_zeroAmount_succeeds_erc20() public {
+        MockGasToken token = new MockGasToken();
+
+        Multicall[] memory calls = new Multicall[](1);
+        calls[0] = makeCall(
+            address(ceaInstance),
+            0,
+            abi.encodeWithSignature(
+                "sendUniversalTxToUEA(address,uint256,bytes,address)", address(token), uint256(0), "", ueaOnPush
+            )
+        );
+
+        bytes memory payload = encodeCalls(calls);
+        bytes32 txId = keccak256(abi.encode("zero_amount_erc20"));
+
+        vm.prank(vault);
+        ceaInstance.executeUniversalTx(txId, bytes32(0), ueaOnPush, address(0), payload);
+
+        assertEq(mockUniversalGateway.lastAmount(), 0, "Should allow zero amount for ERC20");
     }
 
     /// @dev When CEA lacks sufficient ERC20 balance, reverts with InsufficientBalance.

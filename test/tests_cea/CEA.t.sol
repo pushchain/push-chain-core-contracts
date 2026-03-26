@@ -1189,14 +1189,13 @@ contract CEATest is Test {
 
         bytes32 txID = generateTxID(1);
         bytes32 universalTxID = generateUniversalTxID(1);
-        bytes memory payload = buildSendToUEAPayload(address(token), 0, ueaOnPush);
 
         vm.prank(vault);
         bytes memory multicallPayload = buildSendToUEAMulticallPayload(address(token), 0, true);
 
-        // Zero amount sends revert with ExecutionFailed (bubbled from sendUniversalTxToUEA's InvalidInput)
-        vm.expectRevert(Errors.ExecutionFailed.selector);
         ceaInstance.executeUniversalTx(txID, universalTxID, ueaOnPush, address(0), multicallPayload);
+
+        assertEq(mockUniversalGateway.lastAmount(), 0, "Should allow zero amount for ERC20");
     }
 
     function testSendUniversalTxToUEA_MultipleSendsWithDifferentTxIDs_ERC20() public deployCEA {
@@ -1532,14 +1531,13 @@ contract CEATest is Test {
 
         bytes32 txID = generateTxID(1);
         bytes32 universalTxID = generateUniversalTxID(1);
-        bytes memory payload = buildSendToUEAPayload(address(0), 0, ueaOnPush);
 
         vm.prank(vault);
         bytes memory multicallPayload = buildSendToUEAMulticallPayload(address(0), 0, false);
 
-        // Zero amount sends revert with ExecutionFailed (bubbled from sendUniversalTxToUEA's InvalidInput)
-        vm.expectRevert(Errors.ExecutionFailed.selector);
         ceaInstance.executeUniversalTx{value: 0}(txID, universalTxID, ueaOnPush, address(0), multicallPayload);
+
+        assertEq(mockUniversalGateway.lastAmount(), 0, "Should allow zero amount for native");
     }
 
     function testSendUniversalTxToUEA_MultipleSendsWithDifferentTxIDs_Native() public deployCEA {
@@ -1706,15 +1704,17 @@ contract CEATest is Test {
     function testHandleSelfCalls_RevertWhenPayloadExactly4Bytes() public deployCEA {
         fundCEAWithNative(100 ether);
 
-        // Exactly 4 bytes (selector only) - abi.decode on empty payload[4:] will panic
-        bytes memory selectorOnly = abi.encodePacked(bytes4(keccak256("sendUniversalTxToUEA(address,uint256,bytes)")));
+        // Exactly 4 bytes (selector only) — abi.decode on empty payload[4:] will panic
+        bytes memory selectorOnly =
+            abi.encodePacked(bytes4(keccak256("sendUniversalTxToUEA(address,uint256,bytes,address)")));
+
+        Multicall[] memory calls = new Multicall[](1);
+        calls[0] = Multicall({to: address(ceaInstance), value: 0, data: selectorOnly});
 
         vm.prank(vault);
         vm.expectRevert();
-        bytes memory multicallPayload = buildSendToUEAMulticallPayload(address(0), 0, false);
-
         ceaInstance.executeUniversalTx(
-            generateTxID(1), generateUniversalTxID(1), ueaOnPush, address(0), multicallPayload
+            generateTxID(1), generateUniversalTxID(1), ueaOnPush, address(0), encodeCalls(calls)
         );
     }
 
@@ -1722,15 +1722,16 @@ contract CEATest is Test {
         fundCEAWithNative(100 ether);
 
         // Correct selector but truncated args
-        bytes4 selector = bytes4(keccak256("sendUniversalTxToUEA(address,uint256,bytes)"));
+        bytes4 selector = bytes4(keccak256("sendUniversalTxToUEA(address,uint256,bytes,address)"));
         bytes memory malformed = abi.encodePacked(selector, bytes28(0));
+
+        Multicall[] memory calls = new Multicall[](1);
+        calls[0] = Multicall({to: address(ceaInstance), value: 0, data: malformed});
 
         vm.prank(vault);
         vm.expectRevert();
-        bytes memory multicallPayload = buildSendToUEAMulticallPayload(address(0), 0, false);
-
         ceaInstance.executeUniversalTx(
-            generateTxID(1), generateUniversalTxID(1), ueaOnPush, address(0), multicallPayload
+            generateTxID(1), generateUniversalTxID(1), ueaOnPush, address(0), encodeCalls(calls)
         );
     }
 
