@@ -96,7 +96,7 @@ contract UEA_SVM_FuzzTest is Test {
         UEA_SVM freshSVM = new UEA_SVM();
         bytes memory ownerB = abi.encodePacked(bytes32(uint256(0xabcd)));
         UniversalAccountId memory id = UniversalAccountId({chainNamespace: "solana", chainId: chainId, owner: ownerB});
-        freshSVM.initialize(id, address(factory));
+        freshSVM.initialize(id);
 
         bytes32 ds = freshSVM.domainSeparator();
 
@@ -110,7 +110,7 @@ contract UEA_SVM_FuzzTest is Test {
         UEA_SVM otherSVM = new UEA_SVM();
         UniversalAccountId memory otherId =
             UniversalAccountId({chainNamespace: "solana", chainId: differentChainId, owner: ownerB});
-        otherSVM.initialize(otherId, address(factory));
+        otherSVM.initialize(otherId);
 
         bytes32 dsOther = otherSVM.domainSeparator();
         assertTrue(ds != dsOther, "Different chainIds must yield different domain separators");

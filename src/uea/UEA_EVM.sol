@@ -52,7 +52,7 @@ contract UEA_EVM is ReentrancyGuard, IUEA {
         0x2aef22f9d7df5f9d21c56d14029233f3fdaa91917727e1eb68e504d27072d6cd;
 
     /// @notice UEAFactory reference for fetching migration contract.
-    IUEAFactory public ueaFactory;
+    IUEAFactory public constant ueaFactory = IUEAFactory(0x00000000000000000000000000000000000000eA);
 
     // =========================
     //    UE: INITIALIZER
@@ -60,8 +60,7 @@ contract UEA_EVM is ReentrancyGuard, IUEA {
 
     /// @inheritdoc IUEA
     function initialize(
-        UniversalAccountId memory _id,
-        address _factory
+        UniversalAccountId memory _id
     ) external {
         if (_initialized) {
             revert UEAErrors.AccountAlreadyExists();
@@ -69,7 +68,6 @@ contract UEA_EVM is ReentrancyGuard, IUEA {
         _initialized = true;
 
         _universalAccountId = _id;
-        ueaFactory = IUEAFactory(_factory);
     }
 
     // =========================

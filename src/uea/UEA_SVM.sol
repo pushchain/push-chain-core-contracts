@@ -40,7 +40,7 @@ contract UEA_SVM is ReentrancyGuard, IUEA {
 
     /// @notice Ed25519 verifier precompile address.
     address public constant VERIFIER_PRECOMPILE =
-        0x00000000000000000000000000000000000000ca;
+        0xEC00000000000000000000000000000000000001;
 
     /// @notice Universal Executor Module — authorized to execute without signature.
     address public constant UNIVERSAL_EXECUTOR_MODULE =
@@ -52,7 +52,7 @@ contract UEA_SVM is ReentrancyGuard, IUEA {
         0x3aefc31558906b9b2c54de94f82a9b2455c24b4ba2b642ebb545ea2cc64a1e4b;
 
     /// @notice UEAFactory reference for fetching migration contract.
-    IUEAFactory public ueaFactory;
+    IUEAFactory public constant ueaFactory = IUEAFactory(0x00000000000000000000000000000000000000eA);
 
     // =========================
     //    US: INITIALIZER
@@ -60,8 +60,7 @@ contract UEA_SVM is ReentrancyGuard, IUEA {
 
     /// @inheritdoc IUEA
     function initialize(
-        UniversalAccountId memory _id,
-        address _factory
+        UniversalAccountId memory _id
     ) external {
         if (_initialized) {
             revert UEAErrors.AccountAlreadyExists();
@@ -69,7 +68,6 @@ contract UEA_SVM is ReentrancyGuard, IUEA {
         _initialized = true;
 
         _universalAccountId = _id;
-        ueaFactory = IUEAFactory(_factory);
     }
 
     // =========================

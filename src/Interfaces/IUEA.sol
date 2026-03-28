@@ -69,6 +69,5 @@ interface IUEA {
     /// @notice                     Initializes the UEA with Universal Account info.
     /// @dev                        Can only be called once during deployment via Factory.
     /// @param universalAccount     UniversalAccountId with chain info and owner key
-    /// @param factory              Address of the UEAFactory contract
-    function initialize(UniversalAccountId memory universalAccount, address factory) external;
+    function initialize(UniversalAccountId memory universalAccount) external;
 }

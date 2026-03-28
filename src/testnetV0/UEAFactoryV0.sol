@@ -187,7 +187,7 @@ contract UEAFactoryV0 is Initializable, OwnableUpgradeable, PausableUpgradeable,
 
         UEAProxy(ueaProxy).initializeUEA(ueaImplementation);
 
-        IUEA(ueaProxy).initialize(_id, address(this));
+        IUEA(ueaProxy).initialize(_id);
 
         UOA_to_UEA[salt] = ueaProxy;
         UEA_to_UOA[ueaProxy] = _id;

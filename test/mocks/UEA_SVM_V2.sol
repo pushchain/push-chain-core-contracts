@@ -56,14 +56,13 @@ contract UEA_SVM_V2 is ReentrancyGuard, IUEA {
     /**
      * @inheritdoc IUEA
      */
-    function initialize(UniversalAccountId memory _id, address _factory) external {
+    function initialize(UniversalAccountId memory _id) external {
         if (initialized) {
             revert Errors.AccountAlreadyExists();
         }
         initialized = true;
 
         universalAccountId = _id;
-        ueaFactory = IUEAFactory(_factory);
     }
 
     /**

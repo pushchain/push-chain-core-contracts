@@ -88,7 +88,7 @@ contract UEASVMTest is Test {
             UniversalAccountId({chainNamespace: "solana", chainId: "101", owner: ownerBytes});
 
         // Initialize the account
-        newUEA.initialize(_id, address(factory));
+        newUEA.initialize(_id);
 
         // Verify account details were set correctly
         UniversalAccountId memory storedId = newUEA.universalAccount();
@@ -106,11 +106,11 @@ contract UEASVMTest is Test {
             UniversalAccountId({chainNamespace: "solana", chainId: "101", owner: ownerBytes});
 
         // Initialize the account
-        newUEA.initialize(_id, address(factory));
+        newUEA.initialize(_id);
 
         // Try to initialize again with the same ID
         vm.expectRevert(Errors.AccountAlreadyExists.selector);
-        newUEA.initialize(_id, address(factory));
+        newUEA.initialize(_id);
 
         // Try to initialize again with a different ID
         bytes memory differentOwnerBytes = hex"a48f4e93ca594d3c5e09c3ad39c599bbd6e6a2937869f3456905f5aeb7c78a61";
@@ -118,7 +118,7 @@ contract UEASVMTest is Test {
             UniversalAccountId({chainNamespace: "solana", chainId: "101", owner: differentOwnerBytes});
 
         vm.expectRevert(Errors.AccountAlreadyExists.selector);
-        newUEA.initialize(differentId, address(factory));
+        newUEA.initialize(differentId);
     }
 
     function testRegisterChain() public view {
@@ -739,7 +739,7 @@ contract UEASVMTest is Test {
         // Initialize it
         UniversalAccountId memory _id =
             UniversalAccountId({chainNamespace: "solana", chainId: "101", owner: ownerBytes});
-        newUEA.initialize(_id, address(factory));
+        newUEA.initialize(_id);
 
         // Check initial balance
         assertEq(address(newUEA).balance, 0, "Initial balance should be 0");

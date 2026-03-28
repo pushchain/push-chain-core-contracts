@@ -79,6 +79,19 @@ contract UEAFactory is Initializable, AccessControlUpgradeable, PausableUpgradea
         emit PauserRoleGranted(initialPauser);
     }
 
+    /// @dev                     Re-initializer for upgrading from OwnableUpgradeable (v1) to AccessControlUpgradeable (v2).
+    ///                          Must be called atomically via upgradeAndCall to avoid an admin-less window.
+    /// @param initialAdmin      Address granted DEFAULT_ADMIN_ROLE (governance)
+    /// @param initialPauser     Address granted PAUSER_ROLE (guardian)
+    function initializeV2(address initialAdmin, address initialPauser) public reinitializer(2) {
+        if (initialAdmin == address(0) || initialPauser == address(0)) revert UEAErrors.InvalidInputArgs();
+        __AccessControl_init();
+        __Pausable_init();
+        _grantRole(DEFAULT_ADMIN_ROLE, initialAdmin);
+        _grantRole(PAUSER_ROLE, initialPauser);
+        emit PauserRoleGranted(initialPauser);
+    }
+
     // =========================
     //    UF_1: VIEW FUNCTIONS
     // =========================
@@ -181,7 +194,7 @@ contract UEAFactory is Initializable, AccessControlUpgradeable, PausableUpgradea
 
         UEAProxy(ueaProxy).initializeUEA(ueaImplementation);
 
-        IUEA(ueaProxy).initialize(_id, address(this));
+        IUEA(ueaProxy).initialize(_id);
 
         UOA_to_UEA[salt] = ueaProxy;
         UEA_to_UOA[ueaProxy] = _id;
