@@ -69,8 +69,8 @@ contract UniversalCoreV0 is
     /// @notice Uniswap V3 SwapRouter.
     address public uniswapV3SwapRouter;
 
-    /// @notice Uniswap V3 Quoter.
-    address public uniswapV3Quoter;
+    /// @dev Deprecated. Slot retained for storage layout compatibility with deployed testnet proxy.
+    address private __deprecated_uniswapV3Quoter;
 
     /// @notice Address of the wrapped PC to interact with Uniswap V3.
     address public WPC;
@@ -163,7 +163,7 @@ contract UniversalCoreV0 is
         WPC = wpc_;
         uniswapV3Factory = uniswapV3Factory_;
         uniswapV3SwapRouter = uniswapV3SwapRouter_;
-        uniswapV3Quoter = uniswapV3Quoter_;
+        __deprecated_uniswapV3Quoter = uniswapV3Quoter_;
     }
 
     // =========================
@@ -452,7 +452,7 @@ contract UniversalCoreV0 is
         }
         uniswapV3Factory = factory;
         uniswapV3SwapRouter = swapRouter;
-        uniswapV3Quoter = quoter;
+        __deprecated_uniswapV3Quoter = quoter;
     }
 
     /// @notice          Set default fee tier for a token.

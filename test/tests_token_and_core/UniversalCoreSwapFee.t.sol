@@ -10,7 +10,6 @@ import {UniversalCoreErrors, CommonErrors} from "../../src/libraries/Errors.sol"
 import "../../test/helpers/UpgradeableContractHelper.sol";
 import "../../test/mocks/MockUniswapV3Factory.sol";
 import "../../test/mocks/MockUniswapV3Router.sol";
-import "../../test/mocks/MockUniswapV3Quoter.sol";
 import "../../test/mocks/MockWPC.sol";
 import "../../test/mocks/MockPRC20.sol";
 import "@openzeppelin/contracts-upgradeable/utils/PausableUpgradeable.sol";
@@ -21,7 +20,6 @@ contract UniversalCoreSwapFeeTest is Test, UpgradeableContractHelper {
     PRC20 public prc20Token;
     MockUniswapV3Factory public mockFactory;
     MockUniswapV3Router public mockRouter;
-    MockUniswapV3Quoter public mockQuoter;
     MockWPC public mockWPC;
     MockPRC20 public gasTokenMock;
 
@@ -53,7 +51,6 @@ contract UniversalCoreSwapFeeTest is Test, UpgradeableContractHelper {
 
         mockFactory = new MockUniswapV3Factory();
         mockRouter = new MockUniswapV3Router();
-        mockQuoter = new MockUniswapV3Quoter();
         mockWPC = new MockWPC();
         gasTokenMock = new MockPRC20();
 
@@ -79,7 +76,6 @@ contract UniversalCoreSwapFeeTest is Test, UpgradeableContractHelper {
             address(mockWPC),
             address(mockFactory),
             address(mockRouter),
-            address(mockQuoter),
             pauser
         );
         address proxyAddress = deployUpgradeableContract(address(implementation), initData);

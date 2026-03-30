@@ -66,7 +66,6 @@ contract UniversalCore is
 
     address public uniswapV3Factory;
     address public uniswapV3SwapRouter;
-    address public uniswapV3Quoter;
     mapping(string => address) public gasPCPoolByChainNamespace;
     mapping(address => bool) public isAutoSwapSupported;
     mapping(address => uint24) public defaultFeeTier;
@@ -110,12 +109,10 @@ contract UniversalCore is
     /// @param wpc_                      Address of the wrapped PC token
     /// @param uniswapV3Factory_         Address of the Uniswap V3 factory
     /// @param uniswapV3SwapRouter_      Address of the Uniswap V3 swap router
-    /// @param uniswapV3Quoter_          Address of the Uniswap V3 quoter
     function initialize(
         address wpc_,
         address uniswapV3Factory_,
         address uniswapV3SwapRouter_,
-        address uniswapV3Quoter_,
         address initialPauser_
     ) public virtual initializer {
         if (initialPauser_ == address(0)) revert CommonErrors.ZeroAddress();
@@ -131,7 +128,6 @@ contract UniversalCore is
         WPC = wpc_;
         uniswapV3Factory = uniswapV3Factory_;
         uniswapV3SwapRouter = uniswapV3SwapRouter_;
-        uniswapV3Quoter = uniswapV3Quoter_;
     }
 
     // =========================
@@ -400,15 +396,13 @@ contract UniversalCore is
     /// @notice             Setter for Uniswap V3 addresses.
     /// @param factory      Uniswap V3 Factory address
     /// @param swapRouter   Uniswap V3 SwapRouter address
-    /// @param quoter       Uniswap V3 Quoter address
-    function setUniswapV3Addresses(address factory, address swapRouter, address quoter) external onlyAdmin {
-        if (factory == address(0) || swapRouter == address(0) || quoter == address(0)) {
+    function setUniswapV3Addresses(address factory, address swapRouter) external onlyAdmin {
+        if (factory == address(0) || swapRouter == address(0)) {
             revert CommonErrors.ZeroAddress();
         }
         uniswapV3Factory = factory;
         uniswapV3SwapRouter = swapRouter;
-        uniswapV3Quoter = quoter;
-        emit SetUniswapV3Addresses(factory, swapRouter, quoter);
+        emit SetUniswapV3Addresses(factory, swapRouter);
     }
 
     /// @notice          Set default fee tier for a token.

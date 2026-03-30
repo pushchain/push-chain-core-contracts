@@ -29,12 +29,11 @@ contract UniversalCore_Fuzz is Test, UpgradeableContractHelper {
         address mockWPC = makeAddr("wPC");
         address mockFactory = makeAddr("uniswapFactory");
         address mockRouter = makeAddr("uniswapRouter");
-        address mockQuoter = makeAddr("uniswapQuoter");
         pauser = makeAddr("pauser");
 
         UniversalCore impl = new UniversalCore();
         bytes memory initData = abi.encodeWithSelector(
-            UniversalCore.initialize.selector, mockWPC, mockFactory, mockRouter, mockQuoter, pauser
+            UniversalCore.initialize.selector, mockWPC, mockFactory, mockRouter, pauser
         );
         address proxyAddr = deployUpgradeableContract(address(impl), initData);
         universalCore = UniversalCore(payable(proxyAddr));
@@ -371,15 +370,15 @@ contract UniversalCore_Fuzz is Test, UpgradeableContractHelper {
         universalCore.setUniversalGatewayPC(address(0));
     }
 
-    function testFuzz_setUniswapV3Addresses_anyZero_reverts(address f, address r, address q) public {
-        bool anyZero = f == address(0) || r == address(0) || q == address(0);
+    function testFuzz_setUniswapV3Addresses_anyZero_reverts(address f, address r) public {
+        bool anyZero = f == address(0) || r == address(0);
 
         if (anyZero) {
             vm.expectRevert(CommonErrors.ZeroAddress.selector);
-            universalCore.setUniswapV3Addresses(f, r, q);
+            universalCore.setUniswapV3Addresses(f, r);
         } else {
             // No revert expected — just verify it stores values
-            universalCore.setUniswapV3Addresses(f, r, q);
+            universalCore.setUniswapV3Addresses(f, r);
         }
     }
 

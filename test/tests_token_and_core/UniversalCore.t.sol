@@ -10,7 +10,6 @@ import {UniversalCoreErrors, PRC20Errors, CommonErrors} from "../../src/librarie
 import "../../test/helpers/UpgradeableContractHelper.sol";
 import "../../test/mocks/MockUniswapV3Factory.sol";
 import "../../test/mocks/MockUniswapV3Router.sol";
-import "../../test/mocks/MockUniswapV3Quoter.sol";
 import "../../test/mocks/MockWPC.sol";
 import "../../test/mocks/MockPRC20.sol";
 import "../../test/mocks/MaliciousPRC20.sol";
@@ -25,7 +24,6 @@ contract UniversalCoreTest is Test, UpgradeableContractHelper {
     PRC20 public prc20Token;
     MockUniswapV3Factory public mockFactory;
     MockUniswapV3Router public mockRouter;
-    MockUniswapV3Quoter public mockQuoter;
     MockWPC public mockWPC;
 
     address public constant UNIVERSAL_EXECUTOR_MODULE = 0x14191Ea54B4c176fCf86f51b0FAc7CB1E71Df7d7;
@@ -48,7 +46,7 @@ contract UniversalCoreTest is Test, UpgradeableContractHelper {
     event SetAutoSwapSupported(address indexed token, bool supported);
     event SetWPC(address indexed oldAddr, address indexed newAddr);
     event SetUniversalGatewayPC(address indexed oldAddr, address indexed newAddr);
-    event SetUniswapV3Addresses(address factory, address swapRouter, address quoter);
+    event SetUniswapV3Addresses(address factory, address swapRouter);
     event SetDefaultFeeTier(address indexed token, uint24 feeTier);
     event SetSlippageTolerance(address indexed token, uint256 tolerance);
     event SetGasPCPool(string indexed chainId, address indexed pool, uint24 fee);
@@ -79,7 +77,6 @@ contract UniversalCoreTest is Test, UpgradeableContractHelper {
         // Deploy mocks
         mockFactory = new MockUniswapV3Factory();
         mockRouter = new MockUniswapV3Router();
-        mockQuoter = new MockUniswapV3Quoter();
         mockWPC = new MockWPC();
         mockPRC20 = new MockPRC20();
 
@@ -110,7 +107,6 @@ contract UniversalCoreTest is Test, UpgradeableContractHelper {
             address(mockWPC),
             address(mockFactory),
             address(mockRouter),
-            address(mockQuoter),
             pauser
         );
 
@@ -145,7 +141,7 @@ contract UniversalCoreTest is Test, UpgradeableContractHelper {
         UniversalCore newHandler = new UniversalCore();
         // Should not be able to call initialize on implementation directly
         vm.expectRevert(Initializable.InvalidInitialization.selector);
-        newHandler.initialize(address(mockWPC), address(mockFactory), address(mockRouter), address(mockQuoter), pauser);
+        newHandler.initialize(address(mockWPC), address(mockFactory), address(mockRouter), pauser);
     }
 
     function test_Initialize_GrantsAdminRoleToDeployer() public {
@@ -160,7 +156,6 @@ contract UniversalCoreTest is Test, UpgradeableContractHelper {
             address(mockWPC),
             address(mockFactory),
             address(mockRouter),
-            address(mockQuoter),
             newPauser
         );
 
@@ -176,13 +171,12 @@ contract UniversalCoreTest is Test, UpgradeableContractHelper {
         assertEq(universalCore.WPC(), address(mockWPC));
         assertEq(universalCore.uniswapV3Factory(), address(mockFactory));
         assertEq(universalCore.uniswapV3SwapRouter(), address(mockRouter));
-        assertEq(universalCore.uniswapV3Quoter(), address(mockQuoter));
     }
 
     function test_Initialize_RevertsOnSecondCall() public {
         vm.expectRevert(Initializable.InvalidInitialization.selector);
         universalCore.initialize(
-            address(mockWPC), address(mockFactory), address(mockRouter), address(mockQuoter), pauser
+            address(mockWPC), address(mockFactory), address(mockRouter), pauser
         );
     }
 
@@ -1123,40 +1117,32 @@ contract UniversalCoreTest is Test, UpgradeableContractHelper {
     function test_SetUniswapV3Addresses_HappyPath() public {
         address f = makeAddr("factory2");
         address r = makeAddr("router2");
-        address q = makeAddr("quoter2");
 
         vm.prank(deployer);
         vm.expectEmit(false, false, false, true);
-        emit SetUniswapV3Addresses(f, r, q);
-        universalCore.setUniswapV3Addresses(f, r, q);
+        emit SetUniswapV3Addresses(f, r);
+        universalCore.setUniswapV3Addresses(f, r);
 
         assertEq(universalCore.uniswapV3Factory(), f);
         assertEq(universalCore.uniswapV3SwapRouter(), r);
-        assertEq(universalCore.uniswapV3Quoter(), q);
     }
 
     function test_SetUniswapV3Addresses_RevertsZeroFactory() public {
         vm.prank(deployer);
         vm.expectRevert(CommonErrors.ZeroAddress.selector);
-        universalCore.setUniswapV3Addresses(address(0), makeAddr("r"), makeAddr("q"));
+        universalCore.setUniswapV3Addresses(address(0), makeAddr("r"));
     }
 
     function test_SetUniswapV3Addresses_RevertsZeroRouter() public {
         vm.prank(deployer);
         vm.expectRevert(CommonErrors.ZeroAddress.selector);
-        universalCore.setUniswapV3Addresses(makeAddr("f"), address(0), makeAddr("q"));
-    }
-
-    function test_SetUniswapV3Addresses_RevertsZeroQuoter() public {
-        vm.prank(deployer);
-        vm.expectRevert(CommonErrors.ZeroAddress.selector);
-        universalCore.setUniswapV3Addresses(makeAddr("f"), makeAddr("r"), address(0));
+        universalCore.setUniswapV3Addresses(makeAddr("f"), address(0));
     }
 
     function test_SetUniswapV3Addresses_OnlyAdmin() public {
         vm.prank(nonOwner);
         vm.expectRevert(CommonErrors.InvalidOwner.selector);
-        universalCore.setUniswapV3Addresses(makeAddr("f"), makeAddr("r"), makeAddr("q"));
+        universalCore.setUniswapV3Addresses(makeAddr("f"), makeAddr("r"));
     }
 
     // ========================================
