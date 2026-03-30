@@ -117,7 +117,12 @@ contract UniversalCore_Fuzz is Test, UpgradeableContractHelper {
     }
 
     function testFuzz_getOutboundTxGasAndFees_zeroGasPrice_reverts(uint128 gasLimit) public {
-        vm.assume(gasLimit > 0);
+        uint256 baseLimit = 100_000;
+        vm.assume(gasLimit >= baseLimit);
+
+        // Set base gas limit so we pass the zero-base check
+        vm.prank(uExec);
+        universalCore.setBaseGasLimitByChain(CHAIN_NS, baseLimit);
 
         // Set gas price to 0 — setChainMeta is onlyUEModule
         vm.prank(uExec);
@@ -128,7 +133,12 @@ contract UniversalCore_Fuzz is Test, UpgradeableContractHelper {
     }
 
     function testFuzz_getOutboundTxGasAndFees_zeroGasToken_reverts(uint128 gasLimit) public {
-        vm.assume(gasLimit > 0);
+        uint256 baseLimit = 100_000;
+        vm.assume(gasLimit >= baseLimit);
+
+        // Set base gas limit for "nogas" chain so we pass the zero-base check
+        vm.prank(uExec);
+        universalCore.setBaseGasLimitByChain("nogas", baseLimit);
 
         // Deploy a fresh PRC20 on chain "nogas" — no gas token configured for "nogas"
         PRC20 prc20Impl = new PRC20();

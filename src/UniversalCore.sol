@@ -256,6 +256,7 @@ contract UniversalCore is
     {
         chainNamespace = IPRC20(_prc20).SOURCE_CHAIN_NAMESPACE();
         uint256 baseLimit = baseGasLimitByChainNamespace[chainNamespace];
+        if (baseLimit == 0) revert UniversalCoreErrors.ZeroBaseGasLimit();
 
         if (gasLimitWithBaseLimit == 0) {
             gasLimitWithBaseLimit = baseLimit;

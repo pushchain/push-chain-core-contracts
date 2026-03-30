@@ -706,10 +706,10 @@ contract UniversalCoreTest is Test, UpgradeableContractHelper {
         address proxyAddress = deployUpgradeableContract(address(newPrc20Token), initData);
         PRC20 newToken = PRC20(payable(proxyAddress));
 
-        // Don't set gas token for this chain ID, so it will be address(0)
+        // Don't set gas token or base gas limit for this chain ID
 
-        // Expect revert when getting gas fee
-        vm.expectRevert(CommonErrors.ZeroAddress.selector);
+        // Expect revert due to unconfigured base gas limit
+        vm.expectRevert(UniversalCoreErrors.ZeroBaseGasLimit.selector);
         universalCore.getOutboundTxGasAndFees(address(newToken), 0);
     }
 
