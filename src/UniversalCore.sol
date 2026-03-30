@@ -139,7 +139,7 @@ contract UniversalCore is
     // =========================
 
     /// @inheritdoc IUniversalCore
-    function depositPRC20Token(address prc20, uint256 amount, address recipient) external onlyUEModule whenNotPaused {
+    function depositPRC20Token(address prc20, uint256 amount, address recipient) external onlyUEModule whenNotPaused nonReentrant {
         _validateParams(prc20, amount, recipient);
         IPRC20(prc20).deposit(recipient, amount);
     }
