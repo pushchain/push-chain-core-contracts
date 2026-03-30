@@ -87,6 +87,14 @@ contract UniversalCoreV0 is
     /// @notice Role for managing gas-related configurations.
     bytes32 public constant MANAGER_ROLE = keccak256("MANAGER_ROLE");
 
+    // -- Uniswap V3 fee tiers --
+    uint24 public constant FEE_TIER_LOW = 500;
+    uint24 public constant FEE_TIER_MEDIUM = 3000;
+    uint24 public constant FEE_TIER_HIGH = 10000;
+
+    // -- Slippage cap (basis points) --
+    uint256 public constant MAX_SLIPPAGE_BPS = 5000;
+
     /// @notice (Deprecated) Base gas limit — now per-chain via baseGasLimitByChainNamespace.
     /// @dev Only included to avoid storage collision in Testnet UniversalCore.
     uint256 public BASE_GAS_LIMIT = 500_000;
@@ -460,7 +468,7 @@ contract UniversalCoreV0 is
     /// @param feeTier   Fee tier (500, 3000, 10000)
     function setDefaultFeeTier(address token, uint24 feeTier) external onlyAdmin {
         if (token == address(0)) revert CommonErrors.ZeroAddress();
-        if (feeTier != 500 && feeTier != 3000 && feeTier != 10000) {
+        if (feeTier != FEE_TIER_LOW && feeTier != FEE_TIER_MEDIUM && feeTier != FEE_TIER_HIGH) {
             revert UniversalCoreErrors.InvalidFeeTier();
         }
         defaultFeeTier[token] = feeTier;
@@ -471,7 +479,7 @@ contract UniversalCoreV0 is
     /// @param tolerance   Slippage tolerance in basis points (e.g., 300 = 3%)
     function setSlippageTolerance(address token, uint256 tolerance) external onlyAdmin {
         if (token == address(0)) revert CommonErrors.ZeroAddress();
-        if (tolerance > 5000) {
+        if (tolerance > MAX_SLIPPAGE_BPS) {
             revert UniversalCoreErrors.InvalidSlippageTolerance();
         }
         slippageTolerance[token] = tolerance;

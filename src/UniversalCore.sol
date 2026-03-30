@@ -44,6 +44,14 @@ contract UniversalCore is
     bytes32 public constant MANAGER_ROLE = keccak256("MANAGER_ROLE");
     bytes32 public constant PAUSER_ROLE = keccak256("PAUSER_ROLE");
 
+    // -- Uniswap V3 fee tiers --
+    uint24 public constant FEE_TIER_LOW = 500;
+    uint24 public constant FEE_TIER_MEDIUM = 3000;
+    uint24 public constant FEE_TIER_HIGH = 10000;
+
+    // -- Slippage cap (basis points) --
+    uint256 public constant MAX_SLIPPAGE_BPS = 5000;
+
     // -- Protocol addresses --
     address public universalGatewayPC;
     address public WPC;
@@ -415,7 +423,7 @@ contract UniversalCore is
     /// @param feeTier   Fee tier (500, 3000, 10000)
     function setDefaultFeeTier(address token, uint24 feeTier) external onlyAdmin {
         if (token == address(0)) revert CommonErrors.ZeroAddress();
-        if (feeTier != 500 && feeTier != 3000 && feeTier != 10000) {
+        if (feeTier != FEE_TIER_LOW && feeTier != FEE_TIER_MEDIUM && feeTier != FEE_TIER_HIGH) {
             revert UniversalCoreErrors.InvalidFeeTier();
         }
         defaultFeeTier[token] = feeTier;
@@ -427,7 +435,7 @@ contract UniversalCore is
     /// @param tolerance   Slippage tolerance in basis points (e.g., 300 = 3%)
     function setSlippageTolerance(address token, uint256 tolerance) external onlyAdmin {
         if (token == address(0)) revert CommonErrors.ZeroAddress();
-        if (tolerance > 5000) {
+        if (tolerance > MAX_SLIPPAGE_BPS) {
             revert UniversalCoreErrors.InvalidSlippageTolerance();
         }
         slippageTolerance[token] = tolerance;
