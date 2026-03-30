@@ -219,7 +219,7 @@ contract UniversalCore is
 
         IWPC(WPC).deposit{value: msg.value}();
 
-        IERC20(WPC).approve(uniswapV3SwapRouter, msg.value);
+        IERC20(WPC).forceApprove(uniswapV3SwapRouter, msg.value);
 
         ISwapRouter.ExactOutputSingleParams memory params = ISwapRouter.ExactOutputSingleParams({
             tokenIn: WPC,
@@ -233,7 +233,7 @@ contract UniversalCore is
         });
 
         uint256 amountInUsed = ISwapRouter(uniswapV3SwapRouter).exactOutputSingle(params);
-        IERC20(WPC).approve(uniswapV3SwapRouter, 0);
+        IERC20(WPC).forceApprove(uniswapV3SwapRouter, 0);
 
         IPRC20(gasToken).burn(gasFee);
 
@@ -523,7 +523,7 @@ contract UniversalCore is
         if (minPCOut == 0) revert CommonErrors.ZeroAmount();
 
         IPRC20(prc20).deposit(address(this), amount);
-        IPRC20(prc20).approve(uniswapV3SwapRouter, amount);
+        IERC20(prc20).forceApprove(uniswapV3SwapRouter, amount);
 
         ISwapRouter.ExactInputSingleParams memory params = ISwapRouter.ExactInputSingleParams({
             tokenIn: prc20,
@@ -539,7 +539,7 @@ contract UniversalCore is
         pcOut = ISwapRouter(uniswapV3SwapRouter).exactInputSingle(params);
         if (pcOut < minPCOut) revert UniversalCoreErrors.SlippageExceeded();
 
-        IPRC20(prc20).approve(uniswapV3SwapRouter, 0);
+        IERC20(prc20).forceApprove(uniswapV3SwapRouter, 0);
 
         IWPC(WPC).withdraw(pcOut);
         (bool ok,) = recipient.call{value: pcOut}("");
