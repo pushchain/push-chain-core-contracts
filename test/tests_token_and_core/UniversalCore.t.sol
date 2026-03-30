@@ -46,7 +46,11 @@ contract UniversalCoreTest is Test, UpgradeableContractHelper {
 
     event SystemContractDeployed();
     event SetAutoSwapSupported(address indexed token, bool supported);
-    event SetWPC(address indexed wpc);
+    event SetWPC(address indexed oldAddr, address indexed newAddr);
+    event SetUniversalGatewayPC(address indexed oldAddr, address indexed newAddr);
+    event SetUniswapV3Addresses(address factory, address swapRouter, address quoter);
+    event SetDefaultFeeTier(address indexed token, uint24 feeTier);
+    event SetSlippageTolerance(address indexed token, uint256 tolerance);
     event SetGasPCPool(string indexed chainId, address indexed pool, uint24 fee);
     event SetGasToken(string indexed chainId, address indexed prc20);
     event DepositPRC20WithAutoSwap(
@@ -215,11 +219,15 @@ contract UniversalCoreTest is Test, UpgradeableContractHelper {
         address token = makeAddr("token");
 
         vm.prank(deployer);
+        vm.expectEmit(true, false, false, true);
+        emit SetAutoSwapSupported(token, true);
         universalCore.setAutoSwapSupported(token, true);
         assertTrue(universalCore.isAutoSwapSupported(token));
 
         // Test flipping to false
         vm.prank(deployer);
+        vm.expectEmit(true, false, false, true);
+        emit SetAutoSwapSupported(token, false);
         universalCore.setAutoSwapSupported(token, false);
         assertFalse(universalCore.isAutoSwapSupported(token));
     }
@@ -247,8 +255,11 @@ contract UniversalCoreTest is Test, UpgradeableContractHelper {
 
     function test_SetWPCContractAddress_HappyPath() public {
         address newWPC = makeAddr("newWPC");
+        address oldWPC = universalCore.WPC();
 
         vm.prank(deployer);
+        vm.expectEmit(true, true, false, true);
+        emit SetWPC(oldWPC, newWPC);
         universalCore.setWPC(newWPC);
 
         assertEq(universalCore.WPC(), newWPC);
@@ -1084,7 +1095,11 @@ contract UniversalCoreTest is Test, UpgradeableContractHelper {
 
     function test_SetUniversalGatewayPC_HappyPath() public {
         address gateway = makeAddr("gateway");
+        address oldGateway = universalCore.universalGatewayPC();
+
         vm.prank(deployer);
+        vm.expectEmit(true, true, false, true);
+        emit SetUniversalGatewayPC(oldGateway, gateway);
         universalCore.setUniversalGatewayPC(gateway);
         assertEq(universalCore.universalGatewayPC(), gateway);
     }
@@ -1111,6 +1126,8 @@ contract UniversalCoreTest is Test, UpgradeableContractHelper {
         address q = makeAddr("quoter2");
 
         vm.prank(deployer);
+        vm.expectEmit(false, false, false, true);
+        emit SetUniswapV3Addresses(f, r, q);
         universalCore.setUniswapV3Addresses(f, r, q);
 
         assertEq(universalCore.uniswapV3Factory(), f);
@@ -1169,6 +1186,8 @@ contract UniversalCoreTest is Test, UpgradeableContractHelper {
     function test_SetDefaultFeeTier_HappyPath_500() public {
         address token = makeAddr("token");
         vm.prank(deployer);
+        vm.expectEmit(true, false, false, true);
+        emit SetDefaultFeeTier(token, 500);
         universalCore.setDefaultFeeTier(token, 500);
         assertEq(universalCore.defaultFeeTier(token), 500);
     }
@@ -1213,6 +1232,8 @@ contract UniversalCoreTest is Test, UpgradeableContractHelper {
     function test_SetSlippageTolerance_HappyPath() public {
         address token = makeAddr("token");
         vm.prank(deployer);
+        vm.expectEmit(true, false, false, true);
+        emit SetSlippageTolerance(token, 300);
         universalCore.setSlippageTolerance(token, 300);
         assertEq(universalCore.slippageTolerance(token), 300);
     }

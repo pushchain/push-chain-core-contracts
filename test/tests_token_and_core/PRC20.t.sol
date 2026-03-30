@@ -43,6 +43,8 @@ contract PRC20Test is Test, UpgradeableContractHelper {
     event Approval(address indexed owner, address indexed spender, uint256 value);
     event Deposit(bytes from, address to, uint256 amount);
     event UpdatedUniversalCore(address universalCore);
+    event NameUpdated(string oldName, string newName);
+    event SymbolUpdated(string oldSymbol, string newSymbol);
 
     function setUp() public {
         // Setup actors
@@ -551,12 +553,13 @@ contract PRC20Test is Test, UpgradeableContractHelper {
 
     function testSetNameFromUExec() public {
         string memory newName = "New Push Token";
+        string memory oldName = prc20.name();
 
-        // Set name from Universal Executor Module
         vm.prank(uExec);
+        vm.expectEmit(false, false, false, true);
+        emit NameUpdated(oldName, newName);
         prc20.setName(newName);
 
-        // Verify name was updated
         assertEq(prc20.name(), newName);
     }
 
@@ -571,12 +574,13 @@ contract PRC20Test is Test, UpgradeableContractHelper {
 
     function testSetSymbolFromUExec() public {
         string memory newSymbol = "NPUSH";
+        string memory oldSymbol = prc20.symbol();
 
-        // Set symbol from Universal Executor Module
         vm.prank(uExec);
+        vm.expectEmit(false, false, false, true);
+        emit SymbolUpdated(oldSymbol, newSymbol);
         prc20.setSymbol(newSymbol);
 
-        // Verify symbol was updated
         assertEq(prc20.symbol(), newSymbol);
     }
 

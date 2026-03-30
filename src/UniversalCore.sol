@@ -376,20 +376,25 @@ contract UniversalCore is
     /// @param supported Whether the token supports auto-swap
     function setAutoSwapSupported(address token, bool supported) external onlyAdmin {
         isAutoSwapSupported[token] = supported;
+        emit SetAutoSwapSupported(token, supported);
     }
 
     /// @notice      Set the wrapped PC address.
     /// @param addr  WPC new address
     function setWPC(address addr) external onlyAdmin {
         if (addr == address(0)) revert CommonErrors.ZeroAddress();
+        address oldAddr = WPC;
         WPC = addr;
+        emit SetWPC(oldAddr, addr);
     }
 
     /// @notice      Set the UniversalGatewayPC address.
     /// @param addr  UniversalGatewayPC address
     function setUniversalGatewayPC(address addr) external onlyAdmin {
         if (addr == address(0)) revert CommonErrors.ZeroAddress();
+        address oldAddr = universalGatewayPC;
         universalGatewayPC = addr;
+        emit SetUniversalGatewayPC(oldAddr, addr);
     }
 
     /// @notice             Setter for Uniswap V3 addresses.
@@ -403,6 +408,7 @@ contract UniversalCore is
         uniswapV3Factory = factory;
         uniswapV3SwapRouter = swapRouter;
         uniswapV3Quoter = quoter;
+        emit SetUniswapV3Addresses(factory, swapRouter, quoter);
     }
 
     /// @notice          Set default fee tier for a token.
@@ -414,6 +420,7 @@ contract UniversalCore is
             revert UniversalCoreErrors.InvalidFeeTier();
         }
         defaultFeeTier[token] = feeTier;
+        emit SetDefaultFeeTier(token, feeTier);
     }
 
     /// @notice            Set slippage tolerance for a token.
@@ -425,6 +432,7 @@ contract UniversalCore is
             revert UniversalCoreErrors.InvalidSlippageTolerance();
         }
         slippageTolerance[token] = tolerance;
+        emit SetSlippageTolerance(token, tolerance);
     }
 
     /// @notice               Set default deadline in minutes.

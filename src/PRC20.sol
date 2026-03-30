@@ -193,13 +193,17 @@ contract PRC20 is IPRC20, Initializable {
     /// @notice          Update token name.
     /// @param newName   New name string
     function setName(string memory newName) external onlyUniversalExecutor {
+        string memory oldName = _name;
         _name = newName;
+        emit NameUpdated(oldName, newName);
     }
 
     /// @notice            Update token symbol.
     /// @param newSymbol   New symbol string
     function setSymbol(string memory newSymbol) external onlyUniversalExecutor {
+        string memory oldSymbol = _symbol;
         _symbol = newSymbol;
+        emit SymbolUpdated(oldSymbol, newSymbol);
     }
 
     // =========================
