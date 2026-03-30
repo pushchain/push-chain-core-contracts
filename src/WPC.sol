@@ -16,6 +16,7 @@ contract WPC is IWPC {
     string public symbol = "WPC";
     uint8 public decimals = 18;
 
+    uint256 private _totalSupply;
     mapping(address => uint256) public balanceOf;
     mapping(address => mapping(address => uint256)) public allowance;
 
@@ -25,6 +26,7 @@ contract WPC is IWPC {
 
     /// @inheritdoc IWPC
     function deposit() public payable {
+        _totalSupply += msg.value;
         balanceOf[msg.sender] += msg.value;
         emit Deposit(msg.sender, msg.value);
     }
@@ -33,6 +35,7 @@ contract WPC is IWPC {
     function withdraw(uint256 wad) public {
         require(balanceOf[msg.sender] >= wad, "");
         balanceOf[msg.sender] -= wad;
+        _totalSupply -= wad;
         payable(msg.sender).transfer(wad);
         emit Withdrawal(msg.sender, wad);
     }
@@ -43,7 +46,7 @@ contract WPC is IWPC {
 
     /// @inheritdoc IWPC
     function totalSupply() public view returns (uint256) {
-        return address(this).balance;
+        return _totalSupply;
     }
 
     /// @inheritdoc IWPC
