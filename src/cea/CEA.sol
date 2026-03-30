@@ -8,7 +8,6 @@ import {IUniversalGateway, UniversalTxRequest} from "../interfaces/IUniversalGat
 import {Multicall, MULTICALL_SELECTOR, MIGRATION_SELECTOR} from "../libraries/Types.sol";
 
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
-import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import {ReentrancyGuard} from "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
 
 /**
@@ -19,8 +18,6 @@ import {ReentrancyGuard} from "@openzeppelin/contracts/utils/ReentrancyGuard.sol
  *          In v1 only the Vault may call state-changing functions.
  */
 contract CEA is ICEA, ReentrancyGuard {
-    using SafeERC20 for IERC20;
-
     // =========================
     //    CEA: STATE VARIABLES
     // =========================
