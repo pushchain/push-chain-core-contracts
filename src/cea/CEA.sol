@@ -190,9 +190,17 @@ contract CEA is ICEA, ReentrancyGuard {
                 revert CEAErrors.InvalidInput();
             }
 
-            (bool success,) = calls[i].to.call{value: calls[i].value}(calls[i].data);
+            (bool success, bytes memory returnData) = calls[i].to.call{value: calls[i].value}(calls[i].data);
 
-            if (!success) revert CEAErrors.ExecutionFailed();
+            if (!success) {
+                if (returnData.length > 0) {
+                    assembly {
+                        revert(add(32, returnData), mload(returnData))
+                    }
+                } else {
+                    revert CEAErrors.ExecutionFailed();
+                }
+            }
 
             emit UniversalTxExecuted(txId, universalTxId, originCaller, calls[i].to, calls[i].data);
         }
@@ -225,8 +233,16 @@ contract CEA is ICEA, ReentrancyGuard {
             revert CEAErrors.InvalidRecipient();
         }
 
-        (bool success,) = recipient.call{value: msg.value}(payload);
-        if (!success) revert CEAErrors.ExecutionFailed();
+        (bool success, bytes memory returnData) = recipient.call{value: msg.value}(payload);
+        if (!success) {
+            if (returnData.length > 0) {
+                assembly {
+                    revert(add(32, returnData), mload(returnData))
+                }
+            } else {
+                revert CEAErrors.ExecutionFailed();
+            }
+        }
 
         emit UniversalTxExecuted(txId, universalTxId, originCaller, recipient, payload);
     }

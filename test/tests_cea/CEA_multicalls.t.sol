@@ -135,7 +135,7 @@ contract CEA_NewMulticallTests is CEATest {
             buildExternalSingleCall(address(reverter), 0, abi.encodeWithSignature("revertWithReason()"));
 
         vm.prank(vault);
-        vm.expectRevert(Errors.ExecutionFailed.selector); // Bubbled error no longer shown
+        vm.expectRevert("This function always reverts with reason");
         ceaInstance.executeUniversalTx(txID, universalTxID, ueaOnPush, address(0), payload);
     }
 
@@ -154,7 +154,7 @@ contract CEA_NewMulticallTests is CEATest {
         uint256 magicBefore = target.magicNumber();
 
         vm.prank(vault);
-        vm.expectRevert(Errors.ExecutionFailed.selector); // Bubbled error no longer shown
+        vm.expectRevert("This function always reverts with reason");
         ceaInstance.executeUniversalTx(txID, universalTxID, ueaOnPush, address(0), payload);
 
         // First call's effect should be rolled back
@@ -171,7 +171,7 @@ contract CEA_NewMulticallTests is CEATest {
             buildExternalSingleCall(address(reverter), 0, abi.encodeWithSignature("revertWithReason()"));
 
         vm.prank(vault);
-        vm.expectRevert(Errors.ExecutionFailed.selector); // Bubbled error no longer shown
+        vm.expectRevert("This function always reverts with reason");
         ceaInstance.executeUniversalTx(txID, universalTxID, ueaOnPush, address(0), payload);
 
         // txID should NOT be marked as executed since the tx reverted
@@ -190,7 +190,7 @@ contract CEA_NewMulticallTests is CEATest {
         vm.prank(vault);
         vm.recordLogs();
 
-        vm.expectRevert(Errors.ExecutionFailed.selector); // Bubbled error no longer shown
+        vm.expectRevert("This function always reverts with reason");
         ceaInstance.executeUniversalTx(txID, universalTxID, ueaOnPush, address(0), payload);
 
         Vm.Log[] memory logs = vm.getRecordedLogs();
@@ -231,8 +231,7 @@ contract CEA_NewMulticallTests is CEATest {
         bytes memory payload = encodeCalls(calls);
 
         vm.prank(vault);
-        // Calls initializeCEA via .call() which reverts with AlreadyInitialized
-        // but we now get ExecutionFailed instead of bubbled error
+        // Mismatched selector (3 params vs 4) — no function match, empty return data
         vm.expectRevert(Errors.ExecutionFailed.selector);
         ceaInstance.executeUniversalTx(txID, universalTxID, ueaOnPush, address(0), payload);
     }
@@ -279,7 +278,7 @@ contract CEA_NewMulticallTests is CEATest {
         bytes memory payload = encodeCalls(calls);
 
         vm.prank(vault);
-        vm.expectRevert(Errors.ExecutionFailed.selector); // Bubbled from sendUniversalTxToUEA's InsufficientBalance
+        vm.expectRevert(Errors.InsufficientBalance.selector);
         ceaInstance.executeUniversalTx(txID, universalTxID, ueaOnPush, address(0), payload);
     }
 
@@ -314,7 +313,7 @@ contract CEA_NewMulticallTests is CEATest {
         bytes memory payload = encodeCalls(calls);
 
         vm.prank(vault);
-        vm.expectRevert(Errors.ExecutionFailed.selector); // Bubbled from sendUniversalTxToUEA's InsufficientBalance
+        vm.expectRevert(Errors.InsufficientBalance.selector);
         ceaInstance.executeUniversalTx{value: 0}(txID, universalTxID, ueaOnPush, address(0), payload);
     }
 
@@ -583,7 +582,7 @@ contract CEA_NewMulticallTests is CEATest {
         vm.deal(vault, 0.1 ether);
 
         vm.prank(vault);
-        vm.expectRevert(Errors.ExecutionFailed.selector); // Bubbled from sendUniversalTxToUEA's InsufficientBalance
+        vm.expectRevert(Errors.InsufficientBalance.selector);
         ceaInstance.executeUniversalTx{value: 0.1 ether}(txID, universalTxID, ueaOnPush, address(0), payload);
 
         // Verify rollback - target should not have received ETH
@@ -611,7 +610,7 @@ contract CEA_NewMulticallTests is CEATest {
         bytes memory payload = encodeCalls(calls);
 
         vm.prank(vault);
-        vm.expectRevert(Errors.ExecutionFailed.selector); // Gateway revert bubbled as ExecutionFailed
+        vm.expectRevert("Gateway intentionally reverted");
         ceaInstance.executeUniversalTx(txID, universalTxID, ueaOnPush, address(0), payload);
 
         // Verify txID not marked executed
@@ -642,7 +641,7 @@ contract CEA_NewMulticallTests is CEATest {
         bytes memory payload = encodeCalls(calls);
 
         vm.prank(vault);
-        vm.expectRevert(Errors.ExecutionFailed.selector); // Bubbled error no longer shown
+        vm.expectRevert("This function always reverts with reason");
         ceaInstance.executeUniversalTx(txID, universalTxID, ueaOnPush, address(0), payload);
 
         // Verify allowance rolled back to 0
@@ -671,7 +670,7 @@ contract CEA_NewMulticallTests is CEATest {
         bytes memory payload = encodeCalls(calls);
 
         vm.prank(vault);
-        vm.expectRevert(Errors.ExecutionFailed.selector); // Bubbled error no longer shown
+        vm.expectRevert("This function always reverts with reason");
         ceaInstance.executeUniversalTx(txID, universalTxID, ueaOnPush, address(0), payload);
 
         // Verify gateway was NOT called (entire tx reverted before gateway interaction persisted)
@@ -693,7 +692,7 @@ contract CEA_NewMulticallTests is CEATest {
 
         // First attempt - should revert
         vm.prank(vault);
-        vm.expectRevert(Errors.ExecutionFailed.selector); // Bubbled error no longer shown
+        vm.expectRevert("This function always reverts with reason");
         ceaInstance.executeUniversalTx(txID, universalTxID, ueaOnPush, address(0), failingPayload);
 
         // Verify not marked executed
@@ -856,7 +855,7 @@ contract CEA_NewMulticallTests is CEATest {
         uint256 targetBalanceBefore = address(target).balance;
 
         vm.prank(vault);
-        vm.expectRevert(Errors.ExecutionFailed.selector); // Bubbled error no longer shown
+        vm.expectRevert("This function always reverts with reason");
         ceaInstance.executeUniversalTx{value: transferAmount}(txID, universalTxID, ueaOnPush, address(0), payload);
 
         // Verify target balance unchanged (rollback)

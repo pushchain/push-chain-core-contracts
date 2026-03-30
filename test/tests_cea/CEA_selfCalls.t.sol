@@ -300,7 +300,7 @@ contract CEA_ComprehensiveTests is CEATest {
         bytes memory payload = encodeCalls(calls);
 
         vm.prank(vault);
-        vm.expectRevert(Errors.ExecutionFailed.selector); // Bubbled InsufficientBalance
+        vm.expectRevert(Errors.InsufficientBalance.selector);
         ceaInstance.executeUniversalTx(txID, universalTxID, ueaOnPush, address(0), payload);
     }
 
@@ -416,7 +416,7 @@ contract CEA_ComprehensiveTests is CEATest {
         );
 
         vm.prank(vault);
-        vm.expectRevert(Errors.ExecutionFailed.selector);
+        vm.expectRevert(Errors.InsufficientBalance.selector);
         ceaInstance.executeUniversalTx{value: 0}(
             generateTxID(1), generateUniversalTxID(1), ueaOnPush, address(0), encodeCalls(calls)
         );
@@ -439,7 +439,7 @@ contract CEA_ComprehensiveTests is CEATest {
         );
 
         vm.prank(vault);
-        vm.expectRevert(Errors.ExecutionFailed.selector);
+        vm.expectRevert(Errors.InsufficientBalance.selector);
         ceaInstance.executeUniversalTx(
             generateTxID(1), generateUniversalTxID(1), ueaOnPush, address(0), encodeCalls(calls)
         );
@@ -791,7 +791,7 @@ contract CEA_ComprehensiveTests is CEATest {
         bytes32 txID = generateTxID(1);
 
         vm.prank(vault);
-        vm.expectRevert(Errors.ExecutionFailed.selector);
+        vm.expectRevert("GatewayError");
         ceaInstance.executeUniversalTx{value: 0}(
             txID, generateUniversalTxID(1), ueaOnPush, address(0), encodeCalls(calls)
         );
@@ -821,7 +821,7 @@ contract CEA_ComprehensiveTests is CEATest {
         );
 
         vm.prank(vault);
-        vm.expectRevert(Errors.ExecutionFailed.selector);
+        vm.expectRevert("GatewayError");
         ceaInstance.executeUniversalTx{value: 0}(
             generateTxID(1), generateUniversalTxID(1), ueaOnPush, address(0), encodeCalls(calls)
         );
@@ -958,7 +958,7 @@ contract CEA_ComprehensiveTests is CEATest {
         calls[0] = makeCall(address(ceaInstance), 0, buildSendToUEAPayload(address(0), 5 ether, address(0)));
 
         vm.prank(vault);
-        vm.expectRevert(Errors.ExecutionFailed.selector);
+        vm.expectRevert(Errors.InvalidInput.selector);
         ceaInstance.executeUniversalTx{value: 0}(
             generateTxID(1), generateUniversalTxID(1), ueaOnPush, address(0), encodeCalls(calls)
         );

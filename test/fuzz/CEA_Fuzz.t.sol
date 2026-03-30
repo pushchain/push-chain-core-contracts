@@ -444,8 +444,8 @@ contract CEA_FuzzTest is Test {
         bytes memory payload = encodeCalls(calls);
         bytes32 txId = keccak256(abi.encode("insufficient_balance", amount));
 
-        // The inner call reverts with InsufficientBalance, causing ExecutionFailed
-        vm.expectRevert(CEAErrors.ExecutionFailed.selector);
+        // The inner call reverts with InsufficientBalance, now propagated
+        vm.expectRevert(CEAErrors.InsufficientBalance.selector);
         vm.prank(vault);
         ceaInstance.executeUniversalTx(txId, bytes32(0), ueaOnPush, address(0), payload);
     }

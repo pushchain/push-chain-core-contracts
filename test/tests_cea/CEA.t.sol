@@ -607,8 +607,8 @@ contract CEATest is Test {
         bytes memory multicallPayload =
             buildERC20MulticallPayload(address(token), address(reverter), 100 ether, payload);
 
-        // Expect ExecutionFailed (revert data no longer bubbled)
-        vm.expectRevert(Errors.ExecutionFailed.selector);
+        // Underlying revert reason is now propagated
+        vm.expectRevert("This function always reverts with reason");
         ceaInstance.executeUniversalTx(txID, universalTxID, ueaOnPush, address(0), multicallPayload);
 
         // txID should NOT be marked as executed when execution fails
@@ -933,8 +933,7 @@ contract CEATest is Test {
 
         vm.prank(vault);
         // Calls initializeCEA via .call() which reverts with AlreadyInitialized
-        // but we now get ExecutionFailed instead of bubbled error
-        vm.expectRevert(Errors.ExecutionFailed.selector);
+        vm.expectRevert(Errors.AlreadyInitialized.selector);
         ceaInstance.executeUniversalTx(txID, universalTxID, ueaOnPush, address(0), multicallPayload);
     }
 
@@ -951,7 +950,7 @@ contract CEATest is Test {
         bytes memory payload = buildSendToUEAPayload(address(token), 500 ether, ueaOnPush);
 
         vm.prank(vault);
-        vm.expectRevert(Errors.ExecutionFailed.selector); // Bubbled from sendUniversalTxToUEA's InsufficientBalance
+        vm.expectRevert(Errors.InsufficientBalance.selector);
         bytes memory multicallPayload = buildSendToUEAMulticallPayload(address(token), 500 ether, true);
 
         ceaInstance.executeUniversalTx(txID, universalTxID, ueaOnPush, address(0), multicallPayload);
@@ -1366,8 +1365,7 @@ contract CEATest is Test {
 
         vm.prank(vault);
         // Calls initializeCEA via .call() which reverts with AlreadyInitialized
-        // but we now get ExecutionFailed instead of bubbled error
-        vm.expectRevert(Errors.ExecutionFailed.selector);
+        vm.expectRevert(Errors.AlreadyInitialized.selector);
         ceaInstance.executeUniversalTx{value: 0}(txID, universalTxID, ueaOnPush, address(0), multicallPayload);
     }
 
@@ -1378,7 +1376,7 @@ contract CEATest is Test {
         bytes memory payload = buildSendToUEAPayload(address(0), 500 ether, ueaOnPush);
 
         vm.prank(vault);
-        vm.expectRevert(Errors.ExecutionFailed.selector); // Bubbled from sendUniversalTxToUEA's InsufficientBalance
+        vm.expectRevert(Errors.InsufficientBalance.selector);
         bytes memory multicallPayload = buildSendToUEAMulticallPayload(address(0), 500 ether, false);
 
         ceaInstance.executeUniversalTx{value: 0}(txID, universalTxID, ueaOnPush, address(0), multicallPayload);
@@ -1629,8 +1627,8 @@ contract CEATest is Test {
         bytes memory multicallPayload =
             buildERC20MulticallPayload(address(token), address(reverter), 100 ether, payload);
 
-        // Expect ExecutionFailed (revert data no longer bubbled)
-        vm.expectRevert(Errors.ExecutionFailed.selector);
+        // Underlying revert reason is now propagated
+        vm.expectRevert("This function always reverts with reason");
         ceaInstance.executeUniversalTx(
             generateTxID(1), generateUniversalTxID(1), ueaOnPush, address(0), multicallPayload
         );

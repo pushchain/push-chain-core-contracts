@@ -175,7 +175,7 @@ contract CEA_SingleCallTests is CEATest {
         bytes memory payload = abi.encodeWithSignature("revertWithReason()");
 
         vm.prank(vault);
-        vm.expectRevert(Errors.ExecutionFailed.selector);
+        vm.expectRevert("This function always reverts with reason");
         ceaInstance.executeUniversalTx(txID, universalTxID, ueaOnPush, address(reverter), payload);
 
         assertFalse(

@@ -47,17 +47,11 @@ contract UEAProxy_Fuzz is Test {
         proxy.initializeUEA(logic2);
     }
 
-    function testFuzz_initializeUEA_zeroAddress_behavior(bytes calldata) public {
-        // initializeUEA(address(0)) stores address(0) in UEA_LOGIC_SLOT.
-        // A subsequent delegatecall then reverts because _implementation() checks for zero.
+    function testFuzz_initializeUEA_zeroAddress_reverts(bytes calldata) public {
+        // initializeUEA(address(0)) now reverts with InvalidCall (matching CEAProxy)
         UEAProxy proxy = new UEAProxy();
+        vm.expectRevert(UEAErrors.InvalidCall.selector);
         proxy.initializeUEA(address(0));
-
-        assertEq(proxy.getImplementation(), address(0));
-
-        // Any external call to the proxy should revert (no implementation set)
-        (bool ok,) = address(proxy).call(abi.encodeWithSignature("getValue()"));
-        assertFalse(ok);
     }
 
     // =========================================================================
