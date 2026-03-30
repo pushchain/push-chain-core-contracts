@@ -66,6 +66,8 @@ contract UniversalCore is
 
     address public uniswapV3Factory;
     address public uniswapV3SwapRouter;
+    /// @notice Stored gas PC pool per chain — informational only for off-chain consumers.
+    /// @dev    Not used in runtime swap logic. Pool resolution is dynamic via uniswapV3Factory.
     mapping(string => address) public gasPCPoolByChainNamespace;
     mapping(address => bool) public isAutoSwapSupported;
     mapping(address => uint24) public defaultFeeTier;
@@ -324,7 +326,9 @@ contract UniversalCore is
         emit SetSupportedToken(prc20, supported);
     }
 
-    /// @notice                  Set the gas PC pool for a chain.
+    /// @notice                  Set the gas PC pool for a chain (informational — not enforced at runtime).
+    /// @dev                     The stored pool is for off-chain observability only. Runtime swap flows
+    ///                          (swapAndBurnGas, _autoSwap) resolve pools dynamically from the factory.
     /// @param chainNamespace    Chain Namespace (e.g. "eip155:1" for Ethereum Mainnet)
     /// @param gasToken          Gas coin address
     /// @param fee               Uniswap V3 fee tier
