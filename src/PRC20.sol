@@ -144,14 +144,14 @@ contract PRC20 is IPRC20, Initializable {
 
     /// @inheritdoc IPRC20
     function transferFrom(address sender, address recipient, uint256 amount) external returns (bool) {
-        _transfer(sender, recipient, amount);
-
         uint256 currentAllowance = _allowances[sender][msg.sender];
         if (currentAllowance < amount) revert PRC20Errors.LowAllowance();
         unchecked {
             _allowances[sender][msg.sender] = currentAllowance - amount;
         }
         emit Approval(sender, msg.sender, _allowances[sender][msg.sender]);
+
+        _transfer(sender, recipient, amount);
 
         return true;
     }

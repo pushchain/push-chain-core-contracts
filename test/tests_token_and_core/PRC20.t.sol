@@ -250,10 +250,10 @@ contract PRC20Test is Test, UpgradeableContractHelper {
         vm.prank(bob);
 
         vm.expectEmit(true, true, false, true);
-        emit Transfer(alice, bob, APPROVAL_AMOUNT);
+        emit Approval(alice, bob, 0);
 
         vm.expectEmit(true, true, false, true);
-        emit Approval(alice, bob, 0);
+        emit Transfer(alice, bob, APPROVAL_AMOUNT);
 
         bool success = prc20.transferFrom(alice, bob, APPROVAL_AMOUNT);
 
@@ -276,7 +276,7 @@ contract PRC20Test is Test, UpgradeableContractHelper {
 
     function testTransferFromRevertZeroAddressSender() public {
         vm.prank(bob);
-        vm.expectRevert(CommonErrors.ZeroAddress.selector);
+        vm.expectRevert(PRC20Errors.LowAllowance.selector);
         prc20.transferFrom(address(0), bob, APPROVAL_AMOUNT);
     }
 
