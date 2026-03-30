@@ -2,6 +2,7 @@
 pragma solidity 0.8.26;
 
 import {IWPC} from "./interfaces/IWPC.sol";
+import {WPCErrors} from "./libraries/Errors.sol";
 
 /**
  * @title   WPC
@@ -33,7 +34,7 @@ contract WPC is IWPC {
 
     /// @inheritdoc IWPC
     function withdraw(uint256 wad) public {
-        require(balanceOf[msg.sender] >= wad, "");
+        if (balanceOf[msg.sender] < wad) revert WPCErrors.InsufficientBalance();
         balanceOf[msg.sender] -= wad;
         _totalSupply -= wad;
         payable(msg.sender).transfer(wad);
@@ -63,10 +64,10 @@ contract WPC is IWPC {
 
     /// @inheritdoc IWPC
     function transferFrom(address src, address dst, uint256 wad) public returns (bool) {
-        require(balanceOf[src] >= wad, "");
+        if (balanceOf[src] < wad) revert WPCErrors.InsufficientBalance();
 
         if (src != msg.sender && allowance[src][msg.sender] != type(uint256).max) {
-            require(allowance[src][msg.sender] >= wad, "");
+            if (allowance[src][msg.sender] < wad) revert WPCErrors.InsufficientAllowance();
             allowance[src][msg.sender] -= wad;
         }
 

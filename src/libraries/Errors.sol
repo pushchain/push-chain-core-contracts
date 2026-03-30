@@ -51,6 +51,15 @@ library UniversalCoreErrors {
 }
 
 // =========================
+//           WPC-Specific ERRORS
+// =========================
+
+library WPCErrors {
+    error InsufficientBalance();
+    error InsufficientAllowance();
+}
+
+// =========================
 //           UEA-Specific ERRORS
 // =========================
 library UEAErrors {
