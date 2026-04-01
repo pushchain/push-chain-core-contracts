@@ -352,6 +352,7 @@ contract UniversalCore is
         external
         onlyUEModule
     {
+        if (price == 0) revert UniversalCoreErrors.ZeroGasPrice();
         gasPriceByChainNamespace[chainNamespace] = price;
         chainHeightByChainNamespace[chainNamespace] = chainHeight;
         timestampObservedAtByChainNamespace[chainNamespace] = block.timestamp;

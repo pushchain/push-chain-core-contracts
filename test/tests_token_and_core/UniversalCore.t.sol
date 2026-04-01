@@ -677,14 +677,32 @@ contract UniversalCoreTest is Test, UpgradeableContractHelper {
     }
 
     function testWithdrawGasFeeZeroGasPrice() public {
+        // Use a fresh chain namespace with gas token set but no setChainMeta call,
+        // so gasPriceByChainNamespace is 0 by default in storage.
+        string memory newNs = "eip155:9999";
+
+        PRC20 newPrc20Impl = new PRC20();
+        bytes memory initData = abi.encodeWithSelector(
+            PRC20.initialize.selector,
+            "Zero Price PRC20",
+            "ZP",
+            18,
+            newNs,
+            IPRC20.TokenType.ERC20,
+            address(universalCore),
+            SOURCE_TOKEN_ADDRESS
+        );
+        address proxyAddr = deployUpgradeableContract(address(newPrc20Impl), initData);
+        PRC20 newToken = PRC20(payable(proxyAddr));
+
+        // Set gas token and base gas limit, but never call setChainMeta → price stays 0
         vm.startPrank(UNIVERSAL_EXECUTOR_MODULE);
-        // Set gas price to zero
-        universalCore.setChainMeta(CHAIN_NAMESPACE, 0, 0);
+        universalCore.setGasTokenPRC20(newNs, address(mockPRC20));
+        universalCore.setBaseGasLimitByChain(newNs, BASE_GAS_LIMIT);
         vm.stopPrank();
 
-        // Expect revert when getting gas fee
         vm.expectRevert(UniversalCoreErrors.ZeroGasPrice.selector);
-        universalCore.getOutboundTxGasAndFees(address(prc20Token), 0);
+        universalCore.getOutboundTxGasAndFees(address(newToken), BASE_GAS_LIMIT);
     }
 
     function testWithdrawGasFeeZeroGasToken() public {
@@ -876,11 +894,18 @@ contract UniversalCoreTest is Test, UpgradeableContractHelper {
         assertEq(universalCore.timestampObservedAtByChainNamespace(bscChain), block.timestamp);
     }
 
-    function test_SetChainMeta_ZeroValuesAllowed() public {
+    function test_SetChainMeta_ZeroPriceReverts() public {
+        vm.expectRevert(UniversalCoreErrors.ZeroGasPrice.selector);
         vm.prank(UNIVERSAL_EXECUTOR_MODULE);
         universalCore.setChainMeta(CHAIN_NAMESPACE, 0, 0);
+    }
 
-        assertEq(universalCore.gasPriceByChainNamespace(CHAIN_NAMESPACE), 0);
+    function test_SetChainMeta_ZeroChainHeightAllowed() public {
+        // price must be non-zero, but chainHeight=0 is valid
+        vm.prank(UNIVERSAL_EXECUTOR_MODULE);
+        universalCore.setChainMeta(CHAIN_NAMESPACE, GAS_PRICE, 0);
+
+        assertEq(universalCore.gasPriceByChainNamespace(CHAIN_NAMESPACE), GAS_PRICE);
         assertEq(universalCore.chainHeightByChainNamespace(CHAIN_NAMESPACE), 0);
         assertEq(universalCore.timestampObservedAtByChainNamespace(CHAIN_NAMESPACE), block.timestamp);
     }

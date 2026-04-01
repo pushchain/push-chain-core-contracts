@@ -120,16 +120,33 @@ contract UniversalCore_Fuzz is Test, UpgradeableContractHelper {
         uint256 baseLimit = 100_000;
         vm.assume(gasLimit >= baseLimit);
 
-        // Set base gas limit so we pass the zero-base check
-        vm.prank(uExec);
-        universalCore.setBaseGasLimitByChain(CHAIN_NS, baseLimit);
+        // Use a fresh chain namespace where setChainMeta is never called,
+        // so gasPriceByChainNamespace is 0 by default in storage.
+        string memory zeroPriceNs = "zeroprice";
 
-        // Set gas price to 0 — setChainMeta is onlyUEModule
-        vm.prank(uExec);
-        universalCore.setChainMeta(CHAIN_NS, 0, 0);
+        // Deploy a fresh PRC20 on this namespace
+        PRC20 prc20Impl = new PRC20();
+        bytes memory prc20Init = abi.encodeWithSelector(
+            PRC20.initialize.selector,
+            "ZeroPrice",
+            "ZP",
+            18,
+            zeroPriceNs,
+            IPRC20.TokenType.NATIVE,
+            address(universalCore),
+            "0x0"
+        );
+        address prc20Addr = deployUpgradeableContract(address(prc20Impl), prc20Init);
+        PRC20 zeroPricePRC20 = PRC20(payable(prc20Addr));
+
+        // Set gas token and base gas limit, but never call setChainMeta → price stays 0
+        vm.startPrank(uExec);
+        universalCore.setGasTokenPRC20(zeroPriceNs, address(gasToken));
+        universalCore.setBaseGasLimitByChain(zeroPriceNs, baseLimit);
+        vm.stopPrank();
 
         vm.expectRevert(UniversalCoreErrors.ZeroGasPrice.selector);
-        universalCore.getOutboundTxGasAndFees(address(prc20), gasLimit);
+        universalCore.getOutboundTxGasAndFees(address(zeroPricePRC20), gasLimit);
     }
 
     function testFuzz_getOutboundTxGasAndFees_zeroGasToken_reverts(uint128 gasLimit) public {
