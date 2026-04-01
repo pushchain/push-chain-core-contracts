@@ -29,6 +29,7 @@ library PRC20Errors {
     error LowAllowance();
     error InvalidSender();
     error CallerIsNotUniversalExecutor();
+    error CorePaused();
 }
 
 // =========================

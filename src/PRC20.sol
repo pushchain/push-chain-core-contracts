@@ -5,6 +5,7 @@ import {Initializable} from "@openzeppelin/contracts-upgradeable/proxy/utils/Ini
 
 import {IPRC20} from "./interfaces/IPRC20.sol";
 import {PRC20Errors, CommonErrors} from "./libraries/Errors.sol";
+import {PausableUpgradeable} from "@openzeppelin/contracts-upgradeable/utils/PausableUpgradeable.sol";
 
 /**
  * @title   PRC20 (Push Chain Synthetic Token)
@@ -170,6 +171,9 @@ contract PRC20 is IPRC20, Initializable {
     function deposit(address to, uint256 amount) external returns (bool) {
         if (msg.sender != UNIVERSAL_CORE && msg.sender != UNIVERSAL_EXECUTOR_MODULE) {
             revert PRC20Errors.InvalidSender();
+        }
+        if (PausableUpgradeable(UNIVERSAL_CORE).paused()) {
+            revert PRC20Errors.CorePaused();
         }
 
         _mint(to, amount);

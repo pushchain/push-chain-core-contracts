@@ -60,7 +60,6 @@ contract PRC20Test is Test, UpgradeableContractHelper {
         address mockWPC = makeAddr("wPC");
         address mockUniswapFactory = makeAddr("uniswapFactory");
         address mockUniswapRouter = makeAddr("uniswapRouter");
-        address mockUniswapQuoter = makeAddr("uniswapQuoter");
 
         // Deploy universalCore implementation
         universalCoreImplementation = new UniversalCore();
@@ -71,7 +70,6 @@ contract PRC20Test is Test, UpgradeableContractHelper {
             mockWPC,
             mockUniswapFactory,
             mockUniswapRouter,
-            mockUniswapQuoter,
             makeAddr("pauser")
         );
 
@@ -473,6 +471,45 @@ contract PRC20Test is Test, UpgradeableContractHelper {
     }
 
     // =========================================================================
+    // PAUSE PROPAGATION TESTS
+    // =========================================================================
+
+    function testDepositRevertsWhenCorePaused_ViaModule() public {
+        // Pause UniversalCore
+        vm.prank(makeAddr("pauser"));
+        universalCore.pause();
+
+        // Module tries to deposit directly to PRC20 — should revert
+        vm.prank(uExec);
+        vm.expectRevert(PRC20Errors.CorePaused.selector);
+        prc20.deposit(bob, 1000 ether);
+    }
+
+    function testDepositRevertsWhenCorePaused_ViaCore() public {
+        // Pause UniversalCore
+        vm.prank(makeAddr("pauser"));
+        universalCore.pause();
+
+        // Core tries to deposit — should also revert
+        vm.prank(address(universalCore));
+        vm.expectRevert(PRC20Errors.CorePaused.selector);
+        prc20.deposit(bob, 1000 ether);
+    }
+
+    function testDepositSucceedsAfterUnpause() public {
+        // Pause then unpause
+        vm.prank(makeAddr("pauser"));
+        universalCore.pause();
+        vm.prank(makeAddr("pauser"));
+        universalCore.unpause();
+
+        // Deposit should succeed
+        vm.prank(uExec);
+        bool success = prc20.deposit(bob, 1000 ether);
+        assertTrue(success);
+    }
+
+    // =========================================================================
     // ADMIN & GOVERNANCE CONTROLS
     // =========================================================================
 
@@ -481,7 +518,6 @@ contract PRC20Test is Test, UpgradeableContractHelper {
         address mockWPC = makeAddr("newWPC");
         address mockUniswapFactory = makeAddr("newUniswapFactory");
         address mockUniswapRouter = makeAddr("newUniswapRouter");
-        address mockUniswapQuoter = makeAddr("newUniswapQuoter");
 
         vm.prank(uExec);
         // Deploy new universalCore implementation
@@ -493,7 +529,6 @@ contract PRC20Test is Test, UpgradeableContractHelper {
             mockWPC,
             mockUniswapFactory,
             mockUniswapRouter,
-            mockUniswapQuoter,
             makeAddr("pauser")
         );
 
@@ -518,7 +553,6 @@ contract PRC20Test is Test, UpgradeableContractHelper {
         address mockWPC = makeAddr("newWPC");
         address mockUniswapFactory = makeAddr("newUniswapFactory");
         address mockUniswapRouter = makeAddr("newUniswapRouter");
-        address mockUniswapQuoter = makeAddr("newUniswapQuoter");
 
         vm.prank(uExec);
         // Deploy new universalCore implementation
@@ -530,7 +564,6 @@ contract PRC20Test is Test, UpgradeableContractHelper {
             mockWPC,
             mockUniswapFactory,
             mockUniswapRouter,
-            mockUniswapQuoter,
             makeAddr("pauser")
         );
 
