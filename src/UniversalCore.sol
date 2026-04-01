@@ -80,7 +80,7 @@ contract UniversalCore is
     mapping(address => bool) public isAutoSwapSupported;
     mapping(address => uint24) public defaultFeeTier;
     mapping(address => uint256) public slippageTolerance;
-    uint256 public defaultDeadlineMins = 20;
+    uint256 public defaultDeadlineMins;
 
     // =========================
     //    UC: MODIFIERS
@@ -138,6 +138,7 @@ contract UniversalCore is
         WPC = wpc_;
         uniswapV3Factory = uniswapV3Factory_;
         uniswapV3SwapRouter = uniswapV3SwapRouter_;
+        defaultDeadlineMins = 20;
     }
 
     // =========================
