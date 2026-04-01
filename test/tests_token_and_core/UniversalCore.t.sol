@@ -1130,7 +1130,7 @@ contract UniversalCoreTest is Test, UpgradeableContractHelper {
         address token = makeAddr("token");
         vm.prank(deployer);
         vm.expectRevert(UniversalCoreErrors.InvalidFeeTier.selector);
-        universalCore.setDefaultFeeTier(token, 100);
+        universalCore.setDefaultFeeTier(token, 200);
     }
 
     function test_SetDefaultFeeTier_RevertsZeroAddress() public {

@@ -45,6 +45,7 @@ contract UniversalCore is
     bytes32 public constant PAUSER_ROLE = keccak256("PAUSER_ROLE");
 
     // -- Uniswap V3 fee tiers --
+    uint24 public constant FEE_TIER_LOWEST = 100;
     uint24 public constant FEE_TIER_LOW = 500;
     uint24 public constant FEE_TIER_MEDIUM = 3000;
     uint24 public constant FEE_TIER_HIGH = 10000;
@@ -416,7 +417,7 @@ contract UniversalCore is
     /// @param feeTier   Fee tier (500, 3000, 10000)
     function setDefaultFeeTier(address token, uint24 feeTier) external onlyAdmin {
         if (token == address(0)) revert CommonErrors.ZeroAddress();
-        if (feeTier != FEE_TIER_LOW && feeTier != FEE_TIER_MEDIUM && feeTier != FEE_TIER_HIGH) {
+        if (feeTier != FEE_TIER_LOWEST && feeTier != FEE_TIER_LOW && feeTier != FEE_TIER_MEDIUM && feeTier != FEE_TIER_HIGH) {
             revert UniversalCoreErrors.InvalidFeeTier();
         }
         defaultFeeTier[token] = feeTier;

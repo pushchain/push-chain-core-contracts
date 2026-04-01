@@ -266,7 +266,7 @@ contract UniversalCore_Fuzz is Test, UpgradeableContractHelper {
     function testFuzz_setDefaultFeeTier_validTiers(address token, uint24 feeTier) public {
         vm.assume(token != address(0));
 
-        bool isValid = feeTier == 500 || feeTier == 3000 || feeTier == 10000;
+        bool isValid = feeTier == 100 || feeTier == 500 || feeTier == 3000 || feeTier == 10000;
 
         if (isValid) {
             universalCore.setDefaultFeeTier(token, feeTier);
