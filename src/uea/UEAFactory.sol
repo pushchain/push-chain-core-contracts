@@ -251,12 +251,17 @@ contract UEAFactory is Initializable, AccessControlUpgradeable, PausableUpgradea
         }
 
         for (uint256 i = 0; i < _UEA.length; i++) {
-            registerUEA(_chainHashes[i], _vmHashes[i], _UEA[i]);
+            _registerUEA(_chainHashes[i], _vmHashes[i], _UEA[i]);
         }
     }
 
     /// @inheritdoc IUEAFactory
     function registerUEA(bytes32 _chainHash, bytes32 _vmHash, address _UEA) public onlyRole(DEFAULT_ADMIN_ROLE) {
+        _registerUEA(_chainHash, _vmHash, _UEA);
+    }
+
+    /// @dev Internal registration logic — no role check.
+    function _registerUEA(bytes32 _chainHash, bytes32 _vmHash, address _UEA) internal {
         if (_UEA == address(0)) {
             revert UEAErrors.InvalidInputArgs();
         }
