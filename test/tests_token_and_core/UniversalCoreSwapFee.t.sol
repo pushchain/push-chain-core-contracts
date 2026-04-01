@@ -378,7 +378,6 @@ contract UniversalCoreSwapFeeTest is Test, UpgradeableContractHelper {
     function test_ExistingStorage_Preserved() public view {
         assertEq(universalCore.gasPriceByChainNamespace(CHAIN_NAMESPACE), GAS_PRICE);
         assertEq(universalCore.gasTokenPRC20ByChainNamespace(CHAIN_NAMESPACE), address(gasTokenMock));
-        assertTrue(universalCore.isSupportedToken(address(gasTokenMock)) == false);
         assertEq(universalCore.baseGasLimitByChainNamespace(CHAIN_NAMESPACE), 500_000);
     }
 

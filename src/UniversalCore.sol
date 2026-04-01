@@ -67,7 +67,6 @@ contract UniversalCore is
 
     // -- Token configuration --
 
-    mapping(address => bool) public isSupportedToken;
     mapping(address => uint256) public protocolFeeByToken;
 
     // -- Uniswap and AMM specific states --
@@ -324,15 +323,6 @@ contract UniversalCore is
         if (token == address(0)) revert CommonErrors.ZeroAddress();
         protocolFeeByToken[token] = fee;
         emit SetProtocolFeeByToken(token, fee);
-    }
-
-    /// @notice              Set whether a PRC20 token is supported.
-    /// @param prc20         PRC20 token address
-    /// @param supported     Whether the token is supported
-    function setSupportedToken(address prc20, bool supported) external onlyRole(MANAGER_ROLE) {
-        if (prc20 == address(0)) revert CommonErrors.ZeroAddress();
-        isSupportedToken[prc20] = supported;
-        emit SetSupportedToken(prc20, supported);
     }
 
     /// @notice                  Set the gas PC pool for a chain (informational — not enforced at runtime).

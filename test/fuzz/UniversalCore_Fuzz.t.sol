@@ -404,9 +404,4 @@ contract UniversalCore_Fuzz is Test, UpgradeableContractHelper {
         universalCore.setProtocolFeeByToken(address(0), fee);
     }
 
-    function testFuzz_setSupportedToken_zeroAddress_reverts(bool supported) public {
-        vm.prank(uExec);
-        vm.expectRevert(CommonErrors.ZeroAddress.selector);
-        universalCore.setSupportedToken(address(0), supported);
-    }
 }

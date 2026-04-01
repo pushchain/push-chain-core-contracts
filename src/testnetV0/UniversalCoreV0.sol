@@ -99,8 +99,8 @@ contract UniversalCoreV0 is
     /// @dev Only included to avoid storage collision in Testnet UniversalCore.
     uint256 public BASE_GAS_LIMIT = 500_000;
 
-    /// @notice Mapping for indicating an official PRC20 supported token.
-    mapping(address => bool) public isSupportedToken;
+    /// @dev Deprecated. Slot retained for storage layout compatibility with deployed testnet proxy.
+    mapping(address => bool) private __deprecated_isSupportedToken;
 
     /// @notice Address of the UniversalGatewayPC that can call swapAndBurnGas.
     address public universalGatewayPC;
@@ -356,15 +356,6 @@ contract UniversalCoreV0 is
         if (token == address(0)) revert CommonErrors.ZeroAddress();
         protocolFeeByToken[token] = fee;
         emit SetProtocolFeeByToken(token, fee);
-    }
-
-    /// @notice              Set whether a PRC20 token is supported.
-    /// @param prc20         PRC20 token address
-    /// @param supported     Whether the token is supported
-    function setSupportedToken(address prc20, bool supported) external onlyRole(MANAGER_ROLE) {
-        if (prc20 == address(0)) revert CommonErrors.ZeroAddress();
-        isSupportedToken[prc20] = supported;
-        emit SetSupportedToken(prc20, supported);
     }
 
     /// @notice                  Set the gas PC pool for a chain.

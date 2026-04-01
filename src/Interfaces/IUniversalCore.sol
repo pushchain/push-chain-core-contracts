@@ -12,7 +12,6 @@ interface IUniversalCore {
     event SetChainMeta(string chainNamespace, uint256 price, uint256 chainHeight, uint256 observedAt);
     event SetGasToken(string chainNamespace, address prc20);
     event SetDefaultDeadlineMins(uint256 minutesValue);
-    event SetSupportedToken(address indexed prc20, bool supported);
     event SetGasPCPool(string chainNamespace, address pool, uint24 fee);
     event DepositPRC20WithAutoSwap(
         address prc20, uint256 amountIn, address pcToken, uint256 amountOut, uint24 fee, address recipient
@@ -111,11 +110,6 @@ interface IUniversalCore {
     // =========================
     //    UC_3: PUBLIC GETTERS
     // =========================
-
-    /// @notice                 Check if a PRC20 token is supported.
-    /// @param prc20            PRC20 token address
-    /// @return supported       Whether the token is supported
-    function isSupportedToken(address prc20) external view returns (bool supported);
 
     /// @notice                 Get gas token PRC20 address for a chain.
     /// @param chainNamespace   Chain Namespace (e.g. "eip155:1" for Ethereum Mainnet)
