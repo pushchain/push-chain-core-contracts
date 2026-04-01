@@ -37,7 +37,8 @@ contract WPC is IWPC {
         if (balanceOf[msg.sender] < wad) revert WPCErrors.InsufficientBalance();
         balanceOf[msg.sender] -= wad;
         _totalSupply -= wad;
-        payable(msg.sender).transfer(wad);
+        (bool ok,) = msg.sender.call{value: wad}("");
+        if (!ok) revert WPCErrors.TransferFailed();
         emit Withdrawal(msg.sender, wad);
     }
 

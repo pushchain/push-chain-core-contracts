@@ -58,6 +58,7 @@ library UniversalCoreErrors {
 library WPCErrors {
     error InsufficientBalance();
     error InsufficientAllowance();
+    error TransferFailed();
 }
 
 // =========================
