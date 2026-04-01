@@ -178,7 +178,7 @@ contract PRC20 is IPRC20, Initializable {
 
         _mint(to, amount);
 
-        emit Deposit(abi.encodePacked(UNIVERSAL_EXECUTOR_MODULE), to, amount);
+        emit Deposit(abi.encodePacked(msg.sender), to, amount);
         return true;
     }
 

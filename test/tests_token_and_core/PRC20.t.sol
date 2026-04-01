@@ -363,9 +363,9 @@ contract PRC20Test is Test, UpgradeableContractHelper {
         vm.expectEmit(true, true, false, true);
         emit Transfer(address(0), bob, depositAmount);
 
-        // Expect Deposit event with UNIVERSAL_EXECUTOR_MODULE as from (encoded as bytes)
+        // Expect Deposit event with msg.sender (universalCore) as from (encoded as bytes)
         vm.expectEmit(false, true, false, true);
-        emit Deposit(abi.encodePacked(uExec), bob, depositAmount);
+        emit Deposit(abi.encodePacked(address(universalCore)), bob, depositAmount);
 
         bool success = prc20.deposit(bob, depositAmount);
 
@@ -448,9 +448,9 @@ contract PRC20Test is Test, UpgradeableContractHelper {
         assertEq(to, bob);
         assertEq(amount, depositAmount);
 
-        // Verify the from field is encoded as UNIVERSAL_EXECUTOR_MODULE, not universalCore
+        // Verify the from field is encoded as msg.sender (universalCore), not UNIVERSAL_EXECUTOR_MODULE
         assertEq(from.length, 20); // Should be 20 bytes (address length)
-        assertEq(address(bytes20(from)), uExec);
+        assertEq(address(bytes20(from)), address(universalCore));
     }
 
     function testFuzzDeposit(address to, uint96 amount) public {
