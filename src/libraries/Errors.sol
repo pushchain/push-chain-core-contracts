@@ -45,7 +45,6 @@ library UniversalCoreErrors {
     error CallerIsNotUEModule();
     error CallerIsNotGatewayPC();
     error AutoSwapNotSupported();
-    error InvalidSlippageTolerance();
     error MinPCOutRequired();
     error GasLimitBelowBase(uint256 provided, uint256 minimum);
     error ZeroBaseGasLimit();

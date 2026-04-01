@@ -29,7 +29,6 @@ interface IUniversalCore {
     event SetUniversalGatewayPC(address indexed oldAddr, address indexed newAddr);
     event SetUniswapV3Addresses(address factory, address swapRouter);
     event SetDefaultFeeTier(address indexed token, uint24 feeTier);
-    event SetSlippageTolerance(address indexed token, uint256 tolerance);
 
     /// @notice                  Emitted when the PAUSER_ROLE is granted to a new address.
     /// @param pauser            Address that was granted the pauser role

@@ -104,7 +104,6 @@ contract ForkUniversalCoreTest is Test, UpgradeableContractHelper, PushChainAddr
     function _configureToken(address token, uint24 fee) private {
         universalCore.setAutoSwapSupported(token, true);
         universalCore.setDefaultFeeTier(token, fee);
-        universalCore.setSlippageTolerance(token, 500); // 5% slippage
     }
 
     function _updatePRC20UniversalCore(address token) private {

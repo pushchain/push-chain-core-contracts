@@ -99,7 +99,6 @@ contract UniversalCoreRefundTest is Test, UpgradeableContractHelper {
         // Configure auto-swap support
         universalCore.setAutoSwapSupported(address(gasTokenMock), true);
         universalCore.setDefaultFeeTier(address(gasTokenMock), FEE_TIER);
-        universalCore.setSlippageTolerance(address(gasTokenMock), 300);
 
         // Setup mock pool (gasToken <-> wPC)
         address pool = makeAddr("mockPool");

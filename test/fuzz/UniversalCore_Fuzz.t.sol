@@ -277,18 +277,6 @@ contract UniversalCore_Fuzz is Test, UpgradeableContractHelper {
         }
     }
 
-    function testFuzz_setSlippageTolerance_boundary(address token, uint256 tolerance) public {
-        vm.assume(token != address(0));
-
-        if (tolerance <= 5000) {
-            universalCore.setSlippageTolerance(token, tolerance);
-            assertEq(universalCore.slippageTolerance(token), tolerance);
-        } else {
-            vm.expectRevert(UniversalCoreErrors.InvalidSlippageTolerance.selector);
-            universalCore.setSlippageTolerance(token, tolerance);
-        }
-    }
-
     // =============================================
     // 12.5 Deadline Validation Properties
     // =============================================

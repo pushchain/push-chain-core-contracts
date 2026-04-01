@@ -100,9 +100,8 @@ contract UniversalCoreSwapFeeTest is Test, UpgradeableContractHelper {
         universalCore.setProtocolFeeByToken(address(prc20Token), PROTOCOL_FEE);
         vm.stopPrank();
 
-        // Set default fee tier and slippage for gas token
+        // Set default fee tier for gas token
         universalCore.setDefaultFeeTier(address(gasTokenMock), FEE_TIER);
-        universalCore.setSlippageTolerance(address(gasTokenMock), 300);
 
         // Setup mock pool (wPC <-> gasToken)
         address pool = makeAddr("mockPool");

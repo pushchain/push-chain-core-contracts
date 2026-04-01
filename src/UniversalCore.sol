@@ -50,9 +50,6 @@ contract UniversalCore is
     uint24 public constant FEE_TIER_MEDIUM = 3000;
     uint24 public constant FEE_TIER_HIGH = 10000;
 
-    // -- Slippage cap (basis points) --
-    uint256 public constant MAX_SLIPPAGE_BPS = 5000;
-
     // -- Protocol addresses --
     address public universalGatewayPC;
     address public WPC;
@@ -79,7 +76,6 @@ contract UniversalCore is
     mapping(string => address) public gasPCPoolByChainNamespace;
     mapping(address => bool) public isAutoSwapSupported;
     mapping(address => uint24) public defaultFeeTier;
-    mapping(address => uint256) public slippageTolerance;
     uint256 public defaultDeadlineMins;
 
     // =========================
@@ -422,18 +418,6 @@ contract UniversalCore is
         }
         defaultFeeTier[token] = feeTier;
         emit SetDefaultFeeTier(token, feeTier);
-    }
-
-    /// @notice            Set slippage tolerance for a token.
-    /// @param token       Token address
-    /// @param tolerance   Slippage tolerance in basis points (e.g., 300 = 3%)
-    function setSlippageTolerance(address token, uint256 tolerance) external onlyAdmin {
-        if (token == address(0)) revert CommonErrors.ZeroAddress();
-        if (tolerance > MAX_SLIPPAGE_BPS) {
-            revert UniversalCoreErrors.InvalidSlippageTolerance();
-        }
-        slippageTolerance[token] = tolerance;
-        emit SetSlippageTolerance(token, tolerance);
     }
 
     /// @notice               Set default deadline in minutes.

@@ -48,7 +48,6 @@ contract UniversalCoreTest is Test, UpgradeableContractHelper {
     event SetUniversalGatewayPC(address indexed oldAddr, address indexed newAddr);
     event SetUniswapV3Addresses(address factory, address swapRouter);
     event SetDefaultFeeTier(address indexed token, uint24 feeTier);
-    event SetSlippageTolerance(address indexed token, uint256 tolerance);
     event SetGasPCPool(string indexed chainId, address indexed pool, uint24 fee);
     event SetGasToken(string indexed chainId, address indexed prc20);
     event DepositPRC20WithAutoSwap(
@@ -1143,45 +1142,6 @@ contract UniversalCoreTest is Test, UpgradeableContractHelper {
         vm.prank(nonOwner);
         vm.expectRevert(CommonErrors.InvalidOwner.selector);
         universalCore.setDefaultFeeTier(makeAddr("token"), 3000);
-    }
-
-    // ========================================
-    // 13) setSlippageTolerance Tests
-    // ========================================
-
-    function test_SetSlippageTolerance_HappyPath() public {
-        address token = makeAddr("token");
-        vm.prank(deployer);
-        vm.expectEmit(true, false, false, true);
-        emit SetSlippageTolerance(token, 300);
-        universalCore.setSlippageTolerance(token, 300);
-        assertEq(universalCore.slippageTolerance(token), 300);
-    }
-
-    function test_SetSlippageTolerance_RevertsExceeds5000() public {
-        address token = makeAddr("token");
-        vm.prank(deployer);
-        vm.expectRevert(UniversalCoreErrors.InvalidSlippageTolerance.selector);
-        universalCore.setSlippageTolerance(token, 5001);
-    }
-
-    function test_SetSlippageTolerance_RevertsZeroAddress() public {
-        vm.prank(deployer);
-        vm.expectRevert(CommonErrors.ZeroAddress.selector);
-        universalCore.setSlippageTolerance(address(0), 300);
-    }
-
-    function test_SetSlippageTolerance_OnlyAdmin() public {
-        vm.prank(nonOwner);
-        vm.expectRevert(CommonErrors.InvalidOwner.selector);
-        universalCore.setSlippageTolerance(makeAddr("token"), 300);
-    }
-
-    function test_SetSlippageTolerance_BoundaryAt5000() public {
-        address token = makeAddr("token");
-        vm.prank(deployer);
-        universalCore.setSlippageTolerance(token, 5000);
-        assertEq(universalCore.slippageTolerance(token), 5000);
     }
 
     // ========================================

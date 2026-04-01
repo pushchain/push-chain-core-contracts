@@ -54,8 +54,8 @@ contract UniversalCoreV0 is
     /// @notice Default fee tier for each token (0 = not set).
     mapping(address => uint24) public defaultFeeTier;
 
-    /// @notice Slippage tolerance for each token in basis points (e.g., 300 = 3%).
-    mapping(address => uint256) public slippageTolerance;
+    /// @dev Deprecated. Slot retained for storage layout compatibility with deployed testnet proxy.
+    mapping(address => uint256) private __deprecated_slippageTolerance;
 
     /// @notice Default deadline in minutes for swaps.
     uint256 public defaultDeadlineMins = 20;
@@ -464,17 +464,6 @@ contract UniversalCoreV0 is
             revert UniversalCoreErrors.InvalidFeeTier();
         }
         defaultFeeTier[token] = feeTier;
-    }
-
-    /// @notice            Set slippage tolerance for a token.
-    /// @param token       Token address
-    /// @param tolerance   Slippage tolerance in basis points (e.g., 300 = 3%)
-    function setSlippageTolerance(address token, uint256 tolerance) external onlyAdmin {
-        if (token == address(0)) revert CommonErrors.ZeroAddress();
-        if (tolerance > MAX_SLIPPAGE_BPS) {
-            revert UniversalCoreErrors.InvalidSlippageTolerance();
-        }
-        slippageTolerance[token] = tolerance;
     }
 
     /// @notice               Set default deadline in minutes.
