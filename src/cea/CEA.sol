@@ -134,6 +134,7 @@ contract CEA is ICEA, ReentrancyGuard {
                 if (IERC20(token).balanceOf(address(this)) < amount) {
                     revert CEAErrors.InsufficientBalance();
                 }
+                IERC20(token).approve(UNIVERSAL_GATEWAY, amount);
                 IUniversalGateway(UNIVERSAL_GATEWAY).sendUniversalTxFromCEA(req);
             }
         } else {

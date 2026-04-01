@@ -1060,11 +1060,11 @@ contract CEATest is Test {
 
         ceaInstance.executeUniversalTx(txID, universalTxID, ueaOnPush, address(0), multicallPayload);
 
-        // Approval should be set to amount (gateway may or may not consume it)
+        // Approval persists after gateway call (gateway consumes via transferFrom in production)
         assertEq(
             token.allowance(address(ceaInstance), address(mockUniversalGateway)),
             500 ether,
-            "Approval should be set to amount"
+            "Approval should persist (mock gateway doesn't consume)"
         );
     }
 
@@ -1082,9 +1082,9 @@ contract CEATest is Test {
 
         ceaInstance.executeUniversalTx(txID, universalTxID, ueaOnPush, address(0), multicallPayload);
 
-        // Gateway should have approval for exact amount
+        // Approval persists after gateway call (mock gateway doesn't consume)
         assertEq(
-            token.allowance(address(ceaInstance), address(mockUniversalGateway)), amount, "Approval should match amount"
+            token.allowance(address(ceaInstance), address(mockUniversalGateway)), amount, "Approval should persist"
         );
     }
 
@@ -1127,14 +1127,14 @@ contract CEATest is Test {
 
         ceaInstance.executeUniversalTx(txID, universalTxID, ueaOnPush, address(0), multicallPayload);
 
-        // Gateway receives approval but mock doesn't transfer tokens
-        // So balance remains the same, but approval should be granted
+        // Mock gateway doesn't transfer tokens, so balance unchanged
         uint256 balanceAfter = token.balanceOf(address(ceaInstance));
         assertEq(balanceAfter, balanceBefore, "Balance should remain same (mock doesn't transfer)");
+        // Approval persists after gateway call (mock gateway doesn't consume)
         assertEq(
             token.allowance(address(ceaInstance), address(mockUniversalGateway)),
             sendAmount,
-            "Gateway should have approval"
+            "Approval should persist"
         );
     }
 
@@ -1249,14 +1249,14 @@ contract CEATest is Test {
         assertEq(mockUniversalGateway.lastToken(), address(token), "Token should match");
         assertEq(mockUniversalGateway.lastAmount(), sendAmount, "Amount should match");
 
-        // Gateway receives approval but mock doesn't transfer tokens
-        // So balance remains the same, but approval should be granted
+        // Mock gateway doesn't transfer tokens, so balance unchanged
         uint256 balanceAfter = token.balanceOf(address(ceaInstance));
         assertEq(balanceAfter, balanceBefore, "Balance should remain same (mock doesn't transfer)");
+        // Approval persists after gateway call (mock gateway doesn't consume)
         assertEq(
             token.allowance(address(ceaInstance), address(mockUniversalGateway)),
             sendAmount,
-            "Gateway should have approval"
+            "Approval should persist"
         );
     }
 
