@@ -123,10 +123,11 @@ contract UniversalCoreTest is Test, UpgradeableContractHelper {
         // Grant MANAGER_ROLE to UE Module for manager functions
         universalCore.grantRole(universalCore.MANAGER_ROLE(), UNIVERSAL_EXECUTOR_MODULE);
 
-        // Configure gas price, gas token, base gas limit, and protocol fee for testing
+        // Configure gas token first, then gas price (setGasTokenPRC20 resets gas price to 0,
+        // so setChainMeta must come after to preserve the configured gas price).
         vm.startPrank(UNIVERSAL_EXECUTOR_MODULE);
-        universalCore.setChainMeta(CHAIN_NAMESPACE, GAS_PRICE, 0);
         universalCore.setGasTokenPRC20(CHAIN_NAMESPACE, address(mockPRC20));
+        universalCore.setChainMeta(CHAIN_NAMESPACE, GAS_PRICE, 0);
         universalCore.setBaseGasLimitByChain(CHAIN_NAMESPACE, BASE_GAS_LIMIT);
         universalCore.setProtocolFeeByToken(address(prc20Token), PROTOCOL_FEE);
         vm.stopPrank();

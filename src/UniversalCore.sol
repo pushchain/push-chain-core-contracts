@@ -364,6 +364,7 @@ contract UniversalCore is
     function setGasTokenPRC20(string memory chainNamespace, address prc20) external onlyRole(MANAGER_ROLE) {
         if (prc20 == address(0)) revert CommonErrors.ZeroAddress();
         gasTokenPRC20ByChainNamespace[chainNamespace] = prc20;
+        gasPriceByChainNamespace[chainNamespace] = 0;
         emit SetGasToken(chainNamespace, prc20);
     }
 

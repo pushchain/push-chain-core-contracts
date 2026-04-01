@@ -91,10 +91,11 @@ contract UniversalCoreSwapFeeTest is Test, UpgradeableContractHelper {
         // Grant MANAGER_ROLE to UE Module for manager functions
         universalCore.grantRole(universalCore.MANAGER_ROLE(), UNIVERSAL_EXECUTOR_MODULE);
 
-        // Configure gas token, gas price, base gas limit, and protocol fee
+        // Configure gas token first, then gas price (setGasTokenPRC20 resets gas price to 0,
+        // so setChainMeta must come after to preserve the configured gas price).
         vm.startPrank(UNIVERSAL_EXECUTOR_MODULE);
-        universalCore.setChainMeta(CHAIN_NAMESPACE, GAS_PRICE, 0);
         universalCore.setGasTokenPRC20(CHAIN_NAMESPACE, address(gasTokenMock));
+        universalCore.setChainMeta(CHAIN_NAMESPACE, GAS_PRICE, 0);
         universalCore.setBaseGasLimitByChain(CHAIN_NAMESPACE, 500_000);
         universalCore.setProtocolFeeByToken(address(prc20Token), PROTOCOL_FEE);
         vm.stopPrank();
