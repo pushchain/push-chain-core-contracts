@@ -55,6 +55,11 @@ library UniversalCoreErrors {
 //           WPC-Specific ERRORS
 // =========================
 
+library StringUtilsErrors {
+    error EmptyString();
+    error NonDigitCharacter();
+}
+
 library WPCErrors {
     error InsufficientBalance();
     error InsufficientAllowance();
