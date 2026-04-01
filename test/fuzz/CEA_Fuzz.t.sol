@@ -340,7 +340,7 @@ contract CEA_FuzzTest is Test {
 
         vm.expectRevert(CEAErrors.InvalidInput.selector);
         vm.prank(vault);
-        ceaInstance.executeUniversalTx{value: value}(txId, bytes32(0), ueaOnPush, address(0), payload);
+        ceaInstance.executeUniversalTx{value: value}(txId, bytes32(0), ueaOnPush, address(ceaInstance), payload);
     }
 
     /// @dev When factory has no migration contract set, migration reverts with InvalidCall.
@@ -350,7 +350,7 @@ contract CEA_FuzzTest is Test {
 
         vm.expectRevert(CEAErrors.InvalidCall.selector);
         vm.prank(vault);
-        ceaInstance.executeUniversalTx(txId, bytes32(0), ueaOnPush, address(0), payload);
+        ceaInstance.executeUniversalTx(txId, bytes32(0), ueaOnPush, address(ceaInstance), payload);
     }
 
     // =========================================================================

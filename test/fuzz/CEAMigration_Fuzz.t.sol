@@ -86,7 +86,7 @@ contract CEAMigration_FuzzTest is Test {
         bytes32 txId = keccak256("migration_slot_test");
 
         vm.prank(vault);
-        ICEA(ceaAddr).executeUniversalTx(txId, bytes32(0), ueaOnPush, address(0), payload);
+        ICEA(ceaAddr).executeUniversalTx(txId, bytes32(0), ueaOnPush, ceaAddr, payload);
 
         // Verify slot was updated to ceaV2
         bytes32 slotAfter = vm.load(ceaAddr, CEA_LOGIC_SLOT);
@@ -107,7 +107,7 @@ contract CEAMigration_FuzzTest is Test {
         emit CEAMigration.ImplementationUpdated(address(ceaV2));
 
         vm.prank(vault);
-        ICEA(ceaAddr).executeUniversalTx(txId, bytes32(0), ueaOnPush, address(0), payload);
+        ICEA(ceaAddr).executeUniversalTx(txId, bytes32(0), ueaOnPush, ceaAddr, payload);
     }
 
     // =========================================================================

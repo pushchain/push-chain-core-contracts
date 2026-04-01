@@ -97,7 +97,7 @@ contract CEAMigration_IntegrationTest is Test {
         bytes memory payload = buildMigrationPayload(address(ceaInstance));
 
         vm.prank(vault);
-        ceaInstance.executeUniversalTx(txID, universalTxID, ueaOnPush, address(0), payload);
+        ceaInstance.executeUniversalTx(txID, universalTxID, ueaOnPush, address(ceaInstance), payload);
     }
 
     // =========================================================================
@@ -295,12 +295,12 @@ contract CEAMigration_IntegrationTest is Test {
 
         // Execute migration
         vm.prank(vault);
-        ceaInstance.executeUniversalTx(txID, universalTxID, ueaOnPush, address(0), payload);
+        ceaInstance.executeUniversalTx(txID, universalTxID, ueaOnPush, address(ceaInstance), payload);
 
         // Attempt to replay same migration
         vm.prank(vault);
         vm.expectRevert(Errors.PayloadExecuted.selector);
-        ceaInstance.executeUniversalTx(txID, universalTxID, ueaOnPush, address(0), payload);
+        ceaInstance.executeUniversalTx(txID, universalTxID, ueaOnPush, address(ceaInstance), payload);
     }
 
     // =========================================================================
@@ -355,7 +355,7 @@ contract CEAMigration_IntegrationTest is Test {
         bytes memory payload = buildMigrationPayload(address(ceaInstance));
 
         vm.prank(vault);
-        ceaInstance.executeUniversalTx(txID, universalTxID, ueaOnPush, address(0), payload);
+        ceaInstance.executeUniversalTx(txID, universalTxID, ueaOnPush, address(ceaInstance), payload);
 
         assertEq(
             CEAProxy(payable(address(ceaInstance))).getImplementation(),
@@ -414,7 +414,7 @@ contract CEAMigration_IntegrationTest is Test {
         bytes memory payload = buildMigrationPayload(freshCEA);
 
         vm.prank(vault);
-        freshCEAInstance.executeUniversalTx(txID, universalTxID, freshUEA, address(0), payload);
+        freshCEAInstance.executeUniversalTx(txID, universalTxID, freshUEA, address(freshCEAInstance), payload);
 
         // Verify migration successful
         assertEq(

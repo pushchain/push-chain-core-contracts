@@ -240,7 +240,7 @@ contract CEA_SingleCallTests is CEATest {
         assertTrue(CEA(payable(address(ceaInstance))).isExecuted(txID), "txID should be marked executed");
     }
 
-    function test_MigrationPayload_IgnoresRecipient() public deployCEA {
+    function test_MigrationPayload_RevertsWhenRecipientNotSelf() public deployCEA {
         // Set up migration contract
         CEA ceaV2 = new CEA();
         CEAMigration migration = new CEAMigration(address(ceaV2));
@@ -252,13 +252,31 @@ contract CEA_SingleCallTests is CEATest {
         bytes memory payload = abi.encodePacked(MIGRATION_SELECTOR);
         address randomRecipient = makeAddr("randomRecipient");
 
+        // Migration with non-self recipient should revert
         vm.prank(vault);
+        vm.expectRevert(Errors.InvalidRecipient.selector);
         ceaInstance.executeUniversalTx(txID, universalTxID, ueaOnPush, randomRecipient, payload);
+    }
+
+    function test_MigrationPayload_SucceedsWhenRecipientIsSelf() public deployCEA {
+        // Set up migration contract
+        CEA ceaV2 = new CEA();
+        CEAMigration migration = new CEAMigration(address(ceaV2));
+        factory.setCEAMigrationContract(address(migration));
+
+        bytes32 txID = generateTxID(1);
+        bytes32 universalTxID = generateUniversalTxID(1);
+
+        bytes memory payload = abi.encodePacked(MIGRATION_SELECTOR);
+
+        // Migration with self recipient should succeed
+        vm.prank(vault);
+        ceaInstance.executeUniversalTx(txID, universalTxID, ueaOnPush, address(ceaInstance), payload);
 
         assertEq(
             CEAProxy(payable(address(ceaInstance))).getImplementation(),
             address(ceaV2),
-            "Migration should execute normally regardless of recipient"
+            "Migration should succeed with self recipient"
         );
     }
 }

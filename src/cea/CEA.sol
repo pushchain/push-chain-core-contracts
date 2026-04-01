@@ -166,7 +166,7 @@ contract CEA is ICEA, ReentrancyGuard {
             Multicall[] memory calls = _decodeCalls(payload);
             _handleMulticall(txId, universalTxId, originCaller, calls);
         } else if (_isMigration(payload)) {
-            _handleMigration();
+            _handleMigration(recipient);
             emit UniversalTxExecuted(txId, universalTxId, originCaller, address(this), payload);
         } else {
             _handleSingleCall(txId, universalTxId, originCaller, recipient, payload);
@@ -249,8 +249,10 @@ contract CEA is ICEA, ReentrancyGuard {
     }
 
     /// @dev Fetches migration contract from factory and delegates.
-    ///      Rejects msg.value > 0 — migration is a logic upgrade only.
-    function _handleMigration() internal {
+    ///      Enforces: recipient must be self, no value transfer.
+    /// @param recipient   Must be address(this) — migration targets self only
+    function _handleMigration(address recipient) internal {
+        if (recipient != address(this)) revert CEAErrors.InvalidRecipient();
         if (msg.value != 0) revert CEAErrors.InvalidInput();
         address migrationContract = factory.CEA_MIGRATION_CONTRACT();
         if (migrationContract == address(0)) {
