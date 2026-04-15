@@ -110,6 +110,18 @@ contract LocalSetupScript is Script {
                 sourceERC20: "11111111111111111111111111111111"
             })
         );
+        configs.push(
+            PRC20Config({
+                name: "USDT.bsc",
+                symbol: "USDT.bsc",
+                decimals: 6,
+                sourceChainId: "eip155:97",
+                tokenType: IPRC20.TokenType.ERC20,
+                gasLimit: 21000,
+                fee: 0,
+                sourceERC20: "0xbc14f348bc9667be46b35edc9b68653d86013dc5"
+            })
+        );
     }
 
     function run() external {
