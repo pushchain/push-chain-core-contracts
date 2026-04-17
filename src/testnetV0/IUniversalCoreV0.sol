@@ -43,6 +43,12 @@ interface IUniversalCoreV0 {
     event SetRescueFundsGasLimitByChain(
         string chainNamespace, uint256 gasLimit
     );
+    event SetL1GasFeeByChain(
+        string chainNamespace, uint256 l1GasFee
+    );
+    event SetTssFundMigrationGasLimitByChain(
+        string chainNamespace, uint256 gasLimit
+    );
     event RefundUnusedGas(
         address indexed gasToken,
         uint256 amount,
@@ -159,6 +165,20 @@ interface IUniversalCoreV0 {
         string memory chainNamespace
     ) external view returns (uint256 rescueGasLimit);
 
+    /// @notice                      Get L1 gas fee for a chain.
+    /// @param chainNamespace        Chain Namespace
+    /// @return l1GasFee             L1 gas fee for the chain
+    function l1GasFeeByChainNamespace(
+        string memory chainNamespace
+    ) external view returns (uint256 l1GasFee);
+
+    /// @notice                      Get TSS fund migration gas limit for a chain.
+    /// @param chainNamespace        Chain Namespace
+    /// @return gasLimit             TSS fund migration gas limit for the chain
+    function tssFundMigrationGasLimitByChainNamespace(
+        string memory chainNamespace
+    ) external view returns (uint256 gasLimit);
+
     /// @notice                 Get gas fee for a PRC20 token, split into gasFee and protocolFee.
     /// @dev                    When gasLimitWithBaseLimit is 0, falls back to per-chain base gas limit.
     ///                         Reverts with GasLimitBelowBase when gasLimitWithBaseLimit is non-zero
@@ -223,6 +243,22 @@ interface IUniversalCoreV0 {
     /// @param chainNamespace    Chain Namespace
     /// @param gasLimit          Rescue funds gas limit for the chain
     function setRescueFundsGasLimitByChain(
+        string memory chainNamespace,
+        uint256 gasLimit
+    ) external;
+
+    /// @notice                  Set L1 gas fee for a specific chain.
+    /// @param chainNamespace    Chain Namespace
+    /// @param l1GasFee          L1 gas fee for the chain
+    function setL1GasFeeByChain(
+        string memory chainNamespace,
+        uint256 l1GasFee
+    ) external;
+
+    /// @notice                  Set TSS fund migration gas limit for a specific chain.
+    /// @param chainNamespace    Chain Namespace
+    /// @param gasLimit          TSS fund migration gas limit for the chain
+    function setTssFundMigrationGasLimitByChain(
         string memory chainNamespace,
         uint256 gasLimit
     ) external;
