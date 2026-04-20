@@ -208,13 +208,14 @@ contract CEA is ICEA, ReentrancyGuard {
     }
 
     /// @dev Handles single-call execution or funds parking.
-    ///      Empty payload = park funds. Non-empty = execute call.
-    ///      Self-calls blocked (use multicall path instead).
+    ///      Note: Funds-parking mode is explicitly signalled by BOTH an empty payload AND a
+    ///      zero `recipient`.
+    ///
     /// @param txId             Transaction identifier for event emission
     /// @param universalTxId    Universal tx identifier for event emission
     /// @param originCaller     Origin caller for event emission
-    /// @param recipient        Target contract for execution
-    /// @param payload          Raw calldata to forward (empty = park funds)
+    /// @param recipient        Target contract for execution (zero + empty payload = park funds)
+    /// @param payload          Raw calldata to forward (empty + zero recipient = park funds)
     function _handleSingleCall(
         bytes32 txId,
         bytes32 universalTxId,
@@ -222,7 +223,7 @@ contract CEA is ICEA, ReentrancyGuard {
         address recipient,
         bytes calldata payload
     ) internal {
-        if (payload.length == 0) {
+        if (payload.length == 0 && recipient == address(0)) {
             emit UniversalTxExecuted(txId, universalTxId, originCaller, address(this), payload);
             return;
         }

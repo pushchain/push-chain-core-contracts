@@ -52,7 +52,7 @@ contract CEA_SingleCallTests is CEATest {
         assertTrue(CEA(payable(address(ceaInstance))).isExecuted(txID), "txID should be marked executed");
     }
 
-    function test_ParkFunds_EmptyPayload_NonZeroRecipient_Ignored() public deployCEA {
+    function test_EmptyPayload_NonZeroRecipient_ForwardsNative() public deployCEA {
         bytes32 txID = generateTxID(1);
         bytes32 universalTxID = generateUniversalTxID(1);
 
@@ -64,9 +64,10 @@ contract CEA_SingleCallTests is CEATest {
         vm.prank(vault);
         ceaInstance.executeUniversalTx{value: amount}(txID, universalTxID, ueaOnPush, someRecipient, "");
 
-        // Funds should park in CEA regardless of recipient value
-        assertEq(address(ceaInstance).balance, amount, "CEA should hold native funds");
-        assertEq(address(someRecipient).balance, 0, "Recipient should not receive anything");
+        // Empty payload + non-zero recipient is a plain native send to recipient, not fund-parking.
+        // Fund-parking requires BOTH empty payload AND address(0) recipient.
+        assertEq(address(someRecipient).balance, amount, "Recipient should receive the native funds");
+        assertEq(address(ceaInstance).balance, 0, "CEA should not hold funds when recipient is non-zero");
         assertTrue(CEA(payable(address(ceaInstance))).isExecuted(txID), "txID should be marked executed");
     }
 
