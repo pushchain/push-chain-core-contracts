@@ -945,7 +945,7 @@ contract UEASVMTest is Test {
             abi.encode(
                 svmSmartAccountInstance.DOMAIN_SEPARATOR_TYPEHASH_SVM(),
                 keccak256(bytes(svmSmartAccountInstance.VERSION())),
-                "101",
+                keccak256(bytes("101")),
                 address(svmSmartAccountInstance),
                 bytes32(block.chainid)
             )

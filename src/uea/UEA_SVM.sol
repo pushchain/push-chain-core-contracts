@@ -88,12 +88,15 @@ contract UEA_SVM is ReentrancyGuard, IUEA {
     // =========================
 
     /// @inheritdoc IUEA
+    /// @dev Per EIP-712, dynamic types (`string`, `bytes`) must be encoded as their
+    ///      `keccak256` hash when included in the domain/struct hash. Both `version` and
+    ///      `chainId` are declared as `string` in the typehash, so both are hashed here.
     function domainSeparator() public view returns (bytes32) {
         return keccak256(
             abi.encode(
                 DOMAIN_SEPARATOR_TYPEHASH_SVM,
                 keccak256(bytes(VERSION)),
-                _universalAccountId.chainId,
+                keccak256(bytes(_universalAccountId.chainId)),
                 address(this),
                 bytes32(block.chainid)
             )
