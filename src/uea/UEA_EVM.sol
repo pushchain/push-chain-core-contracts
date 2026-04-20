@@ -46,9 +46,22 @@ contract UEA_EVM is ReentrancyGuard, IUEA {
     address public constant UNIVERSAL_EXECUTOR_MODULE = 0x14191Ea54B4c176fCf86f51b0FAc7CB1E71Df7d7;
 
     /// @notice EIP-712 domain separator typehash.
-    ///         keccak256("EIP712Domain(string version,uint256 chainId,address verifyingContract)")
+    ///         keccak256("EIP712Domain(string version,uint256 chainId,address verifyingContract,bytes32 salt)")
+    /// @dev    Uses only the canonical EIP-712 `EIP712Domain` fields (`version`, `chainId`,
+    ///         `verifyingContract`, `salt`) for maximum compatibility with standard wallets.
+    ///
+    ///         Field semantics in this protocol:
+    ///           - `version`             — UEA implementation version string.
+    ///           - `chainId`             — the *source* chain's numeric ID (e.g. Ethereum
+    ///                                     mainnet = 1), derived from `UniversalAccountId`.
+    ///                                     Binds the signature to the origin chain identity.
+    ///           - `verifyingContract`   — this UEA proxy address.
+    ///           - `salt`                — `bytes32(block.chainid)` of Push Chain at execution
+    ///                                     time. Binds the signature to the specific Push Chain
+    ///                                     deployment and prevents cross-deployment replay
+    ///                                     across forks or parallel deployments.
     bytes32 public constant DOMAIN_SEPARATOR_TYPEHASH =
-        0x2aef22f9d7df5f9d21c56d14029233f3fdaa91917727e1eb68e504d27072d6cd;
+        0xb90aaffa4b0fc25d6056f438f2c06198968eaf6723d182f5f928441117424b8e;
 
     /// @notice UEAFactory reference for fetching migration contract.
     IUEAFactory public ueaFactory;
@@ -76,7 +89,11 @@ contract UEA_EVM is ReentrancyGuard, IUEA {
     function domainSeparator() public view returns (bytes32) {
         uint256 chainId = StringUtils.stringToExactUInt256(_universalAccountId.chainId);
 
-        return keccak256(abi.encode(DOMAIN_SEPARATOR_TYPEHASH, keccak256(bytes(VERSION)), chainId, address(this)));
+        return keccak256(
+            abi.encode(
+                DOMAIN_SEPARATOR_TYPEHASH, keccak256(bytes(VERSION)), chainId, address(this), bytes32(block.chainid)
+            )
+        );
     }
 
     /// @inheritdoc IUEA

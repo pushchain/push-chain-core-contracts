@@ -946,7 +946,8 @@ contract UEASVMTest is Test {
                 svmSmartAccountInstance.DOMAIN_SEPARATOR_TYPEHASH_SVM(),
                 keccak256(bytes(svmSmartAccountInstance.VERSION())),
                 "101",
-                address(svmSmartAccountInstance)
+                address(svmSmartAccountInstance),
+                bytes32(block.chainid)
             )
         );
 
@@ -957,7 +958,9 @@ contract UEASVMTest is Test {
         // This test verifies that the DOMAIN_SEPARATOR_TYPEHASH_SVM constant matches the expected hash
         // If the EIP712Domain_SVM struct definition changes, this test will fail
 
-        bytes32 expectedHash = keccak256("EIP712Domain_SVM(string version,string chainId,address verifyingContract)");
+        bytes32 expectedHash = keccak256(
+            "EIP712Domain_SVM(string version,string chainId,address verifyingContract,bytes32 salt)"
+        );
 
         // Access the constant from the deployed instance
         bytes32 actualHash = svmSmartAccountInstance.DOMAIN_SEPARATOR_TYPEHASH_SVM();

@@ -45,9 +45,25 @@ contract UEA_SVM is ReentrancyGuard, IUEA {
     address public constant UNIVERSAL_EXECUTOR_MODULE = 0x14191Ea54B4c176fCf86f51b0FAc7CB1E71Df7d7;
 
     /// @notice EIP-712 domain separator typehash for SVM.
-    ///         keccak256("EIP712Domain_SVM(string version,string chainId,address verifyingContract)")
+    ///         keccak256("EIP712Domain_SVM(string version,string chainId,address verifyingContract,bytes32 salt)")
+    /// @dev    Uses only the canonical EIP-712 `EIP712Domain` fields (`version`, `chainId`,
+    ///         `verifyingContract`, `salt`) for maximum compatibility with standard signers
+    ///         and EIP-712 tooling. The `_SVM` suffix in the type name disambiguates this
+    ///         domain from the EVM variant (which encodes `chainId` as `uint256`); here
+    ///         `chainId` is a `string` to accommodate Solana cluster identifiers.
+    ///
+    ///         Field semantics in this protocol:
+    ///           - `version`             — UEA implementation version string.
+    ///           - `chainId`             — the *source* Solana cluster identifier string,
+    ///                                     derived from `UniversalAccountId`. Binds the
+    ///                                     signature to the origin chain identity.
+    ///           - `verifyingContract`   — this UEA proxy address.
+    ///           - `salt`                — `bytes32(block.chainid)` of Push Chain at execution
+    ///                                     time. Binds the signature to the specific Push Chain
+    ///                                     deployment and prevents cross-deployment replay
+    ///                                     across forks or parallel deployments.
     bytes32 public constant DOMAIN_SEPARATOR_TYPEHASH_SVM =
-        0x3aefc31558906b9b2c54de94f82a9b2455c24b4ba2b642ebb545ea2cc64a1e4b;
+        0x038a4fd0ee5950f0ea6d28f116a885fc5e376a8d1a939f7a9bea48f4f13fabb1;
 
     /// @notice UEAFactory reference for fetching migration contract.
     IUEAFactory public ueaFactory;
@@ -75,7 +91,11 @@ contract UEA_SVM is ReentrancyGuard, IUEA {
     function domainSeparator() public view returns (bytes32) {
         return keccak256(
             abi.encode(
-                DOMAIN_SEPARATOR_TYPEHASH_SVM, keccak256(bytes(VERSION)), _universalAccountId.chainId, address(this)
+                DOMAIN_SEPARATOR_TYPEHASH_SVM,
+                keccak256(bytes(VERSION)),
+                _universalAccountId.chainId,
+                address(this),
+                bytes32(block.chainid)
             )
         );
     }
