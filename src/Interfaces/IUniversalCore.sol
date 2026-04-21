@@ -35,6 +35,11 @@ interface IUniversalCore {
     /// @param pauser            Address that was granted the pauser role
     event PauserRoleGranted(address indexed pauser);
 
+    /// @notice                  Emitted when stuck native PC is rescued by admin.
+    /// @param to                Recipient of the rescued PC
+    /// @param amount            Amount of native PC rescued
+    event RescueNativePC(address indexed to, uint256 amount);
+
     // =========================
     //    UC_1: UE MODULE FUNCTIONS
     // =========================

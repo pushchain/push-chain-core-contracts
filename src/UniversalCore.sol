@@ -489,6 +489,18 @@ contract UniversalCore is
         emit PauserRoleGranted(newPauser);
     }
 
+    /// @notice              Rescue native PC stuck in the contract. Only callable by admin.
+    /// @param to            Recipient address for the rescued PC
+    /// @param amount        Amount of native PC to rescue
+    function rescueNativePC(address payable to, uint256 amount) external onlyAdmin {
+        if (to == address(0)) revert CommonErrors.ZeroAddress();
+        if (amount == 0) revert CommonErrors.ZeroAmount();
+        if (amount > address(this).balance) revert CommonErrors.InsufficientBalance();
+        (bool ok,) = to.call{value: amount}("");
+        if (!ok) revert CommonErrors.TransferFailed();
+        emit RescueNativePC(to, amount);
+    }
+
     // =========================
     //    UC_6: PRIVATE HELPERS
     // =========================
