@@ -50,6 +50,7 @@ library UniversalCoreErrors {
     error ZeroBaseGasLimit();
     error ZeroRescueGasLimit();
     error StaleGasData(uint256 observedAt, uint256 nowTimestamp, uint256 maxAge);
+    error PRC20OperationFailed();
 }
 
 // =========================

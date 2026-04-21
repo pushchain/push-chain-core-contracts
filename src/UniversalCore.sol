@@ -150,7 +150,7 @@ contract UniversalCore is
     /// @inheritdoc IUniversalCore
     function depositPRC20Token(address prc20, uint256 amount, address recipient) external onlyUEModule whenNotPaused nonReentrant {
         _validateParams(prc20, amount, recipient);
-        IPRC20(prc20).deposit(recipient, amount);
+        if (!IPRC20(prc20).deposit(recipient, amount)) revert UniversalCoreErrors.PRC20OperationFailed();
     }
 
     /// @inheritdoc IUniversalCore
@@ -183,7 +183,7 @@ contract UniversalCore is
         uint256 pcOut;
 
         if (!withSwap) {
-            IPRC20(gasToken).deposit(recipient, amount);
+            if (!IPRC20(gasToken).deposit(recipient, amount)) revert UniversalCoreErrors.PRC20OperationFailed();
         } else {
             if (minPCOut == 0) {
                 revert UniversalCoreErrors.MinPCOutRequired();
@@ -244,7 +244,7 @@ contract UniversalCore is
         uint256 amountInUsed = ISwapRouter(uniswapV3SwapRouter).exactOutputSingle(params);
         IERC20(WPC).forceApprove(uniswapV3SwapRouter, 0);
 
-        IPRC20(gasToken).burn(gasFee);
+        if (!IPRC20(gasToken).burn(gasFee)) revert UniversalCoreErrors.PRC20OperationFailed();
 
         gasTokenOut = gasFee;
         refund = msg.value - amountInUsed;
@@ -555,7 +555,7 @@ contract UniversalCore is
 
         if (minPCOut == 0) revert CommonErrors.ZeroAmount();
 
-        IPRC20(prc20).deposit(address(this), amount);
+        if (!IPRC20(prc20).deposit(address(this), amount)) revert UniversalCoreErrors.PRC20OperationFailed();
         IERC20(prc20).forceApprove(uniswapV3SwapRouter, amount);
 
         ISwapRouter.ExactInputSingleParams memory params = ISwapRouter.ExactInputSingleParams({

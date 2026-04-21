@@ -14,6 +14,7 @@ import "../../test/mocks/MockWPC.sol";
 import "../../test/mocks/MockPRC20.sol";
 import "../../test/mocks/MaliciousPRC20.sol";
 import "../../test/mocks/RevertingPRC20.sol";
+import "../../test/mocks/FalseReturningPRC20.sol";
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import "@openzeppelin/contracts-upgradeable/utils/PausableUpgradeable.sol";
 import "@openzeppelin/contracts/access/AccessControl.sol";
@@ -1452,5 +1453,25 @@ contract UniversalCoreTest is Test, UpgradeableContractHelper {
 
         vm.expectRevert(UniversalCoreErrors.ZeroGasPrice.selector);
         universalCore.getOutboundTxGasAndFees(address(freshPRC20), 0);
+    }
+
+    // =========================
+    //    PRC20 Return Value Check Tests
+    // =========================
+
+    function test_DepositPRC20Token_FalseReturn_Reverts() public {
+        FalseReturningPRC20 falseToken = new FalseReturningPRC20(CHAIN_NAMESPACE, SOURCE_TOKEN_ADDRESS);
+
+        vm.prank(UNIVERSAL_EXECUTOR_MODULE);
+        vm.expectRevert(UniversalCoreErrors.PRC20OperationFailed.selector);
+        universalCore.depositPRC20Token(address(falseToken), 1000, makeAddr("target"));
+    }
+
+    function test_RefundUnusedGas_FalseDeposit_Reverts() public {
+        FalseReturningPRC20 falseToken = new FalseReturningPRC20(CHAIN_NAMESPACE, SOURCE_TOKEN_ADDRESS);
+
+        vm.prank(UNIVERSAL_EXECUTOR_MODULE);
+        vm.expectRevert(UniversalCoreErrors.PRC20OperationFailed.selector);
+        universalCore.refundUnusedGas(address(falseToken), 1000, makeAddr("target"), false, 0, 0);
     }
 }

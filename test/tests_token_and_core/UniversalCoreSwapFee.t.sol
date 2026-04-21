@@ -12,6 +12,7 @@ import "../../test/mocks/MockUniswapV3Factory.sol";
 import "../../test/mocks/MockUniswapV3Router.sol";
 import "../../test/mocks/MockWPC.sol";
 import "../../test/mocks/MockPRC20.sol";
+import "../../test/mocks/FalseReturningPRC20.sol";
 import "@openzeppelin/contracts-upgradeable/utils/PausableUpgradeable.sol";
 import {IAccessControl} from "@openzeppelin/contracts/access/IAccessControl.sol";
 
@@ -414,5 +415,34 @@ contract UniversalCoreSwapFeeTest is Test, UpgradeableContractHelper {
         vm.prank(UNIVERSAL_EXECUTOR_MODULE);
         vm.expectRevert(CommonErrors.ZeroAddress.selector);
         universalCore.setProtocolFeeByToken(address(0), 1000);
+    }
+
+    // ========================================
+    // PRC20 Return Value Check Tests
+    // ========================================
+
+    function test_SwapAndBurnGas_FalseBurnReturn_Reverts() public {
+        FalseReturningPRC20 falseGasToken =
+            new FalseReturningPRC20(CHAIN_NAMESPACE, SOURCE_TOKEN_ADDRESS);
+
+        vm.startPrank(UNIVERSAL_EXECUTOR_MODULE);
+        universalCore.setGasTokenPRC20(CHAIN_NAMESPACE, address(falseGasToken));
+        universalCore.setChainMeta(CHAIN_NAMESPACE, GAS_PRICE, 0);
+        vm.stopPrank();
+
+        universalCore.setDefaultFeeTier(address(falseGasToken), FEE_TIER);
+
+        address pool = makeAddr("falsePool");
+        if (address(mockWPC) < address(falseGasToken)) {
+            mockFactory.setPool(address(mockWPC), address(falseGasToken), FEE_TIER, pool);
+        } else {
+            mockFactory.setPool(address(falseGasToken), address(mockWPC), FEE_TIER, pool);
+        }
+
+        vm.prank(gateway);
+        vm.expectRevert(UniversalCoreErrors.PRC20OperationFailed.selector);
+        universalCore.swapAndBurnGas{value: 1 ether}(
+            address(falseGasToken), FEE_TIER, GAS_FEE, 0, user
+        );
     }
 }
