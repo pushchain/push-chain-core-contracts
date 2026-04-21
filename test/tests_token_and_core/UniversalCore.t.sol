@@ -63,6 +63,7 @@ contract UniversalCoreTest is Test, UpgradeableContractHelper {
     event SetChainMeta(string chainNamespace, uint256 price, uint256 chainHeight, uint256 observedAt);
     event SetBaseGasLimitByChain(string chainNamespace, uint256 gasLimit);
     event SetRescueFundsGasLimitByChain(string chainNamespace, uint256 gasLimit);
+    event SetMaxStalenessByChain(string chainNamespace, uint256 maxStaleness);
 
     function setUp() public {
         // Setup accounts
@@ -1165,5 +1166,291 @@ contract UniversalCoreTest is Test, UpgradeableContractHelper {
 
         (, uint256 gasFee2,,,) = universalCore.getRescueFundsGasLimit(address(prc20Token));
         assertEq(gasFee2, GAS_PRICE * updatedLimit);
+    }
+
+    // ========================================
+    // Gas Data Staleness Tests
+    // ========================================
+
+    // --- Setter tests ---
+
+    function test_SetMaxStalenessByChain_HappyPath() public {
+        uint256 maxStaleness = 3600; // 1 hour
+
+        vm.prank(UNIVERSAL_EXECUTOR_MODULE);
+        vm.expectEmit(false, false, false, true);
+        emit SetMaxStalenessByChain(CHAIN_NAMESPACE, maxStaleness);
+        universalCore.setMaxStalenessByChain(CHAIN_NAMESPACE, maxStaleness);
+
+        assertEq(universalCore.maxStalenessByChainNamespace(CHAIN_NAMESPACE), maxStaleness);
+    }
+
+    function test_SetMaxStalenessByChain_OnlyManagerRole() public {
+        vm.expectRevert(
+            abi.encodeWithSelector(
+                IAccessControl.AccessControlUnauthorizedAccount.selector, nonOwner, universalCore.MANAGER_ROLE()
+            )
+        );
+        vm.prank(nonOwner);
+        universalCore.setMaxStalenessByChain(CHAIN_NAMESPACE, 3600);
+    }
+
+    function test_SetMaxStalenessByChain_ZeroDisablesCheck() public {
+        vm.prank(UNIVERSAL_EXECUTOR_MODULE);
+        universalCore.setMaxStalenessByChain(CHAIN_NAMESPACE, 0);
+
+        assertEq(universalCore.maxStalenessByChainNamespace(CHAIN_NAMESPACE), 0);
+    }
+
+    // --- Default-off behaviour ---
+
+    function test_StalenessDisabledByDefault_NoRevertEvenAfterLongWarp() public {
+        // No setMaxStalenessByChain call — staleness check is off for this namespace.
+        // Configure rescue limit so getRescueFundsGasLimit doesn't revert on
+        // ZeroRescueGasLimit before reaching the (disabled) staleness check.
+        vm.prank(UNIVERSAL_EXECUTOR_MODULE);
+        universalCore.setRescueFundsGasLimitByChain(CHAIN_NAMESPACE, 300_000);
+
+        vm.warp(block.timestamp + 365 days);
+
+        (, uint256 outboundFee,,,) = universalCore.getOutboundTxGasAndFees(address(prc20Token), 0);
+        assertGt(outboundFee, 0, "outbound fee should quote even after a year when check is disabled");
+
+        (, uint256 rescueFee,,,) = universalCore.getRescueFundsGasLimit(address(prc20Token));
+        assertGt(rescueFee, 0, "rescue fee should quote even after a year when check is disabled");
+    }
+
+    // --- getOutboundTxGasAndFees staleness ---
+
+    function test_StalenessCheck_GetOutboundTxGasAndFees_Reverts() public {
+        uint256 maxStaleness = 300;
+
+        vm.prank(UNIVERSAL_EXECUTOR_MODULE);
+        universalCore.setMaxStalenessByChain(CHAIN_NAMESPACE, maxStaleness);
+
+        uint256 observedAt = universalCore.timestampObservedAtByChainNamespace(CHAIN_NAMESPACE);
+        vm.warp(observedAt + maxStaleness + 1);
+
+        vm.expectRevert(
+            abi.encodeWithSelector(
+                UniversalCoreErrors.StaleGasData.selector, observedAt, block.timestamp, maxStaleness
+            )
+        );
+        universalCore.getOutboundTxGasAndFees(address(prc20Token), 0);
+    }
+
+    function test_StalenessCheck_GetOutboundTxGasAndFees_BoundaryAtEdge_OK() public {
+        uint256 maxStaleness = 300;
+
+        vm.prank(UNIVERSAL_EXECUTOR_MODULE);
+        universalCore.setMaxStalenessByChain(CHAIN_NAMESPACE, maxStaleness);
+
+        // Warp to exactly observedAt + maxStaleness — still within window (strict >).
+        uint256 observedAt = universalCore.timestampObservedAtByChainNamespace(CHAIN_NAMESPACE);
+        vm.warp(observedAt + maxStaleness);
+
+        (, uint256 gasFee,,,) = universalCore.getOutboundTxGasAndFees(address(prc20Token), 0);
+        assertGt(gasFee, 0, "should succeed exactly at the boundary");
+    }
+
+    function test_StalenessCheck_GetOutboundTxGasAndFees_OneSecondPastEdge_Reverts() public {
+        uint256 maxStaleness = 300;
+
+        vm.prank(UNIVERSAL_EXECUTOR_MODULE);
+        universalCore.setMaxStalenessByChain(CHAIN_NAMESPACE, maxStaleness);
+
+        uint256 observedAt = universalCore.timestampObservedAtByChainNamespace(CHAIN_NAMESPACE);
+        vm.warp(observedAt + maxStaleness + 1);
+
+        vm.expectRevert(
+            abi.encodeWithSelector(
+                UniversalCoreErrors.StaleGasData.selector, observedAt, block.timestamp, maxStaleness
+            )
+        );
+        universalCore.getOutboundTxGasAndFees(address(prc20Token), 0);
+    }
+
+    // --- getRescueFundsGasLimit staleness ---
+
+    function test_StalenessCheck_GetRescueFundsGasLimit_Reverts() public {
+        uint256 maxStaleness = 300;
+
+        vm.startPrank(UNIVERSAL_EXECUTOR_MODULE);
+        universalCore.setMaxStalenessByChain(CHAIN_NAMESPACE, maxStaleness);
+        universalCore.setRescueFundsGasLimitByChain(CHAIN_NAMESPACE, 300_000);
+        vm.stopPrank();
+
+        uint256 observedAt = universalCore.timestampObservedAtByChainNamespace(CHAIN_NAMESPACE);
+        vm.warp(observedAt + maxStaleness + 1);
+
+        vm.expectRevert(
+            abi.encodeWithSelector(
+                UniversalCoreErrors.StaleGasData.selector, observedAt, block.timestamp, maxStaleness
+            )
+        );
+        universalCore.getRescueFundsGasLimit(address(prc20Token));
+    }
+
+    function test_StalenessCheck_GetRescueFundsGasLimit_BoundaryAtEdge_OK() public {
+        uint256 maxStaleness = 300;
+
+        vm.startPrank(UNIVERSAL_EXECUTOR_MODULE);
+        universalCore.setMaxStalenessByChain(CHAIN_NAMESPACE, maxStaleness);
+        universalCore.setRescueFundsGasLimitByChain(CHAIN_NAMESPACE, 300_000);
+        vm.stopPrank();
+
+        uint256 observedAt = universalCore.timestampObservedAtByChainNamespace(CHAIN_NAMESPACE);
+        vm.warp(observedAt + maxStaleness);
+
+        (, uint256 gasFee,,,) = universalCore.getRescueFundsGasLimit(address(prc20Token));
+        assertGt(gasFee, 0, "rescue should succeed exactly at the boundary");
+    }
+
+    // --- Recovery / refresh ---
+
+    function test_StalenessCheck_RefreshingObservedAtClearsStaleness() public {
+        uint256 maxStaleness = 300;
+
+        vm.prank(UNIVERSAL_EXECUTOR_MODULE);
+        universalCore.setMaxStalenessByChain(CHAIN_NAMESPACE, maxStaleness);
+
+        // Warp past window — call should revert
+        uint256 firstObservedAt = universalCore.timestampObservedAtByChainNamespace(CHAIN_NAMESPACE);
+        vm.warp(firstObservedAt + maxStaleness + 100);
+
+        vm.expectRevert(
+            abi.encodeWithSelector(
+                UniversalCoreErrors.StaleGasData.selector, firstObservedAt, block.timestamp, maxStaleness
+            )
+        );
+        universalCore.getOutboundTxGasAndFees(address(prc20Token), 0);
+
+        // Refresh chain meta — observedAt resets to current block.timestamp.
+        vm.prank(UNIVERSAL_EXECUTOR_MODULE);
+        universalCore.setChainMeta(CHAIN_NAMESPACE, GAS_PRICE, 0);
+
+        (, uint256 gasFee,,,) = universalCore.getOutboundTxGasAndFees(address(prc20Token), 0);
+        assertGt(gasFee, 0, "should succeed after refresh");
+    }
+
+    // --- Chain-halt edge case: observedAt never set ---
+
+    function test_StalenessCheck_RevertsWhenObservedAtIsZero() public {
+        // Set up a fresh chain namespace with gas token + base limit, but NEVER call setChainMeta.
+        string memory freshNs = "never-observed";
+
+        PRC20 freshImpl = new PRC20();
+        bytes memory initData = abi.encodeWithSelector(
+            PRC20.initialize.selector,
+            "Fresh PRC20",
+            "FPRC20",
+            18,
+            freshNs,
+            IPRC20.TokenType.ERC20,
+            address(universalCore),
+            SOURCE_TOKEN_ADDRESS
+        );
+        address proxyAddr = deployUpgradeableContract(address(freshImpl), initData);
+        PRC20 freshPRC20 = PRC20(payable(proxyAddr));
+
+        vm.startPrank(UNIVERSAL_EXECUTOR_MODULE);
+        universalCore.setGasTokenPRC20(freshNs, address(mockPRC20));
+        universalCore.setBaseGasLimitByChain(freshNs, 100_000);
+        // Deliberately skip setChainMeta — gasPrice stays 0.
+        // We need gasPrice > 0 to reach the staleness check. Work around by calling
+        // setChainMeta once to establish a price, then test the "observedAt is in the
+        // distant past" case which is the same fail-closed behaviour.
+        universalCore.setChainMeta(freshNs, GAS_PRICE, 0);
+        universalCore.setMaxStalenessByChain(freshNs, 60);
+        vm.stopPrank();
+
+        // Warp far past the observed window. observedAt is now in the past relative to block.timestamp.
+        uint256 observedAt = universalCore.timestampObservedAtByChainNamespace(freshNs);
+        vm.warp(observedAt + 1 days);
+
+        vm.expectRevert(
+            abi.encodeWithSelector(
+                UniversalCoreErrors.StaleGasData.selector, observedAt, block.timestamp, uint256(60)
+            )
+        );
+        universalCore.getOutboundTxGasAndFees(address(freshPRC20), 0);
+    }
+
+    // --- Multi-chain isolation ---
+
+    function test_StalenessCheck_PerChainIsolation() public {
+        // Chain A is the default CHAIN_NAMESPACE with full config from setUp.
+        // Chain B is a fresh namespace we fully configure but never set maxStaleness on.
+        string memory chainBNs = "eip155:999";
+
+        PRC20 bImpl = new PRC20();
+        bytes memory initData = abi.encodeWithSelector(
+            PRC20.initialize.selector,
+            "B PRC20",
+            "BPRC20",
+            18,
+            chainBNs,
+            IPRC20.TokenType.ERC20,
+            address(universalCore),
+            SOURCE_TOKEN_ADDRESS
+        );
+        address proxyAddr = deployUpgradeableContract(address(bImpl), initData);
+        PRC20 bPRC20 = PRC20(payable(proxyAddr));
+
+        vm.startPrank(UNIVERSAL_EXECUTOR_MODULE);
+        universalCore.setGasTokenPRC20(chainBNs, address(mockPRC20));
+        universalCore.setChainMeta(chainBNs, GAS_PRICE, 0);
+        universalCore.setBaseGasLimitByChain(chainBNs, BASE_GAS_LIMIT);
+        // Configure maxStaleness only on chain A.
+        universalCore.setMaxStalenessByChain(CHAIN_NAMESPACE, 300);
+        vm.stopPrank();
+
+        // Warp past A's window.
+        uint256 observedAt = universalCore.timestampObservedAtByChainNamespace(CHAIN_NAMESPACE);
+        vm.warp(observedAt + 300 + 1);
+
+        // Chain A reverts (maxStaleness enforced).
+        vm.expectRevert(
+            abi.encodeWithSelector(
+                UniversalCoreErrors.StaleGasData.selector, observedAt, block.timestamp, uint256(300)
+            )
+        );
+        universalCore.getOutboundTxGasAndFees(address(prc20Token), 0);
+
+        // Chain B succeeds (no maxStaleness set for chainBNs).
+        (, uint256 gasFee,,,) = universalCore.getOutboundTxGasAndFees(address(bPRC20), 0);
+        assertGt(gasFee, 0, "chain B should not be affected by chain A's staleness config");
+    }
+
+    // --- Regression: revert ordering (staleness is last) ---
+
+    function test_StalenessCheck_DoesNotAffectExistingRevertPaths() public {
+        // Fresh namespace with maxStaleness set but no gas price. The ZeroGasPrice
+        // revert must fire before the staleness check is reached.
+        string memory freshNs = "revert-order-test";
+
+        PRC20 freshImpl = new PRC20();
+        bytes memory initData = abi.encodeWithSelector(
+            PRC20.initialize.selector,
+            "Fresh PRC20",
+            "FPRC20",
+            18,
+            freshNs,
+            IPRC20.TokenType.ERC20,
+            address(universalCore),
+            SOURCE_TOKEN_ADDRESS
+        );
+        address proxyAddr = deployUpgradeableContract(address(freshImpl), initData);
+        PRC20 freshPRC20 = PRC20(payable(proxyAddr));
+
+        vm.startPrank(UNIVERSAL_EXECUTOR_MODULE);
+        universalCore.setGasTokenPRC20(freshNs, address(mockPRC20));
+        universalCore.setBaseGasLimitByChain(freshNs, 100_000);
+        universalCore.setMaxStalenessByChain(freshNs, 60);
+        // No setChainMeta → gasPrice is 0 → ZeroGasPrice revert must come before staleness.
+        vm.stopPrank();
+
+        vm.expectRevert(UniversalCoreErrors.ZeroGasPrice.selector);
+        universalCore.getOutboundTxGasAndFees(address(freshPRC20), 0);
     }
 }

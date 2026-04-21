@@ -409,4 +409,63 @@ contract UniversalCore_Fuzz is Test, UpgradeableContractHelper {
         universalCore.setProtocolFeeByToken(address(0), fee);
     }
 
+    // =============================================
+    // 12.X Gas Data Staleness Properties
+    // =============================================
+
+    function testFuzz_staleness_revertsWhenPastWindow(uint128 maxAge, uint128 timePast) public {
+        vm.assume(maxAge > 0);
+        vm.assume(timePast > maxAge);
+
+        // Establish gas price + base limit so the quote call reaches the staleness check.
+        vm.prank(uExec);
+        universalCore.setChainMeta(CHAIN_NS, 50 gwei, 0);
+        vm.prank(uExec);
+        universalCore.setBaseGasLimitByChain(CHAIN_NS, 100_000);
+
+        vm.prank(uExec);
+        universalCore.setMaxStalenessByChain(CHAIN_NS, maxAge);
+
+        uint256 observedAt = universalCore.timestampObservedAtByChainNamespace(CHAIN_NS);
+        vm.warp(uint256(observedAt) + uint256(timePast));
+
+        vm.expectRevert(
+            abi.encodeWithSelector(
+                UniversalCoreErrors.StaleGasData.selector, observedAt, block.timestamp, uint256(maxAge)
+            )
+        );
+        universalCore.getOutboundTxGasAndFees(address(prc20), 0);
+    }
+
+    function testFuzz_staleness_okWithinWindow(uint128 maxAge, uint128 timePast) public {
+        vm.assume(maxAge > 0);
+        vm.assume(timePast <= maxAge);
+
+        vm.prank(uExec);
+        universalCore.setChainMeta(CHAIN_NS, 50 gwei, 0);
+        vm.prank(uExec);
+        universalCore.setBaseGasLimitByChain(CHAIN_NS, 100_000);
+
+        vm.prank(uExec);
+        universalCore.setMaxStalenessByChain(CHAIN_NS, maxAge);
+
+        uint256 observedAt = universalCore.timestampObservedAtByChainNamespace(CHAIN_NS);
+        vm.warp(uint256(observedAt) + uint256(timePast));
+
+        (, uint256 gasFee,,,) = universalCore.getOutboundTxGasAndFees(address(prc20), 0);
+        assertGt(gasFee, 0, "should succeed within the staleness window");
+    }
+
+    function testFuzz_setMaxStalenessByChain_nonManager_reverts(address caller, uint256 maxAge) public {
+        // Only uExec was granted MANAGER_ROLE in setUp; any other address must revert.
+        vm.assume(caller != uExec);
+
+        vm.expectRevert(
+            abi.encodeWithSelector(
+                IAccessControl.AccessControlUnauthorizedAccount.selector, caller, universalCore.MANAGER_ROLE()
+            )
+        );
+        vm.prank(caller);
+        universalCore.setMaxStalenessByChain(CHAIN_NS, maxAge);
+    }
 }

@@ -63,6 +63,12 @@ contract UniversalCore is
     mapping(string => uint256) public chainHeightByChainNamespace;
     mapping(string => uint256) public timestampObservedAtByChainNamespace;
 
+    /// @notice Maximum acceptable age (seconds) of `timestampObservedAtByChainNamespace`
+    ///         before gas fee quotes for that chain are rejected as stale.
+    /// @dev    `0` disables the check for that chain (opt-in). Set per chain by
+    ///         MANAGER_ROLE via `setMaxStalenessByChain`.
+    mapping(string => uint256) public maxStalenessByChainNamespace;
+
     // -- Token configuration --
 
     mapping(address => uint256) public protocolFeeByToken;
@@ -277,6 +283,8 @@ contract UniversalCore is
         gasPrice = gasPriceByChainNamespace[chainNamespace];
         if (gasPrice == 0) revert UniversalCoreErrors.ZeroGasPrice();
 
+        _validateGasDataFreshness(chainNamespace);
+
         gasFee = gasPrice * gasLimitWithBaseLimit;
         protocolFee = protocolFeeByToken[_prc20];
     }
@@ -305,6 +313,8 @@ contract UniversalCore is
 
         gasPrice = gasPriceByChainNamespace[chainNamespace];
         if (gasPrice == 0) revert UniversalCoreErrors.ZeroGasPrice();
+
+        _validateGasDataFreshness(chainNamespace);
 
         gasFee = gasPrice * rescueGasLimit;
     }
@@ -446,6 +456,21 @@ contract UniversalCore is
         emit SetRescueFundsGasLimitByChain(chainNamespace, gasLimit);
     }
 
+    /// @notice                  Set the maximum acceptable age (seconds) of gas data for a chain.
+    /// @dev                     A value of `0` disables the staleness check for that chain (opt-in).
+    ///                          When set, `getOutboundTxGasAndFees` and `getRescueFundsGasLimit`
+    ///                          revert with `StaleGasData` if the chain's observed timestamp is
+    ///                          older than `block.timestamp - maxStaleness`.
+    /// @param chainNamespace    Chain Namespace (e.g. "eip155:1" for Ethereum Mainnet)
+    /// @param maxStaleness      Maximum acceptable age of gas data in seconds (0 disables)
+    function setMaxStalenessByChain(string memory chainNamespace, uint256 maxStaleness)
+        external
+        onlyRole(MANAGER_ROLE)
+    {
+        maxStalenessByChainNamespace[chainNamespace] = maxStaleness;
+        emit SetMaxStalenessByChain(chainNamespace, maxStaleness);
+    }
+
     /// @notice Pause the contract - stops all deposit functions. Only callable by PAUSER_ROLE.
     function pause() external onlyRole(PAUSER_ROLE) {
         _pause();
@@ -479,6 +504,21 @@ contract UniversalCore is
             revert UniversalCoreErrors.InvalidTarget();
         }
         if (amount == 0) revert CommonErrors.ZeroAmount();
+    }
+
+    /// @dev Enforces that gas data for `chainNamespace` is within the configured freshness
+    ///      window. No-op when `maxStalenessByChainNamespace[chainNamespace]` is `0`
+    ///      (check disabled). Reverts with `StaleGasData` when the data is older than
+    ///      the configured max age, carrying the observed timestamp, current timestamp,
+    ///      and max age in the revert data.
+    /// @param chainNamespace   Chain namespace whose freshness is being validated
+    function _validateGasDataFreshness(string memory chainNamespace) private view {
+        uint256 maxAge = maxStalenessByChainNamespace[chainNamespace];
+        if (maxAge == 0) return;
+        uint256 observedAt = timestampObservedAtByChainNamespace[chainNamespace];
+        if (block.timestamp > observedAt + maxAge) {
+            revert UniversalCoreErrors.StaleGasData(observedAt, block.timestamp, maxAge);
+        }
     }
 
     /// @dev Swap PRC20 to native PC via Uniswap V3 and send to recipient.

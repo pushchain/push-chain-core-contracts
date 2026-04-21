@@ -20,6 +20,7 @@ interface IUniversalCore {
     event SetProtocolFeeByToken(address indexed token, uint256 fee);
     event SetBaseGasLimitByChain(string chainNamespace, uint256 gasLimit);
     event SetRescueFundsGasLimitByChain(string chainNamespace, uint256 gasLimit);
+    event SetMaxStalenessByChain(string chainNamespace, uint256 maxStaleness);
     event RefundUnusedGas(
         address indexed gasToken, uint256 amount, address indexed recipient, bool swapped, uint256 pcOut
     );

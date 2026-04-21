@@ -49,6 +49,7 @@ library UniversalCoreErrors {
     error GasLimitBelowBase(uint256 provided, uint256 minimum);
     error ZeroBaseGasLimit();
     error ZeroRescueGasLimit();
+    error StaleGasData(uint256 observedAt, uint256 nowTimestamp, uint256 maxAge);
 }
 
 // =========================
