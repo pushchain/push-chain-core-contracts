@@ -78,6 +78,13 @@ contract UniversalCore is
     mapping(address => uint24) public defaultFeeTier;
     uint256 public defaultDeadlineMins;
 
+    /// @notice L1 gas fee (in gas token units) per chain namespace.
+    mapping(string => uint256) public l1GasFeeByChainNamespace;
+
+    /// @notice Gas limit used when the TSS (threshold signature scheme) signer is
+    ///         migrated and funds are swept to the new signer on a given chain.
+    mapping(string => uint256) public tssFundMigrationGasLimitByChainNamespace;
+
     // =========================
     //    UC: MODIFIERS
     // =========================
@@ -444,6 +451,25 @@ contract UniversalCore is
     {
         rescueFundsGasLimitByChainNamespace[chainNamespace] = gasLimit;
         emit SetRescueFundsGasLimitByChain(chainNamespace, gasLimit);
+    }
+
+    /// @notice                  Set L1 gas fee for a specific chain.
+    /// @param chainNamespace    Chain Namespace (e.g. "eip155:1" for Ethereum Mainnet)
+    /// @param l1GasFee          L1 gas fee for the chain (in gas token units)
+    function setL1GasFeeByChain(string memory chainNamespace, uint256 l1GasFee) external onlyRole(MANAGER_ROLE) {
+        l1GasFeeByChainNamespace[chainNamespace] = l1GasFee;
+        emit SetL1GasFeeByChain(chainNamespace, l1GasFee);
+    }
+
+    /// @notice                  Set TSS migration gas limit for a specific chain.
+    /// @param chainNamespace    Chain Namespace (e.g. "eip155:1" for Ethereum Mainnet)
+    /// @param gasLimit          TSS migration gas limit for the chain
+    function setTssFundMigrationGasLimitByChain(string memory chainNamespace, uint256 gasLimit)
+        external
+        onlyRole(MANAGER_ROLE)
+    {
+        tssFundMigrationGasLimitByChainNamespace[chainNamespace] = gasLimit;
+        emit SetTssFundMigrationGasLimitByChain(chainNamespace, gasLimit);
     }
 
     /// @notice Pause the contract - stops all deposit functions. Only callable by PAUSER_ROLE.
