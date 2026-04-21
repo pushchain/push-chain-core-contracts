@@ -78,6 +78,7 @@ library UEAErrors {
     error InvalidSVMSignature();
     error PrecompileCallFailed();
     error AccountAlreadyExists();
+    error UEAAlreadyRegistered();
 }
 
 library CEAErrors {

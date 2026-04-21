@@ -261,6 +261,10 @@ contract UEAFactory is Initializable, AccessControlUpgradeable, PausableUpgradea
     }
 
     /// @dev Internal registration logic — no role check.
+    ///      Treats registration as a one-time operation per VM hash. If an implementation
+    ///      is already registered for this `_vmHash`, callers must use
+    ///      `updateUEAImplementation` instead. This prevents silent replacement of the
+    ///      VM implementation that all future UEAs of that type delegate to.
     function _registerUEA(bytes32 _chainHash, bytes32 _vmHash, address _UEA) internal {
         if (_UEA == address(0)) {
             revert UEAErrors.InvalidInputArgs();
@@ -271,8 +275,32 @@ contract UEAFactory is Initializable, AccessControlUpgradeable, PausableUpgradea
             revert UEAErrors.InvalidInputArgs();
         }
 
+        if (UEA_VM[_vmHash] != address(0)) {
+            revert UEAErrors.UEAAlreadyRegistered();
+        }
+
         UEA_VM[_vmHash] = _UEA;
         emit UEARegistered(_chainHash, _UEA, _vmHash);
+    }
+
+    /// @notice                  Replace the registered UEA implementation for a VM hash.
+    /// @dev                     Explicit update path distinct from `registerUEA`, which only
+    ///                          performs first-time registration. Emits `UEAImplementationUpdated`
+    ///                          with both previous and new addresses so off-chain systems can
+    ///                          reconstruct the implementation history.
+    /// @param _vmHash           VM hash whose implementation is being updated
+    /// @param _newUEA           New UEA implementation address (must be non-zero)
+    function updateUEAImplementation(bytes32 _vmHash, address _newUEA) external onlyRole(DEFAULT_ADMIN_ROLE) {
+        if (_newUEA == address(0)) {
+            revert UEAErrors.InvalidInputArgs();
+        }
+        address previous = UEA_VM[_vmHash];
+        if (previous == address(0)) {
+            revert UEAErrors.InvalidInputArgs();
+        }
+
+        UEA_VM[_vmHash] = _newUEA;
+        emit UEAImplementationUpdated(_vmHash, previous, _newUEA);
     }
 
     // =========================

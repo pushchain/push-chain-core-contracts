@@ -11,6 +11,7 @@ import {UEA_SVM} from "../../src/uea/UEA_SVM.sol";
 import {UEAMigration} from "../../src/uea/UEAMigration.sol";
 import {UEAErrors as Errors} from "../../src/libraries/Errors.sol";
 import {IUEA} from "../../src/interfaces/IUEA.sol";
+import {IUEAFactory} from "../../src/Interfaces/IUEAFactory.sol";
 import {IAccessControl} from "@openzeppelin/contracts/access/IAccessControl.sol";
 import {PausableUpgradeable} from "@openzeppelin/contracts-upgradeable/utils/PausableUpgradeable.sol";
 import {ERC1967Proxy} from "@openzeppelin/contracts/proxy/ERC1967/ERC1967Proxy.sol";
@@ -111,12 +112,15 @@ contract UEAFactoryTest is Test {
     }
 
     function testRegisterUEA() public {
-        bytes32 chainHash = keccak256(abi.encode("KOVAN", "42"));
-        factory.registerNewChain(chainHash, EVM_HASH);
-        factory.registerUEA(chainHash, EVM_HASH, address(ueaEVMImpl));
+        // Use a fresh VM hash so there is no prior implementation registered for it.
+        bytes32 moveChainHash = keccak256(abi.encode("APTOS", "1"));
+        factory.registerNewChain(moveChainHash, MOVE_VM_HASH);
+
+        UEA_EVM moveImpl = new UEA_EVM();
+        factory.registerUEA(moveChainHash, MOVE_VM_HASH, address(moveImpl));
 
         // Check that the UEA implementation is registered
-        assertEq(factory.getUEA(chainHash), address(ueaEVMImpl));
+        assertEq(factory.getUEA(moveChainHash), address(moveImpl));
     }
 
     function testSetUEAMigrationContractOnlyOwner() public {
@@ -145,15 +149,19 @@ contract UEAFactoryTest is Test {
         bytes32[] memory vmHashes = new bytes32[](2);
         address[] memory implementations = new address[](2);
 
-        // Use different chains than those in setUp
-        chainHashes[0] = keccak256(abi.encode("KOVAN", "42"));
-        chainHashes[1] = keccak256(abi.encode("METIS", "1088"));
+        // Use distinct VM hashes that have no prior implementation registered.
+        // MOVE_VM_HASH and WASM_VM_HASH are never registered in setUp.
+        chainHashes[0] = keccak256(abi.encode("APTOS", "1"));
+        chainHashes[1] = keccak256(abi.encode("NEAR", "mainnet"));
 
-        vmHashes[0] = EVM_HASH;
-        vmHashes[1] = EVM_HASH;
+        vmHashes[0] = MOVE_VM_HASH;
+        vmHashes[1] = WASM_VM_HASH;
 
-        implementations[0] = address(ueaEVMImpl);
-        implementations[1] = address(ueaEVMImpl);
+        UEA_EVM moveImpl = new UEA_EVM();
+        UEA_EVM wasmImpl = new UEA_EVM();
+
+        implementations[0] = address(moveImpl);
+        implementations[1] = address(wasmImpl);
 
         // Register chains first
         factory.registerNewChain(chainHashes[0], vmHashes[0]);
@@ -314,9 +322,9 @@ contract UEAFactoryTest is Test {
         // Use eip155 chain which is already registered in setUp
         address initialImpl = factory.getUEA(ethereumChainHash);
 
-        // Deploy a new implementation
+        // Deploy a new implementation and update via the dedicated update path.
         UEA_EVM newImpl = new UEA_EVM();
-        factory.registerUEA(ethereumChainHash, EVM_HASH, address(newImpl));
+        factory.updateUEAImplementation(EVM_HASH, address(newImpl));
 
         // Check that the implementation was updated
         assertNotEq(factory.getUEA(ethereumChainHash), initialImpl);
@@ -606,9 +614,8 @@ contract UEAFactoryTest is Test {
         // Deploy a new implementation
         UEA_EVM newImpl = new UEA_EVM();
 
-        // Change implementation for EVM type
-        bytes32 evmChainHash = keccak256(abi.encode("eip155", "1"));
-        factory.registerUEA(evmChainHash, EVM_HASH, address(newImpl));
+        // Change implementation for EVM type via the dedicated update path.
+        factory.updateUEAImplementation(EVM_HASH, address(newImpl));
 
         // Verify implementation has changed
         address updatedImpl = factory.getUEA(chainHash);
@@ -1086,6 +1093,63 @@ contract UEAFactoryTest is Test {
 
         vm.expectRevert(Errors.InvalidInputArgs.selector);
         UEAFactory(address(newProxy)).initialize(deployer, address(0));
+    }
+
+    // =========================================================================
+    // updateUEAImplementation Tests
+    // =========================================================================
+
+    function testUpdateUEAImplementation_HappyPath() public {
+        address previousImpl = factory.UEA_VM(EVM_HASH);
+        assertTrue(previousImpl != address(0));
+
+        UEA_EVM newImpl = new UEA_EVM();
+        vm.expectEmit(true, false, false, true, address(factory));
+        emit IUEAFactory.UEAImplementationUpdated(EVM_HASH, previousImpl, address(newImpl));
+
+        factory.updateUEAImplementation(EVM_HASH, address(newImpl));
+
+        assertEq(factory.UEA_VM(EVM_HASH), address(newImpl));
+        assertNotEq(factory.UEA_VM(EVM_HASH), previousImpl);
+    }
+
+    function testUpdateUEAImplementation_UpdatesSVMImpl() public {
+        address previousImpl = factory.UEA_VM(SVM_HASH);
+        assertTrue(previousImpl != address(0));
+
+        UEA_SVM newImpl = new UEA_SVM();
+        factory.updateUEAImplementation(SVM_HASH, address(newImpl));
+
+        assertEq(factory.UEA_VM(SVM_HASH), address(newImpl));
+    }
+
+    function testUpdateUEAImplementation_OnlyAdmin() public {
+        UEA_EVM newImpl = new UEA_EVM();
+        bytes32 adminRole = factory.DEFAULT_ADMIN_ROLE();
+
+        vm.expectRevert(
+            abi.encodeWithSelector(IAccessControl.AccessControlUnauthorizedAccount.selector, nonOwner, adminRole)
+        );
+        vm.prank(nonOwner);
+        factory.updateUEAImplementation(EVM_HASH, address(newImpl));
+    }
+
+    function testUpdateUEAImplementation_ZeroAddressReverts() public {
+        vm.expectRevert(Errors.InvalidInputArgs.selector);
+        factory.updateUEAImplementation(EVM_HASH, address(0));
+    }
+
+    function testUpdateUEAImplementation_UnregisteredVmHashReverts() public {
+        // CAIRO_VM_HASH has never had an implementation registered — no prior entry.
+        UEA_EVM newImpl = new UEA_EVM();
+        vm.expectRevert(Errors.InvalidInputArgs.selector);
+        factory.updateUEAImplementation(CAIRO_VM_HASH, address(newImpl));
+    }
+
+    function testRegisterUEA_AlreadyRegisteredReverts() public {
+        // EVM_HASH already has an implementation from setUp — a second registerUEA must revert.
+        vm.expectRevert(Errors.UEAAlreadyRegistered.selector);
+        factory.registerUEA(ethereumChainHash, EVM_HASH, address(ueaEVMImpl));
     }
 
     // Test for the case where getOriginForUEA is called with an address that has an owner

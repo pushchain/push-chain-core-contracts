@@ -30,6 +30,12 @@ interface IUEAFactory {
     /// @param vmHash            VM type hash
     event UEARegistered(bytes32 indexed chainHash, address ueaLogic, bytes32 vmHash);
 
+    /// @notice                  Emitted when an existing UEA implementation is replaced.
+    /// @param vmHash            VM hash whose implementation is being updated
+    /// @param previousUEA       Previous UEA implementation address
+    /// @param newUEA            New UEA implementation address
+    event UEAImplementationUpdated(bytes32 indexed vmHash, address previousUEA, address newUEA);
+
     /// @notice                  Emitted when the PAUSER_ROLE is granted to a new address.
     /// @param pauser            Address that was granted the pauser role
     event PauserRoleGranted(address indexed pauser);
