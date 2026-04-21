@@ -3,7 +3,7 @@
 ## Contract Locations
 
 - **UniversalCore**: [`src/UniversalCore.sol`](../src/UniversalCore.sol)
-- **IUniversalCore Interface**: [`src/interfaces/IUniversalCore.sol`](../src/interfaces/IUniversalCore.sol)
+- **IUniversalCore Interface**: [`src/Interfaces/IUniversalCore.sol`](../src/Interfaces/IUniversalCore.sol)
 - **PRC20**: [`src/PRC20.sol`](../src/PRC20.sol)
 - **WPC (Wrapped PC)**: [`src/WPC.sol`](../src/WPC.sol)
 
@@ -28,7 +28,7 @@ UniversalCore maintains an on-chain oracle of external chain state. For each sup
 | `timestampObservedAtByChainNamespace` | Timestamp when the observation was recorded |
 | `gasTokenPRC20ByChainNamespace` | PRC-20 address of the chain's native gas token (e.g. pETH for Ethereum) |
 
-The Universal Executor Module periodically calls `setChainMeta(chainNamespace, price, chainHeight, observedAt)` to push fresh external chain data on-chain, updating both `gasPriceByChainNamespace` and `chainHeightByChainNamespace` in a single call. This makes UniversalCore the single source of truth for external chain gas pricing and block height within Push Chain's contract layer.
+The Universal Executor Module periodically calls `setChainMeta(chainNamespace, price, chainHeight)` to push fresh external chain data on-chain, updating `gasPriceByChainNamespace` and `chainHeightByChainNamespace` in a single call. The observation timestamp is derived internally from `block.timestamp` and stored in `timestampObservedAtByChainNamespace`. This makes UniversalCore the single source of truth for external chain gas pricing and block height within Push Chain's contract layer.
 
 This oracle data drives fee computation: when a user initiates an outbound transaction, the gateway queries `getOutboundTxGasAndFees(prc20, gasLimit)` which reads the stored gas price and multiplies it by the gas limit to produce the fee denominated in the destination chain's gas token.
 
@@ -60,8 +60,8 @@ The UE Module is a protocol-level system address that executes on behalf of the 
 |---|---|
 | `depositPRC20Token(prc20, amount, recipient)` | Mint PRC-20 tokens to a recipient address on inbound |
 | `depositPRC20WithAutoSwap(prc20, amount, recipient, fee, minPCOut, deadline)` | Mint PRC-20 and swap to native PC in one step |
-| `setChainMeta(chainNamespace, price, chainHeight, observedAt)` | Update gas price and block height oracle data for an external chain |
-| `refundUnusedGas(recipient, amount)` | Refund unused gas to a recipient after execution |
+| `setChainMeta(chainNamespace, price, chainHeight)` | Update gas price and block height oracle data for an external chain (observation timestamp is set to `block.timestamp` internally) |
+| `refundUnusedGas(gasToken, amount, recipient, withSwap, fee, minPCOut)` | Refund unused gas: either mint `gasToken` PRC-20 directly to `recipient`, or swap back to native PC via Uniswap V3 when `withSwap = true` |
 
 ### Manager Role (`MANAGER_ROLE`)
 
@@ -71,26 +71,26 @@ Managers handle operational configuration that changes with external chain condi
 
 | Function | Purpose |
 |---|---|
-| `setGasTokenPRC20(chainNamespace, prc20)` | Map a chain namespace to its gas token PRC-20 |
+| `setGasTokenPRC20(chainNamespace, prc20)` | Map a chain namespace to its gas token PRC-20 (resets `gasPriceByChainNamespace` to `0` to force explicit reconfiguration) |
 | `setGasPCPool(chainNamespace, gasToken, fee)` | Register a Uniswap V3 pool for PC/gas-token swaps |
-| `setSupportedToken(prc20, supported)` | Mark a PRC-20 token as officially supported |
 | `setBaseGasLimitByChain(chainNamespace, gasLimit)` | Set the minimum base gas limit for TSS execution on a chain |
 | `setRescueFundsGasLimitByChain(chainNamespace, gasLimit)` | Set the fixed gas limit for rescue operations on a chain |
+| `setMaxStalenessByChain(chainNamespace, maxStaleness)` | Set the maximum acceptable age (seconds) of stored gas data before fee quotes revert as stale (`0` disables the check, opt-in) |
 | `setProtocolFeeByToken(prc20, fee)` | Set the protocol fee (in native PC) for a PRC-20 token |
 
 ### Admin Role (`DEFAULT_ADMIN_ROLE`)
 
-Granted to the deployer at initialization. Controls contract-level configuration and emergency operations.
+Granted to the deployer at initialization. Controls contract-level configuration (Uniswap addresses, fee tier, WPC, gateway address) and role administration. Note: pause/unpause authority is **not** held by the admin — it is restricted to `PAUSER_ROLE`.
 
 | Function | Purpose |
 |---|---|
 | `setAutoSwapSupported(token, supported)` | Enable/disable auto-swap for a PRC-20 token |
-| `setWPCContractAddress(addr)` | Update the Wrapped PC token address |
-| `setUniswapV3Addresses(factory, swapRouter, quoter)` | Update Uniswap V3 infrastructure addresses |
-| `setDefaultFeeTier(token, feeTier)` | Set default Uniswap V3 fee tier for a token |
-| `setSlippageTolerance(token, tolerance)` | Set slippage tolerance in basis points |
+| `setWPC(addr)` | Update the Wrapped PC token address |
+| `setUniswapV3Addresses(factory, swapRouter)` | Update Uniswap V3 infrastructure addresses |
+| `setDefaultFeeTier(token, feeTier)` | Set default Uniswap V3 fee tier for a token (allowed tiers: 100, 500, 3000, 10000) |
 | `setDefaultDeadlineMins(minutesValue)` | Set default swap deadline |
-| `pause()` / `unpause()` | Emergency pause/unpause all deposit operations |
+| `setUniversalGatewayPC(addr)` | Update the address authorized to call `swapAndBurnGas` |
+| `setPauserRole(addr)` | Grant `PAUSER_ROLE` to an address (guardian) |
 
 ### Gateway (`universalGatewayPC`)
 
@@ -98,7 +98,7 @@ Not an OZ `AccessControl` role. `universalGatewayPC` is a mutable address stored
 
 | Function | Purpose |
 |---|---|
-| `swapAndBurnGas(gasToken, vault, fee, gasFee, protocolFee, deadline, caller)` | Swap PC for gas token, burn gas fee, send protocol fee to vault |
+| `swapAndBurnGas(gasToken, fee, gasFee, deadline, caller)` | Swap PC for `gasToken`, burn the `gasFee` amount, refund unused PC to `caller` |
 
 ### Pauser Role (`PAUSER_ROLE`)
 
@@ -130,6 +130,8 @@ getOutboundTxGasAndFees(prc20, gasLimitWithBaseLimit)
     |--> look up chainNamespace from prc20.SOURCE_CHAIN_NAMESPACE()
     |--> look up gasToken from gasTokenPRC20ByChainNamespace[chainNamespace]
     |--> look up gasPrice from gasPriceByChainNamespace[chainNamespace]
+    |--> if maxStalenessByChainNamespace[chainNamespace] > 0, enforce freshness of gas data
+    |       (reverts with StaleGasData if block.timestamp > observedAt + maxStaleness)
     |
     |--> gasFee = gasPrice * gasLimitWithBaseLimit   (denominated in gas token units)
     |--> protocolFee = protocolFeeByToken[prc20]     (flat fee in native PC)
@@ -148,7 +150,10 @@ getRescueFundsGasLimit(prc20)
     |
     |--> look up chainNamespace from prc20.SOURCE_CHAIN_NAMESPACE()
     |--> look up rescueGasLimit from rescueFundsGasLimitByChainNamespace[chainNamespace]
-    |--> look up gasToken, gasPrice, protocolFee (same as outbound)
+    |--> look up gasToken and gasPrice (protocol fee is NOT applied on the rescue path)
+    |--> if maxStalenessByChainNamespace[chainNamespace] > 0, enforce freshness of gas data
+    |
+    |--> gasFee = gasPrice * rescueGasLimit
     |
     '--> returns (gasToken, gasFee, rescueGasLimit, gasPrice, chainNamespace)
 ```
@@ -157,7 +162,7 @@ getRescueFundsGasLimit(prc20)
 
 ## Swap-and-Burn: Gas Fee vs Protocol Fee
 
-Outbound transactions require fee settlement. The user pays in native PC, which gets swapped to the destination chain's gas token PRC-20 via Uniswap V3. The resulting gas tokens are then split into two portions with different destinations:
+Outbound transactions require fee settlement. The user pays in native PC. `UniversalGatewayPC` sends the `protocolFee` portion directly to `VaultPC` in native PC, and forwards the remaining PC (intended to cover the gas fee) to `UniversalCore.swapAndBurnGas`, which swaps it into the destination chain's gas token PRC-20 via Uniswap V3 and burns it. The two fee components therefore settle through different paths:
 
 ### Gas Fee (burned)
 
@@ -178,8 +183,8 @@ User pays native PC
         |
         v
 UniversalGatewayPC
-        |
-        | calls swapAndBurnGas{value: pcAmount}(gasToken, vault, fee, gasFee, protocolFee, deadline, caller)
+        | (pays protocolFee to VaultPC directly in native PC, then:)
+        | calls swapAndBurnGas{value: pcAmount}(gasToken, fee, gasFee, deadline, caller)
         v
 UniversalCore
         |
@@ -187,15 +192,19 @@ UniversalCore
         |--> 2. Approve Uniswap V3 router to spend WPC
         |--> 3. Swap WPC -> gasToken via exactOutputSingle
         |       (swap exactly gasFee worth of gas token)
+        |--> 4. Clear router allowance (forceApprove 0)
         |
-        |--> 4. BURN gasFee portion:    IPRC20(gasToken).burn(gasFee)
+        |--> 5. BURN gasFee portion:    IPRC20(gasToken).burn(gasFee)
         |
-        |--> 5. REFUND unused PC:       unwrap leftover WPC, send native PC back to caller
+        |--> 6. REFUND unused PC:       unwrap leftover WPC, send native PC back to caller
         |
-        '--> emit SwapAndBurnGas(gasToken, vault, pcUsed, gasFee, protocolFee, fee, caller)
+        '--> emit SwapAndBurnGas(gasToken, pcIn, gasFee, fee, caller)
+             returns (gasTokenOut, refund)
 ```
 
 The swap uses `exactOutputSingle` — the caller specifies exactly how much gas token output is needed (`gasFee`), and any unused PC input is refunded directly to the caller address. This ensures users never overpay.
+
+Note: `swapAndBurnGas` does not receive or route the protocol fee. `UniversalGatewayPC` pays the `protocolFee` (in native PC) directly to `VaultPC` before invoking `swapAndBurnGas`; only the `gasFee` burn and PC refund happen inside this function. The event therefore emits `(gasToken, pcIn, gasFee, fee, caller)` and does not include vault or protocol-fee fields.
 
 ### Why burn vs transfer?
 
