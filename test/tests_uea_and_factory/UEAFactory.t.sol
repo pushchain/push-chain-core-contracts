@@ -59,8 +59,8 @@ contract UEAFactoryTest is Test {
         // Deploy the factory implementation
         UEAFactory factoryImpl = new UEAFactory();
 
-        // Deploy and initialize the proxy with initialOwner and initialPauser
-        bytes memory initData = abi.encodeWithSelector(UEAFactory.initialize.selector, deployer, pauser);
+        // Deploy and initialize the proxy with initialOwner, initialPauser, and pushChainId
+        bytes memory initData = abi.encodeWithSelector(UEAFactory.initialize.selector, deployer, pauser, "42101");
         ERC1967Proxy proxy = new ERC1967Proxy(address(factoryImpl), initData);
         factory = UEAFactory(address(proxy));
 
@@ -825,7 +825,7 @@ contract UEAFactoryTest is Test {
     function testComputeUEA_RevertsWhenNoProxyImplementation() public {
         // Deploy a fresh factory without proxy implementation
         UEAFactory freshFactoryImpl = new UEAFactory();
-        bytes memory initData = abi.encodeWithSelector(UEAFactory.initialize.selector, address(this), pauser);
+        bytes memory initData = abi.encodeWithSelector(UEAFactory.initialize.selector, address(this), pauser, "42101");
         ERC1967Proxy freshProxy = new ERC1967Proxy(address(freshFactoryImpl), initData);
         UEAFactory freshFactory = UEAFactory(address(freshProxy));
 
@@ -845,7 +845,7 @@ contract UEAFactoryTest is Test {
     function testDeployUEA_RevertsWhenNoProxyImplementation() public {
         // Deploy a fresh factory without proxy implementation
         UEAFactory freshFactoryImpl = new UEAFactory();
-        bytes memory initData = abi.encodeWithSelector(UEAFactory.initialize.selector, address(this), pauser);
+        bytes memory initData = abi.encodeWithSelector(UEAFactory.initialize.selector, address(this), pauser, "42101");
         ERC1967Proxy freshProxy = new ERC1967Proxy(address(freshFactoryImpl), initData);
         UEAFactory freshFactory = UEAFactory(address(freshProxy));
 
@@ -1088,11 +1088,10 @@ contract UEAFactoryTest is Test {
 
     function testInitialize_ZeroPauserReverts() public {
         UEAFactory newImpl = new UEAFactory();
-        bytes memory initData = abi.encodeWithSelector(UEAFactory.initialize.selector, deployer, address(0));
         ERC1967Proxy newProxy = new ERC1967Proxy(address(newImpl), "");
 
         vm.expectRevert(Errors.InvalidInputArgs.selector);
-        UEAFactory(address(newProxy)).initialize(deployer, address(0));
+        UEAFactory(address(newProxy)).initialize(deployer, address(0), "42101");
     }
 
     // =========================================================================
@@ -1166,5 +1165,77 @@ contract UEAFactoryTest is Test {
         // Should return true for isUEA since owner.length > 0
         assertTrue(isUEA);
         assertTrue(account.owner.length > 0);
+    }
+
+    // =========================================================================
+    // F-2026-15576: Configurable pushChainId in getOriginForUEA fallback
+    // =========================================================================
+
+    function test_Initialize_SeedsPushChainId() public {
+        // Fresh proxy deployed with pushChainId seeded via initialize
+        UEAFactory freshImpl = new UEAFactory();
+        bytes memory initData = abi.encodeWithSelector(UEAFactory.initialize.selector, deployer, pauser, "9000");
+        ERC1967Proxy proxy = new ERC1967Proxy(address(freshImpl), initData);
+        UEAFactory freshFactory = UEAFactory(address(proxy));
+
+        assertEq(freshFactory.pushChainId(), "9000");
+    }
+
+    function test_Initialize_RevertsOnEmptyPushChainId() public {
+        UEAFactory freshImpl = new UEAFactory();
+        bytes memory initData = abi.encodeWithSelector(UEAFactory.initialize.selector, deployer, pauser, "");
+        vm.expectRevert();
+        new ERC1967Proxy(address(freshImpl), initData);
+    }
+
+    function test_SetPushChainId_HappyPath() public {
+        factory.setPushChainId("9999");
+        assertEq(factory.pushChainId(), "9999");
+    }
+
+    function test_SetPushChainId_OnlyAdmin() public {
+        vm.expectRevert(
+            abi.encodeWithSelector(
+                IAccessControl.AccessControlUnauthorizedAccount.selector, nonOwner, factory.DEFAULT_ADMIN_ROLE()
+            )
+        );
+        vm.prank(nonOwner);
+        factory.setPushChainId("9999");
+    }
+
+    function test_SetPushChainId_RevertsOnEmptyString() public {
+        vm.expectRevert(Errors.InvalidInputArgs.selector);
+        factory.setPushChainId("");
+    }
+
+    function test_GetOriginForUEA_FallbackUsesConfiguredChainId() public {
+        address randomAddr = makeAddr("random_fallback");
+
+        (UniversalAccountId memory account, bool isUEA) = factory.getOriginForUEA(randomAddr);
+
+        assertFalse(isUEA);
+        assertEq(account.chainNamespace, "eip155");
+        assertEq(account.chainId, factory.pushChainId());
+        assertEq(account.chainId, "42101", "Default seeded value should match setUp");
+        assertEq(account.owner, bytes(abi.encodePacked(randomAddr)));
+    }
+
+    function test_GetOriginForUEA_FallbackUpdatesAfterSetter() public {
+        address randomAddr = makeAddr("random_update");
+
+        // Initial: chainId should be "42101" (seeded in setUp)
+        (UniversalAccountId memory beforeAcc, bool beforeIsUEA) = factory.getOriginForUEA(randomAddr);
+        assertFalse(beforeIsUEA);
+        assertEq(beforeAcc.chainId, "42101");
+
+        // Update pushChainId
+        factory.setPushChainId("1");
+
+        // After update: fallback returns new chainId
+        (UniversalAccountId memory afterAcc, bool afterIsUEA) = factory.getOriginForUEA(randomAddr);
+        assertFalse(afterIsUEA);
+        assertEq(afterAcc.chainNamespace, "eip155", "namespace stays hardcoded eip155");
+        assertEq(afterAcc.chainId, "1");
+        assertEq(afterAcc.owner, bytes(abi.encodePacked(randomAddr)));
     }
 }

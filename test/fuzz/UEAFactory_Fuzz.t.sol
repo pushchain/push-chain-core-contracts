@@ -24,7 +24,7 @@ contract UEAFactory_Fuzz is Test {
         ueaProxyImpl = new UEAProxy();
         UEAFactory factoryImpl = new UEAFactory();
         bytes memory initData =
-            abi.encodeWithSelector(UEAFactory.initialize.selector, address(this), makeAddr("pauser"));
+            abi.encodeWithSelector(UEAFactory.initialize.selector, address(this), makeAddr("pauser"), "42101");
         ERC1967Proxy proxy = new ERC1967Proxy(address(factoryImpl), initData);
         factory = UEAFactory(address(proxy));
         factory.setUEAProxyImplementation(address(ueaProxyImpl));
@@ -202,5 +202,37 @@ contract UEAFactory_Fuzz is Test {
 
         vm.expectRevert(UEAErrors.InvalidInputArgs.selector);
         factory.deployUEA(id);
+    }
+
+    // =============================================
+    // 5.3 Configurable pushChainId Properties
+    // =============================================
+
+    function testFuzz_setPushChainId_nonAdmin_reverts(address caller) public {
+        vm.assume(caller != address(this));
+        vm.assume(caller != address(0));
+
+        vm.expectRevert(
+            abi.encodeWithSelector(
+                IAccessControl.AccessControlUnauthorizedAccount.selector, caller, factory.DEFAULT_ADMIN_ROLE()
+            )
+        );
+        vm.prank(caller);
+        factory.setPushChainId("1");
+    }
+
+    function testFuzz_getOriginForUEA_fallbackMatchesConfiguredChainId(address addr, string memory chainId) public {
+        vm.assume(bytes(chainId).length > 0);
+        // Ensure addr is not a UEA by using an address that cannot collide with deployed UEAs
+        vm.assume(addr != address(0));
+
+        factory.setPushChainId(chainId);
+
+        (UniversalAccountId memory account, bool isUEA) = factory.getOriginForUEA(addr);
+
+        assertFalse(isUEA, "random address should not be a registered UEA");
+        assertEq(account.chainNamespace, "eip155", "namespace is hardcoded eip155");
+        assertEq(account.chainId, chainId, "chainId matches configured pushChainId");
+        assertEq(account.owner, bytes(abi.encodePacked(addr)));
     }
 }

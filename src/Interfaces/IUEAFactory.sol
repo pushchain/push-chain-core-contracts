@@ -78,6 +78,9 @@ interface IUEAFactory {
     /// @return             Migration contract address
     function UEA_MIGRATION_CONTRACT() external view returns (address);
 
+    /// @notice             Push Chain ID used in the `getOriginForUEA` synthetic fallback.
+    function pushChainId() external view returns (string memory);
+
     // =========================
     //    UF_2: DEPLOYMENT
     // =========================

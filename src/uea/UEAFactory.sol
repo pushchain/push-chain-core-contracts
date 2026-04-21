@@ -54,6 +54,9 @@ contract UEAFactory is Initializable, AccessControlUpgradeable, PausableUpgradea
     /// @notice The current UEA migration contract address.
     address public UEA_MIGRATION_CONTRACT;
 
+    /// @notice Push Chain numeric identifier used in the `getOriginForUEA` synthetic fallback.
+    string public pushChainId;
+
     // =========================
     //    UF: CONSTRUCTOR
     // =========================
@@ -70,12 +73,15 @@ contract UEAFactory is Initializable, AccessControlUpgradeable, PausableUpgradea
     /// @dev                     Initializer for the upgradeable UEAFactory.
     /// @param initialAdmin      Initial admin — granted DEFAULT_ADMIN_ROLE (governance)
     /// @param initialPauser     Address granted the PAUSER_ROLE
-    function initialize(address initialAdmin, address initialPauser) public initializer {
+    /// @param _pushChainId      Push Chain numeric identifier (e.g. "42101")
+    function initialize(address initialAdmin, address initialPauser, string memory _pushChainId) public initializer {
         if (initialAdmin == address(0) || initialPauser == address(0)) revert UEAErrors.InvalidInputArgs();
+        if (bytes(_pushChainId).length == 0) revert UEAErrors.InvalidInputArgs();
         __AccessControl_init();
         __Pausable_init();
         _grantRole(DEFAULT_ADMIN_ROLE, initialAdmin);
         _grantRole(PAUSER_ROLE, initialPauser);
+        pushChainId = _pushChainId;
         emit PauserRoleGranted(initialPauser);
     }
 
@@ -124,6 +130,9 @@ contract UEAFactory is Initializable, AccessControlUpgradeable, PausableUpgradea
     }
 
     /// @inheritdoc IUEAFactory
+    /// @dev When `isUEA` is false, `account` is a synthetic fallback built from
+    ///      `"eip155"` + `pushChainId` + `addr` — NOT a registered origin.
+    ///      Callers MUST check `isUEA` before trusting `account`.
     function getOriginForUEA(address addr) external view returns (UniversalAccountId memory account, bool isUEA) {
         account = UEA_to_UOA[addr];
 
@@ -131,7 +140,7 @@ contract UEAFactory is Initializable, AccessControlUpgradeable, PausableUpgradea
             isUEA = true;
         } else {
             account =
-                UniversalAccountId({chainNamespace: "eip155", chainId: "42101", owner: bytes(abi.encodePacked(addr))});
+                UniversalAccountId({chainNamespace: "eip155", chainId: pushChainId, owner: bytes(abi.encodePacked(addr))});
         }
 
         return (account, isUEA);
@@ -228,6 +237,12 @@ contract UEAFactory is Initializable, AccessControlUpgradeable, PausableUpgradea
             revert UEAErrors.InvalidInputArgs();
         }
         UEA_MIGRATION_CONTRACT = ueaMigrationContract;
+    }
+
+    /// @notice Update `pushChainId`. Reverts on empty string.
+    function setPushChainId(string memory _pushChainId) external onlyRole(DEFAULT_ADMIN_ROLE) {
+        if (bytes(_pushChainId).length == 0) revert UEAErrors.InvalidInputArgs();
+        pushChainId = _pushChainId;
     }
 
     /// @inheritdoc IUEAFactory

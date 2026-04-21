@@ -52,6 +52,9 @@ contract UEAFactoryV0 is Initializable, OwnableUpgradeable, PausableUpgradeable,
     /// @notice The current UEA migration contract address.
     address public UEA_MIGRATION_CONTRACT;
 
+    /// @notice Push Chain numeric identifier used in the `getOriginForUEA` synthetic fallback.
+    string public pushChainId;
+
     // =========================
     //    UF: CONSTRUCTOR
     // =========================
@@ -130,6 +133,9 @@ contract UEAFactoryV0 is Initializable, OwnableUpgradeable, PausableUpgradeable,
     }
 
     /// @inheritdoc IUEAFactory
+    /// @dev When `isUEA` is false, `account` is a synthetic fallback built from
+    ///      `"eip155"` + `pushChainId` + `addr` — NOT a registered origin.
+    ///      Callers MUST check `isUEA` before trusting `account`.
     function getOriginForUEA(address addr) external view returns (UniversalAccountId memory account, bool isUEA) {
         account = UEA_to_UOA[addr];
 
@@ -137,7 +143,7 @@ contract UEAFactoryV0 is Initializable, OwnableUpgradeable, PausableUpgradeable,
             isUEA = true;
         } else {
             account =
-                UniversalAccountId({chainNamespace: "eip155", chainId: "42101", owner: bytes(abi.encodePacked(addr))});
+                UniversalAccountId({chainNamespace: "eip155", chainId: pushChainId, owner: bytes(abi.encodePacked(addr))});
         }
 
         return (account, isUEA);
@@ -234,6 +240,12 @@ contract UEAFactoryV0 is Initializable, OwnableUpgradeable, PausableUpgradeable,
             revert UEAErrors.InvalidInputArgs();
         }
         UEA_MIGRATION_CONTRACT = ueaMigrationContract;
+    }
+
+    /// @notice Update `pushChainId`. Reverts on empty string.
+    function setPushChainId(string memory _pushChainId) external onlyOwner {
+        if (bytes(_pushChainId).length == 0) revert UEAErrors.InvalidInputArgs();
+        pushChainId = _pushChainId;
     }
 
     /// @inheritdoc IUEAFactory
