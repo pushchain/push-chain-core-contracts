@@ -13,13 +13,13 @@ interface ICEA {
     // =========================
 
     /// @notice                  Emitted for each execution step (multicall or single call).
-    /// @param txId              Unique transaction identifier
+    /// @param subTxId              Unique transaction identifier
     /// @param universalTxId     Universal transaction identifier on Universal Gateway
     /// @param originCaller      Original caller on source chain (Push Chain)
     /// @param target            Target contract address for this call step
     /// @param data              Calldata executed on target contract
     event UniversalTxExecuted(
-        bytes32 indexed txId, bytes32 indexed universalTxId, address indexed originCaller, address target, bytes data
+        bytes32 indexed subTxId, bytes32 indexed universalTxId, address indexed originCaller, address target, bytes data
     );
 
     /// @notice                  Emitted when funds are sent from CEA to its UEA on Push Chain.
@@ -45,10 +45,10 @@ interface ICEA {
     /// @return             Initialization status
     function isInitialized() external view returns (bool);
 
-    /// @notice             Returns whether a given txId has been executed.
-    /// @param txId         Transaction identifier to check
+    /// @notice             Returns whether a given subTxId has been executed.
+    /// @param subTxId         Transaction identifier to check
     /// @return             True if already executed
-    function isExecuted(bytes32 txId) external view returns (bool);
+    function isExecuted(bytes32 subTxId) external view returns (bool);
 
     // =========================
     //    CEA_2: VAULT OPERATIONS
@@ -57,13 +57,13 @@ interface ICEA {
     /// @notice             Executes a universal transaction.
     /// @dev                Payload can be MULTICALL, MIGRATION, or SINGLE CALL format.
     ///                     Only callable by Vault. SDK crafts correct payload format.
-    /// @param txId         Unique transaction identifier (must not be executed before)
+    /// @param subTxId         Unique transaction identifier (must not be executed before)
     /// @param universalTxId  Universal transaction identifier for cross-chain tracking
     /// @param originCaller Origin caller address (must match pushAccount)
     /// @param recipient    Target contract for single-call. Ignored for multicall/migration.
     /// @param payload      Multicall, migration, or single call payload
     function executeUniversalTx(
-        bytes32 txId,
+        bytes32 subTxId,
         bytes32 universalTxId,
         address originCaller,
         address recipient,

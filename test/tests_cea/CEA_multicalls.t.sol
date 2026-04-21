@@ -15,7 +15,7 @@ contract CEA_NewMulticallTests is CEATest {
     // =========================================================================
 
     function test_RevertWhen_NonEmptyPayload_ZeroRecipient() public deployCEA {
-        bytes32 txID = generateTxID(1);
+        bytes32 subTxId = generateTxID(1);
         bytes32 universalTxID = generateUniversalTxID(1);
 
         // Non-empty payload without MULTICALL_SELECTOR hits single-call path
@@ -23,11 +23,11 @@ contract CEA_NewMulticallTests is CEATest {
 
         vm.prank(vault);
         vm.expectRevert(Errors.InvalidRecipient.selector);
-        ceaInstance.executeUniversalTx(txID, universalTxID, ueaOnPush, address(0), invalidPayload);
+        ceaInstance.executeUniversalTx(subTxId, universalTxID, ueaOnPush, address(0), invalidPayload);
     }
 
     function test_RevertWhen_PayloadIsEmptyCallsArray() public deployCEA {
-        bytes32 txID = generateTxID(1);
+        bytes32 subTxId = generateTxID(1);
         bytes32 universalTxID = generateUniversalTxID(1);
 
         // Empty calls array
@@ -36,9 +36,9 @@ contract CEA_NewMulticallTests is CEATest {
 
         vm.prank(vault);
         // Should succeed (empty multicall is valid, just does nothing)
-        ceaInstance.executeUniversalTx(txID, universalTxID, ueaOnPush, address(0), payload);
+        ceaInstance.executeUniversalTx(subTxId, universalTxID, ueaOnPush, address(0), payload);
 
-        assertTrue(CEA(payable(address(ceaInstance))).isExecuted(txID), "txID should be marked executed");
+        assertTrue(CEA(payable(address(ceaInstance))).isExecuted(subTxId), "subTxId should be marked executed");
     }
 
     // =========================================================================
@@ -46,21 +46,21 @@ contract CEA_NewMulticallTests is CEATest {
     // =========================================================================
 
     function test_SingleExternalCall_NoValue_Success() public deployCEA {
-        bytes32 txID = generateTxID(1);
+        bytes32 subTxId = generateTxID(1);
         bytes32 universalTxID = generateUniversalTxID(1);
 
         bytes memory targetCalldata = abi.encodeWithSignature("setMagicNumber(uint256)", 42);
         bytes memory payload = buildExternalSingleCall(address(target), 0, targetCalldata);
 
         vm.prank(vault);
-        ceaInstance.executeUniversalTx(txID, universalTxID, ueaOnPush, address(0), payload);
+        ceaInstance.executeUniversalTx(subTxId, universalTxID, ueaOnPush, address(0), payload);
 
         assertEq(target.magicNumber(), 42, "Target should have magic number set");
-        assertTrue(CEA(payable(address(ceaInstance))).isExecuted(txID), "txID should be executed");
+        assertTrue(CEA(payable(address(ceaInstance))).isExecuted(subTxId), "subTxId should be executed");
     }
 
     function test_SingleExternalCall_WithValue_Success() public deployCEA {
-        bytes32 txID = generateTxID(1);
+        bytes32 subTxId = generateTxID(1);
         bytes32 universalTxID = generateUniversalTxID(1);
 
         uint256 value = 0.1 ether; // Target requires exactly 0.1 ETH fee
@@ -70,14 +70,14 @@ contract CEA_NewMulticallTests is CEATest {
         bytes memory payload = buildExternalSingleCall(address(target), value, targetCalldata);
 
         vm.prank(vault);
-        ceaInstance.executeUniversalTx{value: value}(txID, universalTxID, ueaOnPush, address(0), payload);
+        ceaInstance.executeUniversalTx{value: value}(subTxId, universalTxID, ueaOnPush, address(0), payload);
 
         assertEq(target.magicNumber(), 42, "Target should have magic number set");
         assertEq(address(target).balance, value, "Target should have received ETH");
     }
 
     function test_MultiStepBatch_AllSucceed_InOrder() public deployCEA {
-        bytes32 txID = generateTxID(1);
+        bytes32 subTxId = generateTxID(1);
         bytes32 universalTxID = generateUniversalTxID(1);
 
         Multicall[] memory calls = new Multicall[](3);
@@ -88,7 +88,7 @@ contract CEA_NewMulticallTests is CEATest {
         bytes memory payload = buildExternalBatch(calls);
 
         vm.prank(vault);
-        ceaInstance.executeUniversalTx(txID, universalTxID, ueaOnPush, address(0), payload);
+        ceaInstance.executeUniversalTx(subTxId, universalTxID, ueaOnPush, address(0), payload);
 
         // Final value should be 30 (last call)
         assertEq(target.magicNumber(), 30, "Target should have final magic number");
@@ -101,7 +101,7 @@ contract CEA_NewMulticallTests is CEATest {
         // Fund CEA with tokens
         fundCEAWithTokens(address(token), 1000 ether);
 
-        bytes32 txID = generateTxID(1);
+        bytes32 subTxId = generateTxID(1);
         bytes32 universalTxID = generateUniversalTxID(1);
 
         Multicall[] memory calls = new Multicall[](2);
@@ -116,7 +116,7 @@ contract CEA_NewMulticallTests is CEATest {
         bytes memory payload = buildExternalBatch(calls);
 
         vm.prank(vault);
-        ceaInstance.executeUniversalTx(txID, universalTxID, ueaOnPush, address(0), payload);
+        ceaInstance.executeUniversalTx(subTxId, universalTxID, ueaOnPush, address(0), payload);
 
         assertEq(spender.totalReceived(address(token)), 100 ether, "Spender should have received tokens");
     }
@@ -128,7 +128,7 @@ contract CEA_NewMulticallTests is CEATest {
     function test_RevertWhen_AnySubcallReverts_BubblesReason() public deployCEA {
         RevertingTarget reverter = new RevertingTarget();
 
-        bytes32 txID = generateTxID(1);
+        bytes32 subTxId = generateTxID(1);
         bytes32 universalTxID = generateUniversalTxID(1);
 
         bytes memory payload =
@@ -136,13 +136,13 @@ contract CEA_NewMulticallTests is CEATest {
 
         vm.prank(vault);
         vm.expectRevert("This function always reverts with reason");
-        ceaInstance.executeUniversalTx(txID, universalTxID, ueaOnPush, address(0), payload);
+        ceaInstance.executeUniversalTx(subTxId, universalTxID, ueaOnPush, address(0), payload);
     }
 
     function test_RevertWhen_LaterSubcallReverts_RollsBackEarlierEffects() public deployCEA {
         RevertingTarget reverter = new RevertingTarget();
 
-        bytes32 txID = generateTxID(1);
+        bytes32 subTxId = generateTxID(1);
         bytes32 universalTxID = generateUniversalTxID(1);
 
         Multicall[] memory calls = new Multicall[](2);
@@ -155,7 +155,7 @@ contract CEA_NewMulticallTests is CEATest {
 
         vm.prank(vault);
         vm.expectRevert("This function always reverts with reason");
-        ceaInstance.executeUniversalTx(txID, universalTxID, ueaOnPush, address(0), payload);
+        ceaInstance.executeUniversalTx(subTxId, universalTxID, ueaOnPush, address(0), payload);
 
         // First call's effect should be rolled back
         assertEq(target.magicNumber(), magicBefore, "Target magic number should be unchanged after revert");
@@ -164,7 +164,7 @@ contract CEA_NewMulticallTests is CEATest {
     function test_TxIDNotMarked_WhenExecutionReverts() public deployCEA {
         RevertingTarget reverter = new RevertingTarget();
 
-        bytes32 txID = generateTxID(1);
+        bytes32 subTxId = generateTxID(1);
         bytes32 universalTxID = generateUniversalTxID(1);
 
         bytes memory payload =
@@ -172,16 +172,16 @@ contract CEA_NewMulticallTests is CEATest {
 
         vm.prank(vault);
         vm.expectRevert("This function always reverts with reason");
-        ceaInstance.executeUniversalTx(txID, universalTxID, ueaOnPush, address(0), payload);
+        ceaInstance.executeUniversalTx(subTxId, universalTxID, ueaOnPush, address(0), payload);
 
-        // txID should NOT be marked as executed since the tx reverted
-        assertFalse(CEA(payable(address(ceaInstance))).isExecuted(txID), "txID should not be marked executed");
+        // subTxId should NOT be marked as executed since the tx reverted
+        assertFalse(CEA(payable(address(ceaInstance))).isExecuted(subTxId), "subTxId should not be marked executed");
     }
 
     function test_NoEventsEmitted_WhenExecutionReverts() public deployCEA {
         RevertingTarget reverter = new RevertingTarget();
 
-        bytes32 txID = generateTxID(1);
+        bytes32 subTxId = generateTxID(1);
         bytes32 universalTxID = generateUniversalTxID(1);
 
         bytes memory payload =
@@ -191,7 +191,7 @@ contract CEA_NewMulticallTests is CEATest {
         vm.recordLogs();
 
         vm.expectRevert("This function always reverts with reason");
-        ceaInstance.executeUniversalTx(txID, universalTxID, ueaOnPush, address(0), payload);
+        ceaInstance.executeUniversalTx(subTxId, universalTxID, ueaOnPush, address(0), payload);
 
         Vm.Log[] memory logs = vm.getRecordedLogs();
         assertEq(logs.length, 0, "No events should be emitted on revert");
@@ -202,7 +202,7 @@ contract CEA_NewMulticallTests is CEATest {
     // =========================================================================
 
     function test_RevertWhen_SelfCallDataLengthLessThan4() public deployCEA {
-        bytes32 txID = generateTxID(1);
+        bytes32 subTxId = generateTxID(1);
         bytes32 universalTxID = generateUniversalTxID(1);
 
         Multicall[] memory calls = new Multicall[](1);
@@ -213,11 +213,11 @@ contract CEA_NewMulticallTests is CEATest {
         vm.prank(vault);
         // Now that _handleSelfCall is removed, malformed calls execute via .call() and fail
         vm.expectRevert(Errors.ExecutionFailed.selector);
-        ceaInstance.executeUniversalTx(txID, universalTxID, ueaOnPush, address(0), payload);
+        ceaInstance.executeUniversalTx(subTxId, universalTxID, ueaOnPush, address(0), payload);
     }
 
     function test_RevertWhen_SelfCallSelectorNotSendToUEA() public deployCEA {
-        bytes32 txID = generateTxID(1);
+        bytes32 subTxId = generateTxID(1);
         bytes32 universalTxID = generateUniversalTxID(1);
 
         // Try to call initializeCEA (wrong selector)
@@ -233,14 +233,14 @@ contract CEA_NewMulticallTests is CEATest {
         vm.prank(vault);
         // Mismatched selector (3 params vs 4) — no function match, empty return data
         vm.expectRevert(Errors.ExecutionFailed.selector);
-        ceaInstance.executeUniversalTx(txID, universalTxID, ueaOnPush, address(0), payload);
+        ceaInstance.executeUniversalTx(subTxId, universalTxID, ueaOnPush, address(0), payload);
     }
 
     function test_SelfCallSendToUEA_ERC20_Success() public deployCEA {
         MockGasToken token = new MockGasToken();
         fundCEAWithTokens(address(token), 1000 ether);
 
-        bytes32 txID = generateTxID(1);
+        bytes32 subTxId = generateTxID(1);
         bytes32 universalTxID = generateUniversalTxID(1);
         uint256 sendAmount = 500 ether;
 
@@ -259,7 +259,7 @@ contract CEA_NewMulticallTests is CEATest {
         bytes memory payload = encodeCalls(calls);
 
         vm.prank(vault);
-        ceaInstance.executeUniversalTx(txID, universalTxID, ueaOnPush, address(0), payload);
+        ceaInstance.executeUniversalTx(subTxId, universalTxID, ueaOnPush, address(0), payload);
 
         assertEq(mockUniversalGateway.callCount(), 1, "Gateway should be called once");
     }
@@ -268,7 +268,7 @@ contract CEA_NewMulticallTests is CEATest {
         MockGasToken token = new MockGasToken();
         fundCEAWithTokens(address(token), 100 ether);
 
-        bytes32 txID = generateTxID(1);
+        bytes32 subTxId = generateTxID(1);
         bytes32 universalTxID = generateUniversalTxID(1);
         uint256 sendAmount = 500 ether; // More than balance
 
@@ -279,13 +279,13 @@ contract CEA_NewMulticallTests is CEATest {
 
         vm.prank(vault);
         vm.expectRevert(Errors.InsufficientBalance.selector);
-        ceaInstance.executeUniversalTx(txID, universalTxID, ueaOnPush, address(0), payload);
+        ceaInstance.executeUniversalTx(subTxId, universalTxID, ueaOnPush, address(0), payload);
     }
 
     function test_SelfCallSendToUEA_Native_Success() public deployCEA {
         fundCEAWithNative(1000 ether);
 
-        bytes32 txID = generateTxID(1);
+        bytes32 subTxId = generateTxID(1);
         bytes32 universalTxID = generateUniversalTxID(1);
         uint256 sendAmount = 500 ether;
 
@@ -295,7 +295,7 @@ contract CEA_NewMulticallTests is CEATest {
         bytes memory payload = encodeCalls(calls);
 
         vm.prank(vault);
-        ceaInstance.executeUniversalTx{value: 0}(txID, universalTxID, ueaOnPush, address(0), payload);
+        ceaInstance.executeUniversalTx{value: 0}(subTxId, universalTxID, ueaOnPush, address(0), payload);
 
         assertEq(mockUniversalGateway.callCount(), 1, "Gateway should be called once");
     }
@@ -303,7 +303,7 @@ contract CEA_NewMulticallTests is CEATest {
     function test_RevertWhen_SelfCallSendToUEA_InsufficientNativeBalance() public deployCEA {
         fundCEAWithNative(100 ether);
 
-        bytes32 txID = generateTxID(1);
+        bytes32 subTxId = generateTxID(1);
         bytes32 universalTxID = generateUniversalTxID(1);
         uint256 sendAmount = 500 ether; // More than balance
 
@@ -314,7 +314,7 @@ contract CEA_NewMulticallTests is CEATest {
 
         vm.prank(vault);
         vm.expectRevert(Errors.InsufficientBalance.selector);
-        ceaInstance.executeUniversalTx{value: 0}(txID, universalTxID, ueaOnPush, address(0), payload);
+        ceaInstance.executeUniversalTx{value: 0}(subTxId, universalTxID, ueaOnPush, address(0), payload);
     }
 
     // =========================================================================
@@ -325,7 +325,7 @@ contract CEA_NewMulticallTests is CEATest {
         MockGasToken token = new MockGasToken();
         fundCEAWithTokens(address(token), 1000 ether);
 
-        bytes32 txID = generateTxID(1);
+        bytes32 subTxId = generateTxID(1);
         bytes32 universalTxID = generateUniversalTxID(1);
 
         Multicall[] memory calls = new Multicall[](4);
@@ -343,7 +343,7 @@ contract CEA_NewMulticallTests is CEATest {
         bytes memory payload = encodeCalls(calls);
 
         vm.prank(vault);
-        ceaInstance.executeUniversalTx(txID, universalTxID, ueaOnPush, address(0), payload);
+        ceaInstance.executeUniversalTx(subTxId, universalTxID, ueaOnPush, address(0), payload);
 
         assertEq(target.magicNumber(), 99, "Final magic number should be 99");
         assertEq(mockUniversalGateway.callCount(), 1, "Gateway should be called once");
@@ -354,7 +354,7 @@ contract CEA_NewMulticallTests is CEATest {
     // =========================================================================
 
     function test_SameTxID_CannotExecuteTwice_EvenWithDifferentPayload() public deployCEA {
-        bytes32 txID = generateTxID(1);
+        bytes32 subTxId = generateTxID(1);
         bytes32 universalTxID = generateUniversalTxID(1);
 
         bytes memory payload1 =
@@ -365,12 +365,12 @@ contract CEA_NewMulticallTests is CEATest {
 
         // First execution succeeds
         vm.prank(vault);
-        ceaInstance.executeUniversalTx(txID, universalTxID, ueaOnPush, address(0), payload1);
+        ceaInstance.executeUniversalTx(subTxId, universalTxID, ueaOnPush, address(0), payload1);
 
-        // Second execution with same txID but different payload should fail
+        // Second execution with same subTxId but different payload should fail
         vm.prank(vault);
         vm.expectRevert(Errors.PayloadExecuted.selector);
-        ceaInstance.executeUniversalTx(txID, universalTxID, ueaOnPush, address(0), payload2);
+        ceaInstance.executeUniversalTx(subTxId, universalTxID, ueaOnPush, address(0), payload2);
     }
 
     function test_DifferentTxID_CanExecuteSamePayload() public deployCEA {
@@ -385,7 +385,7 @@ contract CEA_NewMulticallTests is CEATest {
         vm.prank(vault);
         ceaInstance.executeUniversalTx(txID1, universalTxID, ueaOnPush, address(0), payload);
 
-        // Second execution with different txID but same payload should succeed
+        // Second execution with different subTxId but same payload should succeed
         vm.prank(vault);
         ceaInstance.executeUniversalTx(txID2, universalTxID, ueaOnPush, address(0), payload);
 
@@ -398,7 +398,7 @@ contract CEA_NewMulticallTests is CEATest {
     // =========================================================================
 
     function test_Events_OnePerMulticallStep() public deployCEA {
-        bytes32 txID = generateTxID(1);
+        bytes32 subTxId = generateTxID(1);
         bytes32 universalTxID = generateUniversalTxID(1);
 
         Multicall[] memory calls = new Multicall[](3);
@@ -410,7 +410,7 @@ contract CEA_NewMulticallTests is CEATest {
 
         vm.prank(vault);
         vm.recordLogs();
-        ceaInstance.executeUniversalTx(txID, universalTxID, ueaOnPush, address(0), payload);
+        ceaInstance.executeUniversalTx(subTxId, universalTxID, ueaOnPush, address(0), payload);
 
         Vm.Log[] memory logs = vm.getRecordedLogs();
 
@@ -432,7 +432,7 @@ contract CEA_NewMulticallTests is CEATest {
     function test_RevertWhen_ReentrantCall() public deployCEA {
         MaliciousTarget malicious = new MaliciousTarget(address(ceaInstance));
 
-        bytes32 txID = generateTxID(1);
+        bytes32 subTxId = generateTxID(1);
         bytes32 universalTxID = generateUniversalTxID(1);
 
         bytes memory payload =
@@ -442,7 +442,7 @@ contract CEA_NewMulticallTests is CEATest {
         // The malicious contract will try to reenter but should be blocked
         // Note: Since the malicious contract doesn't actually attempt reentry in execute(),
         // this test just verifies the call succeeds and reentrancy guard is in place
-        ceaInstance.executeUniversalTx(txID, universalTxID, ueaOnPush, address(0), payload);
+        ceaInstance.executeUniversalTx(subTxId, universalTxID, ueaOnPush, address(0), payload);
 
         assertTrue(malicious.attackAttempted(), "Attack should have been attempted");
     }
@@ -452,7 +452,7 @@ contract CEA_NewMulticallTests is CEATest {
     // =========================================================================
 
     function test_MsgValueLessThanSum_CEAHasPreExistingBalance_Succeeds() public deployCEA {
-        bytes32 txID = generateTxID(1);
+        bytes32 subTxId = generateTxID(1);
         bytes32 universalTxID = generateUniversalTxID(1);
 
         uint256 feePerCall = 0.1 ether;
@@ -470,13 +470,13 @@ contract CEA_NewMulticallTests is CEATest {
 
         // msg.value (0.1) < sum of call values (0.2), but CEA has pre-existing 0.1 balance
         vm.prank(vault);
-        ceaInstance.executeUniversalTx{value: 0.1 ether}(txID, universalTxID, ueaOnPush, address(0), payload);
+        ceaInstance.executeUniversalTx{value: 0.1 ether}(subTxId, universalTxID, ueaOnPush, address(0), payload);
 
         assertEq(target.magicNumber(), 20, "Final magic number should be 20");
     }
 
     function test_MsgValueExceedsSum_ExcessStaysInCEA() public deployCEA {
-        bytes32 txID = generateTxID(1);
+        bytes32 subTxId = generateTxID(1);
         bytes32 universalTxID = generateUniversalTxID(1);
 
         uint256 feePerCall = 0.1 ether;
@@ -493,14 +493,16 @@ contract CEA_NewMulticallTests is CEATest {
 
         // Excess ETH stays in CEA (belongs to user's UEA)
         vm.prank(vault);
-        ceaInstance.executeUniversalTx{value: totalValue + excess}(txID, universalTxID, ueaOnPush, address(0), payload);
+        ceaInstance.executeUniversalTx{value: totalValue + excess}(
+            subTxId, universalTxID, ueaOnPush, address(0), payload
+        );
 
         assertEq(target.magicNumber(), 20, "Final magic number should be 20");
         assertEq(address(ceaInstance).balance, excess, "Excess ETH should remain in CEA");
     }
 
     function test_SuccessWhen_MsgValue_MatchesSumExactly() public deployCEA {
-        bytes32 txID = generateTxID(1);
+        bytes32 subTxId = generateTxID(1);
         bytes32 universalTxID = generateUniversalTxID(1);
 
         // Both calls require exactly 0.1 ETH each
@@ -517,7 +519,7 @@ contract CEA_NewMulticallTests is CEATest {
         bytes memory payload = encodeCalls(calls);
 
         vm.prank(vault);
-        ceaInstance.executeUniversalTx{value: totalValue}(txID, universalTxID, ueaOnPush, address(0), payload);
+        ceaInstance.executeUniversalTx{value: totalValue}(subTxId, universalTxID, ueaOnPush, address(0), payload);
 
         assertEq(target.magicNumber(), 20, "Final magic number should be 20");
         assertEq(address(target).balance, totalValue, "Target should have received all ETH");
@@ -528,7 +530,7 @@ contract CEA_NewMulticallTests is CEATest {
     // =========================================================================
 
     function test_RevertWhen_SelfCall_WithNonZeroValue() public deployCEA {
-        bytes32 txID = generateTxID(1);
+        bytes32 subTxId = generateTxID(1);
         bytes32 universalTxID = generateUniversalTxID(1);
 
         // Try to send value to self-call (not allowed)
@@ -546,7 +548,7 @@ contract CEA_NewMulticallTests is CEATest {
         vm.deal(vault, 0.1 ether);
         vm.prank(vault);
         vm.expectRevert(Errors.InvalidInput.selector);
-        ceaInstance.executeUniversalTx{value: 0.1 ether}(txID, universalTxID, ueaOnPush, address(0), payload);
+        ceaInstance.executeUniversalTx{value: 0.1 ether}(subTxId, universalTxID, ueaOnPush, address(0), payload);
     }
 
     function test_RevertWhen_DirectCallToSendUniversalTxToUEA() public deployCEA {
@@ -566,7 +568,7 @@ contract CEA_NewMulticallTests is CEATest {
         // Fund CEA with 0.5 ETH initially
         fundCEAWithNative(0.5 ether);
 
-        bytes32 txID = generateTxID(1);
+        bytes32 subTxId = generateTxID(1);
         bytes32 universalTxID = generateUniversalTxID(1);
 
         // Batch: external call first (uses 0.1 ETH), then send more than remaining balance
@@ -583,7 +585,7 @@ contract CEA_NewMulticallTests is CEATest {
 
         vm.prank(vault);
         vm.expectRevert(Errors.InsufficientBalance.selector);
-        ceaInstance.executeUniversalTx{value: 0.1 ether}(txID, universalTxID, ueaOnPush, address(0), payload);
+        ceaInstance.executeUniversalTx{value: 0.1 ether}(subTxId, universalTxID, ueaOnPush, address(0), payload);
 
         // Verify rollback - target should not have received ETH
         assertEq(address(target).balance, 0, "Target balance should be 0 due to rollback");
@@ -596,7 +598,7 @@ contract CEA_NewMulticallTests is CEATest {
         // Configure gateway to revert
         mockUniversalGateway.setWillRevert(true, "Gateway intentionally reverted");
 
-        bytes32 txID = generateTxID(1);
+        bytes32 subTxId = generateTxID(1);
         bytes32 universalTxID = generateUniversalTxID(1);
 
         Multicall[] memory calls = new Multicall[](2);
@@ -611,10 +613,10 @@ contract CEA_NewMulticallTests is CEATest {
 
         vm.prank(vault);
         vm.expectRevert("Gateway intentionally reverted");
-        ceaInstance.executeUniversalTx(txID, universalTxID, ueaOnPush, address(0), payload);
+        ceaInstance.executeUniversalTx(subTxId, universalTxID, ueaOnPush, address(0), payload);
 
-        // Verify txID not marked executed
-        assertFalse(CEA(payable(address(ceaInstance))).isExecuted(txID), "txID should not be marked");
+        // Verify subTxId not marked executed
+        assertFalse(CEA(payable(address(ceaInstance))).isExecuted(subTxId), "subTxId should not be marked");
     }
 
     // =========================================================================
@@ -628,7 +630,7 @@ contract CEA_NewMulticallTests is CEATest {
 
         fundCEAWithTokens(address(token), 1000 ether);
 
-        bytes32 txID = generateTxID(1);
+        bytes32 subTxId = generateTxID(1);
         bytes32 universalTxID = generateUniversalTxID(1);
 
         Multicall[] memory calls = new Multicall[](2);
@@ -642,7 +644,7 @@ contract CEA_NewMulticallTests is CEATest {
 
         vm.prank(vault);
         vm.expectRevert("This function always reverts with reason");
-        ceaInstance.executeUniversalTx(txID, universalTxID, ueaOnPush, address(0), payload);
+        ceaInstance.executeUniversalTx(subTxId, universalTxID, ueaOnPush, address(0), payload);
 
         // Verify allowance rolled back to 0
         assertEq(token.allowance(address(ceaInstance), address(spender)), 0, "Allowance should be 0");
@@ -654,7 +656,7 @@ contract CEA_NewMulticallTests is CEATest {
 
         fundCEAWithTokens(address(token), 1000 ether);
 
-        bytes32 txID = generateTxID(1);
+        bytes32 subTxId = generateTxID(1);
         bytes32 universalTxID = generateUniversalTxID(1);
 
         Multicall[] memory calls = new Multicall[](3);
@@ -671,7 +673,7 @@ contract CEA_NewMulticallTests is CEATest {
 
         vm.prank(vault);
         vm.expectRevert("This function always reverts with reason");
-        ceaInstance.executeUniversalTx(txID, universalTxID, ueaOnPush, address(0), payload);
+        ceaInstance.executeUniversalTx(subTxId, universalTxID, ueaOnPush, address(0), payload);
 
         // Verify gateway was NOT called (entire tx reverted before gateway interaction persisted)
         assertEq(mockUniversalGateway.callCount(), 0, "Gateway should not be called due to rollback");
@@ -684,7 +686,7 @@ contract CEA_NewMulticallTests is CEATest {
     function test_SuccessWhen_RetrySameTxID_AfterFirstRevert() public deployCEA {
         RevertingTarget reverter = new RevertingTarget();
 
-        bytes32 txID = generateTxID(1);
+        bytes32 subTxId = generateTxID(1);
         bytes32 universalTxID = generateUniversalTxID(1);
 
         bytes memory failingPayload =
@@ -693,25 +695,25 @@ contract CEA_NewMulticallTests is CEATest {
         // First attempt - should revert
         vm.prank(vault);
         vm.expectRevert("This function always reverts with reason");
-        ceaInstance.executeUniversalTx(txID, universalTxID, ueaOnPush, address(0), failingPayload);
+        ceaInstance.executeUniversalTx(subTxId, universalTxID, ueaOnPush, address(0), failingPayload);
 
         // Verify not marked executed
-        assertFalse(CEA(payable(address(ceaInstance))).isExecuted(txID), "txID should not be marked");
+        assertFalse(CEA(payable(address(ceaInstance))).isExecuted(subTxId), "subTxId should not be marked");
 
-        // Retry with same txID but different (succeeding) payload
+        // Retry with same subTxId but different (succeeding) payload
         bytes memory succeedingPayload =
             buildExternalSingleCall(address(target), 0, abi.encodeWithSignature("setMagicNumber(uint256)", 42));
 
         vm.prank(vault);
-        ceaInstance.executeUniversalTx(txID, universalTxID, ueaOnPush, address(0), succeedingPayload);
+        ceaInstance.executeUniversalTx(subTxId, universalTxID, ueaOnPush, address(0), succeedingPayload);
 
         // Verify now marked executed
-        assertTrue(CEA(payable(address(ceaInstance))).isExecuted(txID), "txID should be marked executed");
+        assertTrue(CEA(payable(address(ceaInstance))).isExecuted(subTxId), "subTxId should be marked executed");
         assertEq(target.magicNumber(), 42, "Target should have been updated");
     }
 
     function test_RevertWhen_ReplaySameTxID_WithDifferentMsgValue() public deployCEA {
-        bytes32 txID = generateTxID(1);
+        bytes32 subTxId = generateTxID(1);
         bytes32 universalTxID = generateUniversalTxID(1);
 
         uint256 value1 = 0.1 ether;
@@ -725,12 +727,12 @@ contract CEA_NewMulticallTests is CEATest {
 
         // First execution with value1
         vm.prank(vault);
-        ceaInstance.executeUniversalTx{value: value1}(txID, universalTxID, ueaOnPush, address(0), payload);
+        ceaInstance.executeUniversalTx{value: value1}(subTxId, universalTxID, ueaOnPush, address(0), payload);
 
         // Try to replay with different msg.value - should still be blocked
         vm.prank(vault);
         vm.expectRevert(Errors.PayloadExecuted.selector);
-        ceaInstance.executeUniversalTx{value: value2}(txID, universalTxID, ueaOnPush, address(0), payload);
+        ceaInstance.executeUniversalTx{value: value2}(subTxId, universalTxID, ueaOnPush, address(0), payload);
     }
 
     // =========================================================================
@@ -738,7 +740,7 @@ contract CEA_NewMulticallTests is CEATest {
     // =========================================================================
 
     function test_Events_DataMatchesEachCall() public deployCEA {
-        bytes32 txID = generateTxID(1);
+        bytes32 subTxId = generateTxID(1);
         bytes32 universalTxID = generateUniversalTxID(1);
 
         bytes memory data1 = abi.encodeWithSignature("setMagicNumber(uint256)", 10);
@@ -752,12 +754,12 @@ contract CEA_NewMulticallTests is CEATest {
 
         vm.prank(vault);
         vm.recordLogs();
-        ceaInstance.executeUniversalTx(txID, universalTxID, ueaOnPush, address(0), payload);
+        ceaInstance.executeUniversalTx(subTxId, universalTxID, ueaOnPush, address(0), payload);
 
         Vm.Log[] memory logs = vm.getRecordedLogs();
 
         // Find UniversalTxExecuted events and validate data
-        // Event signature: UniversalTxExecuted(bytes32 indexed txID, bytes32 indexed universalTxID, address indexed originCaller, address target, bytes data)
+        // Event signature: UniversalTxExecuted(bytes32 indexed subTxId, bytes32 indexed universalTxID, address indexed originCaller, address target, bytes data)
         uint256 eventIndex = 0;
         for (uint256 i = 0; i < logs.length; i++) {
             if (logs[i].topics[0] == keccak256("UniversalTxExecuted(bytes32,bytes32,address,address,bytes)")) {
@@ -770,7 +772,7 @@ contract CEA_NewMulticallTests is CEATest {
                 (address emittedTo, bytes memory emittedData) = abi.decode(logs[i].data, (address, bytes));
 
                 // Validate against expected call
-                assertEq(emittedTxID, txID, "Event txID should match");
+                assertEq(emittedTxID, subTxId, "Event subTxId should match");
                 assertEq(emittedUniversalTxID, universalTxID, "Event universalTxID should match");
                 assertEq(emittedOrigin, ueaOnPush, "Event origin should match");
                 assertEq(emittedTo, calls[eventIndex].to, "Event target should match call");
@@ -787,7 +789,7 @@ contract CEA_NewMulticallTests is CEATest {
         MockGasToken token = new MockGasToken();
         fundCEAWithTokens(address(token), 1000 ether);
 
-        bytes32 txID = generateTxID(1);
+        bytes32 subTxId = generateTxID(1);
         bytes32 universalTxID = generateUniversalTxID(1);
         uint256 sendAmount = 100 ether;
 
@@ -803,12 +805,12 @@ contract CEA_NewMulticallTests is CEATest {
 
         vm.prank(vault);
         vm.recordLogs();
-        ceaInstance.executeUniversalTx(txID, universalTxID, ueaOnPush, address(0), payload);
+        ceaInstance.executeUniversalTx(subTxId, universalTxID, ueaOnPush, address(0), payload);
 
         Vm.Log[] memory logs = vm.getRecordedLogs();
 
         // Find the self-call event
-        // Event signature: UniversalTxExecuted(bytes32 indexed txID, bytes32 indexed universalTxID, address indexed originCaller, address target, bytes data)
+        // Event signature: UniversalTxExecuted(bytes32 indexed subTxId, bytes32 indexed universalTxID, address indexed originCaller, address target, bytes data)
         bool foundSelfCallEvent = false;
         for (uint256 i = 0; i < logs.length; i++) {
             if (logs[i].topics[0] == keccak256("UniversalTxExecuted(bytes32,bytes32,address,address,bytes)")) {
@@ -837,7 +839,7 @@ contract CEA_NewMulticallTests is CEATest {
     function test_RevertWhen_NativeTransfer_LaterRevert_RollbackReceiverBalance() public deployCEA {
         RevertingTarget reverter = new RevertingTarget();
 
-        bytes32 txID = generateTxID(1);
+        bytes32 subTxId = generateTxID(1);
         bytes32 universalTxID = generateUniversalTxID(1);
 
         uint256 transferAmount = 0.1 ether; // Exact fee required by target
@@ -856,7 +858,7 @@ contract CEA_NewMulticallTests is CEATest {
 
         vm.prank(vault);
         vm.expectRevert("This function always reverts with reason");
-        ceaInstance.executeUniversalTx{value: transferAmount}(txID, universalTxID, ueaOnPush, address(0), payload);
+        ceaInstance.executeUniversalTx{value: transferAmount}(subTxId, universalTxID, ueaOnPush, address(0), payload);
 
         // Verify target balance unchanged (rollback)
         assertEq(address(target).balance, targetBalanceBefore, "Target balance should not change due to rollback");
@@ -880,15 +882,15 @@ contract CEA_NewMulticallTests is CEATest {
 
         bytes memory payload = encodeCalls(calls); // This now includes MULTICALL_SELECTOR
 
-        bytes32 txID = generateTxID(1);
+        bytes32 subTxId = generateTxID(1);
         bytes32 universalTxID = generateUniversalTxID(1);
 
         vm.prank(vault);
-        ceaInstance.executeUniversalTx(txID, universalTxID, ueaOnPush, address(0), payload);
+        ceaInstance.executeUniversalTx(subTxId, universalTxID, ueaOnPush, address(0), payload);
 
         // Verify execution succeeded
         assertEq(testTarget.magicNumber(), 42);
-        assertTrue(CEA(payable(address(ceaInstance))).isExecuted(txID));
+        assertTrue(CEA(payable(address(ceaInstance))).isExecuted(subTxId));
     }
 
     function test_MulticallSelector_MsgValueExceeds_NoRevert() public deployCEA {
@@ -900,12 +902,12 @@ contract CEA_NewMulticallTests is CEATest {
 
         bytes memory payload = encodeCalls(calls);
 
-        bytes32 txID = generateTxID(1);
+        bytes32 subTxId = generateTxID(1);
         bytes32 universalTxID = generateUniversalTxID(1);
 
         vm.deal(vault, 2 ether);
         vm.prank(vault);
-        ceaInstance.executeUniversalTx{value: 2 ether}(txID, universalTxID, ueaOnPush, address(0), payload);
+        ceaInstance.executeUniversalTx{value: 2 ether}(subTxId, universalTxID, ueaOnPush, address(0), payload);
 
         assertEq(testTarget.magicNumber(), 42, "Target should have magic number set");
         assertEq(address(ceaInstance).balance, 1.9 ether, "Excess should stay in CEA");
@@ -920,14 +922,14 @@ contract CEA_NewMulticallTests is CEATest {
 
         bytes memory payload = encodeCalls(calls); // Includes MULTICALL_SELECTOR
 
-        bytes32 txID = generateTxID(1);
+        bytes32 subTxId = generateTxID(1);
         bytes32 universalTxID = generateUniversalTxID(1);
 
         vm.deal(vault, 0.1 ether);
         vm.prank(vault);
-        ceaInstance.executeUniversalTx{value: 0.1 ether}(txID, universalTxID, ueaOnPush, address(0), payload);
+        ceaInstance.executeUniversalTx{value: 0.1 ether}(subTxId, universalTxID, ueaOnPush, address(0), payload);
 
-        assertTrue(CEA(payable(address(ceaInstance))).isExecuted(txID));
+        assertTrue(CEA(payable(address(ceaInstance))).isExecuted(subTxId));
         assertEq(testTarget.magicNumber(), 999);
     }
 
@@ -940,37 +942,37 @@ contract CEA_NewMulticallTests is CEATest {
         // Payload with MULTICALL_SELECTOR but malformed data after it
         bytes memory invalidPayload = abi.encodePacked(MULTICALL_SELECTOR, bytes("malformed data"));
 
-        bytes32 txID = generateTxID(1);
+        bytes32 subTxId = generateTxID(1);
         bytes32 universalTxID = generateUniversalTxID(1);
 
         vm.prank(vault);
         vm.expectRevert(); // Should revert during abi.decode
-        ceaInstance.executeUniversalTx(txID, universalTxID, ueaOnPush, address(0), invalidPayload);
+        ceaInstance.executeUniversalTx(subTxId, universalTxID, ueaOnPush, address(0), invalidPayload);
     }
 
     function test_PayloadLength_LessThan4Bytes_RevertsInvalidRecipient() public deployCEA {
         // Short non-empty payload hits single-call path; recipient=address(0) reverts
         bytes memory shortPayload = bytes("abc");
 
-        bytes32 txID = generateTxID(1);
+        bytes32 subTxId = generateTxID(1);
         bytes32 universalTxID = generateUniversalTxID(1);
 
         vm.prank(vault);
         vm.expectRevert(Errors.InvalidRecipient.selector);
-        ceaInstance.executeUniversalTx(txID, universalTxID, ueaOnPush, address(0), shortPayload);
+        ceaInstance.executeUniversalTx(subTxId, universalTxID, ueaOnPush, address(0), shortPayload);
     }
 
     function test_MulticallSelector_EmptyCallsArray_Succeeds() public deployCEA {
         Multicall[] memory calls = new Multicall[](0);
         bytes memory payload = encodeCalls(calls);
 
-        bytes32 txID = generateTxID(1);
+        bytes32 subTxId = generateTxID(1);
         bytes32 universalTxID = generateUniversalTxID(1);
 
         vm.prank(vault);
-        ceaInstance.executeUniversalTx(txID, universalTxID, ueaOnPush, address(0), payload);
+        ceaInstance.executeUniversalTx(subTxId, universalTxID, ueaOnPush, address(0), payload);
 
-        assertTrue(CEA(payable(address(ceaInstance))).isExecuted(txID));
+        assertTrue(CEA(payable(address(ceaInstance))).isExecuted(subTxId));
     }
 
     function test_MulticallSelector_MixedValueCalls() public deployCEA {
@@ -984,14 +986,14 @@ contract CEA_NewMulticallTests is CEATest {
 
         bytes memory payload = encodeCalls(calls);
 
-        bytes32 txID = generateTxID(1);
+        bytes32 subTxId = generateTxID(1);
         bytes32 universalTxID = generateUniversalTxID(1);
 
         vm.deal(vault, 0.2 ether);
         vm.prank(vault);
-        ceaInstance.executeUniversalTx{value: 0.2 ether}(txID, universalTxID, ueaOnPush, address(0), payload);
+        ceaInstance.executeUniversalTx{value: 0.2 ether}(subTxId, universalTxID, ueaOnPush, address(0), payload);
 
-        assertTrue(CEA(payable(address(ceaInstance))).isExecuted(txID));
+        assertTrue(CEA(payable(address(ceaInstance))).isExecuted(subTxId));
         assertEq(target1.magicNumber(), 300); // Last call to target1
         assertEq(target2.magicNumber(), 200);
     }
@@ -1015,13 +1017,13 @@ contract CEA_NewMulticallTests is CEATest {
 
         bytes memory payload = encodeCalls(calls);
 
-        bytes32 txID = generateTxID(1);
+        bytes32 subTxId = generateTxID(1);
         bytes32 universalTxID = generateUniversalTxID(1);
 
         vm.deal(vault, 0.1 ether);
         vm.prank(vault);
         vm.expectRevert(Errors.InvalidInput.selector);
-        ceaInstance.executeUniversalTx{value: 0.1 ether}(txID, universalTxID, ueaOnPush, address(0), payload);
+        ceaInstance.executeUniversalTx{value: 0.1 ether}(subTxId, universalTxID, ueaOnPush, address(0), payload);
     }
 
     function test_SelfCall_WithMulticallSelector_ZeroValue_Succeeds() public deployCEA {
@@ -1042,13 +1044,13 @@ contract CEA_NewMulticallTests is CEATest {
 
         bytes memory payload = encodeCalls(calls);
 
-        bytes32 txID = generateTxID(1);
+        bytes32 subTxId = generateTxID(1);
         bytes32 universalTxID = generateUniversalTxID(1);
 
         vm.prank(vault);
-        ceaInstance.executeUniversalTx(txID, universalTxID, ueaOnPush, address(0), payload);
+        ceaInstance.executeUniversalTx(subTxId, universalTxID, ueaOnPush, address(0), payload);
 
-        assertTrue(CEA(payable(address(ceaInstance))).isExecuted(txID));
+        assertTrue(CEA(payable(address(ceaInstance))).isExecuted(subTxId));
     }
 
     // =========================================================================

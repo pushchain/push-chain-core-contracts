@@ -86,18 +86,18 @@ contract CEA is ICEA, ReentrancyGuard {
 
     /// @inheritdoc ICEA
     function executeUniversalTx(
-        bytes32 txId,
+        bytes32 subTxId,
         bytes32 universalTxId,
         address originCaller,
         address recipient,
         bytes calldata payload
     ) external payable onlyVault nonReentrant {
-        if (isExecuted[txId]) revert CEAErrors.PayloadExecuted();
+        if (isExecuted[subTxId]) revert CEAErrors.PayloadExecuted();
         if (originCaller != pushAccount) revert CEAErrors.InvalidUEA();
 
-        isExecuted[txId] = true;
+        isExecuted[subTxId] = true;
 
-        _handleExecution(txId, universalTxId, originCaller, recipient, payload);
+        _handleExecution(subTxId, universalTxId, originCaller, recipient, payload);
     }
 
     // =========================
@@ -150,13 +150,13 @@ contract CEA is ICEA, ReentrancyGuard {
 
     /// @dev Routes execution based on payload type.
     ///      Three-way branch: MULTICALL, MIGRATION, or SINGLE CALL.
-    /// @param txId             Transaction identifier for event emission
+    /// @param subTxId             Transaction identifier for event emission
     /// @param universalTxId    Universal tx identifier for event emission
     /// @param originCaller     Origin caller for event emission
     /// @param recipient        Target for single-call path (ignored otherwise)
     /// @param payload          Raw payload bytes
     function _handleExecution(
-        bytes32 txId,
+        bytes32 subTxId,
         bytes32 universalTxId,
         address originCaller,
         address recipient,
@@ -164,22 +164,22 @@ contract CEA is ICEA, ReentrancyGuard {
     ) internal {
         if (_isMulticall(payload)) {
             Multicall[] memory calls = _decodeCalls(payload);
-            _handleMulticall(txId, universalTxId, originCaller, calls);
+            _handleMulticall(subTxId, universalTxId, originCaller, calls);
         } else if (_isMigration(payload)) {
             _handleMigration(recipient);
-            emit UniversalTxExecuted(txId, universalTxId, originCaller, address(this), payload);
+            emit UniversalTxExecuted(subTxId, universalTxId, originCaller, address(this), payload);
         } else {
-            _handleSingleCall(txId, universalTxId, originCaller, recipient, payload);
+            _handleSingleCall(subTxId, universalTxId, originCaller, recipient, payload);
         }
     }
 
     /// @dev Executes each multicall step sequentially.
     ///      Self-calls must have value == 0.
-    /// @param txId             Transaction identifier for event emission
+    /// @param subTxId             Transaction identifier for event emission
     /// @param universalTxId    Universal tx identifier for event emission
     /// @param originCaller     Origin caller for event emission
     /// @param calls            Decoded Multicall[] array
-    function _handleMulticall(bytes32 txId, bytes32 universalTxId, address originCaller, Multicall[] memory calls)
+    function _handleMulticall(bytes32 subTxId, bytes32 universalTxId, address originCaller, Multicall[] memory calls)
         internal
     {
         for (uint256 i = 0; i < calls.length; i++) {
@@ -203,7 +203,7 @@ contract CEA is ICEA, ReentrancyGuard {
                 }
             }
 
-            emit UniversalTxExecuted(txId, universalTxId, originCaller, calls[i].to, calls[i].data);
+            emit UniversalTxExecuted(subTxId, universalTxId, originCaller, calls[i].to, calls[i].data);
         }
     }
 
@@ -211,20 +211,20 @@ contract CEA is ICEA, ReentrancyGuard {
     ///      Note: Funds-parking mode is explicitly signalled by BOTH an empty payload AND a
     ///      zero `recipient`.
     ///
-    /// @param txId             Transaction identifier for event emission
+    /// @param subTxId             Transaction identifier for event emission
     /// @param universalTxId    Universal tx identifier for event emission
     /// @param originCaller     Origin caller for event emission
     /// @param recipient        Target contract for execution (zero + empty payload = park funds)
     /// @param payload          Raw calldata to forward (empty + zero recipient = park funds)
     function _handleSingleCall(
-        bytes32 txId,
+        bytes32 subTxId,
         bytes32 universalTxId,
         address originCaller,
         address recipient,
         bytes calldata payload
     ) internal {
         if (payload.length == 0 && recipient == address(0)) {
-            emit UniversalTxExecuted(txId, universalTxId, originCaller, address(this), payload);
+            emit UniversalTxExecuted(subTxId, universalTxId, originCaller, address(this), payload);
             return;
         }
 
@@ -246,7 +246,7 @@ contract CEA is ICEA, ReentrancyGuard {
             }
         }
 
-        emit UniversalTxExecuted(txId, universalTxId, originCaller, recipient, payload);
+        emit UniversalTxExecuted(subTxId, universalTxId, originCaller, recipient, payload);
     }
 
     /// @dev Fetches migration contract from factory and delegates.

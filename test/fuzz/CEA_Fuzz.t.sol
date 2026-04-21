@@ -80,26 +80,26 @@ contract CEA_FuzzTest is Test {
     // 8.1 Replay Protection Properties
     // =========================================================================
 
-    /// @dev After successful execution, isExecuted[txId] is true.
-    function testFuzz_executeUniversalTx_uniqueTxId(bytes32 txId, bytes32 universalTxId) public {
+    /// @dev After successful execution, isExecuted[subTxId] is true.
+    function testFuzz_executeUniversalTx_uniqueTxId(bytes32 subTxId, bytes32 universalTxId) public {
         bytes memory payload = emptyMulticallPayload();
 
         vm.prank(vault);
-        ceaInstance.executeUniversalTx(txId, universalTxId, ueaOnPush, address(0), payload);
+        ceaInstance.executeUniversalTx(subTxId, universalTxId, ueaOnPush, address(0), payload);
 
-        assertTrue(ceaInstance.isExecuted(txId));
+        assertTrue(ceaInstance.isExecuted(subTxId));
     }
 
-    /// @dev Second call with same txId always reverts with PayloadExecuted.
-    function testFuzz_executeUniversalTx_replayReverts(bytes32 txId, bytes32 universalTxId) public {
+    /// @dev Second call with same subTxId always reverts with PayloadExecuted.
+    function testFuzz_executeUniversalTx_replayReverts(bytes32 subTxId, bytes32 universalTxId) public {
         bytes memory payload = emptyMulticallPayload();
 
         vm.prank(vault);
-        ceaInstance.executeUniversalTx(txId, universalTxId, ueaOnPush, address(0), payload);
+        ceaInstance.executeUniversalTx(subTxId, universalTxId, ueaOnPush, address(0), payload);
 
         vm.expectRevert(CEAErrors.PayloadExecuted.selector);
         vm.prank(vault);
-        ceaInstance.executeUniversalTx(txId, universalTxId, ueaOnPush, address(0), payload);
+        ceaInstance.executeUniversalTx(subTxId, universalTxId, ueaOnPush, address(0), payload);
     }
 
     /// @dev Different txIds execute independently without replay issues.
@@ -123,24 +123,24 @@ contract CEA_FuzzTest is Test {
     // =========================================================================
 
     /// @dev When originCaller != pushAccount, reverts with InvalidUEA.
-    function testFuzz_executeUniversalTx_wrongOriginCaller_reverts(address wrongCaller, bytes32 txId) public {
+    function testFuzz_executeUniversalTx_wrongOriginCaller_reverts(address wrongCaller, bytes32 subTxId) public {
         vm.assume(wrongCaller != ueaOnPush);
 
         bytes memory payload = emptyMulticallPayload();
 
         vm.expectRevert(CEAErrors.InvalidUEA.selector);
         vm.prank(vault);
-        ceaInstance.executeUniversalTx(txId, bytes32(0), wrongCaller, address(0), payload);
+        ceaInstance.executeUniversalTx(subTxId, bytes32(0), wrongCaller, address(0), payload);
     }
 
     /// @dev When originCaller == pushAccount, origin check passes.
-    function testFuzz_executeUniversalTx_correctOriginCaller_passes(bytes32 txId) public {
+    function testFuzz_executeUniversalTx_correctOriginCaller_passes(bytes32 subTxId) public {
         bytes memory payload = emptyMulticallPayload();
 
         vm.prank(vault);
-        ceaInstance.executeUniversalTx(txId, bytes32(0), ueaOnPush, address(0), payload);
+        ceaInstance.executeUniversalTx(subTxId, bytes32(0), ueaOnPush, address(0), payload);
 
-        assertTrue(ceaInstance.isExecuted(txId));
+        assertTrue(ceaInstance.isExecuted(subTxId));
     }
 
     // =========================================================================
@@ -158,22 +158,22 @@ contract CEA_FuzzTest is Test {
             // Valid multicall selector — would attempt multicall decode
             // Use a properly encoded empty multicall to verify it passes
             bytes memory validPayload = emptyMulticallPayload();
-            bytes32 txId = keccak256(abi.encode("multicall_test", selector));
+            bytes32 subTxId = keccak256(abi.encode("multicall_test", selector));
             vm.prank(vault);
-            ceaInstance.executeUniversalTx(txId, bytes32(0), ueaOnPush, address(0), validPayload);
-            assertTrue(ceaInstance.isExecuted(txId));
+            ceaInstance.executeUniversalTx(subTxId, bytes32(0), ueaOnPush, address(0), validPayload);
+            assertTrue(ceaInstance.isExecuted(subTxId));
         } else if (selector == MIGRATION_SELECTOR) {
             // Migration selector — different path
             vm.assume(selector != MULTICALL_SELECTOR && selector != MIGRATION_SELECTOR);
         } else {
             // Non-multicall, non-migration — single call path with the payload
             // An empty non-special payload parks funds successfully
-            bytes32 txId = keccak256(abi.encode("non_multicall", selector));
+            bytes32 subTxId = keccak256(abi.encode("non_multicall", selector));
             vm.prank(vault);
             // Single-call path with non-zero selector and no recipient won't revert if payload is short
             // Use empty payload to park funds safely
-            ceaInstance.executeUniversalTx(txId, bytes32(0), ueaOnPush, address(0), "");
-            assertTrue(ceaInstance.isExecuted(txId));
+            ceaInstance.executeUniversalTx(subTxId, bytes32(0), ueaOnPush, address(0), "");
+            assertTrue(ceaInstance.isExecuted(subTxId));
         }
     }
 
@@ -182,10 +182,10 @@ contract CEA_FuzzTest is Test {
         vm.assume(selector != MIGRATION_SELECTOR && selector != MULTICALL_SELECTOR);
         // Build a payload with a non-migration, non-multicall selector
         // Should go to single-call path — use empty payload which parks funds
-        bytes32 txId = keccak256(abi.encode("migration_selector_test", selector, remaining));
+        bytes32 subTxId = keccak256(abi.encode("migration_selector_test", selector, remaining));
         vm.prank(vault);
-        ceaInstance.executeUniversalTx(txId, bytes32(0), ueaOnPush, address(0), "");
-        assertTrue(ceaInstance.isExecuted(txId));
+        ceaInstance.executeUniversalTx(subTxId, bytes32(0), ueaOnPush, address(0), "");
+        assertTrue(ceaInstance.isExecuted(subTxId));
     }
 
     /// @dev Payloads shorter than 4 bytes never trigger multicall or migration.
@@ -198,30 +198,30 @@ contract CEA_FuzzTest is Test {
             payload[i] = 0xff;
         }
 
-        bytes32 txId = keccak256(abi.encode("short_payload", length));
+        bytes32 subTxId = keccak256(abi.encode("short_payload", length));
         vm.prank(vault);
         // Short payload goes to single-call path; empty payload parks funds
         // Non-empty short payloads without a valid recipient will revert with InvalidRecipient
         if (length == 0) {
-            ceaInstance.executeUniversalTx(txId, bytes32(0), ueaOnPush, address(0), payload);
-            assertTrue(ceaInstance.isExecuted(txId));
+            ceaInstance.executeUniversalTx(subTxId, bytes32(0), ueaOnPush, address(0), payload);
+            assertTrue(ceaInstance.isExecuted(subTxId));
         } else {
             // Non-empty short payload -> single call path -> needs recipient
             // With address(0) recipient it reverts InvalidRecipient
             vm.expectRevert(CEAErrors.InvalidRecipient.selector);
-            ceaInstance.executeUniversalTx(txId, bytes32(0), ueaOnPush, address(0), payload);
+            ceaInstance.executeUniversalTx(subTxId, bytes32(0), ueaOnPush, address(0), payload);
         }
     }
 
     /// @dev When payload is empty, funds are parked in CEA without external call.
-    function testFuzz_singleCall_emptyPayload_parksFunds(bytes32 txId, uint256 value) public {
+    function testFuzz_singleCall_emptyPayload_parksFunds(bytes32 subTxId, uint256 value) public {
         value = bound(value, 0, 100 ether);
         vm.deal(vault, value);
 
         vm.prank(vault);
-        ceaInstance.executeUniversalTx{value: value}(txId, bytes32(0), ueaOnPush, address(0), "");
+        ceaInstance.executeUniversalTx{value: value}(subTxId, bytes32(0), ueaOnPush, address(0), "");
 
-        assertTrue(ceaInstance.isExecuted(txId));
+        assertTrue(ceaInstance.isExecuted(subTxId));
         // Funds are parked in CEA
         assertEq(address(ceaInstance).balance, value);
     }
@@ -247,11 +247,11 @@ contract CEA_FuzzTest is Test {
         }
 
         bytes memory payload = encodeCalls(calls);
-        bytes32 txId = keccak256(abi.encode("zero_target", numCalls, zeroIndex));
+        bytes32 subTxId = keccak256(abi.encode("zero_target", numCalls, zeroIndex));
 
         vm.expectRevert(CEAErrors.InvalidTarget.selector);
         vm.prank(vault);
-        ceaInstance.executeUniversalTx(txId, bytes32(0), ueaOnPush, address(0), payload);
+        ceaInstance.executeUniversalTx(subTxId, bytes32(0), ueaOnPush, address(0), payload);
     }
 
     /// @dev Self-call with value > 0 reverts with InvalidInput.
@@ -263,11 +263,11 @@ contract CEA_FuzzTest is Test {
         calls[0] = makeCall(address(ceaInstance), value, "");
 
         bytes memory payload = encodeCalls(calls);
-        bytes32 txId = keccak256(abi.encode("self_call_value", value));
+        bytes32 subTxId = keccak256(abi.encode("self_call_value", value));
 
         vm.expectRevert(CEAErrors.InvalidInput.selector);
         vm.prank(vault);
-        ceaInstance.executeUniversalTx(txId, bytes32(0), ueaOnPush, address(0), payload);
+        ceaInstance.executeUniversalTx(subTxId, bytes32(0), ueaOnPush, address(0), payload);
     }
 
     /// @dev Self-call with value == 0 is allowed in multicall.
@@ -284,12 +284,12 @@ contract CEA_FuzzTest is Test {
         calls[0] = makeCall(address(ceaInstance), 0, safeData);
 
         bytes memory payload = encodeCalls(calls);
-        bytes32 txId = keccak256(abi.encode("self_call_zero_value", safeData));
+        bytes32 subTxId = keccak256(abi.encode("self_call_zero_value", safeData));
 
         vm.prank(vault);
-        ceaInstance.executeUniversalTx(txId, bytes32(0), ueaOnPush, address(0), payload);
+        ceaInstance.executeUniversalTx(subTxId, bytes32(0), ueaOnPush, address(0), payload);
 
-        assertTrue(ceaInstance.isExecuted(txId));
+        assertTrue(ceaInstance.isExecuted(subTxId));
     }
 
     /// @dev In CEA._handleMulticall there is NO migration selector check inside array.
@@ -318,13 +318,13 @@ contract CEA_FuzzTest is Test {
         }
 
         bytes memory payload = encodeCalls(calls);
-        bytes32 txId = keccak256(abi.encode("migration_in_array", numCalls, migIdx));
+        bytes32 subTxId = keccak256(abi.encode("migration_in_array", numCalls, migIdx));
 
         // The call with MIGRATION_SELECTOR data will fail at the target level,
         // causing ExecutionFailed — but crucially NOT InvalidCall.
         vm.expectRevert(CEAErrors.ExecutionFailed.selector);
         vm.prank(vault);
-        ceaInstance.executeUniversalTx(txId, bytes32(0), ueaOnPush, address(0), payload);
+        ceaInstance.executeUniversalTx(subTxId, bytes32(0), ueaOnPush, address(0), payload);
     }
 
     // =========================================================================
@@ -332,7 +332,7 @@ contract CEA_FuzzTest is Test {
     // =========================================================================
 
     /// @dev Migration with msg.value > 0 reverts with InvalidInput.
-    function testFuzz_migration_withValue_reverts(uint256 value, bytes32 txId) public {
+    function testFuzz_migration_withValue_reverts(uint256 value, bytes32 subTxId) public {
         value = bound(value, 1, 100 ether);
         vm.deal(vault, value);
 
@@ -340,17 +340,17 @@ contract CEA_FuzzTest is Test {
 
         vm.expectRevert(CEAErrors.InvalidInput.selector);
         vm.prank(vault);
-        ceaInstance.executeUniversalTx{value: value}(txId, bytes32(0), ueaOnPush, address(ceaInstance), payload);
+        ceaInstance.executeUniversalTx{value: value}(subTxId, bytes32(0), ueaOnPush, address(ceaInstance), payload);
     }
 
     /// @dev When factory has no migration contract set, migration reverts with InvalidCall.
-    function testFuzz_migration_noMigrationContract_reverts(bytes32 txId) public {
+    function testFuzz_migration_noMigrationContract_reverts(bytes32 subTxId) public {
         // Factory has no migration contract (CEA_MIGRATION_CONTRACT == address(0) by default)
         bytes memory payload = abi.encodePacked(MIGRATION_SELECTOR);
 
         vm.expectRevert(CEAErrors.InvalidCall.selector);
         vm.prank(vault);
-        ceaInstance.executeUniversalTx(txId, bytes32(0), ueaOnPush, address(ceaInstance), payload);
+        ceaInstance.executeUniversalTx(subTxId, bytes32(0), ueaOnPush, address(ceaInstance), payload);
     }
 
     // =========================================================================
@@ -358,7 +358,7 @@ contract CEA_FuzzTest is Test {
     // =========================================================================
 
     /// @dev When caller != VAULT, executeUniversalTx always reverts with NotVault.
-    function testFuzz_executeUniversalTx_nonVault_reverts(address caller, bytes32 txId) public {
+    function testFuzz_executeUniversalTx_nonVault_reverts(address caller, bytes32 subTxId) public {
         vm.assume(caller != vault);
         vm.assume(caller != address(0));
 
@@ -366,7 +366,7 @@ contract CEA_FuzzTest is Test {
 
         vm.expectRevert(CEAErrors.NotVault.selector);
         vm.prank(caller);
-        ceaInstance.executeUniversalTx(txId, bytes32(0), ueaOnPush, address(0), payload);
+        ceaInstance.executeUniversalTx(subTxId, bytes32(0), ueaOnPush, address(0), payload);
     }
 
     /// @dev When caller != address(this), sendUniversalTxToUEA always reverts with Unauthorized.
@@ -396,10 +396,10 @@ contract CEA_FuzzTest is Test {
         );
 
         bytes memory payload = encodeCalls(calls);
-        bytes32 txId = keccak256(abi.encode("zero_amount_native"));
+        bytes32 subTxId = keccak256(abi.encode("zero_amount_native"));
 
         vm.prank(vault);
-        ceaInstance.executeUniversalTx(txId, bytes32(0), ueaOnPush, address(0), payload);
+        ceaInstance.executeUniversalTx(subTxId, bytes32(0), ueaOnPush, address(0), payload);
 
         assertEq(mockUniversalGateway.lastAmount(), 0, "Should allow zero amount for native");
     }
@@ -417,10 +417,10 @@ contract CEA_FuzzTest is Test {
         );
 
         bytes memory payload = encodeCalls(calls);
-        bytes32 txId = keccak256(abi.encode("zero_amount_erc20"));
+        bytes32 subTxId = keccak256(abi.encode("zero_amount_erc20"));
 
         vm.prank(vault);
-        ceaInstance.executeUniversalTx(txId, bytes32(0), ueaOnPush, address(0), payload);
+        ceaInstance.executeUniversalTx(subTxId, bytes32(0), ueaOnPush, address(0), payload);
 
         assertEq(mockUniversalGateway.lastAmount(), 0, "Should allow zero amount for ERC20");
     }
@@ -442,11 +442,11 @@ contract CEA_FuzzTest is Test {
         );
 
         bytes memory payload = encodeCalls(calls);
-        bytes32 txId = keccak256(abi.encode("insufficient_balance", amount));
+        bytes32 subTxId = keccak256(abi.encode("insufficient_balance", amount));
 
         // The inner call reverts with InsufficientBalance, now propagated
         vm.expectRevert(CEAErrors.InsufficientBalance.selector);
         vm.prank(vault);
-        ceaInstance.executeUniversalTx(txId, bytes32(0), ueaOnPush, address(0), payload);
+        ceaInstance.executeUniversalTx(subTxId, bytes32(0), ueaOnPush, address(0), payload);
     }
 }

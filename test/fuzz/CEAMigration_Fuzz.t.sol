@@ -83,10 +83,10 @@ contract CEAMigration_FuzzTest is Test {
 
         // Trigger migration via executeUniversalTx with MIGRATION_SELECTOR payload
         bytes memory payload = abi.encodePacked(bytes4(keccak256("UEA_MIGRATION")));
-        bytes32 txId = keccak256("migration_slot_test");
+        bytes32 subTxId = keccak256("migration_slot_test");
 
         vm.prank(vault);
-        ICEA(ceaAddr).executeUniversalTx(txId, bytes32(0), ueaOnPush, ceaAddr, payload);
+        ICEA(ceaAddr).executeUniversalTx(subTxId, bytes32(0), ueaOnPush, ceaAddr, payload);
 
         // Verify slot was updated to ceaV2
         bytes32 slotAfter = vm.load(ceaAddr, CEA_LOGIC_SLOT);
@@ -101,13 +101,13 @@ contract CEAMigration_FuzzTest is Test {
         factory.setCEAMigrationContract(address(migration));
 
         bytes memory payload = abi.encodePacked(bytes4(keccak256("UEA_MIGRATION")));
-        bytes32 txId = keccak256("migration_event_test");
+        bytes32 subTxId = keccak256("migration_event_test");
 
         vm.expectEmit(true, false, false, false);
         emit CEAMigration.ImplementationUpdated(address(ceaV2));
 
         vm.prank(vault);
-        ICEA(ceaAddr).executeUniversalTx(txId, bytes32(0), ueaOnPush, ceaAddr, payload);
+        ICEA(ceaAddr).executeUniversalTx(subTxId, bytes32(0), ueaOnPush, ceaAddr, payload);
     }
 
     // =========================================================================

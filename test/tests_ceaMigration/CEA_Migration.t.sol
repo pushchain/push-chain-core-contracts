@@ -69,7 +69,7 @@ contract CEA_MigrationTest is Test {
     // =========================================================================
 
     function generateTxID(uint256 nonce) internal pure returns (bytes32) {
-        return keccak256(abi.encodePacked("txID", nonce));
+        return keccak256(abi.encodePacked("subTxId", nonce));
     }
 
     function generateUniversalTxID(uint256 nonce) internal pure returns (bytes32) {
@@ -108,7 +108,7 @@ contract CEA_MigrationTest is Test {
         // Set migration contract in factory
         factory.setCEAMigrationContract(address(migration));
 
-        bytes32 txID = generateTxID(1);
+        bytes32 subTxId = generateTxID(1);
         bytes32 universalTxID = generateUniversalTxID(1);
 
         // Build migration payload
@@ -116,7 +116,7 @@ contract CEA_MigrationTest is Test {
 
         // Execute migration (will test isMigration detection internally)
         vm.prank(vault);
-        ceaInstance.executeUniversalTx(txID, universalTxID, ueaOnPush, address(ceaInstance), payload);
+        ceaInstance.executeUniversalTx(subTxId, universalTxID, ueaOnPush, address(ceaInstance), payload);
 
         // If execution reaches here without reverting, isMigration worked
         assertTrue(true, "Migration selector detected successfully");
@@ -130,14 +130,14 @@ contract CEA_MigrationTest is Test {
         // Set migration contract
         factory.setCEAMigrationContract(address(migration));
 
-        bytes32 txID = generateTxID(1);
+        bytes32 subTxId = generateTxID(1);
         bytes32 universalTxID = generateUniversalTxID(1);
 
         // Top-level MIGRATION_SELECTOR (no Multicall wrapper)
         bytes memory payload = abi.encodePacked(MIGRATION_SELECTOR);
 
         vm.prank(vault);
-        ceaInstance.executeUniversalTx(txID, universalTxID, ueaOnPush, address(ceaInstance), payload);
+        ceaInstance.executeUniversalTx(subTxId, universalTxID, ueaOnPush, address(ceaInstance), payload);
 
         // Verify implementation changed
         address implAfter = CEAProxy(payable(address(ceaInstance))).getImplementation();
@@ -147,7 +147,7 @@ contract CEA_MigrationTest is Test {
     function test_handleMigration_NonZeroMsgValue_Reverts() public {
         factory.setCEAMigrationContract(address(migration));
 
-        bytes32 txID = generateTxID(1);
+        bytes32 subTxId = generateTxID(1);
         bytes32 universalTxID = generateUniversalTxID(1);
         bytes memory payload = abi.encodePacked(MIGRATION_SELECTOR);
 
@@ -155,14 +155,14 @@ contract CEA_MigrationTest is Test {
 
         vm.prank(vault);
         vm.expectRevert(Errors.InvalidInput.selector);
-        ceaInstance.executeUniversalTx{value: 1 ether}(txID, universalTxID, ueaOnPush, address(ceaInstance), payload);
+        ceaInstance.executeUniversalTx{value: 1 ether}(subTxId, universalTxID, ueaOnPush, address(ceaInstance), payload);
     }
 
     function test_handleMigration_MigrationInsideMulticall_Reverts() public {
         // Set migration contract
         factory.setCEAMigrationContract(address(migration));
 
-        bytes32 txID = generateTxID(1);
+        bytes32 subTxId = generateTxID(1);
         bytes32 universalTxID = generateUniversalTxID(1);
 
         // MIGRATION_SELECTOR wrapped in multicall fails as generic execution failure
@@ -173,13 +173,13 @@ contract CEA_MigrationTest is Test {
 
         vm.prank(vault);
         vm.expectRevert(Errors.ExecutionFailed.selector);
-        ceaInstance.executeUniversalTx(txID, universalTxID, ueaOnPush, address(0), payload);
+        ceaInstance.executeUniversalTx(subTxId, universalTxID, ueaOnPush, address(0), payload);
     }
 
     function test_handleMigration_NoMigrationContract() public {
         // Do NOT set migration contract (remains address(0))
 
-        bytes32 txID = generateTxID(1);
+        bytes32 subTxId = generateTxID(1);
         bytes32 universalTxID = generateUniversalTxID(1);
 
         // Build migration payload
@@ -188,7 +188,7 @@ contract CEA_MigrationTest is Test {
         // Expect InvalidCall revert
         vm.prank(vault);
         vm.expectRevert(Errors.InvalidCall.selector);
-        ceaInstance.executeUniversalTx(txID, universalTxID, ueaOnPush, address(ceaInstance), payload);
+        ceaInstance.executeUniversalTx(subTxId, universalTxID, ueaOnPush, address(ceaInstance), payload);
     }
 
     // =========================================================================
@@ -199,7 +199,7 @@ contract CEA_MigrationTest is Test {
         // Set migration contract
         factory.setCEAMigrationContract(address(migration));
 
-        bytes32 txID = generateTxID(1);
+        bytes32 subTxId = generateTxID(1);
         bytes32 universalTxID = generateUniversalTxID(1);
 
         // Build batched payload with migration
@@ -215,14 +215,14 @@ contract CEA_MigrationTest is Test {
         // Migration selector in multicall fails as generic execution failure
         vm.prank(vault);
         vm.expectRevert(Errors.ExecutionFailed.selector);
-        ceaInstance.executeUniversalTx(txID, universalTxID, ueaOnPush, address(0), payload);
+        ceaInstance.executeUniversalTx(subTxId, universalTxID, ueaOnPush, address(0), payload);
     }
 
     function test_handleMulticall_MigrationInBatch_FirstPosition() public {
         // Set migration contract
         factory.setCEAMigrationContract(address(migration));
 
-        bytes32 txID = generateTxID(1);
+        bytes32 subTxId = generateTxID(1);
         bytes32 universalTxID = generateUniversalTxID(1);
 
         // Build batched payload with migration in first position
@@ -238,7 +238,7 @@ contract CEA_MigrationTest is Test {
         // Migration selector in multicall fails as generic execution failure
         vm.prank(vault);
         vm.expectRevert(Errors.ExecutionFailed.selector);
-        ceaInstance.executeUniversalTx(txID, universalTxID, ueaOnPush, address(0), payload);
+        ceaInstance.executeUniversalTx(subTxId, universalTxID, ueaOnPush, address(0), payload);
     }
 
     // =========================================================================
@@ -249,7 +249,7 @@ contract CEA_MigrationTest is Test {
         // Set migration contract
         factory.setCEAMigrationContract(address(migration));
 
-        bytes32 txID = generateTxID(1);
+        bytes32 subTxId = generateTxID(1);
         bytes32 universalTxID = generateUniversalTxID(1);
 
         // Build standalone migration payload
@@ -260,7 +260,7 @@ contract CEA_MigrationTest is Test {
 
         // Execute migration
         vm.prank(vault);
-        ceaInstance.executeUniversalTx(txID, universalTxID, ueaOnPush, address(ceaInstance), payload);
+        ceaInstance.executeUniversalTx(subTxId, universalTxID, ueaOnPush, address(ceaInstance), payload);
 
         // Get updated implementation
         address implAfter = CEAProxy(payable(address(ceaInstance))).getImplementation();
@@ -277,13 +277,13 @@ contract CEA_MigrationTest is Test {
         FailingMigration failMigration = new FailingMigration();
         factory.setCEAMigrationContract(address(failMigration));
 
-        bytes32 txID = generateTxID(1);
+        bytes32 subTxId = generateTxID(1);
         bytes32 universalTxID = generateUniversalTxID(1);
         bytes memory payload = buildMigrationPayload(address(ceaInstance));
 
         vm.prank(vault);
         vm.expectRevert(Errors.ExecutionFailed.selector);
-        ceaInstance.executeUniversalTx(txID, universalTxID, ueaOnPush, address(ceaInstance), payload);
+        ceaInstance.executeUniversalTx(subTxId, universalTxID, ueaOnPush, address(ceaInstance), payload);
     }
 }
 
