@@ -25,13 +25,7 @@ contract CEA is ICEA, ReentrancyGuard {
     /// @inheritdoc ICEA
     address public pushAccount;
 
-    /// @inheritdoc ICEA
-    address public VAULT;
-
-    /// @notice Address of the Universal Gateway on this external chain.
-    address public UNIVERSAL_GATEWAY;
-
-    /// @notice Reference to the CEA factory for fetching migration contract.
+    /// @notice Reference to the CEA factory — single source of truth for VAULT and UNIVERSAL_GATEWAY.
     ICEAFactory public factory;
 
     bool private _initialized;
@@ -43,9 +37,9 @@ contract CEA is ICEA, ReentrancyGuard {
     //    CEA: MODIFIERS
     // =========================
 
-    /// @notice Restricts to the Vault contract.
+    /// @notice Restricts to the Vault contract (read live from factory).
     modifier onlyVault() {
-        if (msg.sender != VAULT) revert CEAErrors.NotVault();
+        if (msg.sender != factory.VAULT()) revert CEAErrors.NotVault();
         _;
     }
 
@@ -54,21 +48,30 @@ contract CEA is ICEA, ReentrancyGuard {
     // =========================
 
     /// @inheritdoc ICEA
-    function initializeCEA(address _pushAccount, address _vault, address _universalGateway, address _factory) external {
+    function initializeCEA(address _pushAccount, address _factory) external {
         if (_initialized) revert CEAErrors.AlreadyInitialized();
-        if (
-            _pushAccount == address(0) || _vault == address(0) || _universalGateway == address(0)
-                || _factory == address(0)
-        ) {
+        if (_pushAccount == address(0) || _factory == address(0)) {
             revert CEAErrors.ZeroAddress();
         }
 
         pushAccount = _pushAccount;
-        VAULT = _vault;
-        UNIVERSAL_GATEWAY = _universalGateway;
         factory = ICEAFactory(_factory);
 
         _initialized = true;
+    }
+
+    // =========================
+    //    CEA: FACTORY-BACKED GETTERS
+    // =========================
+
+    /// @inheritdoc ICEA
+    function VAULT() external view returns (address) {
+        return factory.VAULT();
+    }
+
+    /// @notice Returns the Universal Gateway address (live from factory).
+    function UNIVERSAL_GATEWAY() external view returns (address) {
+        return factory.UNIVERSAL_GATEWAY();
     }
 
     // =========================
@@ -124,21 +127,23 @@ contract CEA is ICEA, ReentrancyGuard {
             signatureData: ""
         });
 
+        address gateway = factory.UNIVERSAL_GATEWAY();
+
         if (amount > 0) {
             if (token == address(0)) {
                 if (address(this).balance < amount) {
                     revert CEAErrors.InsufficientBalance();
                 }
-                IUniversalGateway(UNIVERSAL_GATEWAY).sendUniversalTxFromCEA{value: amount}(req);
+                IUniversalGateway(gateway).sendUniversalTxFromCEA{value: amount}(req);
             } else {
                 if (IERC20(token).balanceOf(address(this)) < amount) {
                     revert CEAErrors.InsufficientBalance();
                 }
-                IERC20(token).approve(UNIVERSAL_GATEWAY, amount);
-                IUniversalGateway(UNIVERSAL_GATEWAY).sendUniversalTxFromCEA(req);
+                IERC20(token).approve(gateway, amount);
+                IUniversalGateway(gateway).sendUniversalTxFromCEA(req);
             }
         } else {
-            IUniversalGateway(UNIVERSAL_GATEWAY).sendUniversalTxFromCEA(req);
+            IUniversalGateway(gateway).sendUniversalTxFromCEA(req);
         }
 
         emit UniversalTxToUEA(address(this), pushAccount, token, amount);

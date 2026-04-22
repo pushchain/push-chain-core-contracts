@@ -205,7 +205,7 @@ contract CEAFactory_FuzzTest is Test {
             abi.encodeWithSelector(IAccessControl.AccessControlUnauthorizedAccount.selector, caller, adminRole)
         );
         vm.prank(caller);
-        factory.setVault(newVault);
+        factory.updateVault(newVault);
     }
 
     /// @dev Non-owner callers cannot call setCEAImplementation.
@@ -243,7 +243,7 @@ contract CEAFactory_FuzzTest is Test {
     /// @dev setVault(address(0)) reverts with ZeroAddress.
     function testFuzz_setVault_zeroAddress_reverts() public {
         vm.expectRevert(CEAErrors.ZeroAddress.selector);
-        factory.setVault(address(0));
+        factory.updateVault(address(0));
     }
 
     /// @dev setCEAProxyImplementation(address(0)) reverts with ZeroAddress.
@@ -261,6 +261,6 @@ contract CEAFactory_FuzzTest is Test {
     /// @dev setUniversalGateway(address(0)) reverts with ZeroAddress.
     function testFuzz_setUniversalGateway_zeroAddress_reverts() public {
         vm.expectRevert(CEAErrors.ZeroAddress.selector);
-        factory.setUniversalGateway(address(0));
+        factory.updateUniversalGateway(address(0));
     }
 }

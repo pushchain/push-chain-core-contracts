@@ -87,10 +87,8 @@ interface ICEA {
     //    CEA_4: INITIALIZER
     // =========================
 
-    /// @notice                     Initializes this CEA with its identity and references.
+    /// @notice                     Initializes this CEA with its identity and factory reference.
     /// @param _pushAccount         Address of the UEA on Push Chain
-    /// @param _vault               Address of the Vault on this chain
-    /// @param _universalGateway    Address of the Universal Gateway
-    /// @param _factory             Address of the CEA factory
-    function initializeCEA(address _pushAccount, address _vault, address _universalGateway, address _factory) external;
+    /// @param _factory             Address of the CEA factory (source of truth for VAULT and gateway)
+    function initializeCEA(address _pushAccount, address _factory) external;
 }

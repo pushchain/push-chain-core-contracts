@@ -197,17 +197,17 @@ contract CEAFactoryTest is Test {
             abi.encodeWithSelector(IAccessControl.AccessControlUnauthorizedAccount.selector, nonOwner, adminRole)
         );
         vm.prank(nonOwner);
-        factory.setVault(newVault);
+        factory.updateVault(newVault);
 
         vm.prank(owner);
-        factory.setVault(newVault);
+        factory.updateVault(newVault);
         assertEq(factory.VAULT(), newVault, "Vault should be updated");
     }
 
     function testSetVaultZeroAddressReverts() public {
         vm.prank(owner);
         vm.expectRevert(CEAErrors.ZeroAddress.selector);
-        factory.setVault(address(0));
+        factory.updateVault(address(0));
     }
 
     function testSetVaultUpdatesState() public {
@@ -215,7 +215,7 @@ contract CEAFactoryTest is Test {
         address oldVault = factory.VAULT();
 
         vm.prank(owner);
-        factory.setVault(newVault);
+        factory.updateVault(newVault);
 
         assertEq(factory.VAULT(), newVault, "Vault should be updated");
         assertNotEq(factory.VAULT(), oldVault, "Vault should be different from old");
@@ -228,7 +228,7 @@ contract CEAFactoryTest is Test {
         vm.prank(owner);
         vm.expectEmit(true, true, false, false);
         emit ICEAFactory.VaultUpdated(oldVault, newVault);
-        factory.setVault(newVault);
+        factory.updateVault(newVault);
     }
 
     function testSetVaultMultipleTimes() public {
@@ -237,13 +237,13 @@ contract CEAFactoryTest is Test {
         address vault3 = makeAddr("vault3");
 
         vm.startPrank(owner);
-        factory.setVault(vault1);
+        factory.updateVault(vault1);
         assertEq(factory.VAULT(), vault1);
 
-        factory.setVault(vault2);
+        factory.updateVault(vault2);
         assertEq(factory.VAULT(), vault2);
 
-        factory.setVault(vault3);
+        factory.updateVault(vault3);
         assertEq(factory.VAULT(), vault3);
         vm.stopPrank();
     }
@@ -252,7 +252,7 @@ contract CEAFactoryTest is Test {
         address currentVault = factory.VAULT();
 
         vm.prank(owner);
-        factory.setVault(currentVault);
+        factory.updateVault(currentVault);
 
         assertEq(factory.VAULT(), currentVault, "Vault should remain the same");
     }
@@ -263,7 +263,7 @@ contract CEAFactoryTest is Test {
 
         address newVault = makeAddr("newVault");
         vm.prank(owner);
-        factory.setVault(newVault);
+        factory.updateVault(newVault);
 
         assertTrue(hasCode(cea), "CEA should still have code");
         assertEq(factory.getPushAccountForCEA(cea), ueaOnPush, "Mapping should persist");
@@ -274,7 +274,7 @@ contract CEAFactoryTest is Test {
         address contractAddress = address(contractVault);
 
         vm.prank(owner);
-        factory.setVault(contractAddress);
+        factory.updateVault(contractAddress);
 
         assertEq(factory.VAULT(), contractAddress, "Vault can be a contract");
     }
@@ -463,17 +463,17 @@ contract CEAFactoryTest is Test {
             abi.encodeWithSelector(IAccessControl.AccessControlUnauthorizedAccount.selector, nonOwner, adminRole)
         );
         vm.prank(nonOwner);
-        factory.setUniversalGateway(address(newGateway));
+        factory.updateUniversalGateway(address(newGateway));
 
         vm.prank(owner);
-        factory.setUniversalGateway(address(newGateway));
+        factory.updateUniversalGateway(address(newGateway));
         assertEq(factory.UNIVERSAL_GATEWAY(), address(newGateway));
     }
 
     function testSetUniversalGatewayZeroAddressReverts() public {
         vm.prank(owner);
         vm.expectRevert(CEAErrors.ZeroAddress.selector);
-        factory.setUniversalGateway(address(0));
+        factory.updateUniversalGateway(address(0));
     }
 
     function testSetUniversalGatewayUpdatesState() public {
@@ -481,7 +481,7 @@ contract CEAFactoryTest is Test {
         address oldGateway = factory.UNIVERSAL_GATEWAY();
 
         vm.prank(owner);
-        factory.setUniversalGateway(address(newGateway));
+        factory.updateUniversalGateway(address(newGateway));
 
         assertEq(factory.UNIVERSAL_GATEWAY(), address(newGateway));
         assertNotEq(factory.UNIVERSAL_GATEWAY(), oldGateway);
@@ -819,7 +819,7 @@ contract CEAFactoryTest is Test {
         // Similar to above - setter prevents zero address
         vm.prank(owner);
         vm.expectRevert(CEAErrors.ZeroAddress.selector);
-        factory.setUniversalGateway(address(0));
+        factory.updateUniversalGateway(address(0));
     }
 
     // =========================================================================
@@ -1021,7 +1021,7 @@ contract CEAFactoryTest is Test {
     function testDeployCEAWithUpdatedVault() public {
         address newVault = makeAddr("newVault");
         vm.prank(owner);
-        factory.setVault(newVault);
+        factory.updateVault(newVault);
 
         // Deploy with new vault
         vm.prank(newVault);
@@ -1034,7 +1034,7 @@ contract CEAFactoryTest is Test {
     function testDeployCEAWithUpdatedGateway() public {
         MockUniversalGateway newGateway = new MockUniversalGateway();
         vm.prank(owner);
-        factory.setUniversalGateway(address(newGateway));
+        factory.updateUniversalGateway(address(newGateway));
 
         address cea = deployCEAHelper(ueaOnPush);
         CEA ceaInstance = CEA(payable(cea));
@@ -1230,7 +1230,7 @@ contract CEAFactoryTest is Test {
     function testUpdateGatewayBeforeDeployment() public {
         MockUniversalGateway newGateway = new MockUniversalGateway();
         vm.prank(owner);
-        factory.setUniversalGateway(address(newGateway));
+        factory.updateUniversalGateway(address(newGateway));
 
         address cea = deployCEAHelper(ueaOnPush);
         CEA ceaInstance = CEA(payable(cea));
@@ -1240,7 +1240,7 @@ contract CEAFactoryTest is Test {
     function testUpdateVaultBeforeDeployment() public {
         address newVault = makeAddr("newVault");
         vm.prank(owner);
-        factory.setVault(newVault);
+        factory.updateVault(newVault);
 
         vm.prank(newVault);
         address cea = factory.deployCEA(ueaOnPush);
@@ -1252,15 +1252,15 @@ contract CEAFactoryTest is Test {
         // Deploy first
         address cea = deployCEAHelper(ueaOnPush);
         CEA ceaInstance = CEA(payable(cea));
-        address originalGateway = ceaInstance.UNIVERSAL_GATEWAY();
 
         // Update gateway
         MockUniversalGateway newGateway = new MockUniversalGateway();
         vm.prank(owner);
-        factory.setUniversalGateway(address(newGateway));
+        factory.updateUniversalGateway(address(newGateway));
 
-        // Existing CEA should still have old gateway
-        assertEq(ceaInstance.UNIVERSAL_GATEWAY(), originalGateway, "Existing CEA should keep old gateway");
+        // UNIVERSAL_GATEWAY() delegates to the factory, so all existing CEAs immediately
+        // reflect the factory's current value — there is no per-CEA stored copy.
+        assertEq(ceaInstance.UNIVERSAL_GATEWAY(), address(newGateway), "Existing CEA should see new gateway via factory");
     }
 
     // =========================================================================
@@ -1276,14 +1276,14 @@ contract CEAFactoryTest is Test {
             abi.encodeWithSelector(IAccessControl.AccessControlUnauthorizedAccount.selector, vault, adminRole)
         );
         vm.prank(vault);
-        factory.setVault(newVault);
+        factory.updateVault(newVault);
 
         // Non-owner cannot change
         vm.expectRevert(
             abi.encodeWithSelector(IAccessControl.AccessControlUnauthorizedAccount.selector, nonOwner, adminRole)
         );
         vm.prank(nonOwner);
-        factory.setVault(newVault);
+        factory.updateVault(newVault);
     }
 
     function testPreventUnauthorizedImplementationChange() public {

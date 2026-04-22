@@ -87,7 +87,7 @@ contract CEA_MigrationTest is Test {
     function test_initializeCEA_WithFactory() public {
         CEA newCEA = new CEA();
 
-        newCEA.initializeCEA(ueaOnPush, vault, universalGateway, address(factory));
+        newCEA.initializeCEA(ueaOnPush, address(factory));
 
         assertTrue(newCEA.isInitialized(), "CEA should be initialized");
         assertEq(address(newCEA.factory()), address(factory), "Factory should be set");
@@ -97,7 +97,7 @@ contract CEA_MigrationTest is Test {
         CEA newCEA = new CEA();
 
         vm.expectRevert(Errors.ZeroAddress.selector);
-        newCEA.initializeCEA(ueaOnPush, vault, universalGateway, address(0));
+        newCEA.initializeCEA(ueaOnPush, address(0));
     }
 
     // =========================================================================

@@ -49,6 +49,10 @@ interface ICEAFactory {
     /// @return             Vault address
     function VAULT() external view returns (address);
 
+    /// @notice             Returns the current Universal Gateway address.
+    /// @return             Universal Gateway address
+    function UNIVERSAL_GATEWAY() external view returns (address);
+
     /// @notice             Returns the CEA proxy implementation used for clones.
     /// @return             CEA proxy implementation address
     function CEA_PROXY_IMPLEMENTATION() external view returns (address);

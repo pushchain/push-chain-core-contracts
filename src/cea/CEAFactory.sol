@@ -168,7 +168,7 @@ contract CEAFactory is Initializable, AccessControlUpgradeable, PausableUpgradea
 
         ICEAProxy(cea).initializeCEAProxy(CEA_IMPLEMENTATION);
 
-        ICEA(cea).initializeCEA(pushAccount, VAULT, UNIVERSAL_GATEWAY, address(this));
+        ICEA(cea).initializeCEA(pushAccount, address(this));
 
         pushAccountToCEA[pushAccount] = cea;
         ceaToPushAccount[cea] = pushAccount;
@@ -190,9 +190,9 @@ contract CEAFactory is Initializable, AccessControlUpgradeable, PausableUpgradea
         _unpause();
     }
 
-    /// @notice              Sets the Vault address. Only callable by DEFAULT_ADMIN_ROLE.
+    /// @notice              Updates the Vault address. Only callable by DEFAULT_ADMIN_ROLE.
     /// @param newVault      New Vault address
-    function setVault(address newVault) external onlyRole(DEFAULT_ADMIN_ROLE) {
+    function updateVault(address newVault) external onlyRole(DEFAULT_ADMIN_ROLE) {
         if (newVault == address(0)) revert CEAErrors.ZeroAddress();
         address old = VAULT;
         VAULT = newVault;
@@ -217,9 +217,9 @@ contract CEAFactory is Initializable, AccessControlUpgradeable, PausableUpgradea
         emit CEAImplementationUpdated(old, newImplementation);
     }
 
-    /// @notice          Sets the Universal Gateway address. Only callable by DEFAULT_ADMIN_ROLE.
+    /// @notice          Updates the Universal Gateway address. Only callable by DEFAULT_ADMIN_ROLE.
     /// @param newUG     New Universal Gateway address
-    function setUniversalGateway(address newUG) external onlyRole(DEFAULT_ADMIN_ROLE) {
+    function updateUniversalGateway(address newUG) external onlyRole(DEFAULT_ADMIN_ROLE) {
         if (newUG == address(0)) revert CEAErrors.ZeroAddress();
         address old = UNIVERSAL_GATEWAY;
         UNIVERSAL_GATEWAY = newUG;

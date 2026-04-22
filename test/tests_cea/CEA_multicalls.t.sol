@@ -231,7 +231,7 @@ contract CEA_NewMulticallTests is CEATest {
         bytes memory payload = encodeCalls(calls);
 
         vm.prank(vault);
-        // Mismatched selector (3 params vs 4) — no function match, empty return data
+        // Mismatched selector (3 params vs 2) — no function match, empty return data
         vm.expectRevert(Errors.ExecutionFailed.selector);
         ceaInstance.executeUniversalTx(subTxId, universalTxID, ueaOnPush, address(0), payload);
     }
