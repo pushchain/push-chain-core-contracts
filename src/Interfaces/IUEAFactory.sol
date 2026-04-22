@@ -36,10 +36,6 @@ interface IUEAFactory {
     /// @param newUEA            New UEA implementation address
     event UEAImplementationUpdated(bytes32 indexed vmHash, address previousUEA, address newUEA);
 
-    /// @notice                  Emitted when the PAUSER_ROLE is granted to a new address.
-    /// @param pauser            Address that was granted the pauser role
-    event PauserRoleGranted(address indexed pauser);
-
     // =========================
     //    UF_1: VIEW FUNCTIONS
     // =========================

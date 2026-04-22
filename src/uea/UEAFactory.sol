@@ -82,7 +82,6 @@ contract UEAFactory is Initializable, AccessControlUpgradeable, PausableUpgradea
         _grantRole(DEFAULT_ADMIN_ROLE, initialAdmin);
         _grantRole(PAUSER_ROLE, initialPauser);
         pushChainId = _pushChainId;
-        emit PauserRoleGranted(initialPauser);
     }
 
     // =========================
@@ -211,14 +210,6 @@ contract UEAFactory is Initializable, AccessControlUpgradeable, PausableUpgradea
     /// @notice          Unpause UEA deployments. Only callable by PAUSER_ROLE.
     function unpause() external onlyRole(PAUSER_ROLE) {
         _unpause();
-    }
-
-    /// @notice              Grant PAUSER_ROLE to a new address. Only callable by DEFAULT_ADMIN_ROLE.
-    /// @param newPauser     Address to grant pauser role to
-    function setPauserRole(address newPauser) external onlyRole(DEFAULT_ADMIN_ROLE) {
-        if (newPauser == address(0)) revert UEAErrors.InvalidInputArgs();
-        _grantRole(PAUSER_ROLE, newPauser);
-        emit PauserRoleGranted(newPauser);
     }
 
     /// @notice                             Sets the UEAProxy implementation address.

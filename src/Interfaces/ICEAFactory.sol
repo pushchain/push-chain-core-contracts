@@ -41,10 +41,6 @@ interface ICEAFactory {
     /// @param newContract       New migration contract address
     event CEAMigrationContractUpdated(address indexed oldContract, address indexed newContract);
 
-    /// @notice                  Emitted when the PAUSER_ROLE is granted to a new address.
-    /// @param pauser            Address that was granted the pauser role
-    event PauserRoleGranted(address indexed pauser);
-
     // =========================
     //    CF_1: VIEW FUNCTIONS
     // =========================

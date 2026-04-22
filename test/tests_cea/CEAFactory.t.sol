@@ -1446,31 +1446,27 @@ contract CEAFactoryTest is Test {
         assertTrue(factory.isCEA(cea));
     }
 
-    function testSetPauserRole_OnlyOwner() public {
+    function testGrantPauserRole_OnlyAdmin() public {
         address newPauser = makeAddr("newPauser");
-
         bytes32 adminRole = factory.DEFAULT_ADMIN_ROLE();
+        bytes32 pauserRole = factory.PAUSER_ROLE();
+
         vm.expectRevert(
             abi.encodeWithSelector(IAccessControl.AccessControlUnauthorizedAccount.selector, nonOwner, adminRole)
         );
         vm.prank(nonOwner);
-        factory.setPauserRole(newPauser);
+        factory.grantRole(pauserRole, newPauser);
 
         vm.prank(owner);
-        factory.setPauserRole(newPauser);
-        assertTrue(factory.hasRole(factory.PAUSER_ROLE(), newPauser));
+        factory.grantRole(pauserRole, newPauser);
+        assertTrue(factory.hasRole(pauserRole, newPauser));
     }
 
-    function testSetPauserRole_ZeroAddressReverts() public {
-        vm.prank(owner);
-        vm.expectRevert(CEAErrors.ZeroAddress.selector);
-        factory.setPauserRole(address(0));
-    }
-
-    function testSetPauserRole_NewPauserCanPause() public {
+    function testGrantPauserRole_NewPauserCanPause() public {
         address newPauser = makeAddr("newPauser2");
+        bytes32 pauserRole = factory.PAUSER_ROLE();
         vm.prank(owner);
-        factory.setPauserRole(newPauser);
+        factory.grantRole(pauserRole, newPauser);
 
         vm.prank(newPauser);
         factory.pause();

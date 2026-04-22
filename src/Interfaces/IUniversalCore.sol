@@ -31,10 +31,6 @@ interface IUniversalCore {
     event SetUniswapV3Addresses(address factory, address swapRouter);
     event SetDefaultFeeTier(address indexed token, uint24 feeTier);
 
-    /// @notice                  Emitted when the PAUSER_ROLE is granted to a new address.
-    /// @param pauser            Address that was granted the pauser role
-    event PauserRoleGranted(address indexed pauser);
-
     /// @notice                  Emitted when stuck native PC is rescued by admin.
     /// @param to                Recipient of the rescued PC
     /// @param amount            Amount of native PC rescued

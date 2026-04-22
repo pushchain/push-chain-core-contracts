@@ -90,7 +90,8 @@ Granted to the deployer at initialization. Controls contract-level configuration
 | `setDefaultFeeTier(token, feeTier)` | Set default Uniswap V3 fee tier for a token (allowed tiers: 100, 500, 3000, 10000) |
 | `setDefaultDeadlineMins(minutesValue)` | Set default swap deadline |
 | `setUniversalGatewayPC(addr)` | Update the address authorized to call `swapAndBurnGas` |
-| `setPauserRole(addr)` | Grant `PAUSER_ROLE` to an address (guardian) |
+| `grantRole(PAUSER_ROLE, addr)` | Grant `PAUSER_ROLE` to an address (guardian) — inherited from OZ AccessControl |
+| `revokeRole(PAUSER_ROLE, addr)` | Revoke `PAUSER_ROLE` from an address — inherited from OZ AccessControl |
 
 ### Gateway (`universalGatewayPC`)
 

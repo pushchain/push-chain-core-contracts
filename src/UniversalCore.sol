@@ -135,8 +135,6 @@ contract UniversalCore is
         _grantRole(DEFAULT_ADMIN_ROLE, msg.sender);
         _grantRole(PAUSER_ROLE, initialPauser_);
 
-        emit PauserRoleGranted(initialPauser_);
-
         WPC = wpc_;
         uniswapV3Factory = uniswapV3Factory_;
         uniswapV3SwapRouter = uniswapV3SwapRouter_;
@@ -479,14 +477,6 @@ contract UniversalCore is
     /// @notice Unpause the contract - resumes all deposit functions. Only callable by PAUSER_ROLE.
     function unpause() external onlyRole(PAUSER_ROLE) {
         _unpause();
-    }
-
-    /// @notice              Grant PAUSER_ROLE to a new address. Only callable by admin.
-    /// @param newPauser     Address to grant pauser role to
-    function setPauserRole(address newPauser) external onlyAdmin {
-        if (newPauser == address(0)) revert CommonErrors.ZeroAddress();
-        _grantRole(PAUSER_ROLE, newPauser);
-        emit PauserRoleGranted(newPauser);
     }
 
     /// @notice              Rescue native PC stuck in the contract. Only callable by admin.

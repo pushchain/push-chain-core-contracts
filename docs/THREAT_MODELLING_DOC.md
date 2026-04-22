@@ -160,7 +160,7 @@ Uniswap V3 pool infrastructure.
 | `setDefaultFeeTier`             | `DEFAULT_ADMIN_ROLE`        | `onlyAdmin`                                                 |
 | `setSlippageTolerance`          | `DEFAULT_ADMIN_ROLE`        | `onlyAdmin`                                                 |
 | `setDefaultDeadlineMins`        | `DEFAULT_ADMIN_ROLE`        | `onlyAdmin`                                                 |
-| `setPauserRole`                 | `DEFAULT_ADMIN_ROLE`        | `onlyAdmin`                                                 |
+| `grantRole(PAUSER_ROLE, addr)`  | `DEFAULT_ADMIN_ROLE`        | OZ `AccessControl`                                          |
 | `pause`                         | `PAUSER_ROLE`               | OZ `Pausable`                                               |
 | `unpause`                       | `PAUSER_ROLE`               | OZ `Pausable`                                               |
 | `receive()`                     | Anyone                      | `payable`                                                   |
@@ -400,9 +400,9 @@ mappings. Maintains bidirectional `UOA ↔ UEA` address index.
 | Function                    | Caller               | Guard           |
 | --------------------------- | -------------------- | --------------- |
 | `deployUEA(id)`             | Anyone               | `whenNotPaused` |
-| `pause` / `unpause`         | `PAUSER_ROLE`        | OZ `Pausable`   |
-| `setPauserRole`             | `DEFAULT_ADMIN_ROLE` | `onlyAdmin`     |
-| `setUEAProxyImplementation` | `DEFAULT_ADMIN_ROLE` | `onlyAdmin`     |
+| `pause` / `unpause`         | `PAUSER_ROLE`        | OZ `Pausable`        |
+| `grantRole(PAUSER_ROLE, a)` | `DEFAULT_ADMIN_ROLE` | OZ `AccessControl`   |
+| `setUEAProxyImplementation` | `DEFAULT_ADMIN_ROLE` | `onlyAdmin`          |
 | `setUEAMigrationContract`   | `DEFAULT_ADMIN_ROLE` | `onlyAdmin`     |
 | `registerNewChain`          | `DEFAULT_ADMIN_ROLE` | `onlyAdmin`     |
 | `registerUEA`               | `DEFAULT_ADMIN_ROLE` | `onlyAdmin`     |
@@ -567,7 +567,7 @@ Maintains bidirectional `pushAccount ↔ CEA` mappings. Stores shared config
 | --------------------------- | -------------------- | ---------------------------- |
 | `deployCEA(pushAccount)`    | `VAULT`              | `onlyVault`, `whenNotPaused` |
 | `pause` / `unpause`         | `PAUSER_ROLE`        | OZ `Pausable`                |
-| `setPauserRole`             | `DEFAULT_ADMIN_ROLE` | `onlyAdmin`                  |
+| `grantRole(PAUSER_ROLE, a)` | `DEFAULT_ADMIN_ROLE` | OZ `AccessControl`           |
 | `setVault`                  | `DEFAULT_ADMIN_ROLE` | `onlyAdmin`                  |
 | `setCEAProxyImplementation` | `DEFAULT_ADMIN_ROLE` | `onlyAdmin`                  |
 | `setCEAImplementation`      | `DEFAULT_ADMIN_ROLE` | `onlyAdmin`                  |

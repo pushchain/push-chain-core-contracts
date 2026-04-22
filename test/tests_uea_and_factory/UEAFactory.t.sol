@@ -1053,29 +1053,24 @@ contract UEAFactoryTest is Test {
         assertTrue(factory.hasCode(ueaAddress));
     }
 
-    function testSetPauserRole_OnlyOwner() public {
+    function testGrantPauserRole_OnlyAdmin() public {
         address newPauser = makeAddr("newPauser");
-
         bytes32 adminRole = factory.DEFAULT_ADMIN_ROLE();
+        bytes32 pauserRole = factory.PAUSER_ROLE();
+
         vm.expectRevert(
             abi.encodeWithSelector(IAccessControl.AccessControlUnauthorizedAccount.selector, nonOwner, adminRole)
         );
         vm.prank(nonOwner);
-        factory.setPauserRole(newPauser);
+        factory.grantRole(pauserRole, newPauser);
 
-        // Admin can grant pauser role
-        factory.setPauserRole(newPauser);
-        assertTrue(factory.hasRole(factory.PAUSER_ROLE(), newPauser));
+        factory.grantRole(pauserRole, newPauser);
+        assertTrue(factory.hasRole(pauserRole, newPauser));
     }
 
-    function testSetPauserRole_ZeroAddressReverts() public {
-        vm.expectRevert(Errors.InvalidInputArgs.selector);
-        factory.setPauserRole(address(0));
-    }
-
-    function testSetPauserRole_NewPauserCanPause() public {
+    function testGrantPauserRole_NewPauserCanPause() public {
         address newPauser = makeAddr("newPauser2");
-        factory.setPauserRole(newPauser);
+        factory.grantRole(factory.PAUSER_ROLE(), newPauser);
 
         vm.prank(newPauser);
         factory.pause();

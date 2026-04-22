@@ -104,7 +104,6 @@ contract CEAFactory is Initializable, AccessControlUpgradeable, PausableUpgradea
 
         _grantRole(DEFAULT_ADMIN_ROLE, initialAdmin);
         _grantRole(PAUSER_ROLE, initialPauser);
-        emit PauserRoleGranted(initialPauser);
 
         VAULT = initialVault;
         CEA_PROXY_IMPLEMENTATION = ceaProxyImplementation;
@@ -189,14 +188,6 @@ contract CEAFactory is Initializable, AccessControlUpgradeable, PausableUpgradea
     /// @notice          Unpause CEA deployments. Only callable by PAUSER_ROLE.
     function unpause() external onlyRole(PAUSER_ROLE) {
         _unpause();
-    }
-
-    /// @notice              Grant PAUSER_ROLE to a new address. Only callable by DEFAULT_ADMIN_ROLE.
-    /// @param newPauser     Address to grant pauser role to
-    function setPauserRole(address newPauser) external onlyRole(DEFAULT_ADMIN_ROLE) {
-        if (newPauser == address(0)) revert CEAErrors.ZeroAddress();
-        _grantRole(PAUSER_ROLE, newPauser);
-        emit PauserRoleGranted(newPauser);
     }
 
     /// @notice              Sets the Vault address. Only callable by DEFAULT_ADMIN_ROLE.

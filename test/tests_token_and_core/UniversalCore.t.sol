@@ -564,31 +564,26 @@ contract UniversalCoreTest is Test, UpgradeableContractHelper {
         assertFalse(universalCore.hasRole(universalCore.PAUSER_ROLE(), deployer));
     }
 
-    function test_SetPauserRole_OnlyAdmin() public {
+    function test_GrantPauserRole_OnlyAdmin() public {
         address newPauser = makeAddr("newPauser");
+        bytes32 role = universalCore.PAUSER_ROLE();
 
-        // Non-admin cannot set pauser role
         vm.prank(nonOwner);
-        vm.expectRevert(CommonErrors.InvalidOwner.selector);
-        universalCore.setPauserRole(newPauser);
+        vm.expectRevert(
+            abi.encodeWithSelector(IAccessControl.AccessControlUnauthorizedAccount.selector, nonOwner, bytes32(0))
+        );
+        universalCore.grantRole(role, newPauser);
 
-        // Admin can set pauser role
         vm.prank(deployer);
-        universalCore.setPauserRole(newPauser);
-        assertTrue(universalCore.hasRole(universalCore.PAUSER_ROLE(), newPauser));
+        universalCore.grantRole(role, newPauser);
+        assertTrue(universalCore.hasRole(role, newPauser));
     }
 
-    function test_SetPauserRole_ZeroAddressReverts() public {
-        vm.prank(deployer);
-        vm.expectRevert(CommonErrors.ZeroAddress.selector);
-        universalCore.setPauserRole(address(0));
-    }
-
-    function test_SetPauserRole_NewPauserCanPause() public {
+    function test_GrantPauserRole_NewPauserCanPause() public {
         address newPauser = makeAddr("newPauser");
 
         vm.prank(deployer);
-        universalCore.setPauserRole(newPauser);
+        universalCore.grantRole(universalCore.PAUSER_ROLE(), newPauser);
 
         vm.prank(newPauser);
         universalCore.pause();

@@ -22,6 +22,12 @@ contract UEAFactoryV0 is Initializable, OwnableUpgradeable, PausableUpgradeable,
     using Clones for address;
 
     // =========================
+    //    UF: EVENTS (V0-only, removed from IUEAFactory in V1)
+    // =========================
+
+    event PauserRoleGranted(address indexed pauser);
+
+    // =========================
     //    UF: STATE VARIABLES
     // =========================
 
