@@ -232,7 +232,7 @@ contract UEAFactoryV0 is Initializable, OwnableUpgradeable, PausableUpgradeable,
 
     /// @notice                             Sets the UEAProxy implementation address.
     /// @param ueaProxyImplementation       New UEAProxy implementation address
-    function setUEAProxyImplementation(address ueaProxyImplementation) external onlyOwner {
+    function updateUEAProxyImplementation(address ueaProxyImplementation) external onlyOwner {
         if (ueaProxyImplementation == address(0)) {
             revert UEAErrors.InvalidInputArgs();
         }
@@ -241,7 +241,7 @@ contract UEAFactoryV0 is Initializable, OwnableUpgradeable, PausableUpgradeable,
 
     /// @notice                         Sets the UEA migration contract address.
     /// @param ueaMigrationContract     New migration contract address
-    function setUEAMigrationContract(address ueaMigrationContract) external onlyOwner {
+    function updateUEAMigrationContract(address ueaMigrationContract) external onlyOwner {
         if (ueaMigrationContract == address(0)) {
             revert UEAErrors.InvalidInputArgs();
         }
@@ -249,7 +249,7 @@ contract UEAFactoryV0 is Initializable, OwnableUpgradeable, PausableUpgradeable,
     }
 
     /// @notice Update `pushChainId`. Reverts on empty string.
-    function setPushChainId(string memory _pushChainId) external onlyOwner {
+    function updatePushChainId(string memory _pushChainId) external onlyOwner {
         if (bytes(_pushChainId).length == 0) revert UEAErrors.InvalidInputArgs();
         pushChainId = _pushChainId;
     }

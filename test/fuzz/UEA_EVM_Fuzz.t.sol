@@ -45,7 +45,7 @@ contract UEA_EVM_FuzzTest is Test {
             abi.encodeWithSelector(UEAFactory.initialize.selector, address(this), makeAddr("pauser"), "42101");
         ERC1967Proxy proxy = new ERC1967Proxy(address(factoryImpl), initData);
         factory = UEAFactory(address(proxy));
-        factory.setUEAProxyImplementation(address(ueaProxyImpl));
+        factory.updateUEAProxyImplementation(address(ueaProxyImpl));
 
         ueaEVMImpl = new UEA_EVM();
         (owner, ownerPK) = makeAddrAndKey("owner");
@@ -58,7 +58,7 @@ contract UEA_EVM_FuzzTest is Test {
         ueaEVMImpl2 = new UEA_EVM();
         ueaSVMImpl = new UEA_SVM();
         migration = new UEAMigration(address(ueaEVMImpl2), address(ueaSVMImpl));
-        factory.setUEAMigrationContract(address(migration));
+        factory.updateUEAMigrationContract(address(migration));
     }
 
     modifier deployEvmSmartAccount() {

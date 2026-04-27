@@ -67,23 +67,24 @@ contract PRC20Test is Test, UpgradeableContractHelper {
         // Create initialization data
         bytes memory initData = abi.encodeWithSelector(
             UniversalCore.initialize.selector,
+            address(this),
+            makeAddr("pauser"),
             mockWPC,
             mockUniswapFactory,
-            mockUniswapRouter,
-            makeAddr("pauser")
+            mockUniswapRouter
         );
 
         // Deploy proxy and initialize
         address proxyAddress = deployUpgradeableContract(address(universalCoreImplementation), initData);
         universalCore = UniversalCore(payable(proxyAddress));
 
-        // Grant MANAGER_ROLE to uExec so manager functions (e.g. setGasTokenPRC20) are callable
-        universalCore.grantRole(universalCore.MANAGER_ROLE(), uExec);
+        // Grant UVCORE_ADMIN_ROLE to uExec so config functions are callable
+        universalCore.grantRole(universalCore.UVCORE_ADMIN_ROLE(), uExec);
 
         // Configure universalCore
         vm.startPrank(uExec);
         universalCore.setChainMeta(SOURCE_CHAIN_NAMESPACE, GAS_PRICE, 0);
-        universalCore.setGasTokenPRC20(SOURCE_CHAIN_NAMESPACE, address(gasToken));
+        universalCore.updateGasTokenPRC20(SOURCE_CHAIN_NAMESPACE, address(gasToken));
         vm.stopPrank();
 
         // Deploy PRC20 token implementation
@@ -497,10 +498,10 @@ contract PRC20Test is Test, UpgradeableContractHelper {
     }
 
     function testDepositSucceedsAfterUnpause() public {
-        // Pause then unpause
+        // Pause then unpause: pauser has PAUSER_ROLE (can pause), admin/operator has OPERATOR_ROLE (can unpause)
         vm.prank(makeAddr("pauser"));
         universalCore.pause();
-        vm.prank(makeAddr("pauser"));
+        // address(this) is the admin and holds OPERATOR_ROLE — only OPERATOR_ROLE can unpause
         universalCore.unpause();
 
         // Deposit should succeed
@@ -523,20 +524,18 @@ contract PRC20Test is Test, UpgradeableContractHelper {
         // Deploy new universalCore implementation
         UniversalCore newHandlerImpl = new UniversalCore();
 
-        // Create initialization data
         bytes memory initData = abi.encodeWithSelector(
             UniversalCore.initialize.selector,
+            address(this),
+            makeAddr("pauser"),
             mockWPC,
             mockUniswapFactory,
-            mockUniswapRouter,
-            makeAddr("pauser")
+            mockUniswapRouter
         );
 
-        // Deploy proxy and initialize
         address proxyAddress = deployUpgradeableContract(address(newHandlerImpl), initData);
         UniversalCore newHandler = UniversalCore(payable(proxyAddress));
 
-        // Update universalCore contract from Universal Executor Module
         vm.prank(uExec);
 
         vm.expectEmit(false, false, false, true);
@@ -558,16 +557,15 @@ contract PRC20Test is Test, UpgradeableContractHelper {
         // Deploy new universalCore implementation
         UniversalCore newHandlerImpl = new UniversalCore();
 
-        // Create initialization data
         bytes memory initData = abi.encodeWithSelector(
             UniversalCore.initialize.selector,
+            address(this),
+            makeAddr("pauser"),
             mockWPC,
             mockUniswapFactory,
-            mockUniswapRouter,
-            makeAddr("pauser")
+            mockUniswapRouter
         );
 
-        // Deploy proxy and initialize
         address proxyAddress = deployUpgradeableContract(address(newHandlerImpl), initData);
         UniversalCore newHandler = UniversalCore(payable(proxyAddress));
 

@@ -75,7 +75,7 @@ contract CEAMigration_FuzzTest is Test {
         vm.prank(vault);
         address ceaAddr = factory.deployCEA(ueaOnPush);
 
-        factory.setCEAMigrationContract(address(migration));
+        factory.updateCEAMigrationContract(address(migration));
 
         // Verify initial slot value (should be ceaV1)
         bytes32 slotBefore = vm.load(ceaAddr, CEA_LOGIC_SLOT);
@@ -98,7 +98,7 @@ contract CEAMigration_FuzzTest is Test {
         vm.prank(vault);
         address ceaAddr = factory.deployCEA(ueaOnPush);
 
-        factory.setCEAMigrationContract(address(migration));
+        factory.updateCEAMigrationContract(address(migration));
 
         bytes memory payload = abi.encodePacked(bytes4(keccak256("UEA_MIGRATION")));
         bytes32 subTxId = keccak256("migration_event_test");

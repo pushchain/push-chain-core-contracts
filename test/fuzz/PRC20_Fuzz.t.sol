@@ -22,7 +22,7 @@ contract PRC20_Fuzz is Test, UpgradeableContractHelper {
         address mockRouter = makeAddr("router");
         address mockPauser = makeAddr("pauser");
         bytes memory ucInit = abi.encodeWithSelector(
-            UniversalCore.initialize.selector, mockWPC, mockFactory, mockRouter, mockPauser
+            UniversalCore.initialize.selector, address(this), mockPauser, mockWPC, mockFactory, mockRouter
         );
         address ucProxy = deployUpgradeableContract(address(ucImpl), ucInit);
         universalCore = UniversalCore(payable(ucProxy));

@@ -106,7 +106,7 @@ contract CEA_MigrationTest is Test {
 
     function test_isMigration_True() public {
         // Set migration contract in factory
-        factory.setCEAMigrationContract(address(migration));
+        factory.updateCEAMigrationContract(address(migration));
 
         bytes32 subTxId = generateTxID(1);
         bytes32 universalTxID = generateUniversalTxID(1);
@@ -128,7 +128,7 @@ contract CEA_MigrationTest is Test {
 
     function test_handleMigration_TopLevelFormat_Succeeds() public {
         // Set migration contract
-        factory.setCEAMigrationContract(address(migration));
+        factory.updateCEAMigrationContract(address(migration));
 
         bytes32 subTxId = generateTxID(1);
         bytes32 universalTxID = generateUniversalTxID(1);
@@ -145,7 +145,7 @@ contract CEA_MigrationTest is Test {
     }
 
     function test_handleMigration_NonZeroMsgValue_Reverts() public {
-        factory.setCEAMigrationContract(address(migration));
+        factory.updateCEAMigrationContract(address(migration));
 
         bytes32 subTxId = generateTxID(1);
         bytes32 universalTxID = generateUniversalTxID(1);
@@ -160,7 +160,7 @@ contract CEA_MigrationTest is Test {
 
     function test_handleMigration_MigrationInsideMulticall_Reverts() public {
         // Set migration contract
-        factory.setCEAMigrationContract(address(migration));
+        factory.updateCEAMigrationContract(address(migration));
 
         bytes32 subTxId = generateTxID(1);
         bytes32 universalTxID = generateUniversalTxID(1);
@@ -197,7 +197,7 @@ contract CEA_MigrationTest is Test {
 
     function test_handleMulticall_MigrationInBatch() public {
         // Set migration contract
-        factory.setCEAMigrationContract(address(migration));
+        factory.updateCEAMigrationContract(address(migration));
 
         bytes32 subTxId = generateTxID(1);
         bytes32 universalTxID = generateUniversalTxID(1);
@@ -220,7 +220,7 @@ contract CEA_MigrationTest is Test {
 
     function test_handleMulticall_MigrationInBatch_FirstPosition() public {
         // Set migration contract
-        factory.setCEAMigrationContract(address(migration));
+        factory.updateCEAMigrationContract(address(migration));
 
         bytes32 subTxId = generateTxID(1);
         bytes32 universalTxID = generateUniversalTxID(1);
@@ -247,7 +247,7 @@ contract CEA_MigrationTest is Test {
 
     function test_handleExecution_StandaloneMigration() public {
         // Set migration contract
-        factory.setCEAMigrationContract(address(migration));
+        factory.updateCEAMigrationContract(address(migration));
 
         bytes32 subTxId = generateTxID(1);
         bytes32 universalTxID = generateUniversalTxID(1);
@@ -275,7 +275,7 @@ contract CEA_MigrationTest is Test {
         // We need a contract whose migrateCEA() will fail when delegatecalled.
         // Use a mock that reverts on migrateCEA().
         FailingMigration failMigration = new FailingMigration();
-        factory.setCEAMigrationContract(address(failMigration));
+        factory.updateCEAMigrationContract(address(failMigration));
 
         bytes32 subTxId = generateTxID(1);
         bytes32 universalTxID = generateUniversalTxID(1);

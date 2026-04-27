@@ -27,7 +27,7 @@ contract UEAFactory_Fuzz is Test {
             abi.encodeWithSelector(UEAFactory.initialize.selector, address(this), makeAddr("pauser"), "42101");
         ERC1967Proxy proxy = new ERC1967Proxy(address(factoryImpl), initData);
         factory = UEAFactory(address(proxy));
-        factory.setUEAProxyImplementation(address(ueaProxyImpl));
+        factory.updateUEAProxyImplementation(address(ueaProxyImpl));
         ueaEVMImpl = new UEA_EVM();
         bytes32 evmChainHash = keccak256(abi.encode(CHAIN_NS, CHAIN_ID));
         factory.registerNewChain(evmChainHash, EVM_HASH);
@@ -179,15 +179,15 @@ contract UEAFactory_Fuzz is Test {
     // 5.5 Chain Registration Properties
     // =============================================
 
-    function testFuzz_registerNewChain_nonOwner_reverts(address caller) public {
+    function testFuzz_registerNewChain_nonUEAAdmin_reverts(address caller) public {
         vm.assume(caller != address(this));
         vm.assume(caller != address(0));
 
         bytes32 chainHash = keccak256(abi.encode("fuzzchain", "999"));
-        bytes32 adminRole = factory.DEFAULT_ADMIN_ROLE();
+        bytes32 ueaAdminRole = factory.UEA_ADMIN_ROLE();
 
         vm.expectRevert(
-            abi.encodeWithSelector(IAccessControl.AccessControlUnauthorizedAccount.selector, caller, adminRole)
+            abi.encodeWithSelector(IAccessControl.AccessControlUnauthorizedAccount.selector, caller, ueaAdminRole)
         );
         vm.prank(caller);
         factory.registerNewChain(chainHash, EVM_HASH);
@@ -208,17 +208,16 @@ contract UEAFactory_Fuzz is Test {
     // 5.3 Configurable pushChainId Properties
     // =============================================
 
-    function testFuzz_setPushChainId_nonAdmin_reverts(address caller) public {
+    function testFuzz_updatePushChainId_nonUEAAdmin_reverts(address caller) public {
         vm.assume(caller != address(this));
         vm.assume(caller != address(0));
 
+        bytes32 ueaAdminRole = factory.UEA_ADMIN_ROLE();
         vm.expectRevert(
-            abi.encodeWithSelector(
-                IAccessControl.AccessControlUnauthorizedAccount.selector, caller, factory.DEFAULT_ADMIN_ROLE()
-            )
+            abi.encodeWithSelector(IAccessControl.AccessControlUnauthorizedAccount.selector, caller, ueaAdminRole)
         );
         vm.prank(caller);
-        factory.setPushChainId("1");
+        factory.updatePushChainId("1");
     }
 
     function testFuzz_getOriginForUEA_fallbackMatchesConfiguredChainId(address addr, string memory chainId) public {
@@ -226,7 +225,7 @@ contract UEAFactory_Fuzz is Test {
         // Ensure addr is not a UEA by using an address that cannot collide with deployed UEAs
         vm.assume(addr != address(0));
 
-        factory.setPushChainId(chainId);
+        factory.updatePushChainId(chainId);
 
         (UniversalAccountId memory account, bool isUEA) = factory.getOriginForUEA(addr);
 

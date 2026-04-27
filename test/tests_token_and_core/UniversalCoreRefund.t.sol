@@ -88,17 +88,18 @@ contract UniversalCoreRefundTest is Test, UpgradeableContractHelper {
         UniversalCore implementation = new UniversalCore();
         bytes memory initData = abi.encodeWithSelector(
             UniversalCore.initialize.selector,
+            address(this),
+            pauser,
             address(mockWPC),
             address(mockFactory),
-            address(mockRouter),
-            pauser
+            address(mockRouter)
         );
         address proxyAddress = deployUpgradeableContract(address(implementation), initData);
         universalCore = UniversalCore(payable(proxyAddress));
 
         // Configure auto-swap support
-        universalCore.setAutoSwapSupported(address(gasTokenMock), true);
-        universalCore.setDefaultFeeTier(address(gasTokenMock), FEE_TIER);
+        universalCore.updateAutoSwapSupported(address(gasTokenMock), true);
+        universalCore.updateDefaultFeeTier(address(gasTokenMock), FEE_TIER);
 
         // Setup mock pool (gasToken <-> wPC)
         address pool = makeAddr("mockPool");
@@ -178,8 +179,8 @@ contract UniversalCoreRefundTest is Test, UpgradeableContractHelper {
 
     function test_RefundUnusedGas_WithSwap_NoPool_Reverts() public {
         MockPRC20 noPool = new MockPRC20();
-        universalCore.setAutoSwapSupported(address(noPool), true);
-        universalCore.setDefaultFeeTier(address(noPool), FEE_TIER);
+        universalCore.updateAutoSwapSupported(address(noPool), true);
+        universalCore.updateDefaultFeeTier(address(noPool), FEE_TIER);
 
         vm.prank(UNIVERSAL_EXECUTOR_MODULE);
         vm.expectRevert(UniversalCoreErrors.PoolNotFound.selector);

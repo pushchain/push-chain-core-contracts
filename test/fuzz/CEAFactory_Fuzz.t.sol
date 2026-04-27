@@ -194,72 +194,76 @@ contract CEAFactory_FuzzTest is Test {
         factory.deployCEA(pushAccount);
     }
 
-    /// @dev Non-owner callers cannot call setVault.
-    function testFuzz_setVault_nonOwner_reverts(address caller, address newVault) public {
+    /// @dev Non-operator callers cannot call updateVault.
+    function testFuzz_updateVault_nonOperator_reverts(address caller, address newVault) public {
         vm.assume(caller != owner);
         vm.assume(caller != address(0));
         vm.assume(newVault != address(0));
 
-        bytes32 adminRole = factory.DEFAULT_ADMIN_ROLE();
+        bytes32 operatorRole = factory.OPERATOR_ROLE();
         vm.expectRevert(
-            abi.encodeWithSelector(IAccessControl.AccessControlUnauthorizedAccount.selector, caller, adminRole)
+            abi.encodeWithSelector(IAccessControl.AccessControlUnauthorizedAccount.selector, caller, operatorRole)
         );
         vm.prank(caller);
         factory.updateVault(newVault);
     }
 
-    /// @dev Non-owner callers cannot call setCEAImplementation.
-    function testFuzz_setCEAImplementation_nonOwner_reverts(address caller, address newImpl) public {
+    /// @dev Non-CEA-admin callers cannot call setCEAImplementation.
+    function testFuzz_setCEAImplementation_nonCEAAdmin_reverts(address caller, address newImpl) public {
         vm.assume(caller != owner);
         vm.assume(caller != address(0));
         vm.assume(newImpl != address(0));
 
-        bytes32 adminRole = factory.DEFAULT_ADMIN_ROLE();
+        bytes32 ceaAdminRole = factory.CEA_ADMIN_ROLE();
         vm.expectRevert(
-            abi.encodeWithSelector(IAccessControl.AccessControlUnauthorizedAccount.selector, caller, adminRole)
+            abi.encodeWithSelector(IAccessControl.AccessControlUnauthorizedAccount.selector, caller, ceaAdminRole)
         );
         vm.prank(caller);
         factory.setCEAImplementation(newImpl);
     }
 
-    /// @dev Non-owner callers cannot call setCEAMigrationContract.
-    function testFuzz_setCEAMigrationContract_nonOwner_reverts(address caller, address newMigration) public {
+    /// @dev Non-CEA-admin callers cannot call updateCEAMigrationContract.
+    function testFuzz_updateCEAMigrationContract_nonCEAAdmin_reverts(address caller, address newMigration) public {
         vm.assume(caller != owner);
         vm.assume(caller != address(0));
         vm.assume(newMigration != address(0));
 
-        bytes32 adminRole = factory.DEFAULT_ADMIN_ROLE();
+        bytes32 ceaAdminRole = factory.CEA_ADMIN_ROLE();
         vm.expectRevert(
-            abi.encodeWithSelector(IAccessControl.AccessControlUnauthorizedAccount.selector, caller, adminRole)
+            abi.encodeWithSelector(IAccessControl.AccessControlUnauthorizedAccount.selector, caller, ceaAdminRole)
         );
         vm.prank(caller);
-        factory.setCEAMigrationContract(newMigration);
+        factory.updateCEAMigrationContract(newMigration);
     }
 
     // =========================================================================
     // 9.5 Setter Validation Properties
     // =========================================================================
 
-    /// @dev setVault(address(0)) reverts with ZeroAddress.
-    function testFuzz_setVault_zeroAddress_reverts() public {
+    /// @dev updateVault(address(0)) reverts with ZeroAddress.
+    function testFuzz_updateVault_zeroAddress_reverts() public {
+        vm.prank(owner);
         vm.expectRevert(CEAErrors.ZeroAddress.selector);
         factory.updateVault(address(0));
     }
 
     /// @dev setCEAProxyImplementation(address(0)) reverts with ZeroAddress.
     function testFuzz_setCEAProxyImplementation_zeroAddress_reverts() public {
+        vm.prank(owner);
         vm.expectRevert(CEAErrors.ZeroAddress.selector);
         factory.setCEAProxyImplementation(address(0));
     }
 
     /// @dev setCEAImplementation(address(0)) reverts with ZeroAddress.
     function testFuzz_setCEAImplementation_zeroAddress_reverts() public {
+        vm.prank(owner);
         vm.expectRevert(CEAErrors.ZeroAddress.selector);
         factory.setCEAImplementation(address(0));
     }
 
-    /// @dev setUniversalGateway(address(0)) reverts with ZeroAddress.
+    /// @dev updateUniversalGateway(address(0)) reverts with ZeroAddress.
     function testFuzz_setUniversalGateway_zeroAddress_reverts() public {
+        vm.prank(owner);
         vm.expectRevert(CEAErrors.ZeroAddress.selector);
         factory.updateUniversalGateway(address(0));
     }

@@ -245,7 +245,7 @@ contract CEA_SingleCallTests is CEATest {
         // Set up migration contract
         CEA ceaV2 = new CEA();
         CEAMigration migration = new CEAMigration(address(ceaV2));
-        factory.setCEAMigrationContract(address(migration));
+        factory.updateCEAMigrationContract(address(migration));
 
         bytes32 subTxId = generateTxID(1);
         bytes32 universalTxID = generateUniversalTxID(1);
@@ -263,7 +263,7 @@ contract CEA_SingleCallTests is CEATest {
         // Set up migration contract
         CEA ceaV2 = new CEA();
         CEAMigration migration = new CEAMigration(address(ceaV2));
-        factory.setCEAMigrationContract(address(migration));
+        factory.updateCEAMigrationContract(address(migration));
 
         bytes32 subTxId = generateTxID(1);
         bytes32 universalTxID = generateUniversalTxID(1);

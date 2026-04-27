@@ -59,7 +59,7 @@ contract UEA_EVMTest is Test {
         factory = UEAFactory(address(proxy));
 
         // Set UEAProxy implementation after initialization
-        factory.setUEAProxyImplementation(address(ueaProxyImpl));
+        factory.updateUEAProxyImplementation(address(ueaProxyImpl));
 
         // NOW deploy UEA implementations with factory address
         ueaEVMImpl = new UEA_EVM();
@@ -893,7 +893,7 @@ contract UEA_EVMTest is Test {
 
     function test_SuccessfulMigrationUpdatesImplementation() public deployEvmSmartAccount {
         // Set migration contract in factory
-        factory.setUEAMigrationContract(address(migration));
+        factory.updateUEAMigrationContract(address(migration));
 
         MigrationPayload memory payload =
             MigrationPayload({migration: address(migration), nonce: 0, deadline: block.timestamp + 1000});
@@ -929,7 +929,7 @@ contract UEA_EVMTest is Test {
     }
 
     function testMigration_RevertsWhenValueNonZero() public deployEvmSmartAccount {
-        factory.setUEAMigrationContract(address(migration));
+        factory.updateUEAMigrationContract(address(migration));
 
         UniversalPayload memory payload = UniversalPayload({
             to: address(evmSmartAccountInstance),
@@ -952,7 +952,7 @@ contract UEA_EVMTest is Test {
     }
 
     function testMigration_RevertsWhenTargetNotSelf() public deployEvmSmartAccount {
-        factory.setUEAMigrationContract(address(migration));
+        factory.updateUEAMigrationContract(address(migration));
 
         UniversalPayload memory payload = UniversalPayload({
             to: address(target),

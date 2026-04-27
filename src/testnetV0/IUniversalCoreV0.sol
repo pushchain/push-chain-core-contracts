@@ -214,7 +214,7 @@ interface IUniversalCoreV0 {
     /// @notice                 Set protocol fee (in native PC) for a token.
     /// @param token            Token address
     /// @param fee              Protocol fee amount in native PC
-    function setProtocolFeeByToken(
+    function updateProtocolFeeByToken(
         address token,
         uint256 fee
     ) external;
@@ -222,7 +222,7 @@ interface IUniversalCoreV0 {
     /// @notice                  Set rescue funds gas limit for a specific chain.
     /// @param chainNamespace    Chain Namespace
     /// @param gasLimit          Rescue funds gas limit for the chain
-    function setRescueFundsGasLimitByChain(
+    function updateRescueFundsGasLimitByChain(
         string memory chainNamespace,
         uint256 gasLimit
     ) external;

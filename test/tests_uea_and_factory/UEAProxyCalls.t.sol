@@ -57,7 +57,7 @@ contract ProxyCallTest is Test {
         factory = UEAFactory(address(proxy));
 
         // Set UEAProxy implementation after initialization
-        factory.setUEAProxyImplementation(address(ueaProxyImpl));
+        factory.updateUEAProxyImplementation(address(ueaProxyImpl));
 
         bytes32 evmChainHash = keccak256(abi.encode("eip155", "1"));
         factory.registerNewChain(evmChainHash, EVM_HASH);

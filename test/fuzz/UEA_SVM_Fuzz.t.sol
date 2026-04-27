@@ -42,7 +42,7 @@ contract UEA_SVM_FuzzTest is Test {
             abi.encodeWithSelector(UEAFactory.initialize.selector, address(this), makeAddr("pauser"), "42101");
         ERC1967Proxy proxy = new ERC1967Proxy(address(factoryImpl), initData);
         factory = UEAFactory(address(proxy));
-        factory.setUEAProxyImplementation(address(ueaProxyImpl));
+        factory.updateUEAProxyImplementation(address(ueaProxyImpl));
 
         ueaEVMImpl = new UEA_EVM();
         ueaSVMImpl = new UEA_SVM();

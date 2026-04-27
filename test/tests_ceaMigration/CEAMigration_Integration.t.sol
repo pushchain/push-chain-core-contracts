@@ -72,7 +72,7 @@ contract CEAMigration_IntegrationTest is Test {
         migration = new CEAMigration(address(ceaV2Implementation));
 
         // Set migration contract in factory
-        factory.setCEAMigrationContract(address(migration));
+        factory.updateCEAMigrationContract(address(migration));
     }
 
     // =========================================================================
@@ -347,7 +347,7 @@ contract CEAMigration_IntegrationTest is Test {
         // Deploy v3 and new migration contract
         CEA ceaV3Implementation = new CEA();
         CEAMigration migration2 = new CEAMigration(address(ceaV3Implementation));
-        factory.setCEAMigrationContract(address(migration2));
+        factory.updateCEAMigrationContract(address(migration2));
 
         // Migration 2: v2 → v3
         bytes32 subTxId = generateTxID(1000);

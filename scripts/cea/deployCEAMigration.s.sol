@@ -13,7 +13,7 @@ import {CEAFactory} from "../../src/cea/CEAFactory.sol";
  * @dev Steps:
  *  1. Deploy CEA_V2 (new implementation)
  *  2. Deploy CEAMigration(ceaV2Address)
- *  3. Call CEAFactory.setCEAMigrationContract(migrationAddress)
+ *  3. Call CEAFactory.updateCEAMigrationContract(migrationAddress)
  *
  * CONFIGURATION:
  *  Environment variables needed: KEY, RPC_URL
@@ -48,8 +48,8 @@ contract DeployCEAMigrationScript is Script {
 
         // 3. Set migration contract in factory
         CEAFactory factory = CEAFactory(CEA_FACTORY_PROXY);
-        factory.setCEAMigrationContract(address(migration));
-        console.log("[3/3] setCEAMigrationContract called");
+        factory.updateCEAMigrationContract(address(migration));
+        console.log("[3/3] updateCEAMigrationContract called");
 
         vm.stopBroadcast();
 

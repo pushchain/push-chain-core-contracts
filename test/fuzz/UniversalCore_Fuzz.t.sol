@@ -33,15 +33,15 @@ contract UniversalCore_Fuzz is Test, UpgradeableContractHelper {
 
         UniversalCore impl = new UniversalCore();
         bytes memory initData = abi.encodeWithSelector(
-            UniversalCore.initialize.selector, mockWPC, mockFactory, mockRouter, pauser
+            UniversalCore.initialize.selector, address(this), pauser, mockWPC, mockFactory, mockRouter
         );
         address proxyAddr = deployUpgradeableContract(address(impl), initData);
         universalCore = UniversalCore(payable(proxyAddr));
 
-        universalCore.grantRole(universalCore.MANAGER_ROLE(), uExec);
+        universalCore.grantRole(universalCore.UVCORE_ADMIN_ROLE(), uExec);
 
         gateway = makeAddr("gateway");
-        universalCore.setUniversalGatewayPC(gateway);
+        universalCore.updateUniversalGatewayPC(gateway);
 
         // Deploy PRC20 with SOURCE_CHAIN_NAMESPACE = "1" (matches CHAIN_NS)
         PRC20 prc20Impl = new PRC20();
@@ -62,9 +62,9 @@ contract UniversalCore_Fuzz is Test, UpgradeableContractHelper {
         vm.prank(uExec);
         universalCore.setChainMeta(CHAIN_NS, 50 gwei, 0);
 
-        // setGasTokenPRC20 is onlyRole(MANAGER_ROLE), uExec has it
+        // updateGasTokenPRC20 is onlyRole(UVCORE_ADMIN_ROLE), uExec has it
         vm.prank(uExec);
-        universalCore.setGasTokenPRC20(CHAIN_NS, address(gasToken));
+        universalCore.updateGasTokenPRC20(CHAIN_NS, address(gasToken));
     }
 
     // =============================================
@@ -82,7 +82,7 @@ contract UniversalCore_Fuzz is Test, UpgradeableContractHelper {
         universalCore.setChainMeta(CHAIN_NS, gasPrice, 0);
 
         vm.prank(uExec);
-        universalCore.setBaseGasLimitByChain(CHAIN_NS, baseLimit);
+        universalCore.updateBaseGasLimitByChain(CHAIN_NS, baseLimit);
 
         (, uint256 gasFee,,,) = universalCore.getOutboundTxGasAndFees(address(prc20), gasLimit);
 
@@ -97,7 +97,7 @@ contract UniversalCore_Fuzz is Test, UpgradeableContractHelper {
         universalCore.setChainMeta(CHAIN_NS, gasPrice, 0);
 
         vm.prank(uExec);
-        universalCore.setBaseGasLimitByChain(CHAIN_NS, baseLimit);
+        universalCore.updateBaseGasLimitByChain(CHAIN_NS, baseLimit);
 
         // gasLimitWithBaseLimit == 0 → uses baseLimit
         (, uint256 gasFee,,,) = universalCore.getOutboundTxGasAndFees(address(prc20), 0);
@@ -110,7 +110,7 @@ contract UniversalCore_Fuzz is Test, UpgradeableContractHelper {
         vm.assume(provided > 0 && provided < baseLimit);
 
         vm.prank(uExec);
-        universalCore.setBaseGasLimitByChain(CHAIN_NS, baseLimit);
+        universalCore.updateBaseGasLimitByChain(CHAIN_NS, baseLimit);
 
         vm.expectRevert(abi.encodeWithSelector(UniversalCoreErrors.GasLimitBelowBase.selector, provided, baseLimit));
         universalCore.getOutboundTxGasAndFees(address(prc20), provided);
@@ -141,8 +141,8 @@ contract UniversalCore_Fuzz is Test, UpgradeableContractHelper {
 
         // Set gas token and base gas limit, but never call setChainMeta → price stays 0
         vm.startPrank(uExec);
-        universalCore.setGasTokenPRC20(zeroPriceNs, address(gasToken));
-        universalCore.setBaseGasLimitByChain(zeroPriceNs, baseLimit);
+        universalCore.updateGasTokenPRC20(zeroPriceNs, address(gasToken));
+        universalCore.updateBaseGasLimitByChain(zeroPriceNs, baseLimit);
         vm.stopPrank();
 
         vm.expectRevert(UniversalCoreErrors.ZeroGasPrice.selector);
@@ -155,7 +155,7 @@ contract UniversalCore_Fuzz is Test, UpgradeableContractHelper {
 
         // Set base gas limit for "nogas" chain so we pass the zero-base check
         vm.prank(uExec);
-        universalCore.setBaseGasLimitByChain("nogas", baseLimit);
+        universalCore.updateBaseGasLimitByChain("nogas", baseLimit);
 
         // Deploy a fresh PRC20 on chain "nogas" — no gas token configured for "nogas"
         PRC20 prc20Impl = new PRC20();
@@ -192,7 +192,7 @@ contract UniversalCore_Fuzz is Test, UpgradeableContractHelper {
         universalCore.setChainMeta(CHAIN_NS, gasPrice, 0);
 
         vm.prank(uExec);
-        universalCore.setRescueFundsGasLimitByChain(CHAIN_NS, rescueLimit);
+        universalCore.updateRescueFundsGasLimitByChain(CHAIN_NS, rescueLimit);
 
         (, uint256 gasFee, uint256 returnedRescueLimit,,) = universalCore.getRescueFundsGasLimit(address(prc20));
 
@@ -263,17 +263,17 @@ contract UniversalCore_Fuzz is Test, UpgradeableContractHelper {
     // 12.4 Fee Tier Validation Properties
     // =============================================
 
-    function testFuzz_setDefaultFeeTier_validTiers(address token, uint24 feeTier) public {
+    function testFuzz_updateDefaultFeeTier_validTiers(address token, uint24 feeTier) public {
         vm.assume(token != address(0));
 
         bool isValid = feeTier == 100 || feeTier == 500 || feeTier == 3000 || feeTier == 10000;
 
         if (isValid) {
-            universalCore.setDefaultFeeTier(token, feeTier);
+            universalCore.updateDefaultFeeTier(token, feeTier);
             assertEq(universalCore.defaultFeeTier(token), feeTier);
         } else {
             vm.expectRevert(UniversalCoreErrors.InvalidFeeTier.selector);
-            universalCore.setDefaultFeeTier(token, feeTier);
+            universalCore.updateDefaultFeeTier(token, feeTier);
         }
     }
 
@@ -281,9 +281,9 @@ contract UniversalCore_Fuzz is Test, UpgradeableContractHelper {
     // 12.5 Deadline Validation Properties
     // =============================================
 
-    function testFuzz_setDefaultDeadlineMins_storesValue(uint256 mins) public {
-        // setDefaultDeadlineMins is onlyAdmin — test contract is DEFAULT_ADMIN_ROLE
-        universalCore.setDefaultDeadlineMins(mins);
+    function testFuzz_updateDefaultDeadlineMins_storesValue(uint256 mins) public {
+        // updateDefaultDeadlineMins is onlyAdmin — test contract is DEFAULT_ADMIN_ROLE
+        universalCore.updateDefaultDeadlineMins(mins);
         assertEq(universalCore.defaultDeadlineMins(), mins);
     }
 
@@ -327,27 +327,28 @@ contract UniversalCore_Fuzz is Test, UpgradeableContractHelper {
         universalCore.swapAndBurnGas{value: 0}(address(gasToken), 3000, 1, 0, address(this));
     }
 
-    function testFuzz_setProtocolFeeByToken_nonManager_reverts(address caller, address token, uint256 fee) public {
+    function testFuzz_updateProtocolFeeByToken_nonManager_reverts(address caller, address token, uint256 fee) public {
         vm.assume(caller != uExec);
         // Cache role before prank — external calls inside vm.expectRevert would consume the prank
-        bytes32 managerRole = universalCore.MANAGER_ROLE();
+        bytes32 managerRole = universalCore.UVCORE_ADMIN_ROLE();
         vm.assume(!universalCore.hasRole(managerRole, caller));
 
         vm.prank(caller);
         vm.expectRevert(
             abi.encodeWithSelector(IAccessControl.AccessControlUnauthorizedAccount.selector, caller, managerRole)
         );
-        universalCore.setProtocolFeeByToken(token, fee);
+        universalCore.updateProtocolFeeByToken(token, fee);
     }
 
-    function testFuzz_setWPC_nonAdmin_reverts(address caller, address newWPC) public {
-        // Cache role before prank to avoid consuming prank via external call
-        bytes32 adminRole = universalCore.DEFAULT_ADMIN_ROLE();
-        vm.assume(!universalCore.hasRole(adminRole, caller));
+    function testFuzz_updateWPC_nonOperator_reverts(address caller, address newWPC) public {
+        bytes32 operatorRole = universalCore.OPERATOR_ROLE();
+        vm.assume(!universalCore.hasRole(operatorRole, caller));
 
         vm.prank(caller);
-        vm.expectRevert(CommonErrors.InvalidOwner.selector);
-        universalCore.setWPC(newWPC);
+        vm.expectRevert(
+            abi.encodeWithSelector(IAccessControl.AccessControlUnauthorizedAccount.selector, caller, operatorRole)
+        );
+        universalCore.updateWPC(newWPC);
     }
 
     function testFuzz_pause_nonPauser_reverts(address caller) public {
@@ -375,38 +376,38 @@ contract UniversalCore_Fuzz is Test, UpgradeableContractHelper {
     // 12.7 Setter Zero-Address Validation Properties
     // =============================================
 
-    function testFuzz_setWPC_zeroAddress_reverts() public {
+    function testFuzz_updateWPC_zeroAddress_reverts() public {
         vm.expectRevert(CommonErrors.ZeroAddress.selector);
-        universalCore.setWPC(address(0));
+        universalCore.updateWPC(address(0));
     }
 
-    function testFuzz_setUniversalGatewayPC_zeroAddress_reverts() public {
+    function testFuzz_updateUniversalGatewayPC_zeroAddress_reverts() public {
         vm.expectRevert(CommonErrors.ZeroAddress.selector);
-        universalCore.setUniversalGatewayPC(address(0));
+        universalCore.updateUniversalGatewayPC(address(0));
     }
 
-    function testFuzz_setUniswapV3Addresses_anyZero_reverts(address f, address r) public {
+    function testFuzz_updateUniswapV3Addresses_anyZero_reverts(address f, address r) public {
         bool anyZero = f == address(0) || r == address(0);
 
         if (anyZero) {
             vm.expectRevert(CommonErrors.ZeroAddress.selector);
-            universalCore.setUniswapV3Addresses(f, r);
+            universalCore.updateUniswapV3Addresses(f, r);
         } else {
             // No revert expected — just verify it stores values
-            universalCore.setUniswapV3Addresses(f, r);
+            universalCore.updateUniswapV3Addresses(f, r);
         }
     }
 
-    function testFuzz_setGasTokenPRC20_zeroAddress_reverts(string memory chainNamespace) public {
+    function testFuzz_updateGasTokenPRC20_zeroAddress_reverts(string memory chainNamespace) public {
         vm.prank(uExec);
         vm.expectRevert(CommonErrors.ZeroAddress.selector);
-        universalCore.setGasTokenPRC20(chainNamespace, address(0));
+        universalCore.updateGasTokenPRC20(chainNamespace, address(0));
     }
 
-    function testFuzz_setProtocolFeeByToken_zeroToken_reverts(uint256 fee) public {
+    function testFuzz_updateProtocolFeeByToken_zeroToken_reverts(uint256 fee) public {
         vm.prank(uExec);
         vm.expectRevert(CommonErrors.ZeroAddress.selector);
-        universalCore.setProtocolFeeByToken(address(0), fee);
+        universalCore.updateProtocolFeeByToken(address(0), fee);
     }
 
     // =============================================
@@ -421,10 +422,10 @@ contract UniversalCore_Fuzz is Test, UpgradeableContractHelper {
         vm.prank(uExec);
         universalCore.setChainMeta(CHAIN_NS, 50 gwei, 0);
         vm.prank(uExec);
-        universalCore.setBaseGasLimitByChain(CHAIN_NS, 100_000);
+        universalCore.updateBaseGasLimitByChain(CHAIN_NS, 100_000);
 
         vm.prank(uExec);
-        universalCore.setMaxStalenessByChain(CHAIN_NS, maxAge);
+        universalCore.updateMaxStalenessByChain(CHAIN_NS, maxAge);
 
         uint256 observedAt = universalCore.timestampObservedAtByChainNamespace(CHAIN_NS);
         vm.warp(uint256(observedAt) + uint256(timePast));
@@ -444,10 +445,10 @@ contract UniversalCore_Fuzz is Test, UpgradeableContractHelper {
         vm.prank(uExec);
         universalCore.setChainMeta(CHAIN_NS, 50 gwei, 0);
         vm.prank(uExec);
-        universalCore.setBaseGasLimitByChain(CHAIN_NS, 100_000);
+        universalCore.updateBaseGasLimitByChain(CHAIN_NS, 100_000);
 
         vm.prank(uExec);
-        universalCore.setMaxStalenessByChain(CHAIN_NS, maxAge);
+        universalCore.updateMaxStalenessByChain(CHAIN_NS, maxAge);
 
         uint256 observedAt = universalCore.timestampObservedAtByChainNamespace(CHAIN_NS);
         vm.warp(uint256(observedAt) + uint256(timePast));
@@ -456,16 +457,15 @@ contract UniversalCore_Fuzz is Test, UpgradeableContractHelper {
         assertGt(gasFee, 0, "should succeed within the staleness window");
     }
 
-    function testFuzz_setMaxStalenessByChain_nonManager_reverts(address caller, uint256 maxAge) public {
-        // Only uExec was granted MANAGER_ROLE in setUp; any other address must revert.
+    function testFuzz_updateMaxStalenessByChain_nonUCoreAdmin_reverts(address caller, uint256 maxAge) public {
         vm.assume(caller != uExec);
 
         vm.expectRevert(
             abi.encodeWithSelector(
-                IAccessControl.AccessControlUnauthorizedAccount.selector, caller, universalCore.MANAGER_ROLE()
+                IAccessControl.AccessControlUnauthorizedAccount.selector, caller, universalCore.UVCORE_ADMIN_ROLE()
             )
         );
         vm.prank(caller);
-        universalCore.setMaxStalenessByChain(CHAIN_NS, maxAge);
+        universalCore.updateMaxStalenessByChain(CHAIN_NS, maxAge);
     }
 }

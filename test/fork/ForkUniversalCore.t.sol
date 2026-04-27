@@ -63,20 +63,17 @@ contract ForkUniversalCoreTest is Test, UpgradeableContractHelper, PushChainAddr
         UniversalCore implementation = new UniversalCore();
         bytes memory initData = abi.encodeWithSelector(
             UniversalCore.initialize.selector,
+            deployer,
+            makeAddr("pauser"),
             WPC_TOKEN,
             UNISWAP_FACTORY,
-            UNISWAP_ROUTER,
-            UNISWAP_QUOTER,
-            makeAddr("pauser")
+            UNISWAP_ROUTER
         );
         address proxyAddress = deployUpgradeableContract(address(implementation), initData);
         universalCore = UniversalCore(payable(proxyAddress));
 
         // Set gateway
-        universalCore.setUniversalGatewayPC(gateway);
-
-        // Grant MANAGER_ROLE to deployer for config functions
-        universalCore.grantRole(universalCore.MANAGER_ROLE(), deployer);
+        universalCore.updateUniversalGatewayPC(gateway);
 
         // Configure auto-swap and fee tiers for test tokens
         _configureToken(PSOL_TOKEN, 500);
@@ -102,8 +99,8 @@ contract ForkUniversalCoreTest is Test, UpgradeableContractHelper, PushChainAddr
     }
 
     function _configureToken(address token, uint24 fee) private {
-        universalCore.setAutoSwapSupported(token, true);
-        universalCore.setDefaultFeeTier(token, fee);
+        universalCore.updateAutoSwapSupported(token, true);
+        universalCore.updateDefaultFeeTier(token, fee);
     }
 
     function _updatePRC20UniversalCore(address token) private {
@@ -160,15 +157,15 @@ contract ForkUniversalCoreTest is Test, UpgradeableContractHelper, PushChainAddr
         assertEq(pool, PBNB_WPC_POOL);
     }
 
-    function test_fork_setGasPCPool_validatesRealPool() public {
+    function test_fork_updateGasPCPool_validatesRealPool() public {
         vm.startPrank(deployer);
         // Valid pool succeeds
-        universalCore.setGasPCPool("eip155:1", PSOL_TOKEN, 500);
+        universalCore.updateGasPCPool("eip155:1", PSOL_TOKEN, 500);
         assertEq(universalCore.gasPCPoolByChainNamespace("eip155:1"), PSOL_WPC_POOL);
 
         // Nonexistent pool reverts
         vm.expectRevert(UniversalCoreErrors.PoolNotFound.selector);
-        universalCore.setGasPCPool("eip155:2", PSOL_TOKEN, 10000);
+        universalCore.updateGasPCPool("eip155:2", PSOL_TOKEN, 10000);
         vm.stopPrank();
     }
 
@@ -390,7 +387,7 @@ contract ForkUniversalCoreTest is Test, UpgradeableContractHelper, PushChainAddr
         address fakeToken = makeAddr("fakeToken");
 
         vm.prank(deployer);
-        universalCore.setDefaultFeeTier(fakeToken, 500);
+        universalCore.updateDefaultFeeTier(fakeToken, 500);
 
         vm.prank(gateway);
         vm.expectRevert(UniversalCoreErrors.PoolNotFound.selector);

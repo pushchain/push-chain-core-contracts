@@ -68,7 +68,7 @@ contract DeployUEAFactoryScript is Script {
         UEAProxy proxyImpl = new UEAProxy();
         console.log("UEAProxy Implementation deployed at:", address(proxyImpl));
 
-        factory.setUEAProxyImplementation(address(proxyImpl));
+        factory.updateUEAProxyImplementation(address(proxyImpl));
         console.log("UEAProxy impl set in the factory");
 
         // 1. Deploy UEA_EVM implementation
@@ -87,7 +87,7 @@ contract DeployUEAFactoryScript is Script {
         UEAProxy ueaProxy = new UEAProxy();
         console.log("UEAProxy deployed at:", address(ueaProxy));
 
-        factory.setUEAProxyImplementation(address(ueaProxy));
+        factory.updateUEAProxyImplementation(address(ueaProxy));
         console.log("UEAProxy set in the factory");
 
         vm.stopBroadcast();

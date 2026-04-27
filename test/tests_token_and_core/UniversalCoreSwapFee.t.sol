@@ -74,10 +74,11 @@ contract UniversalCoreSwapFeeTest is Test, UpgradeableContractHelper {
         UniversalCore implementation = new UniversalCore();
         bytes memory initData = abi.encodeWithSelector(
             UniversalCore.initialize.selector,
+            deployer,
+            pauser,
             address(mockWPC),
             address(mockFactory),
-            address(mockRouter),
-            pauser
+            address(mockRouter)
         );
         address proxyAddress = deployUpgradeableContract(address(implementation), initData);
         universalCore = UniversalCore(payable(proxyAddress));
@@ -87,22 +88,22 @@ contract UniversalCoreSwapFeeTest is Test, UpgradeableContractHelper {
         prc20Token.updateUniversalCore(address(universalCore));
 
         // Set gateway
-        universalCore.setUniversalGatewayPC(gateway);
+        universalCore.updateUniversalGatewayPC(gateway);
 
         // Grant MANAGER_ROLE to UE Module for manager functions
-        universalCore.grantRole(universalCore.MANAGER_ROLE(), UNIVERSAL_EXECUTOR_MODULE);
+        universalCore.grantRole(universalCore.UVCORE_ADMIN_ROLE(), UNIVERSAL_EXECUTOR_MODULE);
 
-        // Configure gas token first, then gas price (setGasTokenPRC20 resets gas price to 0,
+        // Configure gas token first, then gas price (updateGasTokenPRC20 resets gas price to 0,
         // so setChainMeta must come after to preserve the configured gas price).
         vm.startPrank(UNIVERSAL_EXECUTOR_MODULE);
-        universalCore.setGasTokenPRC20(CHAIN_NAMESPACE, address(gasTokenMock));
+        universalCore.updateGasTokenPRC20(CHAIN_NAMESPACE, address(gasTokenMock));
         universalCore.setChainMeta(CHAIN_NAMESPACE, GAS_PRICE, 0);
-        universalCore.setBaseGasLimitByChain(CHAIN_NAMESPACE, 500_000);
-        universalCore.setProtocolFeeByToken(address(prc20Token), PROTOCOL_FEE);
+        universalCore.updateBaseGasLimitByChain(CHAIN_NAMESPACE, 500_000);
+        universalCore.updateProtocolFeeByToken(address(prc20Token), PROTOCOL_FEE);
         vm.stopPrank();
 
         // Set default fee tier for gas token
-        universalCore.setDefaultFeeTier(address(gasTokenMock), FEE_TIER);
+        universalCore.updateDefaultFeeTier(address(gasTokenMock), FEE_TIER);
 
         // Setup mock pool (wPC <-> gasToken)
         address pool = makeAddr("mockPool");
@@ -138,7 +139,7 @@ contract UniversalCoreSwapFeeTest is Test, UpgradeableContractHelper {
         address newGateway = makeAddr("newGateway");
         vm.deal(newGateway, 1 ether);
 
-        universalCore.setUniversalGatewayPC(newGateway);
+        universalCore.updateUniversalGatewayPC(newGateway);
 
         vm.prank(newGateway);
         (uint256 gasTokenOut,) =
@@ -242,8 +243,8 @@ contract UniversalCoreSwapFeeTest is Test, UpgradeableContractHelper {
         // Setup BSC chain
         MockPRC20 bscGasToken = new MockPRC20();
         vm.prank(UNIVERSAL_EXECUTOR_MODULE);
-        universalCore.setGasTokenPRC20("eip155:56", address(bscGasToken));
-        universalCore.setDefaultFeeTier(address(bscGasToken), FEE_TIER);
+        universalCore.updateGasTokenPRC20("eip155:56", address(bscGasToken));
+        universalCore.updateDefaultFeeTier(address(bscGasToken), FEE_TIER);
 
         // Setup BSC pool
         address bscPool = makeAddr("bscPool");
@@ -383,7 +384,7 @@ contract UniversalCoreSwapFeeTest is Test, UpgradeableContractHelper {
     }
 
     // ========================================
-    // 8) setProtocolFeeByToken
+    // 8) updateProtocolFeeByToken
     // ========================================
 
     function test_SetProtocolFeeByToken_HappyPath() public {
@@ -393,7 +394,7 @@ contract UniversalCoreSwapFeeTest is Test, UpgradeableContractHelper {
         vm.prank(UNIVERSAL_EXECUTOR_MODULE);
         vm.expectEmit(true, false, false, true);
         emit SetProtocolFeeByToken(token, fee);
-        universalCore.setProtocolFeeByToken(token, fee);
+        universalCore.updateProtocolFeeByToken(token, fee);
 
         assertEq(universalCore.protocolFeeByToken(token), fee);
     }
@@ -404,17 +405,17 @@ contract UniversalCoreSwapFeeTest is Test, UpgradeableContractHelper {
 
         vm.expectRevert(
             abi.encodeWithSelector(
-                IAccessControl.AccessControlUnauthorizedAccount.selector, nonManager, universalCore.MANAGER_ROLE()
+                IAccessControl.AccessControlUnauthorizedAccount.selector, nonManager, universalCore.UVCORE_ADMIN_ROLE()
             )
         );
         vm.prank(nonManager);
-        universalCore.setProtocolFeeByToken(token, 1000);
+        universalCore.updateProtocolFeeByToken(token, 1000);
     }
 
     function test_SetProtocolFeeByToken_ZeroAddressReverts() public {
         vm.prank(UNIVERSAL_EXECUTOR_MODULE);
         vm.expectRevert(CommonErrors.ZeroAddress.selector);
-        universalCore.setProtocolFeeByToken(address(0), 1000);
+        universalCore.updateProtocolFeeByToken(address(0), 1000);
     }
 
     // ========================================
@@ -422,15 +423,14 @@ contract UniversalCoreSwapFeeTest is Test, UpgradeableContractHelper {
     // ========================================
 
     function test_SwapAndBurnGas_FalseBurnReturn_Reverts() public {
-        FalseReturningPRC20 falseGasToken =
-            new FalseReturningPRC20(CHAIN_NAMESPACE, SOURCE_TOKEN_ADDRESS);
+        FalseReturningPRC20 falseGasToken = new FalseReturningPRC20(CHAIN_NAMESPACE, SOURCE_TOKEN_ADDRESS);
 
         vm.startPrank(UNIVERSAL_EXECUTOR_MODULE);
-        universalCore.setGasTokenPRC20(CHAIN_NAMESPACE, address(falseGasToken));
+        universalCore.updateGasTokenPRC20(CHAIN_NAMESPACE, address(falseGasToken));
         universalCore.setChainMeta(CHAIN_NAMESPACE, GAS_PRICE, 0);
         vm.stopPrank();
 
-        universalCore.setDefaultFeeTier(address(falseGasToken), FEE_TIER);
+        universalCore.updateDefaultFeeTier(address(falseGasToken), FEE_TIER);
 
         address pool = makeAddr("falsePool");
         if (address(mockWPC) < address(falseGasToken)) {
@@ -441,8 +441,6 @@ contract UniversalCoreSwapFeeTest is Test, UpgradeableContractHelper {
 
         vm.prank(gateway);
         vm.expectRevert(UniversalCoreErrors.PRC20OperationFailed.selector);
-        universalCore.swapAndBurnGas{value: 1 ether}(
-            address(falseGasToken), FEE_TIER, GAS_FEE, 0, user
-        );
+        universalCore.swapAndBurnGas{value: 1 ether}(address(falseGasToken), FEE_TIER, GAS_FEE, 0, user);
     }
 }
