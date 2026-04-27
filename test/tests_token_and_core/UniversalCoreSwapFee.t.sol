@@ -346,27 +346,41 @@ contract UniversalCoreSwapFeeTest is Test, UpgradeableContractHelper {
     // 6) getOutboundTxGasAndFees
     // ========================================
 
-    function test_WithdrawGasFee_Returns5Values() public view {
-        (address gasToken, uint256 gasFee, uint256 protocolFee, uint256 gasPrice, string memory chainNamespace) =
-            universalCore.getOutboundTxGasAndFees(address(prc20Token), 0);
+    function test_WithdrawGasFee_Returns6Values() public view {
+        (
+            address gasToken,
+            uint256 gasFee,
+            uint256 protocolFee,
+            uint256 gasPrice,
+            string memory chainNamespace,
+            uint256 gasLimitUsed
+        ) = universalCore.getOutboundTxGasAndFees(address(prc20Token), 0);
 
         assertEq(gasToken, address(gasTokenMock));
         assertEq(gasPrice, GAS_PRICE);
         assertEq(gasFee, gasPrice * universalCore.baseGasLimitByChainNamespace(CHAIN_NAMESPACE));
         assertEq(protocolFee, universalCore.protocolFeeByToken(address(prc20Token)));
         assertEq(keccak256(bytes(chainNamespace)), keccak256(bytes(CHAIN_NAMESPACE)));
+        assertEq(gasLimitUsed, universalCore.baseGasLimitByChainNamespace(CHAIN_NAMESPACE));
     }
 
-    function test_WithdrawGasFeeWithGasLimit_Returns5Values() public view {
+    function test_WithdrawGasFeeWithGasLimit_Returns6Values() public view {
         uint256 customGasLimit = 600_000;
-        (address gasToken, uint256 gasFee, uint256 protocolFee, uint256 gasPrice, string memory chainNamespace) =
-            universalCore.getOutboundTxGasAndFees(address(prc20Token), customGasLimit);
+        (
+            address gasToken,
+            uint256 gasFee,
+            uint256 protocolFee,
+            uint256 gasPrice,
+            string memory chainNamespace,
+            uint256 gasLimitUsed
+        ) = universalCore.getOutboundTxGasAndFees(address(prc20Token), customGasLimit);
 
         assertEq(gasToken, address(gasTokenMock));
         assertEq(gasPrice, GAS_PRICE);
         assertEq(gasFee, gasPrice * customGasLimit);
         assertEq(protocolFee, PROTOCOL_FEE);
         assertEq(keccak256(bytes(chainNamespace)), keccak256(bytes(CHAIN_NAMESPACE)));
+        assertEq(gasLimitUsed, customGasLimit);
     }
 
     // ========================================

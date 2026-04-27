@@ -280,7 +280,14 @@ contract UniversalCore is
     function getOutboundTxGasAndFees(address _prc20, uint256 gasLimitWithBaseLimit)
         public
         view
-        returns (address gasToken, uint256 gasFee, uint256 protocolFee, uint256 gasPrice, string memory chainNamespace)
+        returns (
+            address gasToken,
+            uint256 gasFee,
+            uint256 protocolFee,
+            uint256 gasPrice,
+            string memory chainNamespace,
+            uint256 gasLimitUsed
+        )
     {
         chainNamespace = IPRC20(_prc20).SOURCE_CHAIN_NAMESPACE();
         uint256 baseLimit = baseGasLimitByChainNamespace[chainNamespace];
@@ -302,6 +309,7 @@ contract UniversalCore is
 
         gasFee = gasPrice * gasLimitWithBaseLimit;
         protocolFee = protocolFeeByToken[_prc20];
+        gasLimitUsed = gasLimitWithBaseLimit;
     }
 
     /// @inheritdoc IUniversalCore

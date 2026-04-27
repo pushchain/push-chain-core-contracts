@@ -84,7 +84,7 @@ contract UniversalCore_Fuzz is Test, UpgradeableContractHelper {
         vm.prank(uExec);
         universalCore.updateBaseGasLimitByChain(CHAIN_NS, baseLimit);
 
-        (, uint256 gasFee,,,) = universalCore.getOutboundTxGasAndFees(address(prc20), gasLimit);
+        (, uint256 gasFee,,,,) = universalCore.getOutboundTxGasAndFees(address(prc20), gasLimit);
 
         assertEq(gasFee, uint256(gasPrice) * uint256(gasLimit));
     }
@@ -100,7 +100,7 @@ contract UniversalCore_Fuzz is Test, UpgradeableContractHelper {
         universalCore.updateBaseGasLimitByChain(CHAIN_NS, baseLimit);
 
         // gasLimitWithBaseLimit == 0 → uses baseLimit
-        (, uint256 gasFee,,,) = universalCore.getOutboundTxGasAndFees(address(prc20), 0);
+        (, uint256 gasFee,,,,) = universalCore.getOutboundTxGasAndFees(address(prc20), 0);
 
         assertEq(gasFee, uint256(gasPrice) * uint256(baseLimit));
     }
@@ -453,7 +453,7 @@ contract UniversalCore_Fuzz is Test, UpgradeableContractHelper {
         uint256 observedAt = universalCore.timestampObservedAtByChainNamespace(CHAIN_NS);
         vm.warp(uint256(observedAt) + uint256(timePast));
 
-        (, uint256 gasFee,,,) = universalCore.getOutboundTxGasAndFees(address(prc20), 0);
+        (, uint256 gasFee,,,,) = universalCore.getOutboundTxGasAndFees(address(prc20), 0);
         assertGt(gasFee, 0, "should succeed within the staleness window");
     }
 

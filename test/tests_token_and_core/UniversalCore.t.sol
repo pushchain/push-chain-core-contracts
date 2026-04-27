@@ -652,7 +652,8 @@ contract UniversalCoreTest is Test, UpgradeableContractHelper {
             uint256 gasFee,
             uint256 protocolFee,
             uint256 gasPrice,
-            string memory chainNamespace
+            string memory chainNamespace,
+            uint256 gasLimitUsed
         ) = universalCore.getOutboundTxGasAndFees(address(prc20Token), 0);
 
         assertEq(returnedGasToken, address(mockPRC20));
@@ -664,6 +665,8 @@ contract UniversalCoreTest is Test, UpgradeableContractHelper {
         assertEq(gasFee, gasPrice * actualBaseGasLimit);
         assertEq(protocolFee, actualProtocolFee);
         assertEq(keccak256(bytes(chainNamespace)), keccak256(bytes(CHAIN_NAMESPACE)));
+        assertEq(gasLimitUsed, actualBaseGasLimit);
+        assertEq(gasFee, gasPrice * gasLimitUsed);
     }
 
     function testWithdrawGasFeeWithGasLimitHappyPath() public view {
@@ -674,7 +677,8 @@ contract UniversalCoreTest is Test, UpgradeableContractHelper {
             uint256 gasFee,
             uint256 protocolFee,
             uint256 gasPrice,
-            string memory chainNamespace
+            string memory chainNamespace,
+            uint256 gasLimitUsed
         ) = universalCore.getOutboundTxGasAndFees(address(prc20Token), customGasLimit);
 
         assertEq(returnedGasToken, address(mockPRC20));
@@ -682,6 +686,8 @@ contract UniversalCoreTest is Test, UpgradeableContractHelper {
         assertEq(gasFee, gasPrice * customGasLimit);
         assertEq(protocolFee, PROTOCOL_FEE);
         assertEq(keccak256(bytes(chainNamespace)), keccak256(bytes(CHAIN_NAMESPACE)));
+        assertEq(gasLimitUsed, customGasLimit);
+        assertEq(gasFee, gasPrice * gasLimitUsed);
     }
 
     function testWithdrawGasFeeZeroGasPrice() public {
@@ -745,7 +751,7 @@ contract UniversalCoreTest is Test, UpgradeableContractHelper {
         vm.prank(UNIVERSAL_EXECUTOR_MODULE);
         universalCore.setChainMeta(CHAIN_NAMESPACE, newGasPrice, 0);
 
-        (, uint256 gasFee, uint256 protocolFee,,) = universalCore.getOutboundTxGasAndFees(address(prc20Token), 0);
+        (, uint256 gasFee, uint256 protocolFee,,,) = universalCore.getOutboundTxGasAndFees(address(prc20Token), 0);
 
         uint256 actualBaseGasLimit = universalCore.baseGasLimitByChainNamespace(CHAIN_NAMESPACE);
         uint256 expectedGasFee = newGasPrice * actualBaseGasLimit;
@@ -759,7 +765,7 @@ contract UniversalCoreTest is Test, UpgradeableContractHelper {
         vm.prank(UNIVERSAL_EXECUTOR_MODULE);
         universalCore.updateBaseGasLimitByChain(CHAIN_NAMESPACE, newBaseGasLimit);
 
-        (, uint256 gasFee, uint256 protocolFee,,) = universalCore.getOutboundTxGasAndFees(address(prc20Token), 0);
+        (, uint256 gasFee, uint256 protocolFee,,,) = universalCore.getOutboundTxGasAndFees(address(prc20Token), 0);
 
         uint256 actualGasPrice = universalCore.gasPriceByChainNamespace(CHAIN_NAMESPACE);
         assertEq(gasFee, actualGasPrice * newBaseGasLimit);
@@ -772,7 +778,7 @@ contract UniversalCoreTest is Test, UpgradeableContractHelper {
         vm.prank(UNIVERSAL_EXECUTOR_MODULE);
         universalCore.updateProtocolFeeByToken(address(prc20Token), newProtocolFee);
 
-        (, uint256 gasFee, uint256 protocolFee,,) = universalCore.getOutboundTxGasAndFees(address(prc20Token), 0);
+        (, uint256 gasFee, uint256 protocolFee,,,) = universalCore.getOutboundTxGasAndFees(address(prc20Token), 0);
 
         uint256 actualGasPrice = universalCore.gasPriceByChainNamespace(CHAIN_NAMESPACE);
         uint256 actualBaseGasLimit = universalCore.baseGasLimitByChainNamespace(CHAIN_NAMESPACE);
@@ -862,7 +868,7 @@ contract UniversalCoreTest is Test, UpgradeableContractHelper {
         vm.prank(UNIVERSAL_EXECUTOR_MODULE);
         universalCore.setChainMeta(CHAIN_NAMESPACE, newPrice, 100);
 
-        (, uint256 gasFee, uint256 protocolFee,,) = universalCore.getOutboundTxGasAndFees(address(prc20Token), 0);
+        (, uint256 gasFee, uint256 protocolFee,,,) = universalCore.getOutboundTxGasAndFees(address(prc20Token), 0);
         assertEq(gasFee, newPrice * universalCore.baseGasLimitByChainNamespace(CHAIN_NAMESPACE));
         assertEq(protocolFee, universalCore.protocolFeeByToken(address(prc20Token)));
     }
@@ -1233,7 +1239,7 @@ contract UniversalCoreTest is Test, UpgradeableContractHelper {
 
         vm.warp(block.timestamp + 365 days);
 
-        (, uint256 outboundFee,,,) = universalCore.getOutboundTxGasAndFees(address(prc20Token), 0);
+        (, uint256 outboundFee,,,,) = universalCore.getOutboundTxGasAndFees(address(prc20Token), 0);
         assertGt(outboundFee, 0, "outbound fee should quote even after a year when check is disabled");
 
         (, uint256 rescueFee,,,) = universalCore.getRescueFundsGasLimit(address(prc20Token));
@@ -1267,7 +1273,7 @@ contract UniversalCoreTest is Test, UpgradeableContractHelper {
         uint256 observedAt = universalCore.timestampObservedAtByChainNamespace(CHAIN_NAMESPACE);
         vm.warp(observedAt + maxStaleness);
 
-        (, uint256 gasFee,,,) = universalCore.getOutboundTxGasAndFees(address(prc20Token), 0);
+        (, uint256 gasFee,,,,) = universalCore.getOutboundTxGasAndFees(address(prc20Token), 0);
         assertGt(gasFee, 0, "should succeed exactly at the boundary");
     }
 
@@ -1343,7 +1349,7 @@ contract UniversalCoreTest is Test, UpgradeableContractHelper {
         vm.prank(UNIVERSAL_EXECUTOR_MODULE);
         universalCore.setChainMeta(CHAIN_NAMESPACE, GAS_PRICE, 0);
 
-        (, uint256 gasFee,,,) = universalCore.getOutboundTxGasAndFees(address(prc20Token), 0);
+        (, uint256 gasFee,,,,) = universalCore.getOutboundTxGasAndFees(address(prc20Token), 0);
         assertGt(gasFee, 0, "should succeed after refresh");
     }
 
@@ -1428,7 +1434,7 @@ contract UniversalCoreTest is Test, UpgradeableContractHelper {
         universalCore.getOutboundTxGasAndFees(address(prc20Token), 0);
 
         // Chain B succeeds (no maxStaleness set for chainBNs).
-        (, uint256 gasFee,,,) = universalCore.getOutboundTxGasAndFees(address(bPRC20), 0);
+        (, uint256 gasFee,,,,) = universalCore.getOutboundTxGasAndFees(address(bPRC20), 0);
         assertGt(gasFee, 0, "chain B should not be affected by chain A's staleness config");
     }
 
