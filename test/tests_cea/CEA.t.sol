@@ -1055,11 +1055,10 @@ contract CEATest is Test {
 
         ceaInstance.executeUniversalTx(subTxId, universalTxID, ueaOnPush, address(0), multicallPayload);
 
-        // Approval persists after gateway call (gateway consumes via transferFrom in production)
         assertEq(
             token.allowance(address(ceaInstance), address(mockUniversalGateway)),
-            500 ether,
-            "Approval should persist (mock gateway doesn't consume)"
+            0,
+            "Approval should be reset to zero after gateway call"
         );
     }
 
@@ -1077,9 +1076,10 @@ contract CEATest is Test {
 
         ceaInstance.executeUniversalTx(subTxId, universalTxID, ueaOnPush, address(0), multicallPayload);
 
-        // Approval persists after gateway call (mock gateway doesn't consume)
         assertEq(
-            token.allowance(address(ceaInstance), address(mockUniversalGateway)), amount, "Approval should persist"
+            token.allowance(address(ceaInstance), address(mockUniversalGateway)),
+            0,
+            "Approval should be reset to zero after gateway call"
         );
     }
 
@@ -1125,9 +1125,10 @@ contract CEATest is Test {
         // Mock gateway doesn't transfer tokens, so balance unchanged
         uint256 balanceAfter = token.balanceOf(address(ceaInstance));
         assertEq(balanceAfter, balanceBefore, "Balance should remain same (mock doesn't transfer)");
-        // Approval persists after gateway call (mock gateway doesn't consume)
         assertEq(
-            token.allowance(address(ceaInstance), address(mockUniversalGateway)), sendAmount, "Approval should persist"
+            token.allowance(address(ceaInstance), address(mockUniversalGateway)),
+            0,
+            "Approval should be reset to zero after gateway call"
         );
     }
 
@@ -1245,9 +1246,33 @@ contract CEATest is Test {
         // Mock gateway doesn't transfer tokens, so balance unchanged
         uint256 balanceAfter = token.balanceOf(address(ceaInstance));
         assertEq(balanceAfter, balanceBefore, "Balance should remain same (mock doesn't transfer)");
-        // Approval persists after gateway call (mock gateway doesn't consume)
         assertEq(
-            token.allowance(address(ceaInstance), address(mockUniversalGateway)), sendAmount, "Approval should persist"
+            token.allowance(address(ceaInstance), address(mockUniversalGateway)),
+            0,
+            "Approval should be reset to zero after gateway call"
+        );
+    }
+
+    function testSendUniversalTxToUEA_ResetsApprovalToZeroAfterGatewayCall() public deployCEA {
+        MockGasToken token = new MockGasToken();
+        fundCEAWithTokens(address(token), 2000 ether);
+
+        vm.prank(address(ceaInstance));
+        token.approve(address(mockUniversalGateway), 1000 ether);
+        assertEq(token.allowance(address(ceaInstance), address(mockUniversalGateway)), 1000 ether);
+
+        bytes32 subTxId = generateTxID(1);
+        bytes32 universalTxID = generateUniversalTxID(1);
+        uint256 sendAmount = 500 ether;
+
+        vm.prank(vault);
+        bytes memory multicallPayload = buildSendToUEAMulticallPayload(address(token), sendAmount, true);
+        ceaInstance.executeUniversalTx(subTxId, universalTxID, ueaOnPush, address(0), multicallPayload);
+
+        assertEq(
+            token.allowance(address(ceaInstance), address(mockUniversalGateway)),
+            0,
+            "Pre-existing approval should be zeroed after gateway call"
         );
     }
 

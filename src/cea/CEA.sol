@@ -141,6 +141,7 @@ contract CEA is ICEA, ReentrancyGuard {
                 }
                 IERC20(token).approve(gateway, amount);
                 IUniversalGateway(gateway).sendUniversalTxFromCEA(req);
+                IERC20(token).approve(gateway, 0);
             }
         } else {
             IUniversalGateway(gateway).sendUniversalTxFromCEA(req);
