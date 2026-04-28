@@ -174,7 +174,8 @@ contract BaseTest is Test {
 
         UEAFactory factoryImpl = new UEAFactory();
 
-        bytes memory initData = abi.encodeWithSelector(UEAFactory.initialize.selector, deployer, makeAddr("pauser"), "42101");
+        bytes memory initData =
+            abi.encodeWithSelector(UEAFactory.initialize.selector, deployer, makeAddr("pauser"), "42101");
         ERC1967Proxy factoryProxy = new ERC1967Proxy(address(factoryImpl), initData);
         factory = UEAFactory(address(factoryProxy));
 

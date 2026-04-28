@@ -315,4 +315,14 @@ contract UEAFactoryV0 is Initializable, OwnableUpgradeable, PausableUpgradeable,
     function generateSalt(UniversalAccountId memory _id) public pure returns (bytes32) {
         return keccak256(abi.encode(_id));
     }
+
+    /// @dev V0 stub — not implemented in testnet version.
+    function getCEAForPushAccount(bytes32, address) external pure returns (address) {
+        revert UEAErrors.InvalidInputArgs();
+    }
+
+    /// @dev V0 stub — not implemented in testnet version.
+    function setCEAConfig(bytes32, address, address) external pure {
+        revert UEAErrors.InvalidInputArgs();
+    }
 }

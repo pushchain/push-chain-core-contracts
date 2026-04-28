@@ -3,6 +3,12 @@ pragma solidity 0.8.26;
 
 import {UniversalAccountId} from "../libraries/Types.sol";
 
+/// @notice Configuration for predicting CEA addresses on an external chain.
+struct CEAConfig {
+    address ceaFactory;
+    address ceaProxyImplementation;
+}
+
 /// @title  IUEAFactory
 /// @notice Interface for the Universal Executor Account Factory.
 /// @dev    Deploys deterministic UEA instances via CREATE2 and maintains
@@ -35,6 +41,12 @@ interface IUEAFactory {
     /// @param previousUEA       Previous UEA implementation address
     /// @param newUEA            New UEA implementation address
     event UEAImplementationUpdated(bytes32 indexed vmHash, address previousUEA, address newUEA);
+
+    /// @notice                  Emitted when CEA config is set for an external chain.
+    /// @param chainHash         Hash of the chain identifier
+    /// @param ceaFactory        CEAFactory address on the external chain
+    /// @param ceaProxyImpl      CEAProxy implementation address on the external chain
+    event CEAConfigSet(bytes32 indexed chainHash, address ceaFactory, address ceaProxyImpl);
 
     // =========================
     //    UF_1: VIEW FUNCTIONS
@@ -69,6 +81,12 @@ interface IUEAFactory {
     /// @param id           Universal Account information
     /// @return             Predicted UEA proxy address
     function computeUEA(UniversalAccountId memory id) external view returns (address);
+
+    /// @notice             Returns the predicted CEA address on an external chain.
+    /// @param chainHash    Hash of the external chain (keccak256(abi.encode(namespace, chainId)))
+    /// @param pushAccount  UEA or EOA address on Push Chain
+    /// @return cea         Predicted CEA address on the external chain
+    function getCEAForPushAccount(bytes32 chainHash, address pushAccount) external view returns (address cea);
 
     /// @notice             Returns the current UEA migration contract address.
     /// @return             Migration contract address
@@ -106,4 +124,10 @@ interface IUEAFactory {
     /// @param vmHash       VM type hash
     /// @param uea          UEA implementation address
     function registerUEA(bytes32 chainHash, bytes32 vmHash, address uea) external;
+
+    /// @notice                         Sets CEA config for an external chain.
+    /// @param chainHash                Hash of the chain identifier
+    /// @param ceaFactory               CEAFactory address on the external chain
+    /// @param ceaProxyImplementation   CEAProxy implementation on the external chain
+    function setCEAConfig(bytes32 chainHash, address ceaFactory, address ceaProxyImplementation) external;
 }
