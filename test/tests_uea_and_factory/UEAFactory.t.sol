@@ -13,11 +13,14 @@ import {UEAErrors as Errors} from "../../src/libraries/Errors.sol";
 import {IUEA} from "../../src/interfaces/IUEA.sol";
 import {IUEAFactory} from "../../src/Interfaces/IUEAFactory.sol";
 import {IAccessControl} from "@openzeppelin/contracts/access/IAccessControl.sol";
-import {IAccessControlDefaultAdminRules} from
-    "@openzeppelin/contracts/access/extensions/IAccessControlDefaultAdminRules.sol";
+import {
+    IAccessControlDefaultAdminRules
+} from "@openzeppelin/contracts/access/extensions/IAccessControlDefaultAdminRules.sol";
 import {PausableUpgradeable} from "@openzeppelin/contracts-upgradeable/utils/PausableUpgradeable.sol";
 import {ERC1967Proxy} from "@openzeppelin/contracts/proxy/ERC1967/ERC1967Proxy.sol";
 import {UEAProxy} from "../../src/uea/UEAProxy.sol";
+import {Clones} from "@openzeppelin/contracts/proxy/Clones.sol";
+import {CEAConfig} from "../../src/interfaces/IUEAFactory.sol";
 
 contract UEAFactoryTest is Test {
     UEAFactory factory;
@@ -1323,5 +1326,124 @@ contract UEAFactoryTest is Test {
         );
         vm.prank(pauser);
         factory.unpause();
+    }
+
+    // ============================================
+    //    CEA CONFIG & getCEAForPushAccount TESTS
+    // ============================================
+
+    function testSetCEAConfig_HappyPath() public {
+        address mockCeaFactory = makeAddr("ceaFactory");
+        address mockCeaProxyImpl = makeAddr("ceaProxyImpl");
+
+        factory.setCEAConfig(ethereumChainHash, mockCeaFactory, mockCeaProxyImpl);
+
+        (address storedFactory, address storedImpl) = factory.CEA_CONFIG(ethereumChainHash);
+        assertEq(storedFactory, mockCeaFactory);
+        assertEq(storedImpl, mockCeaProxyImpl);
+    }
+
+    function testSetCEAConfig_EmitsEvent() public {
+        address mockCeaFactory = makeAddr("ceaFactory");
+        address mockCeaProxyImpl = makeAddr("ceaProxyImpl");
+
+        vm.expectEmit(true, false, false, true, address(factory));
+        emit IUEAFactory.CEAConfigSet(ethereumChainHash, mockCeaFactory, mockCeaProxyImpl);
+
+        factory.setCEAConfig(ethereumChainHash, mockCeaFactory, mockCeaProxyImpl);
+    }
+
+    function testSetCEAConfig_RevertsOnZeroCeaFactory() public {
+        vm.expectRevert(Errors.InvalidInputArgs.selector);
+        factory.setCEAConfig(ethereumChainHash, address(0), makeAddr("ceaProxyImpl"));
+    }
+
+    function testSetCEAConfig_RevertsOnZeroCeaProxyImpl() public {
+        vm.expectRevert(Errors.InvalidInputArgs.selector);
+        factory.setCEAConfig(ethereumChainHash, makeAddr("ceaFactory"), address(0));
+    }
+
+    function testSetCEAConfig_OnlyUEAAdmin() public {
+        bytes32 ueaAdminRole = factory.UEA_ADMIN_ROLE();
+        vm.expectRevert(
+            abi.encodeWithSelector(IAccessControl.AccessControlUnauthorizedAccount.selector, nonOwner, ueaAdminRole)
+        );
+        vm.prank(nonOwner);
+        factory.setCEAConfig(ethereumChainHash, makeAddr("ceaFactory"), makeAddr("ceaProxyImpl"));
+    }
+
+    function testSetCEAConfig_CanOverwrite() public {
+        address factory1 = makeAddr("ceaFactory1");
+        address impl1 = makeAddr("ceaProxyImpl1");
+        address factory2 = makeAddr("ceaFactory2");
+        address impl2 = makeAddr("ceaProxyImpl2");
+
+        factory.setCEAConfig(ethereumChainHash, factory1, impl1);
+        factory.setCEAConfig(ethereumChainHash, factory2, impl2);
+
+        (address storedFactory, address storedImpl) = factory.CEA_CONFIG(ethereumChainHash);
+        assertEq(storedFactory, factory2);
+        assertEq(storedImpl, impl2);
+    }
+
+    function testGetCEAForPushAccount_HappyPath() public {
+        address mockCeaFactory = makeAddr("ceaFactory");
+        address mockCeaProxyImpl = makeAddr("ceaProxyImpl");
+        factory.setCEAConfig(ethereumChainHash, mockCeaFactory, mockCeaProxyImpl);
+
+        address pushAccount = makeAddr("pushAccount");
+        address cea = factory.getCEAForPushAccount(ethereumChainHash, pushAccount);
+
+        bytes32 salt = keccak256(abi.encode(pushAccount));
+        address expected = Clones.predictDeterministicAddress(mockCeaProxyImpl, salt, mockCeaFactory);
+        assertEq(cea, expected);
+    }
+
+    function testGetCEAForPushAccount_RevertsWhenConfigNotSet() public {
+        bytes32 unregisteredChain = keccak256(abi.encode("eip155", "999"));
+        vm.expectRevert(Errors.InvalidInputArgs.selector);
+        factory.getCEAForPushAccount(unregisteredChain, makeAddr("pushAccount"));
+    }
+
+    function testGetCEAForPushAccount_DifferentAccountsDifferentAddresses() public {
+        address mockCeaFactory = makeAddr("ceaFactory");
+        address mockCeaProxyImpl = makeAddr("ceaProxyImpl");
+        factory.setCEAConfig(ethereumChainHash, mockCeaFactory, mockCeaProxyImpl);
+
+        address cea1 = factory.getCEAForPushAccount(ethereumChainHash, makeAddr("account1"));
+        address cea2 = factory.getCEAForPushAccount(ethereumChainHash, makeAddr("account2"));
+        assertTrue(cea1 != cea2);
+    }
+
+    function testGetCEAForPushAccount_MatchesCEAFactoryFormula() public {
+        address mockCeaFactory = makeAddr("ceaFactory");
+        address mockCeaProxyImpl = makeAddr("ceaProxyImpl");
+        factory.setCEAConfig(ethereumChainHash, mockCeaFactory, mockCeaProxyImpl);
+
+        address pushAccount = makeAddr("pushAccount");
+        address cea = factory.getCEAForPushAccount(ethereumChainHash, pushAccount);
+
+        bytes32 salt = keccak256(abi.encode(pushAccount));
+        address manual = address(
+            uint160(
+                uint256(
+                    keccak256(
+                        abi.encodePacked(
+                            bytes1(0xff),
+                            mockCeaFactory,
+                            salt,
+                            keccak256(
+                                abi.encodePacked(
+                                    hex"3d602d80600a3d3981f3363d3d373d3d3d363d73",
+                                    mockCeaProxyImpl,
+                                    hex"5af43d82803e903d91602b57fd5bf3"
+                                )
+                            )
+                        )
+                    )
+                )
+            )
+        );
+        assertEq(cea, manual);
     }
 }

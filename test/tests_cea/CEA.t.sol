@@ -918,11 +918,7 @@ contract CEATest is Test {
         // Create multicall with wrong selector (try to call initializeCEA)
         Multicall[] memory calls = new Multicall[](1);
         calls[0] = makeCall(
-            address(ceaInstance),
-            0,
-            abi.encodeWithSignature(
-                "initializeCEA(address,address)", address(0), address(0)
-            )
+            address(ceaInstance), 0, abi.encodeWithSignature("initializeCEA(address,address)", address(0), address(0))
         );
         bytes memory multicallPayload = encodeCalls(calls);
 
@@ -1346,11 +1342,7 @@ contract CEATest is Test {
         // Create multicall with wrong selector (try to call initializeCEA)
         Multicall[] memory calls = new Multicall[](1);
         calls[0] = makeCall(
-            address(ceaInstance),
-            0,
-            abi.encodeWithSignature(
-                "initializeCEA(address,address)", address(0), address(0)
-            )
+            address(ceaInstance), 0, abi.encodeWithSignature("initializeCEA(address,address)", address(0), address(0))
         );
         bytes memory multicallPayload = encodeCalls(calls);
 
@@ -1730,8 +1722,7 @@ contract CEATest is Test {
 
     function testInitializeCEA_CannotBeCalledAgainAfterProxyDeployment() public deployCEA {
         vm.expectRevert(Errors.AlreadyInitialized.selector);
-        CEA(payable(address(ceaInstance)))
-            .initializeCEA(ueaOnPush, address(factory));
+        CEA(payable(address(ceaInstance))).initializeCEA(ueaOnPush, address(factory));
     }
 
     function testReceive_DirectETHTransferSucceeds() public deployCEA {
