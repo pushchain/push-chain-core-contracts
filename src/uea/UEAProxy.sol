@@ -31,6 +31,10 @@ contract UEAProxy is Initializable, Proxy {
     /// @dev                 Can only be called once. Intended caller: UEAFactory.
     /// @param _logic        Address of the UEA implementation contract
     function initializeUEA(address _logic) external initializer {
+        if (_logic == address(0)) {
+            revert UEAErrors.InvalidCall();
+        }
+
         address currentImpl = getImplementation();
         if (currentImpl != address(0)) {
             revert UEAErrors.InvalidCall();

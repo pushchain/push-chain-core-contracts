@@ -24,6 +24,8 @@ interface IPRC20 {
     event Deposit(bytes from, address to, uint256 amount);
     event Transfer(address indexed from, address indexed to, uint256 value);
     event Approval(address indexed owner, address indexed spender, uint256 value);
+    event NameUpdated(string oldName, string newName);
+    event SymbolUpdated(string oldSymbol, string newSymbol);
 
     // =========================
     //    PRC20_1: ERC-20 METADATA

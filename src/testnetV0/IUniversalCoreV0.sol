@@ -18,7 +18,6 @@ interface IUniversalCoreV0 {
     event SetGasPrice(string chainNamespace, uint256 price);
     event SetGasToken(string chainNamespace, address prc20);
     event SetDefaultDeadlineMins(uint256 minutesValue);
-    event SetSupportedToken(address indexed prc20, bool supported);
     event SetGasPCPool(
         string chainNamespace, address pool, uint24 fee
     );
@@ -132,13 +131,6 @@ interface IUniversalCoreV0 {
     //    UCV0_3: PUBLIC GETTERS
     // =========================
 
-    /// @notice                 Check if a PRC20 token is supported.
-    /// @param prc20            PRC20 token address
-    /// @return supported       Whether the token is supported
-    function isSupportedToken(
-        address prc20
-    ) external view returns (bool supported);
-
     /// @notice                 Get gas token PRC20 address for a chain.
     /// @param chainNamespace   Chain Namespace
     /// @return gasToken        Gas token address
@@ -222,7 +214,7 @@ interface IUniversalCoreV0 {
     /// @notice                 Set protocol fee (in native PC) for a token.
     /// @param token            Token address
     /// @param fee              Protocol fee amount in native PC
-    function setProtocolFeeByToken(
+    function updateProtocolFeeByToken(
         address token,
         uint256 fee
     ) external;
@@ -230,7 +222,7 @@ interface IUniversalCoreV0 {
     /// @notice                  Set rescue funds gas limit for a specific chain.
     /// @param chainNamespace    Chain Namespace
     /// @param gasLimit          Rescue funds gas limit for the chain
-    function setRescueFundsGasLimitByChain(
+    function updateRescueFundsGasLimitByChain(
         string memory chainNamespace,
         uint256 gasLimit
     ) external;

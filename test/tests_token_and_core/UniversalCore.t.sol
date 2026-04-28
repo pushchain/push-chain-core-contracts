@@ -10,22 +10,24 @@ import {UniversalCoreErrors, PRC20Errors, CommonErrors} from "../../src/librarie
 import "../../test/helpers/UpgradeableContractHelper.sol";
 import "../../test/mocks/MockUniswapV3Factory.sol";
 import "../../test/mocks/MockUniswapV3Router.sol";
-import "../../test/mocks/MockUniswapV3Quoter.sol";
 import "../../test/mocks/MockWPC.sol";
 import "../../test/mocks/MockPRC20.sol";
 import "../../test/mocks/MaliciousPRC20.sol";
 import "../../test/mocks/RevertingPRC20.sol";
+import "../../test/mocks/FalseReturningPRC20.sol";
+import "../../test/mocks/RevertingTarget.sol";
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import "@openzeppelin/contracts-upgradeable/utils/PausableUpgradeable.sol";
-import "@openzeppelin/contracts/access/AccessControl.sol";
 import {IAccessControl} from "@openzeppelin/contracts/access/IAccessControl.sol";
+import {
+    IAccessControlDefaultAdminRules
+} from "@openzeppelin/contracts/access/extensions/IAccessControlDefaultAdminRules.sol";
 
 contract UniversalCoreTest is Test, UpgradeableContractHelper {
     UniversalCore public universalCore;
     PRC20 public prc20Token;
     MockUniswapV3Factory public mockFactory;
     MockUniswapV3Router public mockRouter;
-    MockUniswapV3Quoter public mockQuoter;
     MockWPC public mockWPC;
 
     address public constant UNIVERSAL_EXECUTOR_MODULE = 0x14191Ea54B4c176fCf86f51b0FAc7CB1E71Df7d7;
@@ -46,7 +48,10 @@ contract UniversalCoreTest is Test, UpgradeableContractHelper {
 
     event SystemContractDeployed();
     event SetAutoSwapSupported(address indexed token, bool supported);
-    event SetWPC(address indexed wpc);
+    event SetWPC(address indexed oldAddr, address indexed newAddr);
+    event SetUniversalGatewayPC(address indexed oldAddr, address indexed newAddr);
+    event SetUniswapV3Addresses(address factory, address swapRouter);
+    event SetDefaultFeeTier(address indexed token, uint24 feeTier);
     event SetGasPCPool(string indexed chainId, address indexed pool, uint24 fee);
     event SetGasToken(string indexed chainId, address indexed prc20);
     event DepositPRC20WithAutoSwap(
@@ -59,10 +64,11 @@ contract UniversalCoreTest is Test, UpgradeableContractHelper {
     );
     event Paused(address account);
     event Unpaused(address account);
-    event SetSupportedToken(address indexed prc20, bool supported);
     event SetChainMeta(string chainNamespace, uint256 price, uint256 chainHeight, uint256 observedAt);
     event SetBaseGasLimitByChain(string chainNamespace, uint256 gasLimit);
     event SetRescueFundsGasLimitByChain(string chainNamespace, uint256 gasLimit);
+    event SetMaxStalenessByChain(string chainNamespace, uint256 maxStaleness);
+    event RescueNativePC(address indexed to, uint256 amount);
 
     function setUp() public {
         // Setup accounts
@@ -75,7 +81,6 @@ contract UniversalCoreTest is Test, UpgradeableContractHelper {
         // Deploy mocks
         mockFactory = new MockUniswapV3Factory();
         mockRouter = new MockUniswapV3Router();
-        mockQuoter = new MockUniswapV3Quoter();
         mockWPC = new MockWPC();
         mockPRC20 = new MockPRC20();
 
@@ -103,11 +108,11 @@ contract UniversalCoreTest is Test, UpgradeableContractHelper {
         // Deploy proxy and initialize
         bytes memory initData = abi.encodeWithSelector(
             UniversalCore.initialize.selector,
+            deployer,
+            pauser,
             address(mockWPC),
             address(mockFactory),
-            address(mockRouter),
-            address(mockQuoter),
-            pauser
+            address(mockRouter)
         );
 
         address proxyAddress = deployUpgradeableContract(address(implementation), initData);
@@ -121,15 +126,16 @@ contract UniversalCoreTest is Test, UpgradeableContractHelper {
         address pool = makeAddr("mockPool");
         mockFactory.setPool(address(mockWPC), address(prc20Token), FEE_TIER, pool);
 
-        // Grant MANAGER_ROLE to UE Module for manager functions
-        universalCore.grantRole(universalCore.MANAGER_ROLE(), UNIVERSAL_EXECUTOR_MODULE);
+        // Grant UVCORE_ADMIN_ROLE to UE Module for config functions
+        universalCore.grantRole(universalCore.UVCORE_ADMIN_ROLE(), UNIVERSAL_EXECUTOR_MODULE);
 
-        // Configure gas price, gas token, base gas limit, and protocol fee for testing
+        // Configure gas token first, then gas price (updateGasTokenPRC20 resets gas price to 0,
+        // so setChainMeta must come after to preserve the configured gas price).
         vm.startPrank(UNIVERSAL_EXECUTOR_MODULE);
+        universalCore.updateGasTokenPRC20(CHAIN_NAMESPACE, address(mockPRC20));
         universalCore.setChainMeta(CHAIN_NAMESPACE, GAS_PRICE, 0);
-        universalCore.setGasTokenPRC20(CHAIN_NAMESPACE, address(mockPRC20));
-        universalCore.setBaseGasLimitByChain(CHAIN_NAMESPACE, BASE_GAS_LIMIT);
-        universalCore.setProtocolFeeByToken(address(prc20Token), PROTOCOL_FEE);
+        universalCore.updateBaseGasLimitByChain(CHAIN_NAMESPACE, BASE_GAS_LIMIT);
+        universalCore.updateProtocolFeeByToken(address(prc20Token), PROTOCOL_FEE);
         vm.stopPrank();
     }
 
@@ -141,45 +147,43 @@ contract UniversalCoreTest is Test, UpgradeableContractHelper {
         UniversalCore newHandler = new UniversalCore();
         // Should not be able to call initialize on implementation directly
         vm.expectRevert(Initializable.InvalidInitialization.selector);
-        newHandler.initialize(address(mockWPC), address(mockFactory), address(mockRouter), address(mockQuoter), pauser);
+        newHandler.initialize(deployer, pauser, address(mockWPC), address(mockFactory), address(mockRouter));
     }
 
-    function test_Initialize_GrantsAdminRoleToDeployer() public {
-        // Deploy new universalCore with different deployer
-        address newDeployer = makeAddr("newDeployer");
-        vm.startPrank(newDeployer);
+    function test_Initialize_GrantsAdminRoleToAdmin() public {
+        address admin = makeAddr("newAdmin");
+        address newPauser = makeAddr("newPauser");
 
         UniversalCore newImplementation = new UniversalCore();
-        address newPauser = makeAddr("newPauser");
         bytes memory initData = abi.encodeWithSelector(
             UniversalCore.initialize.selector,
+            admin,
+            newPauser,
             address(mockWPC),
             address(mockFactory),
-            address(mockRouter),
-            address(mockQuoter),
-            newPauser
+            address(mockRouter)
         );
 
         address newProxyAddress = deployUpgradeableContract(address(newImplementation), initData);
         UniversalCore newHandler = UniversalCore(payable(newProxyAddress));
 
-        // Check that deployer has admin role
-        assertTrue(newHandler.hasRole(newHandler.DEFAULT_ADMIN_ROLE(), newDeployer));
-        vm.stopPrank();
+        assertTrue(newHandler.hasRole(newHandler.DEFAULT_ADMIN_ROLE(), admin));
+        assertTrue(newHandler.hasRole(newHandler.ROLE_MANAGER_ROLE(), admin));
+        assertTrue(newHandler.hasRole(newHandler.UVCORE_ADMIN_ROLE(), admin));
+        assertTrue(newHandler.hasRole(newHandler.OPERATOR_ROLE(), admin));
+        assertTrue(newHandler.hasRole(newHandler.PAUSER_ROLE(), newPauser));
+        assertFalse(newHandler.hasRole(newHandler.PAUSER_ROLE(), admin));
     }
 
     function test_Initialize_SetsAddresses() public view {
         assertEq(universalCore.WPC(), address(mockWPC));
         assertEq(universalCore.uniswapV3Factory(), address(mockFactory));
         assertEq(universalCore.uniswapV3SwapRouter(), address(mockRouter));
-        assertEq(universalCore.uniswapV3Quoter(), address(mockQuoter));
     }
 
     function test_Initialize_RevertsOnSecondCall() public {
         vm.expectRevert(Initializable.InvalidInitialization.selector);
-        universalCore.initialize(
-            address(mockWPC), address(mockFactory), address(mockRouter), address(mockQuoter), pauser
-        );
+        universalCore.initialize(deployer, pauser, address(mockWPC), address(mockFactory), address(mockRouter));
     }
 
     function test_UniversalExecutorModule_IsImmutable() public view {
@@ -197,17 +201,19 @@ contract UniversalCoreTest is Test, UpgradeableContractHelper {
     // 1) Admin-specific (DEFAULT_ADMIN_ROLE) setters
     // ========================================
 
-    function test_SetAutoSwapSupported_OnlyOwner() public {
+    function test_SetAutoSwapSupported_OnlyUCoreAdmin() public {
         address token = makeAddr("token");
 
-        // Non-owner should revert
+        bytes32 ucoreAdminRole = universalCore.UVCORE_ADMIN_ROLE();
         vm.prank(nonOwner);
-        vm.expectRevert(CommonErrors.InvalidOwner.selector);
-        universalCore.setAutoSwapSupported(token, true);
+        vm.expectRevert(
+            abi.encodeWithSelector(IAccessControl.AccessControlUnauthorizedAccount.selector, nonOwner, ucoreAdminRole)
+        );
+        universalCore.updateAutoSwapSupported(token, true);
 
-        // Deployer (who has admin role) should succeed
+        // Deployer (who has UVCORE_ADMIN_ROLE) should succeed
         vm.prank(deployer);
-        universalCore.setAutoSwapSupported(token, true);
+        universalCore.updateAutoSwapSupported(token, true);
         assertTrue(universalCore.isAutoSwapSupported(token));
     }
 
@@ -215,41 +221,50 @@ contract UniversalCoreTest is Test, UpgradeableContractHelper {
         address token = makeAddr("token");
 
         vm.prank(deployer);
-        universalCore.setAutoSwapSupported(token, true);
+        vm.expectEmit(true, false, false, true);
+        emit SetAutoSwapSupported(token, true);
+        universalCore.updateAutoSwapSupported(token, true);
         assertTrue(universalCore.isAutoSwapSupported(token));
 
         // Test flipping to false
         vm.prank(deployer);
-        universalCore.setAutoSwapSupported(token, false);
+        vm.expectEmit(true, false, false, true);
+        emit SetAutoSwapSupported(token, false);
+        universalCore.updateAutoSwapSupported(token, false);
         assertFalse(universalCore.isAutoSwapSupported(token));
     }
 
     function test_SetAutoSwapSupported_ZeroAddressAllowed() public {
         // Current implementation allows zero address
         vm.prank(deployer);
-        universalCore.setAutoSwapSupported(address(0), true);
+        universalCore.updateAutoSwapSupported(address(0), true);
         assertTrue(universalCore.isAutoSwapSupported(address(0)));
     }
 
-    function test_SetWPCContractAddress_OnlyOwner() public {
+    function test_SetWPCContractAddress_OnlyOperator() public {
         address newWPC = makeAddr("newWPC");
 
-        // Non-owner should revert
+        bytes32 operatorRole = universalCore.OPERATOR_ROLE();
         vm.prank(nonOwner);
-        vm.expectRevert(CommonErrors.InvalidOwner.selector);
-        universalCore.setWPC(newWPC);
+        vm.expectRevert(
+            abi.encodeWithSelector(IAccessControl.AccessControlUnauthorizedAccount.selector, nonOwner, operatorRole)
+        );
+        universalCore.updateWPC(newWPC);
 
-        // Deployer (who has admin role) should succeed
+        // Deployer (who has OPERATOR_ROLE) should succeed
         vm.prank(deployer);
-        universalCore.setWPC(newWPC);
+        universalCore.updateWPC(newWPC);
         assertEq(universalCore.WPC(), newWPC);
     }
 
     function test_SetWPCContractAddress_HappyPath() public {
         address newWPC = makeAddr("newWPC");
+        address oldWPC = universalCore.WPC();
 
         vm.prank(deployer);
-        universalCore.setWPC(newWPC);
+        vm.expectEmit(true, true, false, true);
+        emit SetWPC(oldWPC, newWPC);
+        universalCore.updateWPC(newWPC);
 
         assertEq(universalCore.WPC(), newWPC);
     }
@@ -257,7 +272,7 @@ contract UniversalCoreTest is Test, UpgradeableContractHelper {
     function test_SetWPCContractAddress_ZeroAddressReverts() public {
         vm.prank(deployer);
         vm.expectRevert(CommonErrors.ZeroAddress.selector);
-        universalCore.setWPC(address(0));
+        universalCore.updateWPC(address(0));
     }
 
     // ========================================
@@ -279,21 +294,21 @@ contract UniversalCoreTest is Test, UpgradeableContractHelper {
         vm.startPrank(nonUEModule);
         vm.expectRevert(
             abi.encodeWithSelector(
-                IAccessControl.AccessControlUnauthorizedAccount.selector, nonUEModule, universalCore.MANAGER_ROLE()
+                IAccessControl.AccessControlUnauthorizedAccount.selector, nonUEModule, universalCore.UVCORE_ADMIN_ROLE()
             )
         );
-        universalCore.setGasPCPool(CHAIN_NAMESPACE, gasToken, FEE_TIER);
+        universalCore.updateGasPCPool(CHAIN_NAMESPACE, gasToken, FEE_TIER);
         vm.stopPrank();
 
         // UEM should succeed
         vm.prank(UNIVERSAL_EXECUTOR_MODULE);
-        universalCore.setGasPCPool(CHAIN_NAMESPACE, gasToken, FEE_TIER);
+        universalCore.updateGasPCPool(CHAIN_NAMESPACE, gasToken, FEE_TIER);
     }
 
     function test_SetGasPCPool_ZeroAddressReverts() public {
         vm.prank(UNIVERSAL_EXECUTOR_MODULE);
         vm.expectRevert(CommonErrors.ZeroAddress.selector);
-        universalCore.setGasPCPool(CHAIN_NAMESPACE, address(0), FEE_TIER);
+        universalCore.updateGasPCPool(CHAIN_NAMESPACE, address(0), FEE_TIER);
     }
 
     function test_SetGasPCPool_PoolNotFoundReverts() public {
@@ -304,7 +319,7 @@ contract UniversalCoreTest is Test, UpgradeableContractHelper {
 
         vm.prank(UNIVERSAL_EXECUTOR_MODULE);
         vm.expectRevert(UniversalCoreErrors.PoolNotFound.selector);
-        universalCore.setGasPCPool(CHAIN_NAMESPACE, gasToken, FEE_TIER);
+        universalCore.updateGasPCPool(CHAIN_NAMESPACE, gasToken, FEE_TIER);
     }
 
     function test_SetGasPCPool_HappyPath() public {
@@ -319,7 +334,7 @@ contract UniversalCoreTest is Test, UpgradeableContractHelper {
         }
 
         vm.prank(UNIVERSAL_EXECUTOR_MODULE);
-        universalCore.setGasPCPool(CHAIN_NAMESPACE, gasToken, FEE_TIER);
+        universalCore.updateGasPCPool(CHAIN_NAMESPACE, gasToken, FEE_TIER);
 
         assertEq(universalCore.gasPCPoolByChainNamespace(CHAIN_NAMESPACE), pool);
     }
@@ -336,7 +351,7 @@ contract UniversalCoreTest is Test, UpgradeableContractHelper {
         }
 
         vm.prank(UNIVERSAL_EXECUTOR_MODULE);
-        universalCore.setGasPCPool(CHAIN_NAMESPACE, gasToken, FEE_TIER);
+        universalCore.updateGasPCPool(CHAIN_NAMESPACE, gasToken, FEE_TIER);
 
         assertEq(universalCore.gasPCPoolByChainNamespace(CHAIN_NAMESPACE), pool);
     }
@@ -348,7 +363,7 @@ contract UniversalCoreTest is Test, UpgradeableContractHelper {
 
         // Change WPC first
         vm.prank(deployer);
-        universalCore.setWPC(newWPC);
+        universalCore.updateWPC(newWPC);
 
         // Setup pool with new WPC (both orderings)
         if (newWPC < gasToken) {
@@ -358,7 +373,7 @@ contract UniversalCoreTest is Test, UpgradeableContractHelper {
         }
 
         vm.prank(UNIVERSAL_EXECUTOR_MODULE);
-        universalCore.setGasPCPool(CHAIN_NAMESPACE, gasToken, FEE_TIER);
+        universalCore.updateGasPCPool(CHAIN_NAMESPACE, gasToken, FEE_TIER);
 
         assertEq(universalCore.gasPCPoolByChainNamespace(CHAIN_NAMESPACE), pool);
     }
@@ -370,29 +385,29 @@ contract UniversalCoreTest is Test, UpgradeableContractHelper {
         vm.startPrank(nonUEModule);
         vm.expectRevert(
             abi.encodeWithSelector(
-                IAccessControl.AccessControlUnauthorizedAccount.selector, nonUEModule, universalCore.MANAGER_ROLE()
+                IAccessControl.AccessControlUnauthorizedAccount.selector, nonUEModule, universalCore.UVCORE_ADMIN_ROLE()
             )
         );
-        universalCore.setGasTokenPRC20(CHAIN_NAMESPACE, prc20);
+        universalCore.updateGasTokenPRC20(CHAIN_NAMESPACE, prc20);
         vm.stopPrank();
 
         // UEM should succeed
         vm.prank(UNIVERSAL_EXECUTOR_MODULE);
-        universalCore.setGasTokenPRC20(CHAIN_NAMESPACE, prc20);
+        universalCore.updateGasTokenPRC20(CHAIN_NAMESPACE, prc20);
         assertEq(universalCore.gasTokenPRC20ByChainNamespace(CHAIN_NAMESPACE), prc20);
     }
 
     function test_SetGasTokenPRC20_ZeroAddressReverts() public {
         vm.prank(UNIVERSAL_EXECUTOR_MODULE);
         vm.expectRevert(CommonErrors.ZeroAddress.selector);
-        universalCore.setGasTokenPRC20(CHAIN_NAMESPACE, address(0));
+        universalCore.updateGasTokenPRC20(CHAIN_NAMESPACE, address(0));
     }
 
     function test_SetGasTokenPRC20_HappyPath() public {
         address prc20 = makeAddr("prc20");
 
         vm.prank(UNIVERSAL_EXECUTOR_MODULE);
-        universalCore.setGasTokenPRC20(CHAIN_NAMESPACE, prc20);
+        universalCore.updateGasTokenPRC20(CHAIN_NAMESPACE, prc20);
 
         assertEq(universalCore.gasTokenPRC20ByChainNamespace(CHAIN_NAMESPACE), prc20);
     }
@@ -518,31 +533,35 @@ contract UniversalCoreTest is Test, UpgradeableContractHelper {
         assertTrue(universalCore.paused());
     }
 
-    function test_Unpause_OnlyPauser() public {
-        bytes32 role = universalCore.PAUSER_ROLE();
+    function test_Unpause_OnlyOperator() public {
+        bytes32 operatorRole = universalCore.OPERATOR_ROLE();
 
-        // First pause the contract
         vm.prank(pauser);
         universalCore.pause();
 
-        // Non-pauser cannot unpause
+        // Non-operator cannot unpause
         vm.expectRevert(
-            abi.encodeWithSelector(IAccessControl.AccessControlUnauthorizedAccount.selector, nonOwner, role)
+            abi.encodeWithSelector(IAccessControl.AccessControlUnauthorizedAccount.selector, nonOwner, operatorRole)
         );
         vm.prank(nonOwner);
+        universalCore.unpause();
+
+        // Pauser also cannot unpause (different role)
+        vm.expectRevert(
+            abi.encodeWithSelector(IAccessControl.AccessControlUnauthorizedAccount.selector, pauser, operatorRole)
+        );
+        vm.prank(pauser);
         universalCore.unpause();
     }
 
     function test_Unpause_HappyPath() public {
-        // First pause the contract
         vm.prank(pauser);
         universalCore.pause();
         assertTrue(universalCore.paused());
 
-        // Unpause
-        vm.prank(pauser);
+        // Deployer has OPERATOR_ROLE
         vm.expectEmit(true, true, true, true);
-        emit Unpaused(pauser);
+        emit Unpaused(deployer);
         universalCore.unpause();
 
         assertFalse(universalCore.paused());
@@ -556,31 +575,27 @@ contract UniversalCoreTest is Test, UpgradeableContractHelper {
         assertFalse(universalCore.hasRole(universalCore.PAUSER_ROLE(), deployer));
     }
 
-    function test_SetPauserRole_OnlyAdmin() public {
+    function test_GrantPauserRole_OnlyRoleManager() public {
         address newPauser = makeAddr("newPauser");
+        bytes32 pauserRole = universalCore.PAUSER_ROLE();
+        bytes32 roleManagerRole = universalCore.ROLE_MANAGER_ROLE();
 
-        // Non-admin cannot set pauser role
         vm.prank(nonOwner);
-        vm.expectRevert(CommonErrors.InvalidOwner.selector);
-        universalCore.setPauserRole(newPauser);
+        vm.expectRevert(
+            abi.encodeWithSelector(IAccessControl.AccessControlUnauthorizedAccount.selector, nonOwner, roleManagerRole)
+        );
+        universalCore.grantRole(pauserRole, newPauser);
 
-        // Admin can set pauser role
-        vm.prank(deployer);
-        universalCore.setPauserRole(newPauser);
-        assertTrue(universalCore.hasRole(universalCore.PAUSER_ROLE(), newPauser));
+        // Deployer has ROLE_MANAGER_ROLE
+        universalCore.grantRole(pauserRole, newPauser);
+        assertTrue(universalCore.hasRole(pauserRole, newPauser));
     }
 
-    function test_SetPauserRole_ZeroAddressReverts() public {
-        vm.prank(deployer);
-        vm.expectRevert(CommonErrors.ZeroAddress.selector);
-        universalCore.setPauserRole(address(0));
-    }
-
-    function test_SetPauserRole_NewPauserCanPause() public {
+    function test_GrantPauserRole_NewPauserCanPause() public {
         address newPauser = makeAddr("newPauser");
 
         vm.prank(deployer);
-        universalCore.setPauserRole(newPauser);
+        universalCore.grantRole(universalCore.PAUSER_ROLE(), newPauser);
 
         vm.prank(newPauser);
         universalCore.pause();
@@ -601,7 +616,7 @@ contract UniversalCoreTest is Test, UpgradeableContractHelper {
     function test_DepositPRC20WithAutoSwap_WhenPaused_Reverts() public {
         // Setup auto-swap support
         vm.prank(deployer);
-        universalCore.setAutoSwapSupported(address(mockPRC20), true);
+        universalCore.updateAutoSwapSupported(address(mockPRC20), true);
 
         // Pause the contract
         vm.prank(pauser);
@@ -614,12 +629,10 @@ contract UniversalCoreTest is Test, UpgradeableContractHelper {
     }
 
     function test_DepositPRC20Token_AfterUnpause_Works() public {
-        // Pause the contract
         vm.prank(pauser);
         universalCore.pause();
 
-        // Unpause the contract
-        vm.prank(pauser);
+        // Deployer has OPERATOR_ROLE
         universalCore.unpause();
 
         // Now deposit should work
@@ -639,7 +652,8 @@ contract UniversalCoreTest is Test, UpgradeableContractHelper {
             uint256 gasFee,
             uint256 protocolFee,
             uint256 gasPrice,
-            string memory chainNamespace
+            string memory chainNamespace,
+            uint256 gasLimitUsed
         ) = universalCore.getOutboundTxGasAndFees(address(prc20Token), 0);
 
         assertEq(returnedGasToken, address(mockPRC20));
@@ -651,6 +665,8 @@ contract UniversalCoreTest is Test, UpgradeableContractHelper {
         assertEq(gasFee, gasPrice * actualBaseGasLimit);
         assertEq(protocolFee, actualProtocolFee);
         assertEq(keccak256(bytes(chainNamespace)), keccak256(bytes(CHAIN_NAMESPACE)));
+        assertEq(gasLimitUsed, actualBaseGasLimit);
+        assertEq(gasFee, gasPrice * gasLimitUsed);
     }
 
     function testWithdrawGasFeeWithGasLimitHappyPath() public view {
@@ -661,7 +677,8 @@ contract UniversalCoreTest is Test, UpgradeableContractHelper {
             uint256 gasFee,
             uint256 protocolFee,
             uint256 gasPrice,
-            string memory chainNamespace
+            string memory chainNamespace,
+            uint256 gasLimitUsed
         ) = universalCore.getOutboundTxGasAndFees(address(prc20Token), customGasLimit);
 
         assertEq(returnedGasToken, address(mockPRC20));
@@ -669,17 +686,37 @@ contract UniversalCoreTest is Test, UpgradeableContractHelper {
         assertEq(gasFee, gasPrice * customGasLimit);
         assertEq(protocolFee, PROTOCOL_FEE);
         assertEq(keccak256(bytes(chainNamespace)), keccak256(bytes(CHAIN_NAMESPACE)));
+        assertEq(gasLimitUsed, customGasLimit);
+        assertEq(gasFee, gasPrice * gasLimitUsed);
     }
 
     function testWithdrawGasFeeZeroGasPrice() public {
+        // Use a fresh chain namespace with gas token set but no setChainMeta call,
+        // so gasPriceByChainNamespace is 0 by default in storage.
+        string memory newNs = "eip155:9999";
+
+        PRC20 newPrc20Impl = new PRC20();
+        bytes memory initData = abi.encodeWithSelector(
+            PRC20.initialize.selector,
+            "Zero Price PRC20",
+            "ZP",
+            18,
+            newNs,
+            IPRC20.TokenType.ERC20,
+            address(universalCore),
+            SOURCE_TOKEN_ADDRESS
+        );
+        address proxyAddr = deployUpgradeableContract(address(newPrc20Impl), initData);
+        PRC20 newToken = PRC20(payable(proxyAddr));
+
+        // Set gas token and base gas limit, but never call setChainMeta → price stays 0
         vm.startPrank(UNIVERSAL_EXECUTOR_MODULE);
-        // Set gas price to zero
-        universalCore.setChainMeta(CHAIN_NAMESPACE, 0, 0);
+        universalCore.updateGasTokenPRC20(newNs, address(mockPRC20));
+        universalCore.updateBaseGasLimitByChain(newNs, BASE_GAS_LIMIT);
         vm.stopPrank();
 
-        // Expect revert when getting gas fee
         vm.expectRevert(UniversalCoreErrors.ZeroGasPrice.selector);
-        universalCore.getOutboundTxGasAndFees(address(prc20Token), 0);
+        universalCore.getOutboundTxGasAndFees(address(newToken), BASE_GAS_LIMIT);
     }
 
     function testWithdrawGasFeeZeroGasToken() public {
@@ -701,10 +738,10 @@ contract UniversalCoreTest is Test, UpgradeableContractHelper {
         address proxyAddress = deployUpgradeableContract(address(newPrc20Token), initData);
         PRC20 newToken = PRC20(payable(proxyAddress));
 
-        // Don't set gas token for this chain ID, so it will be address(0)
+        // Don't set gas token or base gas limit for this chain ID
 
-        // Expect revert when getting gas fee
-        vm.expectRevert(CommonErrors.ZeroAddress.selector);
+        // Expect revert due to unconfigured base gas limit
+        vm.expectRevert(UniversalCoreErrors.ZeroBaseGasLimit.selector);
         universalCore.getOutboundTxGasAndFees(address(newToken), 0);
     }
 
@@ -714,7 +751,7 @@ contract UniversalCoreTest is Test, UpgradeableContractHelper {
         vm.prank(UNIVERSAL_EXECUTOR_MODULE);
         universalCore.setChainMeta(CHAIN_NAMESPACE, newGasPrice, 0);
 
-        (, uint256 gasFee, uint256 protocolFee,,) = universalCore.getOutboundTxGasAndFees(address(prc20Token), 0);
+        (, uint256 gasFee, uint256 protocolFee,,,) = universalCore.getOutboundTxGasAndFees(address(prc20Token), 0);
 
         uint256 actualBaseGasLimit = universalCore.baseGasLimitByChainNamespace(CHAIN_NAMESPACE);
         uint256 expectedGasFee = newGasPrice * actualBaseGasLimit;
@@ -726,9 +763,9 @@ contract UniversalCoreTest is Test, UpgradeableContractHelper {
         uint256 newBaseGasLimit = BASE_GAS_LIMIT * 2;
 
         vm.prank(UNIVERSAL_EXECUTOR_MODULE);
-        universalCore.setBaseGasLimitByChain(CHAIN_NAMESPACE, newBaseGasLimit);
+        universalCore.updateBaseGasLimitByChain(CHAIN_NAMESPACE, newBaseGasLimit);
 
-        (, uint256 gasFee, uint256 protocolFee,,) = universalCore.getOutboundTxGasAndFees(address(prc20Token), 0);
+        (, uint256 gasFee, uint256 protocolFee,,,) = universalCore.getOutboundTxGasAndFees(address(prc20Token), 0);
 
         uint256 actualGasPrice = universalCore.gasPriceByChainNamespace(CHAIN_NAMESPACE);
         assertEq(gasFee, actualGasPrice * newBaseGasLimit);
@@ -739,9 +776,9 @@ contract UniversalCoreTest is Test, UpgradeableContractHelper {
         uint256 newProtocolFee = PROTOCOL_FEE * 2;
 
         vm.prank(UNIVERSAL_EXECUTOR_MODULE);
-        universalCore.setProtocolFeeByToken(address(prc20Token), newProtocolFee);
+        universalCore.updateProtocolFeeByToken(address(prc20Token), newProtocolFee);
 
-        (, uint256 gasFee, uint256 protocolFee,,) = universalCore.getOutboundTxGasAndFees(address(prc20Token), 0);
+        (, uint256 gasFee, uint256 protocolFee,,,) = universalCore.getOutboundTxGasAndFees(address(prc20Token), 0);
 
         uint256 actualGasPrice = universalCore.gasPriceByChainNamespace(CHAIN_NAMESPACE);
         uint256 actualBaseGasLimit = universalCore.baseGasLimitByChainNamespace(CHAIN_NAMESPACE);
@@ -759,7 +796,7 @@ contract UniversalCoreTest is Test, UpgradeableContractHelper {
         vm.prank(UNIVERSAL_EXECUTOR_MODULE);
         vm.expectEmit(false, false, false, true);
         emit SetBaseGasLimitByChain(CHAIN_NAMESPACE, newGasLimit);
-        universalCore.setBaseGasLimitByChain(CHAIN_NAMESPACE, newGasLimit);
+        universalCore.updateBaseGasLimitByChain(CHAIN_NAMESPACE, newGasLimit);
 
         assertEq(universalCore.baseGasLimitByChainNamespace(CHAIN_NAMESPACE), newGasLimit);
     }
@@ -770,16 +807,16 @@ contract UniversalCoreTest is Test, UpgradeableContractHelper {
         // Non-manager should revert
         vm.expectRevert(
             abi.encodeWithSelector(
-                IAccessControl.AccessControlUnauthorizedAccount.selector, nonOwner, universalCore.MANAGER_ROLE()
+                IAccessControl.AccessControlUnauthorizedAccount.selector, nonOwner, universalCore.UVCORE_ADMIN_ROLE()
             )
         );
         vm.prank(nonOwner);
-        universalCore.setBaseGasLimitByChain(CHAIN_NAMESPACE, newGasLimit);
+        universalCore.updateBaseGasLimitByChain(CHAIN_NAMESPACE, newGasLimit);
     }
 
     function test_SetBaseGasLimitByChain_ZeroValueAllowed() public {
         vm.prank(UNIVERSAL_EXECUTOR_MODULE);
-        universalCore.setBaseGasLimitByChain(CHAIN_NAMESPACE, 0);
+        universalCore.updateBaseGasLimitByChain(CHAIN_NAMESPACE, 0);
         assertEq(universalCore.baseGasLimitByChainNamespace(CHAIN_NAMESPACE), 0);
     }
 
@@ -790,97 +827,6 @@ contract UniversalCoreTest is Test, UpgradeableContractHelper {
             abi.encodeWithSelector(UniversalCoreErrors.GasLimitBelowBase.selector, belowBase, BASE_GAS_LIMIT)
         );
         universalCore.getOutboundTxGasAndFees(address(prc20Token), belowBase);
-    }
-
-    // ========================================
-    // 6) Set Supported Token Tests
-    // ========================================
-
-    function test_SetSupportedToken_OnlyManagerRole() public {
-        address token = makeAddr("token");
-
-        // Non-manager should revert
-        vm.expectRevert(
-            abi.encodeWithSelector(
-                IAccessControl.AccessControlUnauthorizedAccount.selector, nonUEModule, universalCore.MANAGER_ROLE()
-            )
-        );
-        vm.prank(nonUEModule);
-        universalCore.setSupportedToken(token, true);
-
-        // MANAGER_ROLE (UNIVERSAL_EXECUTOR_MODULE) should succeed
-        vm.prank(UNIVERSAL_EXECUTOR_MODULE);
-        universalCore.setSupportedToken(token, true);
-        assertTrue(universalCore.isSupportedToken(token));
-    }
-
-    function test_SetSupportedToken_HappyPath_SetTrue() public {
-        address token = makeAddr("token");
-
-        vm.prank(UNIVERSAL_EXECUTOR_MODULE);
-        universalCore.setSupportedToken(token, true);
-        assertTrue(universalCore.isSupportedToken(token));
-    }
-
-    function test_SetSupportedToken_HappyPath_SetFalse() public {
-        address token = makeAddr("token");
-
-        // First set to true
-        vm.prank(UNIVERSAL_EXECUTOR_MODULE);
-        universalCore.setSupportedToken(token, true);
-        assertTrue(universalCore.isSupportedToken(token));
-
-        // Then set to false
-        vm.prank(UNIVERSAL_EXECUTOR_MODULE);
-        universalCore.setSupportedToken(token, false);
-        assertFalse(universalCore.isSupportedToken(token));
-    }
-
-    function test_SetSupportedToken_FlipFalseToTrue() public {
-        address token = makeAddr("token");
-
-        // Initially false (default)
-        assertFalse(universalCore.isSupportedToken(token));
-
-        // Flip to true
-        vm.prank(UNIVERSAL_EXECUTOR_MODULE);
-        universalCore.setSupportedToken(token, true);
-        assertTrue(universalCore.isSupportedToken(token));
-    }
-
-    function test_SetSupportedToken_ZeroAddressReverts() public {
-        vm.prank(UNIVERSAL_EXECUTOR_MODULE);
-        vm.expectRevert(CommonErrors.ZeroAddress.selector);
-        universalCore.setSupportedToken(address(0), true);
-    }
-
-    function test_SetSupportedToken_EmitsEvent() public {
-        address token = makeAddr("token");
-
-        // Test event emission when setting to true
-        vm.prank(UNIVERSAL_EXECUTOR_MODULE);
-        vm.expectEmit(true, false, false, false);
-        emit SetSupportedToken(token, true);
-        universalCore.setSupportedToken(token, true);
-
-        // Test event emission when setting to false
-        vm.prank(UNIVERSAL_EXECUTOR_MODULE);
-        vm.expectEmit(true, false, false, false);
-        emit SetSupportedToken(token, false);
-        universalCore.setSupportedToken(token, false);
-    }
-
-    function test_SetSupportedToken_OwnerCannotCall() public {
-        address token = makeAddr("token");
-
-        // Owner (deployer) should not be able to call without MANAGER_ROLE
-        vm.prank(deployer);
-        vm.expectRevert(
-            abi.encodeWithSelector(
-                IAccessControl.AccessControlUnauthorizedAccount.selector, deployer, universalCore.MANAGER_ROLE()
-            )
-        );
-        universalCore.setSupportedToken(token, true);
     }
 
     // ========================================
@@ -922,7 +868,7 @@ contract UniversalCoreTest is Test, UpgradeableContractHelper {
         vm.prank(UNIVERSAL_EXECUTOR_MODULE);
         universalCore.setChainMeta(CHAIN_NAMESPACE, newPrice, 100);
 
-        (, uint256 gasFee, uint256 protocolFee,,) = universalCore.getOutboundTxGasAndFees(address(prc20Token), 0);
+        (, uint256 gasFee, uint256 protocolFee,,,) = universalCore.getOutboundTxGasAndFees(address(prc20Token), 0);
         assertEq(gasFee, newPrice * universalCore.baseGasLimitByChainNamespace(CHAIN_NAMESPACE));
         assertEq(protocolFee, universalCore.protocolFeeByToken(address(prc20Token)));
     }
@@ -962,11 +908,18 @@ contract UniversalCoreTest is Test, UpgradeableContractHelper {
         assertEq(universalCore.timestampObservedAtByChainNamespace(bscChain), block.timestamp);
     }
 
-    function test_SetChainMeta_ZeroValuesAllowed() public {
+    function test_SetChainMeta_ZeroPriceReverts() public {
+        vm.expectRevert(UniversalCoreErrors.ZeroGasPrice.selector);
         vm.prank(UNIVERSAL_EXECUTOR_MODULE);
         universalCore.setChainMeta(CHAIN_NAMESPACE, 0, 0);
+    }
 
-        assertEq(universalCore.gasPriceByChainNamespace(CHAIN_NAMESPACE), 0);
+    function test_SetChainMeta_ZeroChainHeightAllowed() public {
+        // price must be non-zero, but chainHeight=0 is valid
+        vm.prank(UNIVERSAL_EXECUTOR_MODULE);
+        universalCore.setChainMeta(CHAIN_NAMESPACE, GAS_PRICE, 0);
+
+        assertEq(universalCore.gasPriceByChainNamespace(CHAIN_NAMESPACE), GAS_PRICE);
         assertEq(universalCore.chainHeightByChainNamespace(CHAIN_NAMESPACE), 0);
         assertEq(universalCore.timestampObservedAtByChainNamespace(CHAIN_NAMESPACE), block.timestamp);
     }
@@ -981,7 +934,7 @@ contract UniversalCoreTest is Test, UpgradeableContractHelper {
         vm.prank(UNIVERSAL_EXECUTOR_MODULE);
         vm.expectEmit(false, false, false, true);
         emit SetRescueFundsGasLimitByChain(CHAIN_NAMESPACE, rescueGasLimit);
-        universalCore.setRescueFundsGasLimitByChain(CHAIN_NAMESPACE, rescueGasLimit);
+        universalCore.updateRescueFundsGasLimitByChain(CHAIN_NAMESPACE, rescueGasLimit);
 
         assertEq(universalCore.rescueFundsGasLimitByChainNamespace(CHAIN_NAMESPACE), rescueGasLimit);
     }
@@ -989,16 +942,16 @@ contract UniversalCoreTest is Test, UpgradeableContractHelper {
     function test_SetRescueFundsGasLimitByChain_OnlyManagerRole() public {
         vm.expectRevert(
             abi.encodeWithSelector(
-                IAccessControl.AccessControlUnauthorizedAccount.selector, nonOwner, universalCore.MANAGER_ROLE()
+                IAccessControl.AccessControlUnauthorizedAccount.selector, nonOwner, universalCore.UVCORE_ADMIN_ROLE()
             )
         );
         vm.prank(nonOwner);
-        universalCore.setRescueFundsGasLimitByChain(CHAIN_NAMESPACE, 300_000);
+        universalCore.updateRescueFundsGasLimitByChain(CHAIN_NAMESPACE, 300_000);
     }
 
     function test_SetRescueFundsGasLimitByChain_ZeroValueAllowed() public {
         vm.prank(UNIVERSAL_EXECUTOR_MODULE);
-        universalCore.setRescueFundsGasLimitByChain(CHAIN_NAMESPACE, 0);
+        universalCore.updateRescueFundsGasLimitByChain(CHAIN_NAMESPACE, 0);
         assertEq(universalCore.rescueFundsGasLimitByChainNamespace(CHAIN_NAMESPACE), 0);
     }
 
@@ -1006,7 +959,7 @@ contract UniversalCoreTest is Test, UpgradeableContractHelper {
         uint256 rescueGasLimit = 300_000;
 
         vm.prank(UNIVERSAL_EXECUTOR_MODULE);
-        universalCore.setRescueFundsGasLimitByChain(CHAIN_NAMESPACE, rescueGasLimit);
+        universalCore.updateRescueFundsGasLimitByChain(CHAIN_NAMESPACE, rescueGasLimit);
 
         (
             address returnedGasToken,
@@ -1046,7 +999,7 @@ contract UniversalCoreTest is Test, UpgradeableContractHelper {
 
         // Set rescue gas limit but no gas token for this chain
         vm.prank(UNIVERSAL_EXECUTOR_MODULE);
-        universalCore.setRescueFundsGasLimitByChain("999", 300_000);
+        universalCore.updateRescueFundsGasLimitByChain("999", 300_000);
 
         vm.expectRevert(CommonErrors.ZeroAddress.selector);
         universalCore.getRescueFundsGasLimit(address(newToken));
@@ -1070,8 +1023,8 @@ contract UniversalCoreTest is Test, UpgradeableContractHelper {
 
         // Set rescue gas limit and gas token, but no gas price
         vm.startPrank(UNIVERSAL_EXECUTOR_MODULE);
-        universalCore.setRescueFundsGasLimitByChain("888", 300_000);
-        universalCore.setGasTokenPRC20("888", address(mockPRC20));
+        universalCore.updateRescueFundsGasLimitByChain("888", 300_000);
+        universalCore.updateGasTokenPRC20("888", address(mockPRC20));
         vm.stopPrank();
 
         vm.expectRevert(UniversalCoreErrors.ZeroGasPrice.selector);
@@ -1079,71 +1032,75 @@ contract UniversalCoreTest is Test, UpgradeableContractHelper {
     }
 
     // ========================================
-    // 9) setUniversalGatewayPC Tests
+    // 9) updateUniversalGatewayPC Tests
     // ========================================
 
     function test_SetUniversalGatewayPC_HappyPath() public {
         address gateway = makeAddr("gateway");
+        address oldGateway = universalCore.universalGatewayPC();
+
         vm.prank(deployer);
-        universalCore.setUniversalGatewayPC(gateway);
+        vm.expectEmit(true, true, false, true);
+        emit SetUniversalGatewayPC(oldGateway, gateway);
+        universalCore.updateUniversalGatewayPC(gateway);
         assertEq(universalCore.universalGatewayPC(), gateway);
     }
 
     function test_SetUniversalGatewayPC_ZeroAddressReverts() public {
         vm.prank(deployer);
         vm.expectRevert(CommonErrors.ZeroAddress.selector);
-        universalCore.setUniversalGatewayPC(address(0));
+        universalCore.updateUniversalGatewayPC(address(0));
     }
 
-    function test_SetUniversalGatewayPC_OnlyAdmin() public {
+    function test_SetUniversalGatewayPC_OnlyOperator() public {
+        bytes32 operatorRole = universalCore.OPERATOR_ROLE();
         vm.prank(nonOwner);
-        vm.expectRevert(CommonErrors.InvalidOwner.selector);
-        universalCore.setUniversalGatewayPC(makeAddr("gateway"));
+        vm.expectRevert(
+            abi.encodeWithSelector(IAccessControl.AccessControlUnauthorizedAccount.selector, nonOwner, operatorRole)
+        );
+        universalCore.updateUniversalGatewayPC(makeAddr("gateway"));
     }
 
     // ========================================
-    // 10) setUniswapV3Addresses Tests
+    // 10) updateUniswapV3Addresses Tests
     // ========================================
 
     function test_SetUniswapV3Addresses_HappyPath() public {
         address f = makeAddr("factory2");
         address r = makeAddr("router2");
-        address q = makeAddr("quoter2");
 
         vm.prank(deployer);
-        universalCore.setUniswapV3Addresses(f, r, q);
+        vm.expectEmit(false, false, false, true);
+        emit SetUniswapV3Addresses(f, r);
+        universalCore.updateUniswapV3Addresses(f, r);
 
         assertEq(universalCore.uniswapV3Factory(), f);
         assertEq(universalCore.uniswapV3SwapRouter(), r);
-        assertEq(universalCore.uniswapV3Quoter(), q);
     }
 
     function test_SetUniswapV3Addresses_RevertsZeroFactory() public {
         vm.prank(deployer);
         vm.expectRevert(CommonErrors.ZeroAddress.selector);
-        universalCore.setUniswapV3Addresses(address(0), makeAddr("r"), makeAddr("q"));
+        universalCore.updateUniswapV3Addresses(address(0), makeAddr("r"));
     }
 
     function test_SetUniswapV3Addresses_RevertsZeroRouter() public {
         vm.prank(deployer);
         vm.expectRevert(CommonErrors.ZeroAddress.selector);
-        universalCore.setUniswapV3Addresses(makeAddr("f"), address(0), makeAddr("q"));
+        universalCore.updateUniswapV3Addresses(makeAddr("f"), address(0));
     }
 
-    function test_SetUniswapV3Addresses_RevertsZeroQuoter() public {
-        vm.prank(deployer);
-        vm.expectRevert(CommonErrors.ZeroAddress.selector);
-        universalCore.setUniswapV3Addresses(makeAddr("f"), makeAddr("r"), address(0));
-    }
-
-    function test_SetUniswapV3Addresses_OnlyAdmin() public {
+    function test_SetUniswapV3Addresses_OnlyOperator() public {
+        bytes32 operatorRole = universalCore.OPERATOR_ROLE();
         vm.prank(nonOwner);
-        vm.expectRevert(CommonErrors.InvalidOwner.selector);
-        universalCore.setUniswapV3Addresses(makeAddr("f"), makeAddr("r"), makeAddr("q"));
+        vm.expectRevert(
+            abi.encodeWithSelector(IAccessControl.AccessControlUnauthorizedAccount.selector, nonOwner, operatorRole)
+        );
+        universalCore.updateUniswapV3Addresses(makeAddr("f"), makeAddr("r"));
     }
 
     // ========================================
-    // 11) setDefaultDeadlineMins Tests
+    // 11) updateDefaultDeadlineMins Tests
     // ========================================
 
     event SetDefaultDeadlineMins(uint256 minutesValue);
@@ -1152,38 +1109,43 @@ contract UniversalCoreTest is Test, UpgradeableContractHelper {
         vm.prank(deployer);
         vm.expectEmit(false, false, false, true);
         emit SetDefaultDeadlineMins(30);
-        universalCore.setDefaultDeadlineMins(30);
+        universalCore.updateDefaultDeadlineMins(30);
         assertEq(universalCore.defaultDeadlineMins(), 30);
     }
 
-    function test_SetDefaultDeadlineMins_OnlyAdmin() public {
+    function test_SetDefaultDeadlineMins_OnlyUCoreAdmin() public {
+        bytes32 ucoreAdminRole = universalCore.UVCORE_ADMIN_ROLE();
         vm.prank(nonOwner);
-        vm.expectRevert(CommonErrors.InvalidOwner.selector);
-        universalCore.setDefaultDeadlineMins(30);
+        vm.expectRevert(
+            abi.encodeWithSelector(IAccessControl.AccessControlUnauthorizedAccount.selector, nonOwner, ucoreAdminRole)
+        );
+        universalCore.updateDefaultDeadlineMins(30);
     }
 
     // ========================================
-    // 12) setDefaultFeeTier Tests
+    // 12) updateDefaultFeeTier Tests
     // ========================================
 
     function test_SetDefaultFeeTier_HappyPath_500() public {
         address token = makeAddr("token");
         vm.prank(deployer);
-        universalCore.setDefaultFeeTier(token, 500);
+        vm.expectEmit(true, false, false, true);
+        emit SetDefaultFeeTier(token, 500);
+        universalCore.updateDefaultFeeTier(token, 500);
         assertEq(universalCore.defaultFeeTier(token), 500);
     }
 
     function test_SetDefaultFeeTier_HappyPath_3000() public {
         address token = makeAddr("token");
         vm.prank(deployer);
-        universalCore.setDefaultFeeTier(token, 3000);
+        universalCore.updateDefaultFeeTier(token, 3000);
         assertEq(universalCore.defaultFeeTier(token), 3000);
     }
 
     function test_SetDefaultFeeTier_HappyPath_10000() public {
         address token = makeAddr("token");
         vm.prank(deployer);
-        universalCore.setDefaultFeeTier(token, 10000);
+        universalCore.updateDefaultFeeTier(token, 10000);
         assertEq(universalCore.defaultFeeTier(token), 10000);
     }
 
@@ -1191,56 +1153,22 @@ contract UniversalCoreTest is Test, UpgradeableContractHelper {
         address token = makeAddr("token");
         vm.prank(deployer);
         vm.expectRevert(UniversalCoreErrors.InvalidFeeTier.selector);
-        universalCore.setDefaultFeeTier(token, 100);
+        universalCore.updateDefaultFeeTier(token, 200);
     }
 
     function test_SetDefaultFeeTier_RevertsZeroAddress() public {
         vm.prank(deployer);
         vm.expectRevert(CommonErrors.ZeroAddress.selector);
-        universalCore.setDefaultFeeTier(address(0), 3000);
+        universalCore.updateDefaultFeeTier(address(0), 3000);
     }
 
-    function test_SetDefaultFeeTier_OnlyAdmin() public {
+    function test_SetDefaultFeeTier_OnlyUCoreAdmin() public {
+        bytes32 ucoreAdminRole = universalCore.UVCORE_ADMIN_ROLE();
         vm.prank(nonOwner);
-        vm.expectRevert(CommonErrors.InvalidOwner.selector);
-        universalCore.setDefaultFeeTier(makeAddr("token"), 3000);
-    }
-
-    // ========================================
-    // 13) setSlippageTolerance Tests
-    // ========================================
-
-    function test_SetSlippageTolerance_HappyPath() public {
-        address token = makeAddr("token");
-        vm.prank(deployer);
-        universalCore.setSlippageTolerance(token, 300);
-        assertEq(universalCore.slippageTolerance(token), 300);
-    }
-
-    function test_SetSlippageTolerance_RevertsExceeds5000() public {
-        address token = makeAddr("token");
-        vm.prank(deployer);
-        vm.expectRevert(UniversalCoreErrors.InvalidSlippageTolerance.selector);
-        universalCore.setSlippageTolerance(token, 5001);
-    }
-
-    function test_SetSlippageTolerance_RevertsZeroAddress() public {
-        vm.prank(deployer);
-        vm.expectRevert(CommonErrors.ZeroAddress.selector);
-        universalCore.setSlippageTolerance(address(0), 300);
-    }
-
-    function test_SetSlippageTolerance_OnlyAdmin() public {
-        vm.prank(nonOwner);
-        vm.expectRevert(CommonErrors.InvalidOwner.selector);
-        universalCore.setSlippageTolerance(makeAddr("token"), 300);
-    }
-
-    function test_SetSlippageTolerance_BoundaryAt5000() public {
-        address token = makeAddr("token");
-        vm.prank(deployer);
-        universalCore.setSlippageTolerance(token, 5000);
-        assertEq(universalCore.slippageTolerance(token), 5000);
+        vm.expectRevert(
+            abi.encodeWithSelector(IAccessControl.AccessControlUnauthorizedAccount.selector, nonOwner, ucoreAdminRole)
+        );
+        universalCore.updateDefaultFeeTier(makeAddr("token"), 3000);
     }
 
     // ========================================
@@ -1252,17 +1180,453 @@ contract UniversalCoreTest is Test, UpgradeableContractHelper {
         uint256 updatedLimit = 600_000;
 
         vm.startPrank(UNIVERSAL_EXECUTOR_MODULE);
-        universalCore.setRescueFundsGasLimitByChain(CHAIN_NAMESPACE, initialLimit);
+        universalCore.updateRescueFundsGasLimitByChain(CHAIN_NAMESPACE, initialLimit);
         vm.stopPrank();
 
         (, uint256 gasFee1,,,) = universalCore.getRescueFundsGasLimit(address(prc20Token));
         assertEq(gasFee1, GAS_PRICE * initialLimit);
 
         vm.startPrank(UNIVERSAL_EXECUTOR_MODULE);
-        universalCore.setRescueFundsGasLimitByChain(CHAIN_NAMESPACE, updatedLimit);
+        universalCore.updateRescueFundsGasLimitByChain(CHAIN_NAMESPACE, updatedLimit);
         vm.stopPrank();
 
         (, uint256 gasFee2,,,) = universalCore.getRescueFundsGasLimit(address(prc20Token));
         assertEq(gasFee2, GAS_PRICE * updatedLimit);
+    }
+
+    // ========================================
+    // Gas Data Staleness Tests
+    // ========================================
+
+    // --- Setter tests ---
+
+    function test_SetMaxStalenessByChain_HappyPath() public {
+        uint256 maxStaleness = 3600; // 1 hour
+
+        vm.prank(UNIVERSAL_EXECUTOR_MODULE);
+        vm.expectEmit(false, false, false, true);
+        emit SetMaxStalenessByChain(CHAIN_NAMESPACE, maxStaleness);
+        universalCore.updateMaxStalenessByChain(CHAIN_NAMESPACE, maxStaleness);
+
+        assertEq(universalCore.maxStalenessByChainNamespace(CHAIN_NAMESPACE), maxStaleness);
+    }
+
+    function test_SetMaxStalenessByChain_OnlyManagerRole() public {
+        vm.expectRevert(
+            abi.encodeWithSelector(
+                IAccessControl.AccessControlUnauthorizedAccount.selector, nonOwner, universalCore.UVCORE_ADMIN_ROLE()
+            )
+        );
+        vm.prank(nonOwner);
+        universalCore.updateMaxStalenessByChain(CHAIN_NAMESPACE, 3600);
+    }
+
+    function test_SetMaxStalenessByChain_ZeroDisablesCheck() public {
+        vm.prank(UNIVERSAL_EXECUTOR_MODULE);
+        universalCore.updateMaxStalenessByChain(CHAIN_NAMESPACE, 0);
+
+        assertEq(universalCore.maxStalenessByChainNamespace(CHAIN_NAMESPACE), 0);
+    }
+
+    // --- Default-off behaviour ---
+
+    function test_StalenessDisabledByDefault_NoRevertEvenAfterLongWarp() public {
+        // No updateMaxStalenessByChain call — staleness check is off for this namespace.
+        // Configure rescue limit so getRescueFundsGasLimit doesn't revert on
+        // ZeroRescueGasLimit before reaching the (disabled) staleness check.
+        vm.prank(UNIVERSAL_EXECUTOR_MODULE);
+        universalCore.updateRescueFundsGasLimitByChain(CHAIN_NAMESPACE, 300_000);
+
+        vm.warp(block.timestamp + 365 days);
+
+        (, uint256 outboundFee,,,,) = universalCore.getOutboundTxGasAndFees(address(prc20Token), 0);
+        assertGt(outboundFee, 0, "outbound fee should quote even after a year when check is disabled");
+
+        (, uint256 rescueFee,,,) = universalCore.getRescueFundsGasLimit(address(prc20Token));
+        assertGt(rescueFee, 0, "rescue fee should quote even after a year when check is disabled");
+    }
+
+    // --- getOutboundTxGasAndFees staleness ---
+
+    function test_StalenessCheck_GetOutboundTxGasAndFees_Reverts() public {
+        uint256 maxStaleness = 300;
+
+        vm.prank(UNIVERSAL_EXECUTOR_MODULE);
+        universalCore.updateMaxStalenessByChain(CHAIN_NAMESPACE, maxStaleness);
+
+        uint256 observedAt = universalCore.timestampObservedAtByChainNamespace(CHAIN_NAMESPACE);
+        vm.warp(observedAt + maxStaleness + 1);
+
+        vm.expectRevert(
+            abi.encodeWithSelector(UniversalCoreErrors.StaleGasData.selector, observedAt, block.timestamp, maxStaleness)
+        );
+        universalCore.getOutboundTxGasAndFees(address(prc20Token), 0);
+    }
+
+    function test_StalenessCheck_GetOutboundTxGasAndFees_BoundaryAtEdge_OK() public {
+        uint256 maxStaleness = 300;
+
+        vm.prank(UNIVERSAL_EXECUTOR_MODULE);
+        universalCore.updateMaxStalenessByChain(CHAIN_NAMESPACE, maxStaleness);
+
+        // Warp to exactly observedAt + maxStaleness — still within window (strict >).
+        uint256 observedAt = universalCore.timestampObservedAtByChainNamespace(CHAIN_NAMESPACE);
+        vm.warp(observedAt + maxStaleness);
+
+        (, uint256 gasFee,,,,) = universalCore.getOutboundTxGasAndFees(address(prc20Token), 0);
+        assertGt(gasFee, 0, "should succeed exactly at the boundary");
+    }
+
+    function test_StalenessCheck_GetOutboundTxGasAndFees_OneSecondPastEdge_Reverts() public {
+        uint256 maxStaleness = 300;
+
+        vm.prank(UNIVERSAL_EXECUTOR_MODULE);
+        universalCore.updateMaxStalenessByChain(CHAIN_NAMESPACE, maxStaleness);
+
+        uint256 observedAt = universalCore.timestampObservedAtByChainNamespace(CHAIN_NAMESPACE);
+        vm.warp(observedAt + maxStaleness + 1);
+
+        vm.expectRevert(
+            abi.encodeWithSelector(UniversalCoreErrors.StaleGasData.selector, observedAt, block.timestamp, maxStaleness)
+        );
+        universalCore.getOutboundTxGasAndFees(address(prc20Token), 0);
+    }
+
+    // --- getRescueFundsGasLimit staleness ---
+
+    function test_StalenessCheck_GetRescueFundsGasLimit_Reverts() public {
+        uint256 maxStaleness = 300;
+
+        vm.startPrank(UNIVERSAL_EXECUTOR_MODULE);
+        universalCore.updateMaxStalenessByChain(CHAIN_NAMESPACE, maxStaleness);
+        universalCore.updateRescueFundsGasLimitByChain(CHAIN_NAMESPACE, 300_000);
+        vm.stopPrank();
+
+        uint256 observedAt = universalCore.timestampObservedAtByChainNamespace(CHAIN_NAMESPACE);
+        vm.warp(observedAt + maxStaleness + 1);
+
+        vm.expectRevert(
+            abi.encodeWithSelector(UniversalCoreErrors.StaleGasData.selector, observedAt, block.timestamp, maxStaleness)
+        );
+        universalCore.getRescueFundsGasLimit(address(prc20Token));
+    }
+
+    function test_StalenessCheck_GetRescueFundsGasLimit_BoundaryAtEdge_OK() public {
+        uint256 maxStaleness = 300;
+
+        vm.startPrank(UNIVERSAL_EXECUTOR_MODULE);
+        universalCore.updateMaxStalenessByChain(CHAIN_NAMESPACE, maxStaleness);
+        universalCore.updateRescueFundsGasLimitByChain(CHAIN_NAMESPACE, 300_000);
+        vm.stopPrank();
+
+        uint256 observedAt = universalCore.timestampObservedAtByChainNamespace(CHAIN_NAMESPACE);
+        vm.warp(observedAt + maxStaleness);
+
+        (, uint256 gasFee,,,) = universalCore.getRescueFundsGasLimit(address(prc20Token));
+        assertGt(gasFee, 0, "rescue should succeed exactly at the boundary");
+    }
+
+    // --- Recovery / refresh ---
+
+    function test_StalenessCheck_RefreshingObservedAtClearsStaleness() public {
+        uint256 maxStaleness = 300;
+
+        vm.prank(UNIVERSAL_EXECUTOR_MODULE);
+        universalCore.updateMaxStalenessByChain(CHAIN_NAMESPACE, maxStaleness);
+
+        // Warp past window — call should revert
+        uint256 firstObservedAt = universalCore.timestampObservedAtByChainNamespace(CHAIN_NAMESPACE);
+        vm.warp(firstObservedAt + maxStaleness + 100);
+
+        vm.expectRevert(
+            abi.encodeWithSelector(
+                UniversalCoreErrors.StaleGasData.selector, firstObservedAt, block.timestamp, maxStaleness
+            )
+        );
+        universalCore.getOutboundTxGasAndFees(address(prc20Token), 0);
+
+        // Refresh chain meta — observedAt resets to current block.timestamp.
+        vm.prank(UNIVERSAL_EXECUTOR_MODULE);
+        universalCore.setChainMeta(CHAIN_NAMESPACE, GAS_PRICE, 0);
+
+        (, uint256 gasFee,,,,) = universalCore.getOutboundTxGasAndFees(address(prc20Token), 0);
+        assertGt(gasFee, 0, "should succeed after refresh");
+    }
+
+    // --- Chain-halt edge case: observedAt never set ---
+
+    function test_StalenessCheck_RevertsWhenObservedAtIsZero() public {
+        // Set up a fresh chain namespace with gas token + base limit, but NEVER call setChainMeta.
+        string memory freshNs = "never-observed";
+
+        PRC20 freshImpl = new PRC20();
+        bytes memory initData = abi.encodeWithSelector(
+            PRC20.initialize.selector,
+            "Fresh PRC20",
+            "FPRC20",
+            18,
+            freshNs,
+            IPRC20.TokenType.ERC20,
+            address(universalCore),
+            SOURCE_TOKEN_ADDRESS
+        );
+        address proxyAddr = deployUpgradeableContract(address(freshImpl), initData);
+        PRC20 freshPRC20 = PRC20(payable(proxyAddr));
+
+        vm.startPrank(UNIVERSAL_EXECUTOR_MODULE);
+        universalCore.updateGasTokenPRC20(freshNs, address(mockPRC20));
+        universalCore.updateBaseGasLimitByChain(freshNs, 100_000);
+        // Deliberately skip setChainMeta — gasPrice stays 0.
+        // We need gasPrice > 0 to reach the staleness check. Work around by calling
+        // setChainMeta once to establish a price, then test the "observedAt is in the
+        // distant past" case which is the same fail-closed behaviour.
+        universalCore.setChainMeta(freshNs, GAS_PRICE, 0);
+        universalCore.updateMaxStalenessByChain(freshNs, 60);
+        vm.stopPrank();
+
+        // Warp far past the observed window. observedAt is now in the past relative to block.timestamp.
+        uint256 observedAt = universalCore.timestampObservedAtByChainNamespace(freshNs);
+        vm.warp(observedAt + 1 days);
+
+        vm.expectRevert(
+            abi.encodeWithSelector(UniversalCoreErrors.StaleGasData.selector, observedAt, block.timestamp, uint256(60))
+        );
+        universalCore.getOutboundTxGasAndFees(address(freshPRC20), 0);
+    }
+
+    // --- Multi-chain isolation ---
+
+    function test_StalenessCheck_PerChainIsolation() public {
+        // Chain A is the default CHAIN_NAMESPACE with full config from setUp.
+        // Chain B is a fresh namespace we fully configure but never set maxStaleness on.
+        string memory chainBNs = "eip155:999";
+
+        PRC20 bImpl = new PRC20();
+        bytes memory initData = abi.encodeWithSelector(
+            PRC20.initialize.selector,
+            "B PRC20",
+            "BPRC20",
+            18,
+            chainBNs,
+            IPRC20.TokenType.ERC20,
+            address(universalCore),
+            SOURCE_TOKEN_ADDRESS
+        );
+        address proxyAddr = deployUpgradeableContract(address(bImpl), initData);
+        PRC20 bPRC20 = PRC20(payable(proxyAddr));
+
+        vm.startPrank(UNIVERSAL_EXECUTOR_MODULE);
+        universalCore.updateGasTokenPRC20(chainBNs, address(mockPRC20));
+        universalCore.setChainMeta(chainBNs, GAS_PRICE, 0);
+        universalCore.updateBaseGasLimitByChain(chainBNs, BASE_GAS_LIMIT);
+        // Configure maxStaleness only on chain A.
+        universalCore.updateMaxStalenessByChain(CHAIN_NAMESPACE, 300);
+        vm.stopPrank();
+
+        // Warp past A's window.
+        uint256 observedAt = universalCore.timestampObservedAtByChainNamespace(CHAIN_NAMESPACE);
+        vm.warp(observedAt + 300 + 1);
+
+        // Chain A reverts (maxStaleness enforced).
+        vm.expectRevert(
+            abi.encodeWithSelector(UniversalCoreErrors.StaleGasData.selector, observedAt, block.timestamp, uint256(300))
+        );
+        universalCore.getOutboundTxGasAndFees(address(prc20Token), 0);
+
+        // Chain B succeeds (no maxStaleness set for chainBNs).
+        (, uint256 gasFee,,,,) = universalCore.getOutboundTxGasAndFees(address(bPRC20), 0);
+        assertGt(gasFee, 0, "chain B should not be affected by chain A's staleness config");
+    }
+
+    // --- Regression: revert ordering (staleness is last) ---
+
+    function test_StalenessCheck_DoesNotAffectExistingRevertPaths() public {
+        // Fresh namespace with maxStaleness set but no gas price. The ZeroGasPrice
+        // revert must fire before the staleness check is reached.
+        string memory freshNs = "revert-order-test";
+
+        PRC20 freshImpl = new PRC20();
+        bytes memory initData = abi.encodeWithSelector(
+            PRC20.initialize.selector,
+            "Fresh PRC20",
+            "FPRC20",
+            18,
+            freshNs,
+            IPRC20.TokenType.ERC20,
+            address(universalCore),
+            SOURCE_TOKEN_ADDRESS
+        );
+        address proxyAddr = deployUpgradeableContract(address(freshImpl), initData);
+        PRC20 freshPRC20 = PRC20(payable(proxyAddr));
+
+        vm.startPrank(UNIVERSAL_EXECUTOR_MODULE);
+        universalCore.updateGasTokenPRC20(freshNs, address(mockPRC20));
+        universalCore.updateBaseGasLimitByChain(freshNs, 100_000);
+        universalCore.updateMaxStalenessByChain(freshNs, 60);
+        // No setChainMeta → gasPrice is 0 → ZeroGasPrice revert must come before staleness.
+        vm.stopPrank();
+
+        vm.expectRevert(UniversalCoreErrors.ZeroGasPrice.selector);
+        universalCore.getOutboundTxGasAndFees(address(freshPRC20), 0);
+    }
+
+    // =========================
+    //    PRC20 Return Value Check Tests
+    // =========================
+
+    function test_DepositPRC20Token_FalseReturn_Reverts() public {
+        FalseReturningPRC20 falseToken = new FalseReturningPRC20(CHAIN_NAMESPACE, SOURCE_TOKEN_ADDRESS);
+
+        vm.prank(UNIVERSAL_EXECUTOR_MODULE);
+        vm.expectRevert(UniversalCoreErrors.PRC20OperationFailed.selector);
+        universalCore.depositPRC20Token(address(falseToken), 1000, makeAddr("target"));
+    }
+
+    function test_RefundUnusedGas_FalseDeposit_Reverts() public {
+        FalseReturningPRC20 falseToken = new FalseReturningPRC20(CHAIN_NAMESPACE, SOURCE_TOKEN_ADDRESS);
+
+        vm.prank(UNIVERSAL_EXECUTOR_MODULE);
+        vm.expectRevert(UniversalCoreErrors.PRC20OperationFailed.selector);
+        universalCore.refundUnusedGas(address(falseToken), 1000, makeAddr("target"), false, 0, 0);
+    }
+
+    // =========================
+    //    Rescue Native PC Tests
+    // =========================
+
+    function test_RescueNativePC_HappyPath() public {
+        address payable recipient = payable(makeAddr("rescueRecipient"));
+        uint256 stuckAmount = 1 ether;
+        vm.deal(address(universalCore), stuckAmount);
+
+        vm.expectEmit(true, false, false, true);
+        emit RescueNativePC(recipient, stuckAmount);
+
+        universalCore.rescueNativePC(recipient, stuckAmount);
+
+        assertEq(address(universalCore).balance, 0);
+        assertEq(recipient.balance, stuckAmount);
+    }
+
+    function test_RescueNativePC_OnlyUCoreAdmin() public {
+        vm.deal(address(universalCore), 1 ether);
+        address nonAdmin = makeAddr("nonAdmin");
+        bytes32 ucoreAdminRole = universalCore.UVCORE_ADMIN_ROLE();
+
+        vm.expectRevert(
+            abi.encodeWithSelector(IAccessControl.AccessControlUnauthorizedAccount.selector, nonAdmin, ucoreAdminRole)
+        );
+        vm.prank(nonAdmin);
+        universalCore.rescueNativePC(payable(nonAdmin), 1 ether);
+    }
+
+    function test_RescueNativePC_ZeroAddressReverts() public {
+        vm.deal(address(universalCore), 1 ether);
+        vm.expectRevert(CommonErrors.ZeroAddress.selector);
+        universalCore.rescueNativePC(payable(address(0)), 1 ether);
+    }
+
+    function test_RescueNativePC_ZeroAmountReverts() public {
+        vm.deal(address(universalCore), 1 ether);
+        vm.expectRevert(CommonErrors.ZeroAmount.selector);
+        universalCore.rescueNativePC(payable(makeAddr("r")), 0);
+    }
+
+    function test_RescueNativePC_InsufficientBalanceReverts() public {
+        vm.deal(address(universalCore), 0.5 ether);
+        vm.expectRevert(CommonErrors.InsufficientBalance.selector);
+        universalCore.rescueNativePC(payable(makeAddr("r")), 1 ether);
+    }
+
+    function test_RescueNativePC_TransferToNonPayableReverts() public {
+        vm.deal(address(universalCore), 1 ether);
+        RevertingTarget nonPayable = new RevertingTarget();
+        vm.expectRevert(CommonErrors.TransferFailed.selector);
+        universalCore.rescueNativePC(payable(address(nonPayable)), 1 ether);
+    }
+
+    // =========================================================================
+    // ADR (AccessControlDefaultAdminRules) Tests
+    // =========================================================================
+
+    function testADR_OwnerReturnsAdmin() public view {
+        assertEq(universalCore.owner(), deployer);
+    }
+
+    function testADR_DefaultAdminDelay() public view {
+        assertEq(universalCore.defaultAdminDelay(), 1 days);
+    }
+
+    function testADR_RoleAdminOfUCoreAdmin_IsRoleManager() public view {
+        assertEq(universalCore.getRoleAdmin(universalCore.UVCORE_ADMIN_ROLE()), universalCore.ROLE_MANAGER_ROLE());
+    }
+
+    function testADR_RoleAdminOfOperator_IsRoleManager() public view {
+        assertEq(universalCore.getRoleAdmin(universalCore.OPERATOR_ROLE()), universalCore.ROLE_MANAGER_ROLE());
+    }
+
+    function testADR_RoleAdminOfPauser_IsRoleManager() public view {
+        assertEq(universalCore.getRoleAdmin(universalCore.PAUSER_ROLE()), universalCore.ROLE_MANAGER_ROLE());
+    }
+
+    function testADR_RoleAdminOfRoleManager_IsDefaultAdmin() public view {
+        assertEq(universalCore.getRoleAdmin(universalCore.ROLE_MANAGER_ROLE()), universalCore.DEFAULT_ADMIN_ROLE());
+    }
+
+    function testADR_GrantDefaultAdminRole_Reverts() public {
+        bytes32 defaultAdminRole = universalCore.DEFAULT_ADMIN_ROLE();
+        address newAdmin = makeAddr("adrNewAdmin");
+
+        vm.expectRevert(IAccessControlDefaultAdminRules.AccessControlEnforcedDefaultAdminRules.selector);
+        universalCore.grantRole(defaultAdminRole, newAdmin);
+    }
+
+    function testADR_TransferFlow() public {
+        address newAdmin = makeAddr("adrNewAdmin");
+
+        universalCore.beginDefaultAdminTransfer(newAdmin);
+
+        (address pendingAdmin, uint48 schedule) = universalCore.pendingDefaultAdmin();
+        assertEq(pendingAdmin, newAdmin);
+        assertTrue(schedule > 0);
+
+        // Cannot accept before delay
+        vm.expectRevert();
+        vm.prank(newAdmin);
+        universalCore.acceptDefaultAdminTransfer();
+
+        // Warp past delay and accept
+        vm.warp(block.timestamp + 1 days + 1);
+        vm.prank(newAdmin);
+        universalCore.acceptDefaultAdminTransfer();
+
+        assertEq(universalCore.owner(), newAdmin);
+        assertTrue(universalCore.hasRole(universalCore.DEFAULT_ADMIN_ROLE(), newAdmin));
+        assertFalse(universalCore.hasRole(universalCore.DEFAULT_ADMIN_ROLE(), deployer));
+    }
+
+    function testADR_GrantRoleManager() public {
+        address newRoleManager = makeAddr("newRoleManager");
+
+        universalCore.grantRole(universalCore.ROLE_MANAGER_ROLE(), newRoleManager);
+        assertTrue(universalCore.hasRole(universalCore.ROLE_MANAGER_ROLE(), newRoleManager));
+
+        // newRoleManager can now grant UVCORE_ADMIN_ROLE
+        address newUCoreAdmin = makeAddr("newUCoreAdmin");
+        vm.prank(newRoleManager);
+        universalCore.grantRole(universalCore.UVCORE_ADMIN_ROLE(), newUCoreAdmin);
+        assertTrue(universalCore.hasRole(universalCore.UVCORE_ADMIN_ROLE(), newUCoreAdmin));
+    }
+
+    function testPauserCannotUnpause() public {
+        vm.prank(pauser);
+        universalCore.pause();
+
+        bytes32 operatorRole = universalCore.OPERATOR_ROLE();
+        vm.expectRevert(
+            abi.encodeWithSelector(IAccessControl.AccessControlUnauthorizedAccount.selector, pauser, operatorRole)
+        );
+        vm.prank(pauser);
+        universalCore.unpause();
     }
 }

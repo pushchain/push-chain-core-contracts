@@ -67,14 +67,14 @@ function initializeCEAProxy(address _logic) external initializer {
 
 **Current Execution Flow:**
 ```
-executeUniversalTx(txID, universalTxID, originCaller, payload)
+executeUniversalTx(subTxId, universalTxID, originCaller, payload)
   → _handleExecution(...)
       → if isMulticall(payload): _handleMulticall(...)
       → else: _handleSingleCall(...) // backwards compat
 ```
 
 **Key Functions:**
-- `executeUniversalTx()` (line 101): Entry point, validates txID and originCaller
+- `executeUniversalTx()` (line 101): Entry point, validates subTxId and originCaller
 - `_handleExecution()` (line 168): Routes based on payload type
 - `_handleMulticall()` (line 193): Executes Multicall[] array via `.call()`
 - `sendUniversalTxToUEA()` (line 123): Self-call only function for withdrawals
@@ -183,7 +183,7 @@ function migrateCEA() external onlyDelegateCall {
 │ ─────────────────────────────────────────────────────────────────────── │
 │ Vault.executeUniversalTx()                                              │
 │   → Calls CEA.executeUniversalTx(                                       │
-│        txID,                                                            │
+│        subTxId,                                                            │
 │        universalTxID,                                                   │
 │        originCaller = UEA address,                                      │
 │        payload = MULTICALL_SELECTOR + Multicall[{...}]                  │
@@ -195,9 +195,9 @@ function migrateCEA() external onlyDelegateCall {
 │ ─────────────────────────────────────────────────────────────────────── │
 │ CEA.executeUniversalTx() [NEW LOGIC]                                    │
 │   → Validates: msg.sender == VAULT              ✓                       │
-│   → Validates: !isExecuted[txID]                ✓                       │
+│   → Validates: !isExecuted[subTxId]                ✓                       │
 │   → Validates: originCaller == UEA               ✓                       │
-│   → Sets: isExecuted[txID] = true               ✓                       │
+│   → Sets: isExecuted[subTxId] = true               ✓                       │
 │   → Calls: _handleExecution(...)                                        │
 │                                                                         │
 │ CEA._handleExecution() [NEW LOGIC]                                      │
@@ -242,7 +242,7 @@ function migrateCEA() external onlyDelegateCall {
 │ ─────────────────────────────────────────────────────────────────────── │
 │ CEA._handleMigration() [returned from delegatecall]                     │
 │   → Checks: success == true                      ✓                       │
-│   → Emits: UniversalTxExecuted(txID, universalTxID, originCaller, ...)  │
+│   → Emits: UniversalTxExecuted(subTxId, universalTxID, originCaller, ...)  │
 │   → Returns to caller                                                   │
 │                                                                         │
 │ Result: CEAProxy now points to CEA v2 implementation                    │
@@ -290,7 +290,7 @@ if (isMulticall(payload)) {
     }
 
     // Normal multicall execution
-    _handleMulticall(txID, universalTxID, originCaller, calls);
+    _handleMulticall(subTxId, universalTxID, originCaller, calls);
 }
 ```
 
@@ -443,16 +443,16 @@ function _handleMigration(Multicall memory call) internal {
 **Before:**
 ```solidity
 function _handleExecution(
-    bytes32 txID,
+    bytes32 subTxId,
     bytes32 universalTxID,
     address originCaller,
     bytes calldata payload
 ) internal {
     if (isMulticall(payload)) {
         Multicall[] memory calls = decodeCalls(payload);
-        _handleMulticall(txID, universalTxID, originCaller, calls);
+        _handleMulticall(subTxId, universalTxID, originCaller, calls);
     } else {
-        _handleSingleCall(txID, universalTxID, originCaller, payload);
+        _handleSingleCall(subTxId, universalTxID, originCaller, payload);
     }
 }
 ```
@@ -460,7 +460,7 @@ function _handleExecution(
 **After:**
 ```solidity
 function _handleExecution(
-    bytes32 txID,
+    bytes32 subTxId,
     bytes32 universalTxID,
     address originCaller,
     bytes calldata payload
@@ -472,14 +472,14 @@ function _handleExecution(
         if (calls.length == 1 && isMigration(calls[0].data)) {
             _handleMigration(calls[0]);
             // Emit event for migration execution
-            emit UniversalTxExecuted(txID, universalTxID, originCaller, address(this), calls[0].data);
+            emit UniversalTxExecuted(subTxId, universalTxID, originCaller, address(this), calls[0].data);
             return;
         }
 
         // Normal multicall execution
-        _handleMulticall(txID, universalTxID, originCaller, calls);
+        _handleMulticall(subTxId, universalTxID, originCaller, calls);
     } else {
-        _handleSingleCall(txID, universalTxID, originCaller, payload);
+        _handleSingleCall(subTxId, universalTxID, originCaller, payload);
     }
 }
 ```
@@ -682,19 +682,19 @@ function initializeCEA(address _uea, address _vault, address _universalGateway, 
 
 All migration executions MUST satisfy these constraints (enforced by `_handleMigration()`):
 
-| Constraint | Validation | Error | Rationale |
-|------------|-----------|-------|-----------|
-| **Standalone execution** | `calls.length == 1` | `InvalidCall` | Prevents migration buried in complex batch |
-| **Self-targeted** | `call.to == address(this)` | `InvalidTarget` | Migration must target own proxy |
-| **Zero value** | `call.value == 0` | `InvalidInput` | No funds sent with migration |
-| **Migration contract set** | `factory.CEA_MIGRATION_CONTRACT() != address(0)` | `InvalidCall` | Prevents uninitialized migration |
-| **Delegatecall context** | Enforced by CEAMigration.`onlyDelegateCall()` | `Unauthorized` | Prevents direct calls to migration |
-| **Valid implementation** | CEAMigration constructor validates `hasCode()` | `InvalidInput` | Prevents bricking proxy |
+| Constraint                 | Validation                                       | Error           | Rationale                                  |
+| -------------------------- | ------------------------------------------------ | --------------- | ------------------------------------------ |
+| **Standalone execution**   | `calls.length == 1`                              | `InvalidCall`   | Prevents migration buried in complex batch |
+| **Self-targeted**          | `call.to == address(this)`                       | `InvalidTarget` | Migration must target own proxy            |
+| **Zero value**             | `call.value == 0`                                | `InvalidInput`  | No funds sent with migration               |
+| **Migration contract set** | `factory.CEA_MIGRATION_CONTRACT() != address(0)` | `InvalidCall`   | Prevents uninitialized migration           |
+| **Delegatecall context**   | Enforced by CEAMigration.`onlyDelegateCall()`    | `Unauthorized`  | Prevents direct calls to migration         |
+| **Valid implementation**   | CEAMigration constructor validates `hasCode()`   | `InvalidInput`  | Prevents bricking proxy                    |
 
 **Additional existing protections:**
 - `onlyVault` modifier (line 52): Only Vault can call `executeUniversalTx()`
 - `originCaller == UEA` check (line 109): Transaction must originate from correct UEA
-- `!isExecuted[txID]` check (line 108): Prevents replay attacks
+- `!isExecuted[subTxId]` check (line 108): Prevents replay attacks
 - `nonReentrant` modifier (line 106): Prevents reentrancy
 
 ---
@@ -801,22 +801,22 @@ All migration executions MUST satisfy these constraints (enforced by `_handleMig
 
 ### 6.4 Replay Attack
 
-**Threat:** Same txID executed twice → double spend or double migration
+**Threat:** Same subTxId executed twice → double spend or double migration
 
 **Impact:** High - unauthorized execution or wasted gas
 
 **Mitigation:**
 - **Existing protection (line 108):**
   ```solidity
-  if (isExecuted[txID]) revert CEAErrors.PayloadExecuted();
-  isExecuted[txID] = true;
+  if (isExecuted[subTxId]) revert CEAErrors.PayloadExecuted();
+  isExecuted[subTxId] = true;
   ```
 - Executed BEFORE routing to migration
 - Preserved across migration (storage not touched)
 
 **Test coverage:**
-- Execute migration with txID = keccak256("migration1")
-- Attempt to execute same txID again → expect `PayloadExecuted` revert
+- Execute migration with subTxId = keccak256("migration1")
+- Attempt to execute same subTxId again → expect `PayloadExecuted` revert
 - Verify isExecuted mapping preserved after migration
 
 ---
@@ -1007,17 +1007,17 @@ All migration executions MUST satisfy these constraints (enforced by `_handleMig
 
 **File:** `test/tests_ceaMigration/CEAMigration.t.sol`
 
-| Test | Description | Expected Result |
-|------|-------------|-----------------|
-| `test_Constructor_ValidImplementation` | Deploy with valid CEA v2 | Success, immutables set correctly |
-| `test_Constructor_RevertZeroAddress` | Deploy with address(0) | Revert with `InvalidInput` |
-| `test_Constructor_RevertEOA` | Deploy with EOA address | Revert with `InvalidInput` |
-| `test_migrateCEA_DirectCall` | Call `migrateCEA()` directly | Revert with `Unauthorized` |
-| `test_migrateCEA_Delegatecall` | Delegatecall from mock proxy | Success, slot written, event emitted |
-| `test_migrateCEA_SlotWrite` | Verify CEA_LOGIC_SLOT updated | Slot contains new implementation address |
-| `test_migrateCEA_EventEmission` | Check event emission | `ImplementationUpdated` emitted with correct address |
-| `test_hasCode_Contract` | Check contract address | Returns true |
-| `test_hasCode_EOA` | Check EOA address | Returns false |
+| Test                                   | Description                   | Expected Result                                      |
+| -------------------------------------- | ----------------------------- | ---------------------------------------------------- |
+| `test_Constructor_ValidImplementation` | Deploy with valid CEA v2      | Success, immutables set correctly                    |
+| `test_Constructor_RevertZeroAddress`   | Deploy with address(0)        | Revert with `InvalidInput`                           |
+| `test_Constructor_RevertEOA`           | Deploy with EOA address       | Revert with `InvalidInput`                           |
+| `test_migrateCEA_DirectCall`           | Call `migrateCEA()` directly  | Revert with `Unauthorized`                           |
+| `test_migrateCEA_Delegatecall`         | Delegatecall from mock proxy  | Success, slot written, event emitted                 |
+| `test_migrateCEA_SlotWrite`            | Verify CEA_LOGIC_SLOT updated | Slot contains new implementation address             |
+| `test_migrateCEA_EventEmission`        | Check event emission          | `ImplementationUpdated` emitted with correct address |
+| `test_hasCode_Contract`                | Check contract address        | Returns true                                         |
+| `test_hasCode_EOA`                     | Check EOA address             | Returns false                                        |
 
 ---
 
@@ -1025,14 +1025,14 @@ All migration executions MUST satisfy these constraints (enforced by `_handleMig
 
 **File:** `test/tests_cea/CEAFactory.t.sol` (add to existing test file)
 
-| Test | Description | Expected Result |
-|------|-------------|-----------------|
-| `test_setCEAMigrationContract_Success` | Owner sets migration contract | Success, event emitted |
-| `test_setCEAMigrationContract_ZeroAddress` | Set to address(0) | Revert with `ZeroAddress` |
-| `test_setCEAMigrationContract_NonOwner` | Non-owner attempts to set | Revert with `OwnableUnauthorizedAccount` |
-| `test_setCEAMigrationContract_Event` | Verify event emission | `CEAMigrationContractUpdated` with old/new addresses |
-| `test_initialize_WithMigrationContract` | Initialize factory with migration contract | Success (if optional param added) |
-| `test_deployCEA_PassesFactoryAddress` | Verify factory address passed to CEA | CEA.factory == factory address |
+| Test                                       | Description                                | Expected Result                                      |
+| ------------------------------------------ | ------------------------------------------ | ---------------------------------------------------- |
+| `test_setCEAMigrationContract_Success`     | Owner sets migration contract              | Success, event emitted                               |
+| `test_setCEAMigrationContract_ZeroAddress` | Set to address(0)                          | Revert with `ZeroAddress`                            |
+| `test_setCEAMigrationContract_NonOwner`    | Non-owner attempts to set                  | Revert with `OwnableUnauthorizedAccount`             |
+| `test_setCEAMigrationContract_Event`       | Verify event emission                      | `CEAMigrationContractUpdated` with old/new addresses |
+| `test_initialize_WithMigrationContract`    | Initialize factory with migration contract | Success (if optional param added)                    |
+| `test_deployCEA_PassesFactoryAddress`      | Verify factory address passed to CEA       | CEA.factory == factory address                       |
 
 ---
 
@@ -1040,19 +1040,19 @@ All migration executions MUST satisfy these constraints (enforced by `_handleMig
 
 **File:** `test/tests_cea/CEA_Migration.t.sol` (new test file)
 
-| Test | Description | Expected Result |
-|------|-------------|-----------------|
-| `test_initializeCEA_WithFactory` | Initialize with factory address | Success, factory set |
-| `test_initializeCEA_ZeroFactory` | Initialize with address(0) factory | Revert with `ZeroAddress` |
-| `test_isMigration_True` | Check MIGRATION_SELECTOR | Returns true |
-| `test_isMigration_False` | Check other selector | Returns false |
-| `test_isMigration_ShortData` | Check data < 4 bytes | Returns false |
-| `test_handleMigration_WrongTarget` | Migration with `to != address(this)` | Revert with `InvalidTarget` |
-| `test_handleMigration_NonZeroValue` | Migration with `value > 0` | Revert with `InvalidInput` |
-| `test_handleMigration_NoMigrationContract` | Factory returns address(0) | Revert with `InvalidCall` |
-| `test_handleMigration_DelegatecallFailure` | Migration contract reverts | Revert bubbles up |
-| `test_handleMulticall_MigrationInBatch` | Batch with migration selector | Revert with `InvalidCall` |
-| `test_handleExecution_StandaloneMigration` | Single-element migration multicall | Routes to `_handleMigration()` |
+| Test                                       | Description                          | Expected Result                |
+| ------------------------------------------ | ------------------------------------ | ------------------------------ |
+| `test_initializeCEA_WithFactory`           | Initialize with factory address      | Success, factory set           |
+| `test_initializeCEA_ZeroFactory`           | Initialize with address(0) factory   | Revert with `ZeroAddress`      |
+| `test_isMigration_True`                    | Check MIGRATION_SELECTOR             | Returns true                   |
+| `test_isMigration_False`                   | Check other selector                 | Returns false                  |
+| `test_isMigration_ShortData`               | Check data < 4 bytes                 | Returns false                  |
+| `test_handleMigration_WrongTarget`         | Migration with `to != address(this)` | Revert with `InvalidTarget`    |
+| `test_handleMigration_NonZeroValue`        | Migration with `value > 0`           | Revert with `InvalidInput`     |
+| `test_handleMigration_NoMigrationContract` | Factory returns address(0)           | Revert with `InvalidCall`      |
+| `test_handleMigration_DelegatecallFailure` | Migration contract reverts           | Revert bubbles up              |
+| `test_handleMulticall_MigrationInBatch`    | Batch with migration selector        | Revert with `InvalidCall`      |
+| `test_handleExecution_StandaloneMigration` | Single-element migration multicall   | Routes to `_handleMigration()` |
 
 ---
 
@@ -1060,19 +1060,19 @@ All migration executions MUST satisfy these constraints (enforced by `_handleMig
 
 **File:** `test/tests_ceaMigration/CEAMigration_Integration.t.sol`
 
-| Test | Description | Expected Result |
-|------|-------------|-----------------|
-| `test_FullMigrationFlow` | Complete Vault → CEA → Migration flow | Success, implementation upgraded |
-| `test_StatePersistence_UEA` | Verify UEA unchanged after migration | `cea.UEA()` == original value |
-| `test_StatePersistence_VAULT` | Verify VAULT unchanged | `cea.VAULT()` == original value |
-| `test_StatePersistence_UNIVERSAL_GATEWAY` | Verify gateway unchanged | `cea.UNIVERSAL_GATEWAY()` == original value |
-| `test_StatePersistence_isExecuted` | Verify executed tx records preserved | `cea.isExecuted(oldTxID)` == true |
-| `test_FundPersistence_Native` | Native balance preserved | Balance unchanged before/after |
-| `test_FundPersistence_ERC20` | ERC20 balance preserved | Balance unchanged before/after |
-| `test_PostMigration_Withdraw` | Withdraw funds after migration | `sendUniversalTxToUEA()` succeeds |
-| `test_PostMigration_Execute` | Execute new tx after migration | `executeUniversalTx()` succeeds with new logic |
-| `test_PostMigration_Multicall` | Multicall after migration | Works normally |
-| `test_MultipleProxies_IndependentMigration` | Migrate multiple CEAs independently | Each migrates without affecting others |
+| Test                                        | Description                           | Expected Result                                |
+| ------------------------------------------- | ------------------------------------- | ---------------------------------------------- |
+| `test_FullMigrationFlow`                    | Complete Vault → CEA → Migration flow | Success, implementation upgraded               |
+| `test_StatePersistence_UEA`                 | Verify UEA unchanged after migration  | `cea.UEA()` == original value                  |
+| `test_StatePersistence_VAULT`               | Verify VAULT unchanged                | `cea.VAULT()` == original value                |
+| `test_StatePersistence_UNIVERSAL_GATEWAY`   | Verify gateway unchanged              | `cea.UNIVERSAL_GATEWAY()` == original value    |
+| `test_StatePersistence_isExecuted`          | Verify executed tx records preserved  | `cea.isExecuted(oldTxID)` == true              |
+| `test_FundPersistence_Native`               | Native balance preserved              | Balance unchanged before/after                 |
+| `test_FundPersistence_ERC20`                | ERC20 balance preserved               | Balance unchanged before/after                 |
+| `test_PostMigration_Withdraw`               | Withdraw funds after migration        | `sendUniversalTxToUEA()` succeeds              |
+| `test_PostMigration_Execute`                | Execute new tx after migration        | `executeUniversalTx()` succeeds with new logic |
+| `test_PostMigration_Multicall`              | Multicall after migration             | Works normally                                 |
+| `test_MultipleProxies_IndependentMigration` | Migrate multiple CEAs independently   | Each migrates without affecting others         |
 
 ---
 
@@ -1080,16 +1080,16 @@ All migration executions MUST satisfy these constraints (enforced by `_handleMig
 
 **File:** `test/tests_ceaMigration/CEAMigration_Negative.t.sol`
 
-| Test | Description | Expected Result |
-|------|-------------|-----------------|
-| `testRevert_NotVault` | Non-Vault calls executeUniversalTx with migration | Revert with `NotVault` |
-| `testRevert_WrongOriginCaller` | Wrong originCaller in migration payload | Revert with `InvalidUEA` |
-| `testRevert_ReplayedTxID` | Attempt to execute same migration txID twice | Revert with `PayloadExecuted` |
-| `testRevert_WrongTarget` | Migration with `to != address(this)` | Revert with `InvalidTarget` |
-| `testRevert_NonZeroValue` | Migration with `value > 0` | Revert with `InvalidInput` |
-| `testRevert_BatchedMigration` | Migration in multi-call batch | Revert with `InvalidCall` |
-| `testRevert_UnsetMigrationContract` | Migration before factory.CEA_MIGRATION_CONTRACT() set | Revert with `InvalidCall` |
-| `testRevert_InvalidImplementation` | Migration contract points to invalid address | Revert (caught at migration deploy) |
+| Test                                | Description                                           | Expected Result                     |
+| ----------------------------------- | ----------------------------------------------------- | ----------------------------------- |
+| `testRevert_NotVault`               | Non-Vault calls executeUniversalTx with migration     | Revert with `NotVault`              |
+| `testRevert_WrongOriginCaller`      | Wrong originCaller in migration payload               | Revert with `InvalidUEA`            |
+| `testRevert_ReplayedTxID`           | Attempt to execute same migration subTxId twice       | Revert with `PayloadExecuted`       |
+| `testRevert_WrongTarget`            | Migration with `to != address(this)`                  | Revert with `InvalidTarget`         |
+| `testRevert_NonZeroValue`           | Migration with `value > 0`                            | Revert with `InvalidInput`          |
+| `testRevert_BatchedMigration`       | Migration in multi-call batch                         | Revert with `InvalidCall`           |
+| `testRevert_UnsetMigrationContract` | Migration before factory.CEA_MIGRATION_CONTRACT() set | Revert with `InvalidCall`           |
+| `testRevert_InvalidImplementation`  | Migration contract points to invalid address          | Revert (caught at migration deploy) |
 
 ---
 
@@ -1097,14 +1097,14 @@ All migration executions MUST satisfy these constraints (enforced by `_handleMig
 
 **File:** `test/tests_ceaMigration/CEAMigration_EdgeCases.t.sol`
 
-| Test | Description | Expected Result |
-|------|-------------|-----------------|
-| `test_MigrationV1toV2toV3` | Chain migrations: v1 → v2 → v3 | All succeed, state preserved through both |
-| `test_MigrationAfterManyExecutions` | Migrate CEA with 1000+ executed txs | Success, all isExecuted entries preserved |
-| `test_MigrationWithMaxBalances` | Migrate CEA holding max uint256 token amounts | Balances preserved |
-| `test_MigrationEmptyState` | Migrate brand new CEA (no executions yet) | Success, ready for use |
-| `test_MigrationImmediateReuse` | Execute normal tx immediately after migration | Works with new implementation |
-| `test_MigrationDuringHighLoad` | Migrate while other CEAs executing | No interference, isolated state |
+| Test                                | Description                                   | Expected Result                           |
+| ----------------------------------- | --------------------------------------------- | ----------------------------------------- |
+| `test_MigrationV1toV2toV3`          | Chain migrations: v1 → v2 → v3                | All succeed, state preserved through both |
+| `test_MigrationAfterManyExecutions` | Migrate CEA with 1000+ executed txs           | Success, all isExecuted entries preserved |
+| `test_MigrationWithMaxBalances`     | Migrate CEA holding max uint256 token amounts | Balances preserved                        |
+| `test_MigrationEmptyState`          | Migrate brand new CEA (no executions yet)     | Success, ready for use                    |
+| `test_MigrationImmediateReuse`      | Execute normal tx immediately after migration | Works with new implementation             |
+| `test_MigrationDuringHighLoad`      | Migrate while other CEAs executing            | No interference, isolated state           |
 
 ---
 
@@ -1119,7 +1119,7 @@ function testFuzz_MigrationPreservesState(uint256 executionCount) public {
 
     // Execute random txs
     for (uint256 i = 0; i < executionCount; i++) {
-        bytes32 txID = keccak256(abi.encode(i));
+        bytes32 subTxId = keccak256(abi.encode(i));
         // ... execute normal tx
     }
 
@@ -1517,7 +1517,7 @@ event CEAMigrationContractUpdated(address indexed oldContract, address indexed n
 **CEA (existing, line 219):**
 ```solidity
 event UniversalTxExecuted(
-    bytes32 indexed txID,
+    bytes32 indexed subTxId,
     bytes32 indexed universalTxID,
     address indexed originCaller,
     address to,
@@ -1527,7 +1527,7 @@ event UniversalTxExecuted(
 
 **Emitted during migration:**
 1. `CEAMigration.ImplementationUpdated(ceaV2Address)` - inside delegatecall
-2. `CEA.UniversalTxExecuted(txID, universalTxID, UEA, ceaProxy, migrationSelector)` - in _handleExecution
+2. `CEA.UniversalTxExecuted(subTxId, universalTxID, UEA, ceaProxy, migrationSelector)` - in _handleExecution
 
 ---
 
@@ -1549,18 +1549,18 @@ event UniversalTxExecuted(
 
 ### 10.6 Comparison: UEA vs CEA Migration
 
-| Aspect | UEA Migration | CEA Migration |
-|--------|--------------|---------------|
-| **Initiator** | User (signs UniversalPayload) | User (via UEA on Push Chain) |
-| **Entry point** | `UEA_EVM.executePayload()` | `CEA.executeUniversalTx()` |
-| **Caller** | Direct call (or UE_MODULE) | Vault only |
-| **Authorization** | Signature verification | originCaller == UEA |
-| **Payload format** | `UniversalPayload` struct | `Multicall[]` array |
-| **Selector detection** | `isMigration(payload.data)` | `isMigration(call.data)` inside multicall |
-| **Migration contract fetch** | `factory.UEA_MIGRATION_CONTRACT()` | `factory.CEA_MIGRATION_CONTRACT()` |
-| **Delegatecall target** | `migrateUEAEVM()` | `migrateCEA()` |
-| **Storage slot** | `UEA_LOGIC_SLOT` (0x868a771a...) | `CEA_LOGIC_SLOT` (0x8b2ae8ee...) |
-| **Cross-chain** | No (UEA lives on Push Chain) | Yes (CEA on external chain, initiated from Push) |
+| Aspect                       | UEA Migration                      | CEA Migration                                    |
+| ---------------------------- | ---------------------------------- | ------------------------------------------------ |
+| **Initiator**                | User (signs UniversalPayload)      | User (via UEA on Push Chain)                     |
+| **Entry point**              | `UEA_EVM.executePayload()`         | `CEA.executeUniversalTx()`                       |
+| **Caller**                   | Direct call (or UE_MODULE)         | Vault only                                       |
+| **Authorization**            | Signature verification             | originCaller == UEA                              |
+| **Payload format**           | `UniversalPayload` struct          | `Multicall[]` array                              |
+| **Selector detection**       | `isMigration(payload.data)`        | `isMigration(call.data)` inside multicall        |
+| **Migration contract fetch** | `factory.UEA_MIGRATION_CONTRACT()` | `factory.CEA_MIGRATION_CONTRACT()`               |
+| **Delegatecall target**      | `migrateUEAEVM()`                  | `migrateCEA()`                                   |
+| **Storage slot**             | `UEA_LOGIC_SLOT` (0x868a771a...)   | `CEA_LOGIC_SLOT` (0x8b2ae8ee...)                 |
+| **Cross-chain**              | No (UEA lives on Push Chain)       | Yes (CEA on external chain, initiated from Push) |
 
 ---
 

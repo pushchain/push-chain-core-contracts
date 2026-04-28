@@ -22,6 +22,12 @@ contract UEAFactoryV0 is Initializable, OwnableUpgradeable, PausableUpgradeable,
     using Clones for address;
 
     // =========================
+    //    UF: EVENTS (V0-only, removed from IUEAFactory in V1)
+    // =========================
+
+    event PauserRoleGranted(address indexed pauser);
+
+    // =========================
     //    UF: STATE VARIABLES
     // =========================
 
@@ -51,6 +57,9 @@ contract UEAFactoryV0 is Initializable, OwnableUpgradeable, PausableUpgradeable,
 
     /// @notice The current UEA migration contract address.
     address public UEA_MIGRATION_CONTRACT;
+
+    /// @notice Push Chain numeric identifier used in the `getOriginForUEA` synthetic fallback.
+    string public pushChainId;
 
     // =========================
     //    UF: CONSTRUCTOR
@@ -130,6 +139,9 @@ contract UEAFactoryV0 is Initializable, OwnableUpgradeable, PausableUpgradeable,
     }
 
     /// @inheritdoc IUEAFactory
+    /// @dev When `isUEA` is false, `account` is a synthetic fallback built from
+    ///      `"eip155"` + `pushChainId` + `addr` — NOT a registered origin.
+    ///      Callers MUST check `isUEA` before trusting `account`.
     function getOriginForUEA(address addr) external view returns (UniversalAccountId memory account, bool isUEA) {
         account = UEA_to_UOA[addr];
 
@@ -137,7 +149,7 @@ contract UEAFactoryV0 is Initializable, OwnableUpgradeable, PausableUpgradeable,
             isUEA = true;
         } else {
             account =
-                UniversalAccountId({chainNamespace: "eip155", chainId: "42101", owner: bytes(abi.encodePacked(addr))});
+                UniversalAccountId({chainNamespace: "eip155", chainId: pushChainId, owner: bytes(abi.encodePacked(addr))});
         }
 
         return (account, isUEA);
@@ -220,7 +232,7 @@ contract UEAFactoryV0 is Initializable, OwnableUpgradeable, PausableUpgradeable,
 
     /// @notice                             Sets the UEAProxy implementation address.
     /// @param ueaProxyImplementation       New UEAProxy implementation address
-    function setUEAProxyImplementation(address ueaProxyImplementation) external onlyOwner {
+    function updateUEAProxyImplementation(address ueaProxyImplementation) external onlyOwner {
         if (ueaProxyImplementation == address(0)) {
             revert UEAErrors.InvalidInputArgs();
         }
@@ -229,11 +241,17 @@ contract UEAFactoryV0 is Initializable, OwnableUpgradeable, PausableUpgradeable,
 
     /// @notice                         Sets the UEA migration contract address.
     /// @param ueaMigrationContract     New migration contract address
-    function setUEAMigrationContract(address ueaMigrationContract) external onlyOwner {
+    function updateUEAMigrationContract(address ueaMigrationContract) external onlyOwner {
         if (ueaMigrationContract == address(0)) {
             revert UEAErrors.InvalidInputArgs();
         }
         UEA_MIGRATION_CONTRACT = ueaMigrationContract;
+    }
+
+    /// @notice Update `pushChainId`. Reverts on empty string.
+    function updatePushChainId(string memory _pushChainId) external onlyOwner {
+        if (bytes(_pushChainId).length == 0) revert UEAErrors.InvalidInputArgs();
+        pushChainId = _pushChainId;
     }
 
     /// @inheritdoc IUEAFactory

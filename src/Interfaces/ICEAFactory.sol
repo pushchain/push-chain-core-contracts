@@ -41,10 +41,6 @@ interface ICEAFactory {
     /// @param newContract       New migration contract address
     event CEAMigrationContractUpdated(address indexed oldContract, address indexed newContract);
 
-    /// @notice                  Emitted when the PAUSER_ROLE is granted to a new address.
-    /// @param pauser            Address that was granted the pauser role
-    event PauserRoleGranted(address indexed pauser);
-
     // =========================
     //    CF_1: VIEW FUNCTIONS
     // =========================
@@ -52,6 +48,10 @@ interface ICEAFactory {
     /// @notice             Returns the current Vault address.
     /// @return             Vault address
     function VAULT() external view returns (address);
+
+    /// @notice             Returns the current Universal Gateway address.
+    /// @return             Universal Gateway address
+    function UNIVERSAL_GATEWAY() external view returns (address);
 
     /// @notice             Returns the CEA proxy implementation used for clones.
     /// @return             CEA proxy implementation address

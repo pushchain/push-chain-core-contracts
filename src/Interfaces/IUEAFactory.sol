@@ -30,9 +30,11 @@ interface IUEAFactory {
     /// @param vmHash            VM type hash
     event UEARegistered(bytes32 indexed chainHash, address ueaLogic, bytes32 vmHash);
 
-    /// @notice                  Emitted when the PAUSER_ROLE is granted to a new address.
-    /// @param pauser            Address that was granted the pauser role
-    event PauserRoleGranted(address indexed pauser);
+    /// @notice                  Emitted when an existing UEA implementation is replaced.
+    /// @param vmHash            VM hash whose implementation is being updated
+    /// @param previousUEA       Previous UEA implementation address
+    /// @param newUEA            New UEA implementation address
+    event UEAImplementationUpdated(bytes32 indexed vmHash, address previousUEA, address newUEA);
 
     // =========================
     //    UF_1: VIEW FUNCTIONS
@@ -71,6 +73,9 @@ interface IUEAFactory {
     /// @notice             Returns the current UEA migration contract address.
     /// @return             Migration contract address
     function UEA_MIGRATION_CONTRACT() external view returns (address);
+
+    /// @notice             Push Chain ID used in the `getOriginForUEA` synthetic fallback.
+    function pushChainId() external view returns (string memory);
 
     // =========================
     //    UF_2: DEPLOYMENT

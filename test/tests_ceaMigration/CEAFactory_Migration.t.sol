@@ -57,42 +57,42 @@ contract CEAFactory_MigrationTest is Test {
     }
 
     // =========================================================================
-    // setCEAMigrationContract Tests
+    // updateCEAMigrationContract Tests
     // =========================================================================
 
-    function test_setCEAMigrationContract_Success() public {
+    function test_updateCEAMigrationContract_Success() public {
         // Initially should be zero
         assertEq(factory.CEA_MIGRATION_CONTRACT(), address(0), "Migration contract should be zero initially");
 
         // Set migration contract
-        factory.setCEAMigrationContract(address(migration));
+        factory.updateCEAMigrationContract(address(migration));
 
         // Verify set correctly
         assertEq(factory.CEA_MIGRATION_CONTRACT(), address(migration), "Migration contract should be set");
     }
 
-    function test_setCEAMigrationContract_ZeroAddress() public {
+    function test_updateCEAMigrationContract_ZeroAddress() public {
         vm.expectRevert(abi.encodeWithSelector(CEAErrors.ZeroAddress.selector));
-        factory.setCEAMigrationContract(address(0));
+        factory.updateCEAMigrationContract(address(0));
     }
 
-    function test_setCEAMigrationContract_NonOwner() public {
+    function test_updateCEAMigrationContract_NonOwner() public {
         vm.prank(nonOwner);
         vm.expectRevert(); // OwnableUnauthorizedAccount
-        factory.setCEAMigrationContract(address(migration));
+        factory.updateCEAMigrationContract(address(migration));
     }
 
-    function test_setCEAMigrationContract_Event() public {
+    function test_updateCEAMigrationContract_Event() public {
         // Expect CEAMigrationContractUpdated event
         vm.expectEmit(true, true, false, false);
         emit ICEAFactory.CEAMigrationContractUpdated(address(0), address(migration));
 
-        factory.setCEAMigrationContract(address(migration));
+        factory.updateCEAMigrationContract(address(migration));
     }
 
-    function test_setCEAMigrationContract_UpdateExisting() public {
+    function test_updateCEAMigrationContract_UpdateExisting() public {
         // Set initial migration contract
-        factory.setCEAMigrationContract(address(migration));
+        factory.updateCEAMigrationContract(address(migration));
 
         // Deploy new migration contract
         CEA ceaV3 = new CEA();
@@ -103,7 +103,7 @@ contract CEAFactory_MigrationTest is Test {
         emit ICEAFactory.CEAMigrationContractUpdated(address(migration), address(migration2));
 
         // Update migration contract
-        factory.setCEAMigrationContract(address(migration2));
+        factory.updateCEAMigrationContract(address(migration2));
 
         // Verify updated
         assertEq(factory.CEA_MIGRATION_CONTRACT(), address(migration2), "Migration contract should be updated");
@@ -129,7 +129,7 @@ contract CEAFactory_MigrationTest is Test {
         address ueaOnPush = makeAddr("ueaOnPush");
 
         // Set migration contract in factory
-        factory.setCEAMigrationContract(address(migration));
+        factory.updateCEAMigrationContract(address(migration));
 
         // Deploy CEA
         vm.prank(vault);

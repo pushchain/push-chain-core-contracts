@@ -54,8 +54,8 @@ contract UniversalCoreV0 is
     /// @notice Default fee tier for each token (0 = not set).
     mapping(address => uint24) public defaultFeeTier;
 
-    /// @notice Slippage tolerance for each token in basis points (e.g., 300 = 3%).
-    mapping(address => uint256) public slippageTolerance;
+    /// @dev Deprecated. Slot retained for storage layout compatibility with deployed testnet proxy.
+    mapping(address => uint256) private __deprecated_slippageTolerance;
 
     /// @notice Default deadline in minutes for swaps.
     uint256 public defaultDeadlineMins = 20;
@@ -69,8 +69,8 @@ contract UniversalCoreV0 is
     /// @notice Uniswap V3 SwapRouter.
     address public uniswapV3SwapRouter;
 
-    /// @notice Uniswap V3 Quoter.
-    address public uniswapV3Quoter;
+    /// @dev Deprecated. Slot retained for storage layout compatibility with deployed testnet proxy.
+    address private __deprecated_uniswapV3Quoter;
 
     /// @notice Address of the wrapped PC to interact with Uniswap V3.
     address public WPC;
@@ -87,12 +87,21 @@ contract UniversalCoreV0 is
     /// @notice Role for managing gas-related configurations.
     bytes32 public constant MANAGER_ROLE = keccak256("MANAGER_ROLE");
 
+    // -- Uniswap V3 fee tiers --
+    uint24 public constant FEE_TIER_LOWEST = 100;
+    uint24 public constant FEE_TIER_LOW = 500;
+    uint24 public constant FEE_TIER_MEDIUM = 3000;
+    uint24 public constant FEE_TIER_HIGH = 10000;
+
+    // -- Slippage cap (basis points) --
+    uint256 public constant MAX_SLIPPAGE_BPS = 5000;
+
     /// @notice (Deprecated) Base gas limit — now per-chain via baseGasLimitByChainNamespace.
     /// @dev Only included to avoid storage collision in Testnet UniversalCore.
     uint256 public BASE_GAS_LIMIT = 500_000;
 
-    /// @notice Mapping for indicating an official PRC20 supported token.
-    mapping(address => bool) public isSupportedToken;
+    /// @dev Deprecated. Slot retained for storage layout compatibility with deployed testnet proxy.
+    mapping(address => bool) private __deprecated_isSupportedToken;
 
     /// @notice Address of the UniversalGatewayPC that can call swapAndBurnGas.
     address public universalGatewayPC;
@@ -163,7 +172,7 @@ contract UniversalCoreV0 is
         WPC = wpc_;
         uniswapV3Factory = uniswapV3Factory_;
         uniswapV3SwapRouter = uniswapV3SwapRouter_;
-        uniswapV3Quoter = uniswapV3Quoter_;
+        __deprecated_uniswapV3Quoter = uniswapV3Quoter_;
     }
 
     // =========================
@@ -344,26 +353,17 @@ contract UniversalCoreV0 is
     /// @notice              Set protocol fee (in native PC) for a token.
     /// @param token         Token address
     /// @param fee           Protocol fee amount in native PC
-    function setProtocolFeeByToken(address token, uint256 fee) external onlyRole(MANAGER_ROLE) {
+    function updateProtocolFeeByToken(address token, uint256 fee) external onlyRole(MANAGER_ROLE) {
         if (token == address(0)) revert CommonErrors.ZeroAddress();
         protocolFeeByToken[token] = fee;
         emit SetProtocolFeeByToken(token, fee);
-    }
-
-    /// @notice              Set whether a PRC20 token is supported.
-    /// @param prc20         PRC20 token address
-    /// @param supported     Whether the token is supported
-    function setSupportedToken(address prc20, bool supported) external onlyRole(MANAGER_ROLE) {
-        if (prc20 == address(0)) revert CommonErrors.ZeroAddress();
-        isSupportedToken[prc20] = supported;
-        emit SetSupportedToken(prc20, supported);
     }
 
     /// @notice                  Set the gas PC pool for a chain.
     /// @param chainNamespace    Chain Namespace (e.g. "eip155:1" for Ethereum Mainnet)
     /// @param gasToken          Gas coin address
     /// @param fee               Uniswap V3 fee tier
-    function setGasPCPool(string memory chainNamespace, address gasToken, uint24 fee) external onlyRole(MANAGER_ROLE) {
+    function updateGasPCPool(string memory chainNamespace, address gasToken, uint24 fee) external onlyRole(MANAGER_ROLE) {
         if (gasToken == address(0)) revert CommonErrors.ZeroAddress();
 
         address pool = IUniswapV3Factory(uniswapV3Factory)
@@ -402,7 +402,7 @@ contract UniversalCoreV0 is
     /// @notice                  Setter for gasTokenPRC20ByChainNamespace map.
     /// @param chainNamespace    Chain Namespace
     /// @param prc20             PRC20 address
-    function setGasTokenPRC20(string memory chainNamespace, address prc20) external onlyRole(MANAGER_ROLE) {
+    function updateGasTokenPRC20(string memory chainNamespace, address prc20) external onlyRole(MANAGER_ROLE) {
         if (prc20 == address(0)) revert CommonErrors.ZeroAddress();
         gasTokenPRC20ByChainNamespace[chainNamespace] = prc20;
         emit SetGasToken(chainNamespace, prc20);
@@ -424,20 +424,20 @@ contract UniversalCoreV0 is
     /// @notice          Set auto-swap support for a token.
     /// @param token     Token address
     /// @param supported Whether the token supports auto-swap
-    function setAutoSwapSupported(address token, bool supported) external onlyAdmin {
+    function updateAutoSwapSupported(address token, bool supported) external onlyAdmin {
         isAutoSwapSupported[token] = supported;
     }
 
     /// @notice      Set the wrapped PC address.
     /// @param addr  WPC new address
-    function setWPC(address addr) external onlyAdmin {
+    function updateWPC(address addr) external onlyAdmin {
         if (addr == address(0)) revert CommonErrors.ZeroAddress();
         WPC = addr;
     }
 
     /// @notice      Set the UniversalGatewayPC address.
     /// @param addr  UniversalGatewayPC address
-    function setUniversalGatewayPC(address addr) external onlyAdmin {
+    function updateUniversalGatewayPC(address addr) external onlyAdmin {
         if (addr == address(0)) revert CommonErrors.ZeroAddress();
         universalGatewayPC = addr;
     }
@@ -446,40 +446,29 @@ contract UniversalCoreV0 is
     /// @param factory      Uniswap V3 Factory address
     /// @param swapRouter   Uniswap V3 SwapRouter address
     /// @param quoter       Uniswap V3 Quoter address
-    function setUniswapV3Addresses(address factory, address swapRouter, address quoter) external onlyAdmin {
+    function updateUniswapV3Addresses(address factory, address swapRouter, address quoter) external onlyAdmin {
         if (factory == address(0) || swapRouter == address(0) || quoter == address(0)) {
             revert CommonErrors.ZeroAddress();
         }
         uniswapV3Factory = factory;
         uniswapV3SwapRouter = swapRouter;
-        uniswapV3Quoter = quoter;
+        __deprecated_uniswapV3Quoter = quoter;
     }
 
     /// @notice          Set default fee tier for a token.
     /// @param token     Token address
     /// @param feeTier   Fee tier (500, 3000, 10000)
-    function setDefaultFeeTier(address token, uint24 feeTier) external onlyAdmin {
+    function updateDefaultFeeTier(address token, uint24 feeTier) external onlyAdmin {
         if (token == address(0)) revert CommonErrors.ZeroAddress();
-        if (feeTier != 500 && feeTier != 3000 && feeTier != 10000) {
+        if (feeTier != FEE_TIER_LOWEST && feeTier != FEE_TIER_LOW && feeTier != FEE_TIER_MEDIUM && feeTier != FEE_TIER_HIGH) {
             revert UniversalCoreErrors.InvalidFeeTier();
         }
         defaultFeeTier[token] = feeTier;
     }
 
-    /// @notice            Set slippage tolerance for a token.
-    /// @param token       Token address
-    /// @param tolerance   Slippage tolerance in basis points (e.g., 300 = 3%)
-    function setSlippageTolerance(address token, uint256 tolerance) external onlyAdmin {
-        if (token == address(0)) revert CommonErrors.ZeroAddress();
-        if (tolerance > 5000) {
-            revert UniversalCoreErrors.InvalidSlippageTolerance();
-        }
-        slippageTolerance[token] = tolerance;
-    }
-
     /// @notice               Set default deadline in minutes.
     /// @param minutesValue   Default deadline in minutes
-    function setDefaultDeadlineMins(uint256 minutesValue) external onlyAdmin {
+    function updateDefaultDeadlineMins(uint256 minutesValue) external onlyAdmin {
         defaultDeadlineMins = minutesValue;
         emit SetDefaultDeadlineMins(minutesValue);
     }
@@ -487,7 +476,7 @@ contract UniversalCoreV0 is
     /// @notice                  Set base gas limit for a specific chain.
     /// @param chainNamespace    Chain Namespace (e.g. "eip155:1" for Ethereum Mainnet)
     /// @param gasLimit          Base gas limit for the chain
-    function setBaseGasLimitByChain(string memory chainNamespace, uint256 gasLimit) external onlyRole(MANAGER_ROLE) {
+    function updateBaseGasLimitByChain(string memory chainNamespace, uint256 gasLimit) external onlyRole(MANAGER_ROLE) {
         baseGasLimitByChainNamespace[chainNamespace] = gasLimit;
         emit SetBaseGasLimitByChain(chainNamespace, gasLimit);
     }
@@ -495,7 +484,7 @@ contract UniversalCoreV0 is
     /// @notice                  Set rescue funds gas limit for a specific chain.
     /// @param chainNamespace    Chain Namespace (e.g. "eip155:1" for Ethereum Mainnet)
     /// @param gasLimit          Rescue funds gas limit for the chain
-    function setRescueFundsGasLimitByChain(string memory chainNamespace, uint256 gasLimit)
+    function updateRescueFundsGasLimitByChain(string memory chainNamespace, uint256 gasLimit)
         external
         onlyRole(MANAGER_ROLE)
     {

@@ -52,12 +52,12 @@ contract ProxyCallTest is Test {
 
         UEAFactory factoryImpl = new UEAFactory();
 
-        bytes memory initData = abi.encodeWithSelector(UEAFactory.initialize.selector, admin, makeAddr("pauser"));
+        bytes memory initData = abi.encodeWithSelector(UEAFactory.initialize.selector, admin, makeAddr("pauser"), "42101");
         ERC1967Proxy proxy = new ERC1967Proxy(address(factoryImpl), initData);
         factory = UEAFactory(address(proxy));
 
         // Set UEAProxy implementation after initialization
-        factory.setUEAProxyImplementation(address(ueaProxyImpl));
+        factory.updateUEAProxyImplementation(address(ueaProxyImpl));
 
         bytes32 evmChainHash = keccak256(abi.encode("eip155", "1"));
         factory.registerNewChain(evmChainHash, EVM_HASH);

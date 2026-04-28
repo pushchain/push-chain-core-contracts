@@ -29,6 +29,7 @@ library PRC20Errors {
     error LowAllowance();
     error InvalidSender();
     error CallerIsNotUniversalExecutor();
+    error CorePaused();
 }
 
 // =========================
@@ -44,10 +45,27 @@ library UniversalCoreErrors {
     error CallerIsNotUEModule();
     error CallerIsNotGatewayPC();
     error AutoSwapNotSupported();
-    error InvalidSlippageTolerance();
     error MinPCOutRequired();
     error GasLimitBelowBase(uint256 provided, uint256 minimum);
+    error ZeroBaseGasLimit();
     error ZeroRescueGasLimit();
+    error StaleGasData(uint256 observedAt, uint256 nowTimestamp, uint256 maxAge);
+    error PRC20OperationFailed();
+}
+
+// =========================
+//           WPC-Specific ERRORS
+// =========================
+
+library StringUtilsErrors {
+    error EmptyString();
+    error NonDigitCharacter();
+}
+
+library WPCErrors {
+    error InsufficientBalance();
+    error InsufficientAllowance();
+    error TransferFailed();
 }
 
 // =========================
@@ -62,6 +80,7 @@ library UEAErrors {
     error InvalidSVMSignature();
     error PrecompileCallFailed();
     error AccountAlreadyExists();
+    error UEAAlreadyRegistered();
 }
 
 library CEAErrors {
