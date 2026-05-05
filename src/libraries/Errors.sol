@@ -78,6 +78,7 @@ library UEAErrors {
     error InvalidInputArgs();
     error InvalidEVMSignature();
     error InvalidSVMSignature();
+    error NonceMismatch(uint256 expected, uint256 provided);
     error PrecompileCallFailed();
     error AccountAlreadyExists();
     error UEAAlreadyRegistered();

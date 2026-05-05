@@ -261,7 +261,8 @@ contract ProxyCallTest is Test {
 
         user1UEAInstance.executeUniversalTx(payload, signature);
 
-        vm.expectRevert(Errors.InvalidEVMSignature.selector);
+        // Nonce check fires first (expected=1, got=0) before signature verification
+        vm.expectRevert(abi.encodeWithSelector(Errors.NonceMismatch.selector, 1, 0));
         user1UEAInstance.executeUniversalTx(payload, signature);
     }
 

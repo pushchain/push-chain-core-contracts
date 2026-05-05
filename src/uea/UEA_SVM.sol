@@ -141,6 +141,10 @@ contract UEA_SVM is ReentrancyGuard, IUEA {
 
     /// @inheritdoc IUEA
     function executeUniversalTx(UniversalPayload calldata payload, bytes calldata signature) external nonReentrant {
+        if (payload.nonce != nonce) {
+            revert UEAErrors.NonceMismatch(nonce, payload.nonce);
+        }
+
         if (msg.sender != UNIVERSAL_EXECUTOR_MODULE) {
             bytes32 payloadHash = getUniversalPayloadHash(payload);
             if (!verifyUniversalPayloadSignature(payloadHash, signature)) {

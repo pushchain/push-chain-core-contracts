@@ -705,7 +705,7 @@ contract UEA_EVMTest is Test {
         bytes memory signature = abi.encodePacked(r, s, v);
 
         // The execution should fail because the account expects nonce to be 0, not 100
-        vm.expectRevert(Errors.InvalidEVMSignature.selector);
+        vm.expectRevert(abi.encodeWithSelector(Errors.NonceMismatch.selector, 0, 100));
         evmSmartAccountInstance.executeUniversalTx(payload, signature);
 
         // Verify state hasn't changed
@@ -737,8 +737,8 @@ contract UEA_EVMTest is Test {
 
         uint256 previousNonce = evmSmartAccountInstance.nonce();
 
-        // Try to execute with same nonce again
-        vm.expectRevert(Errors.InvalidEVMSignature.selector);
+        // Try to execute with same nonce again — nonce check fires first (expected=1, got=0)
+        vm.expectRevert(abi.encodeWithSelector(Errors.NonceMismatch.selector, 1, 0));
         evmSmartAccountInstance.executeUniversalTx(payload, signature);
 
         // Verify state hasn't changed

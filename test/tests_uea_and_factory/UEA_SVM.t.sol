@@ -1264,6 +1264,29 @@ contract UEASVMTest is Test {
         // Verify execution succeeded
         assertEq(target.getMagicNumber(), 999, "Execution should succeed with valid signature");
     }
+
+    function testRevertWhenIncorrectNonce() public deploySvmSmartAccount {
+        uint256 previousNonce = svmSmartAccountInstance.nonce();
+
+        UniversalPayload memory payload = UniversalPayload({
+            to: address(target),
+            value: 0,
+            data: abi.encodeWithSignature("setMagicNumber(uint256)", 786),
+            gasLimit: 1000000,
+            maxFeePerGas: 0,
+            nonce: 100,
+            deadline: block.timestamp + 1000,
+            maxPriorityFeePerGas: 0,
+            vType: VerificationType(0)
+        });
+
+        bytes memory signature = hex"00";
+
+        vm.expectRevert(abi.encodeWithSelector(Errors.NonceMismatch.selector, 0, 100));
+        svmSmartAccountInstance.executeUniversalTx(payload, signature);
+
+        assertEq(previousNonce, svmSmartAccountInstance.nonce(), "Nonce should not have changed");
+    }
 }
 
 // Helper contracts for testing reverts
