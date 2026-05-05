@@ -9,35 +9,37 @@ import {UEAProxy} from "../uea/UEAProxy.sol";
 
 import {Clones} from "@openzeppelin/contracts/proxy/Clones.sol";
 import {Initializable} from "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol";
-import {OwnableUpgradeable} from "@openzeppelin/contracts-upgradeable/access/OwnableUpgradeable.sol";
+import {AccessControlDefaultAdminRulesUpgradeable} from
+    "@openzeppelin/contracts-upgradeable/access/extensions/AccessControlDefaultAdminRulesUpgradeable.sol";
 import {PausableUpgradeable} from "@openzeppelin/contracts-upgradeable/utils/PausableUpgradeable.sol";
 
 /**
  * @title   UEAFactoryV0  (TESTNET ONLY — DO NOT DEPLOY TO MAINNET)
  * @notice  Testnet version of UEAFactory, preserved as-is from the live deployment
  *          on Push Chain Donut Testnet.
- *          Note: Testnet Version includes OwneableUpgradeable but mainnet uses AccessControlUpgradeable.
+ *
+ *          Access control: AccessControlDefaultAdminRulesUpgradeable (1-day delay).
+ *          Roles: DEFAULT_ADMIN_ROLE (root), ROLE_MANAGER_ROLE (grants operational roles),
+ *          UEA_ADMIN_ROLE (implementation + chain config), OPERATOR_ROLE (unpause),
+ *          PAUSER_ROLE (pause only).
  */
-contract UEAFactoryV0 is Initializable, OwnableUpgradeable, PausableUpgradeable, IUEAFactory {
+contract UEAFactoryV0 is Initializable, AccessControlDefaultAdminRulesUpgradeable, PausableUpgradeable, IUEAFactory {
     using Clones for address;
 
     // =========================
-    //    UF: EVENTS (V0-only, removed from IUEAFactory in V1)
+    //    UF: ROLES
     // =========================
 
-    event PauserRoleGranted(address indexed pauser);
+    bytes32 public constant ROLE_MANAGER_ROLE = keccak256("ROLE_MANAGER_ROLE");
+    bytes32 public constant UEA_ADMIN_ROLE = keccak256("UEA_ADMIN_ROLE");
+    bytes32 public constant OPERATOR_ROLE = keccak256("OPERATOR_ROLE");
+    bytes32 public constant PAUSER_ROLE = keccak256("PAUSER_ROLE");
 
     // =========================
     //    UF: STATE VARIABLES
     // =========================
 
-    /// @notice Role that can pause and unpause UEA deployments.
-    bytes32 public constant PAUSER_ROLE = keccak256("PAUSER_ROLE");
-
-    /**
-     * @notice Maps role hash to the address holding that role.
-     * @dev    STORAGE SLOT 0 — DEAD SLOT — DO NOT REMOVE OR REORDER.
-     */
+    /// @dev DEAD SLOT — preserved for storage layout compatibility. Do not use.
     mapping(bytes32 => address) public roles;
 
     /// @notice Maps VM type hashes to their UEA implementation addresses.
@@ -71,15 +73,6 @@ contract UEAFactoryV0 is Initializable, OwnableUpgradeable, PausableUpgradeable,
     }
 
     // =========================
-    //    UF: MODIFIERS
-    // =========================
-
-    modifier onlyPauser() {
-        if (roles[PAUSER_ROLE] != msg.sender) revert UEAErrors.InvalidInputArgs();
-        _;
-    }
-
-    // =========================
     //    UF: INITIALIZER
     // =========================
 
@@ -88,10 +81,26 @@ contract UEAFactoryV0 is Initializable, OwnableUpgradeable, PausableUpgradeable,
     /// @param initialPauser     Address granted the PAUSER_ROLE
     function initialize(address initialOwner, address initialPauser) public initializer {
         if (initialOwner == address(0) || initialPauser == address(0)) revert UEAErrors.InvalidInputArgs();
-        __Ownable_init(initialOwner);
         __Pausable_init();
         roles[PAUSER_ROLE] = initialPauser;
-        emit PauserRoleGranted(initialPauser);
+    }
+
+    /// @dev                     Reinitializer to migrate from OwnableUpgradeable to RBAC.
+    /// @param _admin            Admin address — granted DEFAULT_ADMIN_ROLE + all operational roles
+    /// @param _pauser           Address granted the PAUSER_ROLE
+    function initializeV2(address _admin, address _pauser) public reinitializer(2) {
+        if (_admin == address(0) || _pauser == address(0)) revert UEAErrors.InvalidInputArgs();
+
+        __AccessControlDefaultAdminRules_init(1 days, _admin);
+
+        _setRoleAdmin(UEA_ADMIN_ROLE, ROLE_MANAGER_ROLE);
+        _setRoleAdmin(OPERATOR_ROLE, ROLE_MANAGER_ROLE);
+        _setRoleAdmin(PAUSER_ROLE, ROLE_MANAGER_ROLE);
+
+        _grantRole(ROLE_MANAGER_ROLE, _admin);
+        _grantRole(UEA_ADMIN_ROLE, _admin);
+        _grantRole(OPERATOR_ROLE, _admin);
+        _grantRole(PAUSER_ROLE, _pauser);
     }
 
     // =========================
@@ -213,49 +222,41 @@ contract UEAFactoryV0 is Initializable, OwnableUpgradeable, PausableUpgradeable,
     // =========================
 
     /// @notice          Pause UEA deployments. Only callable by PAUSER_ROLE.
-    function pause() external onlyPauser {
+    function pause() external onlyRole(PAUSER_ROLE) {
         _pause();
     }
 
-    /// @notice          Unpause UEA deployments. Only callable by PAUSER_ROLE.
-    function unpause() external onlyPauser {
+    /// @notice          Unpause UEA deployments. Only callable by OPERATOR_ROLE.
+    function unpause() external onlyRole(OPERATOR_ROLE) {
         _unpause();
     }
 
-    /// @notice              Grant PAUSER_ROLE to a new address. Only callable by owner.
-    /// @param newPauser     Address to grant pauser role to
-    function setPauserRole(address newPauser) external onlyOwner {
-        if (newPauser == address(0)) revert UEAErrors.InvalidInputArgs();
-        roles[PAUSER_ROLE] = newPauser;
-        emit PauserRoleGranted(newPauser);
-    }
-
-    /// @notice                             Sets the UEAProxy implementation address.
+    /// @notice                             Sets the UEAProxy implementation address. Only callable by UEA_ADMIN_ROLE.
     /// @param ueaProxyImplementation       New UEAProxy implementation address
-    function updateUEAProxyImplementation(address ueaProxyImplementation) external onlyOwner {
+    function updateUEAProxyImplementation(address ueaProxyImplementation) external onlyRole(UEA_ADMIN_ROLE) {
         if (ueaProxyImplementation == address(0)) {
             revert UEAErrors.InvalidInputArgs();
         }
         UEA_PROXY_IMPLEMENTATION = ueaProxyImplementation;
     }
 
-    /// @notice                         Sets the UEA migration contract address.
+    /// @notice                         Sets the UEA migration contract address. Only callable by UEA_ADMIN_ROLE.
     /// @param ueaMigrationContract     New migration contract address
-    function updateUEAMigrationContract(address ueaMigrationContract) external onlyOwner {
+    function updateUEAMigrationContract(address ueaMigrationContract) external onlyRole(UEA_ADMIN_ROLE) {
         if (ueaMigrationContract == address(0)) {
             revert UEAErrors.InvalidInputArgs();
         }
         UEA_MIGRATION_CONTRACT = ueaMigrationContract;
     }
 
-    /// @notice Update `pushChainId`. Reverts on empty string.
-    function updatePushChainId(string memory _pushChainId) external onlyOwner {
+    /// @notice Update `pushChainId`. Reverts on empty string. Only callable by UEA_ADMIN_ROLE.
+    function updatePushChainId(string memory _pushChainId) external onlyRole(UEA_ADMIN_ROLE) {
         if (bytes(_pushChainId).length == 0) revert UEAErrors.InvalidInputArgs();
         pushChainId = _pushChainId;
     }
 
     /// @inheritdoc IUEAFactory
-    function registerNewChain(bytes32 _chainHash, bytes32 _vmHash) external onlyOwner {
+    function registerNewChain(bytes32 _chainHash, bytes32 _vmHash) external onlyRole(UEA_ADMIN_ROLE) {
         (, bool isRegistered) = getVMType(_chainHash);
         if (isRegistered) {
             revert UEAErrors.InvalidInputArgs();
@@ -268,19 +269,24 @@ contract UEAFactoryV0 is Initializable, OwnableUpgradeable, PausableUpgradeable,
     /// @inheritdoc IUEAFactory
     function registerMultipleUEA(bytes32[] memory _chainHashes, bytes32[] memory _vmHashes, address[] memory _UEA)
         external
-        onlyOwner
+        onlyRole(UEA_ADMIN_ROLE)
     {
         if (_UEA.length != _vmHashes.length || _UEA.length != _chainHashes.length) {
             revert UEAErrors.InvalidInputArgs();
         }
 
         for (uint256 i = 0; i < _UEA.length; i++) {
-            registerUEA(_chainHashes[i], _vmHashes[i], _UEA[i]);
+            _registerUEA(_chainHashes[i], _vmHashes[i], _UEA[i]);
         }
     }
 
     /// @inheritdoc IUEAFactory
-    function registerUEA(bytes32 _chainHash, bytes32 _vmHash, address _UEA) public onlyOwner {
+    function registerUEA(bytes32 _chainHash, bytes32 _vmHash, address _UEA) public onlyRole(UEA_ADMIN_ROLE) {
+        _registerUEA(_chainHash, _vmHash, _UEA);
+    }
+
+    /// @dev Internal registration logic with overwrite protection.
+    function _registerUEA(bytes32 _chainHash, bytes32 _vmHash, address _UEA) internal {
         if (_UEA == address(0)) {
             revert UEAErrors.InvalidInputArgs();
         }
@@ -290,8 +296,28 @@ contract UEAFactoryV0 is Initializable, OwnableUpgradeable, PausableUpgradeable,
             revert UEAErrors.InvalidInputArgs();
         }
 
+        if (UEA_VM[_vmHash] != address(0)) {
+            revert UEAErrors.UEAAlreadyRegistered();
+        }
+
         UEA_VM[_vmHash] = _UEA;
         emit UEARegistered(_chainHash, _UEA, _vmHash);
+    }
+
+    /// @notice                  Replace the registered UEA implementation for a VM hash.
+    /// @param _vmHash           VM hash whose implementation is being updated
+    /// @param _newUEA           New UEA implementation address (must be non-zero)
+    function updateUEAImplementation(bytes32 _vmHash, address _newUEA) external onlyRole(UEA_ADMIN_ROLE) {
+        if (_newUEA == address(0)) {
+            revert UEAErrors.InvalidInputArgs();
+        }
+        address previous = UEA_VM[_vmHash];
+        if (previous == address(0)) {
+            revert UEAErrors.InvalidInputArgs();
+        }
+
+        UEA_VM[_vmHash] = _newUEA;
+        emit UEAImplementationUpdated(_vmHash, previous, _newUEA);
     }
 
     // =========================

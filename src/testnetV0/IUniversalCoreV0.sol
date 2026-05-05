@@ -15,9 +15,15 @@ interface IUniversalCoreV0 {
         uint256 chainHeight,
         uint256 observedAt
     );
-    event SetGasPrice(string chainNamespace, uint256 price);
     event SetGasToken(string chainNamespace, address prc20);
     event SetDefaultDeadlineMins(uint256 minutesValue);
+    event SetMaxStalenessByChain(string chainNamespace, uint256 maxStaleness);
+    event SetAutoSwapSupported(address indexed token, bool supported);
+    event SetWPC(address indexed oldAddr, address indexed newAddr);
+    event SetUniversalGatewayPC(address indexed oldAddr, address indexed newAddr);
+    event SetUniswapV3Addresses(address factory, address swapRouter);
+    event SetDefaultFeeTier(address indexed token, uint24 feeTier);
+    event RescueNativePC(address indexed to, uint256 amount);
     event SetGasPCPool(
         string chainNamespace, address pool, uint24 fee
     );
@@ -98,15 +104,6 @@ interface IUniversalCoreV0 {
         uint256 minPCOut
     ) external;
 
-    /// @notice             Set gas price for a chain.
-    /// @dev                To Be Removed — use setChainMeta instead.
-    /// @param chainNamespace Chain Namespace
-    /// @param price        New gas price
-    function setGasPrice(
-        string memory chainNamespace,
-        uint256 price
-    ) external;
-
     // =========================
     //    UCV0_2: GATEWAY FUNCTIONS
     // =========================
@@ -170,6 +167,7 @@ interface IUniversalCoreV0 {
     /// @return protocolFee     Protocol fee in native PC from protocolFeeByToken mapping
     /// @return gasPrice        Gas price on the external chain
     /// @return chainNamespace  Source chain namespace
+    /// @return gasLimitUsed    Effective gas limit used in calculation
     function getOutboundTxGasAndFees(
         address _prc20,
         uint256 gasLimitWithBaseLimit
@@ -181,7 +179,8 @@ interface IUniversalCoreV0 {
             uint256 gasFee,
             uint256 protocolFee,
             uint256 gasPrice,
-            string memory chainNamespace
+            string memory chainNamespace,
+            uint256 gasLimitUsed
         );
 
     /// @notice                 Get rescue funds gas limit, fee, and related config for a PRC20 token.
