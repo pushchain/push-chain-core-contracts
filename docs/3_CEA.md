@@ -106,7 +106,7 @@ Each user has exactly one CEA per external chain (v1). A CEA is deployed via `CE
 **Deployment flow:**
 1. `CEAFactory` clones `CEAProxy` template using `cloneDeterministic(salt)` where `salt = keccak256(abi.encode(pushAccount))`.
 2. `CEAFactory` calls `CEAProxy.initializeCEAProxy(CEA_IMPLEMENTATION)` to set the implementation.
-3. `CEAFactory` calls `CEA.initializeCEA(pushAccount, VAULT, UNIVERSAL_GATEWAY)` through the proxy.
+3. `CEAFactory` calls `CEA.initializeCEA(pushAccount, VAULT, UNIVERSAL_GATEWAY, factory)` through the proxy.
 
 In practice:
 ```

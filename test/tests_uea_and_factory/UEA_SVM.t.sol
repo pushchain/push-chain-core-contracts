@@ -45,12 +45,12 @@ contract UEASVMTest is Test {
 
         // Deploy and initialize the proxy with initialOwner
         bytes memory initData =
-            abi.encodeWithSelector(UEAFactory.initialize.selector, address(this), makeAddr("pauser"));
+            abi.encodeWithSelector(UEAFactory.initialize.selector, address(this), makeAddr("pauser"), "42101");
         ERC1967Proxy proxy = new ERC1967Proxy(address(factoryImpl), initData);
         factory = UEAFactory(address(proxy));
 
         // Set UEAProxy implementation after initialization
-        factory.setUEAProxyImplementation(address(ueaProxyImpl));
+        factory.updateUEAProxyImplementation(address(ueaProxyImpl));
 
         // Deploy SVM implementation
         svmSmartAccountImpl = new UEA_SVM();
@@ -830,7 +830,7 @@ contract UEASVMTest is Test {
 
     function test_SuccessfulMigrationUpdatesImplementation() public deploySvmSmartAccount {
         // Set migration contract in factory
-        factory.setUEAMigrationContract(address(migration));
+        factory.updateUEAMigrationContract(address(migration));
 
         MigrationPayload memory payload =
             MigrationPayload({migration: address(migration), nonce: 0, deadline: block.timestamp + 1000});
@@ -874,7 +874,7 @@ contract UEASVMTest is Test {
     }
 
     function testMigration_RevertsWhenValueNonZero() public deploySvmSmartAccount {
-        factory.setUEAMigrationContract(address(migration));
+        factory.updateUEAMigrationContract(address(migration));
 
         UniversalPayload memory payload = UniversalPayload({
             to: address(svmSmartAccountInstance),
@@ -894,7 +894,7 @@ contract UEASVMTest is Test {
     }
 
     function testMigration_RevertsWhenTargetNotSelf() public deploySvmSmartAccount {
-        factory.setUEAMigrationContract(address(migration));
+        factory.updateUEAMigrationContract(address(migration));
 
         UniversalPayload memory payload = UniversalPayload({
             to: address(target),
@@ -945,8 +945,9 @@ contract UEASVMTest is Test {
             abi.encode(
                 svmSmartAccountInstance.DOMAIN_SEPARATOR_TYPEHASH_SVM(),
                 keccak256(bytes(svmSmartAccountInstance.VERSION())),
-                "101",
-                address(svmSmartAccountInstance)
+                keccak256(bytes("101")),
+                address(svmSmartAccountInstance),
+                bytes32(block.chainid)
             )
         );
 
@@ -957,7 +958,9 @@ contract UEASVMTest is Test {
         // This test verifies that the DOMAIN_SEPARATOR_TYPEHASH_SVM constant matches the expected hash
         // If the EIP712Domain_SVM struct definition changes, this test will fail
 
-        bytes32 expectedHash = keccak256("EIP712Domain_SVM(string version,string chainId,address verifyingContract)");
+        bytes32 expectedHash = keccak256(
+            "EIP712Domain_SVM(string version,string chainId,address verifyingContract,bytes32 salt)"
+        );
 
         // Access the constant from the deployed instance
         bytes32 actualHash = svmSmartAccountInstance.DOMAIN_SEPARATOR_TYPEHASH_SVM();
@@ -1260,6 +1263,29 @@ contract UEASVMTest is Test {
 
         // Verify execution succeeded
         assertEq(target.getMagicNumber(), 999, "Execution should succeed with valid signature");
+    }
+
+    function testRevertWhenIncorrectNonce() public deploySvmSmartAccount {
+        uint256 previousNonce = svmSmartAccountInstance.nonce();
+
+        UniversalPayload memory payload = UniversalPayload({
+            to: address(target),
+            value: 0,
+            data: abi.encodeWithSignature("setMagicNumber(uint256)", 786),
+            gasLimit: 1000000,
+            maxFeePerGas: 0,
+            nonce: 100,
+            deadline: block.timestamp + 1000,
+            maxPriorityFeePerGas: 0,
+            vType: VerificationType(0)
+        });
+
+        bytes memory signature = hex"00";
+
+        vm.expectRevert(abi.encodeWithSelector(Errors.NonceMismatch.selector, 0, 100));
+        svmSmartAccountInstance.executeUniversalTx(payload, signature);
+
+        assertEq(previousNonce, svmSmartAccountInstance.nonce(), "Nonce should not have changed");
     }
 }
 

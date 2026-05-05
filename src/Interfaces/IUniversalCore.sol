@@ -12,7 +12,6 @@ interface IUniversalCore {
     event SetChainMeta(string chainNamespace, uint256 price, uint256 chainHeight, uint256 observedAt);
     event SetGasToken(string chainNamespace, address prc20);
     event SetDefaultDeadlineMins(uint256 minutesValue);
-    event SetSupportedToken(address indexed prc20, bool supported);
     event SetGasPCPool(string chainNamespace, address pool, uint24 fee);
     event DepositPRC20WithAutoSwap(
         address prc20, uint256 amountIn, address pcToken, uint256 amountOut, uint24 fee, address recipient
@@ -21,13 +20,21 @@ interface IUniversalCore {
     event SetProtocolFeeByToken(address indexed token, uint256 fee);
     event SetBaseGasLimitByChain(string chainNamespace, uint256 gasLimit);
     event SetRescueFundsGasLimitByChain(string chainNamespace, uint256 gasLimit);
+    event SetMaxStalenessByChain(string chainNamespace, uint256 maxStaleness);
     event RefundUnusedGas(
         address indexed gasToken, uint256 amount, address indexed recipient, bool swapped, uint256 pcOut
     );
 
-    /// @notice                  Emitted when the PAUSER_ROLE is granted to a new address.
-    /// @param pauser            Address that was granted the pauser role
-    event PauserRoleGranted(address indexed pauser);
+    event SetAutoSwapSupported(address indexed token, bool supported);
+    event SetWPC(address indexed oldAddr, address indexed newAddr);
+    event SetUniversalGatewayPC(address indexed oldAddr, address indexed newAddr);
+    event SetUniswapV3Addresses(address factory, address swapRouter);
+    event SetDefaultFeeTier(address indexed token, uint24 feeTier);
+
+    /// @notice                  Emitted when stuck native PC is rescued by admin.
+    /// @param to                Recipient of the rescued PC
+    /// @param amount            Amount of native PC rescued
+    event RescueNativePC(address indexed to, uint256 amount);
 
     // =========================
     //    UC_1: UE MODULE FUNCTIONS
@@ -105,11 +112,6 @@ interface IUniversalCore {
     //    UC_3: PUBLIC GETTERS
     // =========================
 
-    /// @notice                 Check if a PRC20 token is supported.
-    /// @param prc20            PRC20 token address
-    /// @return supported       Whether the token is supported
-    function isSupportedToken(address prc20) external view returns (bool supported);
-
     /// @notice                 Get gas token PRC20 address for a chain.
     /// @param chainNamespace   Chain Namespace (e.g. "eip155:1" for Ethereum Mainnet)
     /// @return gasToken        Gas token address
@@ -144,10 +146,18 @@ interface IUniversalCore {
     /// @return protocolFee     Protocol fee in native PC from protocolFeeByToken mapping
     /// @return gasPrice        Gas price on the external chain
     /// @return chainNamespace  Source chain namespace
+    /// @return gasLimitUsed    Effective gas limit used to compute gasFee
     function getOutboundTxGasAndFees(address _prc20, uint256 gasLimitWithBaseLimit)
         external
         view
-        returns (address gasToken, uint256 gasFee, uint256 protocolFee, uint256 gasPrice, string memory chainNamespace);
+        returns (
+            address gasToken,
+            uint256 gasFee,
+            uint256 protocolFee,
+            uint256 gasPrice,
+            string memory chainNamespace,
+            uint256 gasLimitUsed
+        );
 
     /// @notice                 Get rescue funds gas limit, fee, and related config for a PRC20 token.
     /// @param _prc20           PRC20 address
@@ -175,12 +185,12 @@ interface IUniversalCore {
     /// @notice                 Set protocol fee (in native PC) for a token.
     /// @param token            Token address
     /// @param fee              Protocol fee amount in native PC
-    function setProtocolFeeByToken(address token, uint256 fee) external;
+    function updateProtocolFeeByToken(address token, uint256 fee) external;
 
     /// @notice                  Set rescue funds gas limit for a specific chain.
     /// @param chainNamespace    Chain Namespace
     /// @param gasLimit          Rescue funds gas limit for the chain
-    function setRescueFundsGasLimitByChain(string memory chainNamespace, uint256 gasLimit) external;
+    function updateRescueFundsGasLimitByChain(string memory chainNamespace, uint256 gasLimit) external;
 
     /// @notice Get the UniversalGatewayPC address.
     function universalGatewayPC() external view returns (address);

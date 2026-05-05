@@ -8,7 +8,6 @@ import {IUniversalGateway, UniversalTxRequest} from "../interfaces/IUniversalGat
 import {Multicall, MULTICALL_SELECTOR, MIGRATION_SELECTOR} from "../libraries/Types.sol";
 
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
-import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import {ReentrancyGuard} from "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
 
 /**
@@ -19,8 +18,6 @@ import {ReentrancyGuard} from "@openzeppelin/contracts/utils/ReentrancyGuard.sol
  *          In v1 only the Vault may call state-changing functions.
  */
 contract CEA is ICEA, ReentrancyGuard {
-    using SafeERC20 for IERC20;
-
     // =========================
     //    CEA: STATE VARIABLES
     // =========================
@@ -28,13 +25,7 @@ contract CEA is ICEA, ReentrancyGuard {
     /// @inheritdoc ICEA
     address public pushAccount;
 
-    /// @inheritdoc ICEA
-    address public VAULT;
-
-    /// @notice Address of the Universal Gateway on this external chain.
-    address public UNIVERSAL_GATEWAY;
-
-    /// @notice Reference to the CEA factory for fetching migration contract.
+    /// @notice Reference to the CEA factory — single source of truth for VAULT and UNIVERSAL_GATEWAY.
     ICEAFactory public factory;
 
     bool private _initialized;
@@ -46,9 +37,9 @@ contract CEA is ICEA, ReentrancyGuard {
     //    CEA: MODIFIERS
     // =========================
 
-    /// @notice Restricts to the Vault contract.
+    /// @notice Restricts to the Vault contract (read live from factory).
     modifier onlyVault() {
-        if (msg.sender != VAULT) revert CEAErrors.NotVault();
+        if (msg.sender != factory.VAULT()) revert CEAErrors.NotVault();
         _;
     }
 
@@ -57,21 +48,30 @@ contract CEA is ICEA, ReentrancyGuard {
     // =========================
 
     /// @inheritdoc ICEA
-    function initializeCEA(address _pushAccount, address _vault, address _universalGateway, address _factory) external {
+    function initializeCEA(address _pushAccount, address _factory) external {
         if (_initialized) revert CEAErrors.AlreadyInitialized();
-        if (
-            _pushAccount == address(0) || _vault == address(0) || _universalGateway == address(0)
-                || _factory == address(0)
-        ) {
+        if (_pushAccount == address(0) || _factory == address(0)) {
             revert CEAErrors.ZeroAddress();
         }
 
         pushAccount = _pushAccount;
-        VAULT = _vault;
-        UNIVERSAL_GATEWAY = _universalGateway;
         factory = ICEAFactory(_factory);
 
         _initialized = true;
+    }
+
+    // =========================
+    //    CEA: FACTORY-BACKED GETTERS
+    // =========================
+
+    /// @inheritdoc ICEA
+    function VAULT() external view returns (address) {
+        return factory.VAULT();
+    }
+
+    /// @notice Returns the Universal Gateway address (live from factory).
+    function UNIVERSAL_GATEWAY() external view returns (address) {
+        return factory.UNIVERSAL_GATEWAY();
     }
 
     // =========================
@@ -89,18 +89,18 @@ contract CEA is ICEA, ReentrancyGuard {
 
     /// @inheritdoc ICEA
     function executeUniversalTx(
-        bytes32 txId,
+        bytes32 subTxId,
         bytes32 universalTxId,
         address originCaller,
         address recipient,
         bytes calldata payload
     ) external payable onlyVault nonReentrant {
-        if (isExecuted[txId]) revert CEAErrors.PayloadExecuted();
+        if (isExecuted[subTxId]) revert CEAErrors.PayloadExecuted();
         if (originCaller != pushAccount) revert CEAErrors.InvalidUEA();
 
-        isExecuted[txId] = true;
+        isExecuted[subTxId] = true;
 
-        _handleExecution(txId, universalTxId, originCaller, recipient, payload);
+        _handleExecution(subTxId, universalTxId, originCaller, recipient, payload);
     }
 
     // =========================
@@ -114,7 +114,6 @@ contract CEA is ICEA, ReentrancyGuard {
         if (msg.sender != address(this)) {
             revert CommonErrors.Unauthorized();
         }
-        if (amount == 0) revert CEAErrors.InvalidInput();
         if (revertRecipient == address(0)) {
             revert CEAErrors.InvalidInput();
         }
@@ -128,16 +127,24 @@ contract CEA is ICEA, ReentrancyGuard {
             signatureData: ""
         });
 
-        if (token == address(0)) {
-            if (address(this).balance < amount) {
-                revert CEAErrors.InsufficientBalance();
+        address gateway = factory.UNIVERSAL_GATEWAY();
+
+        if (amount > 0) {
+            if (token == address(0)) {
+                if (address(this).balance < amount) {
+                    revert CEAErrors.InsufficientBalance();
+                }
+                IUniversalGateway(gateway).sendUniversalTxFromCEA{value: amount}(req);
+            } else {
+                if (IERC20(token).balanceOf(address(this)) < amount) {
+                    revert CEAErrors.InsufficientBalance();
+                }
+                IERC20(token).approve(gateway, amount);
+                IUniversalGateway(gateway).sendUniversalTxFromCEA(req);
+                IERC20(token).approve(gateway, 0);
             }
-            IUniversalGateway(UNIVERSAL_GATEWAY).sendUniversalTxFromCEA{value: amount}(req);
         } else {
-            if (IERC20(token).balanceOf(address(this)) < amount) {
-                revert CEAErrors.InsufficientBalance();
-            }
-            IUniversalGateway(UNIVERSAL_GATEWAY).sendUniversalTxFromCEA(req);
+            IUniversalGateway(gateway).sendUniversalTxFromCEA(req);
         }
 
         emit UniversalTxToUEA(address(this), pushAccount, token, amount);
@@ -149,13 +156,13 @@ contract CEA is ICEA, ReentrancyGuard {
 
     /// @dev Routes execution based on payload type.
     ///      Three-way branch: MULTICALL, MIGRATION, or SINGLE CALL.
-    /// @param txId             Transaction identifier for event emission
+    /// @param subTxId             Transaction identifier for event emission
     /// @param universalTxId    Universal tx identifier for event emission
     /// @param originCaller     Origin caller for event emission
     /// @param recipient        Target for single-call path (ignored otherwise)
     /// @param payload          Raw payload bytes
     function _handleExecution(
-        bytes32 txId,
+        bytes32 subTxId,
         bytes32 universalTxId,
         address originCaller,
         address recipient,
@@ -163,22 +170,22 @@ contract CEA is ICEA, ReentrancyGuard {
     ) internal {
         if (_isMulticall(payload)) {
             Multicall[] memory calls = _decodeCalls(payload);
-            _handleMulticall(txId, universalTxId, originCaller, calls);
+            _handleMulticall(subTxId, universalTxId, originCaller, calls);
         } else if (_isMigration(payload)) {
-            _handleMigration();
-            emit UniversalTxExecuted(txId, universalTxId, originCaller, address(this), payload);
+            _handleMigration(recipient);
+            emit UniversalTxExecuted(subTxId, universalTxId, originCaller, address(this), payload);
         } else {
-            _handleSingleCall(txId, universalTxId, originCaller, recipient, payload);
+            _handleSingleCall(subTxId, universalTxId, originCaller, recipient, payload);
         }
     }
 
     /// @dev Executes each multicall step sequentially.
     ///      Self-calls must have value == 0.
-    /// @param txId             Transaction identifier for event emission
+    /// @param subTxId             Transaction identifier for event emission
     /// @param universalTxId    Universal tx identifier for event emission
     /// @param originCaller     Origin caller for event emission
     /// @param calls            Decoded Multicall[] array
-    function _handleMulticall(bytes32 txId, bytes32 universalTxId, address originCaller, Multicall[] memory calls)
+    function _handleMulticall(bytes32 subTxId, bytes32 universalTxId, address originCaller, Multicall[] memory calls)
         internal
     {
         for (uint256 i = 0; i < calls.length; i++) {
@@ -190,31 +197,40 @@ contract CEA is ICEA, ReentrancyGuard {
                 revert CEAErrors.InvalidInput();
             }
 
-            (bool success,) = calls[i].to.call{value: calls[i].value}(calls[i].data);
+            (bool success, bytes memory returnData) = calls[i].to.call{value: calls[i].value}(calls[i].data);
 
-            if (!success) revert CEAErrors.ExecutionFailed();
+            if (!success) {
+                if (returnData.length > 0) {
+                    assembly {
+                        revert(add(32, returnData), mload(returnData))
+                    }
+                } else {
+                    revert CEAErrors.ExecutionFailed();
+                }
+            }
 
-            emit UniversalTxExecuted(txId, universalTxId, originCaller, calls[i].to, calls[i].data);
+            emit UniversalTxExecuted(subTxId, universalTxId, originCaller, calls[i].to, calls[i].data);
         }
     }
 
     /// @dev Handles single-call execution or funds parking.
-    ///      Empty payload = park funds. Non-empty = execute call.
-    ///      Self-calls blocked (use multicall path instead).
-    /// @param txId             Transaction identifier for event emission
+    ///      Note: Funds-parking mode is explicitly signalled by BOTH an empty payload AND a
+    ///      zero `recipient`.
+    ///
+    /// @param subTxId             Transaction identifier for event emission
     /// @param universalTxId    Universal tx identifier for event emission
     /// @param originCaller     Origin caller for event emission
-    /// @param recipient        Target contract for execution
-    /// @param payload          Raw calldata to forward (empty = park funds)
+    /// @param recipient        Target contract for execution (zero + empty payload = park funds)
+    /// @param payload          Raw calldata to forward (empty + zero recipient = park funds)
     function _handleSingleCall(
-        bytes32 txId,
+        bytes32 subTxId,
         bytes32 universalTxId,
         address originCaller,
         address recipient,
         bytes calldata payload
     ) internal {
-        if (payload.length == 0) {
-            emit UniversalTxExecuted(txId, universalTxId, originCaller, address(this), payload);
+        if (payload.length == 0 && recipient == address(0)) {
+            emit UniversalTxExecuted(subTxId, universalTxId, originCaller, address(this), payload);
             return;
         }
 
@@ -225,15 +241,25 @@ contract CEA is ICEA, ReentrancyGuard {
             revert CEAErrors.InvalidRecipient();
         }
 
-        (bool success,) = recipient.call{value: msg.value}(payload);
-        if (!success) revert CEAErrors.ExecutionFailed();
+        (bool success, bytes memory returnData) = recipient.call{value: msg.value}(payload);
+        if (!success) {
+            if (returnData.length > 0) {
+                assembly {
+                    revert(add(32, returnData), mload(returnData))
+                }
+            } else {
+                revert CEAErrors.ExecutionFailed();
+            }
+        }
 
-        emit UniversalTxExecuted(txId, universalTxId, originCaller, recipient, payload);
+        emit UniversalTxExecuted(subTxId, universalTxId, originCaller, recipient, payload);
     }
 
     /// @dev Fetches migration contract from factory and delegates.
-    ///      Rejects msg.value > 0 — migration is a logic upgrade only.
-    function _handleMigration() internal {
+    ///      Enforces: recipient must be self, no value transfer.
+    /// @param recipient   Must be address(this) — migration targets self only
+    function _handleMigration(address recipient) internal {
+        if (recipient != address(this)) revert CEAErrors.InvalidRecipient();
         if (msg.value != 0) revert CEAErrors.InvalidInput();
         address migrationContract = factory.CEA_MIGRATION_CONTRACT();
         if (migrationContract == address(0)) {

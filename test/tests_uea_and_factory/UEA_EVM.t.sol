@@ -54,12 +54,12 @@ contract UEA_EVMTest is Test {
 
         // Deploy and initialize the proxy with initialOwner
         bytes memory initData =
-            abi.encodeWithSelector(UEAFactory.initialize.selector, address(this), makeAddr("pauser"));
+            abi.encodeWithSelector(UEAFactory.initialize.selector, address(this), makeAddr("pauser"), "42101");
         ERC1967Proxy proxy = new ERC1967Proxy(address(factoryImpl), initData);
         factory = UEAFactory(address(proxy));
 
         // Set UEAProxy implementation after initialization
-        factory.setUEAProxyImplementation(address(ueaProxyImpl));
+        factory.updateUEAProxyImplementation(address(ueaProxyImpl));
 
         // NOW deploy UEA implementations with factory address
         ueaEVMImpl = new UEA_EVM();
@@ -705,7 +705,7 @@ contract UEA_EVMTest is Test {
         bytes memory signature = abi.encodePacked(r, s, v);
 
         // The execution should fail because the account expects nonce to be 0, not 100
-        vm.expectRevert(Errors.InvalidEVMSignature.selector);
+        vm.expectRevert(abi.encodeWithSelector(Errors.NonceMismatch.selector, 0, 100));
         evmSmartAccountInstance.executeUniversalTx(payload, signature);
 
         // Verify state hasn't changed
@@ -737,8 +737,8 @@ contract UEA_EVMTest is Test {
 
         uint256 previousNonce = evmSmartAccountInstance.nonce();
 
-        // Try to execute with same nonce again
-        vm.expectRevert(Errors.InvalidEVMSignature.selector);
+        // Try to execute with same nonce again — nonce check fires first (expected=1, got=0)
+        vm.expectRevert(abi.encodeWithSelector(Errors.NonceMismatch.selector, 1, 0));
         evmSmartAccountInstance.executeUniversalTx(payload, signature);
 
         // Verify state hasn't changed
@@ -893,7 +893,7 @@ contract UEA_EVMTest is Test {
 
     function test_SuccessfulMigrationUpdatesImplementation() public deployEvmSmartAccount {
         // Set migration contract in factory
-        factory.setUEAMigrationContract(address(migration));
+        factory.updateUEAMigrationContract(address(migration));
 
         MigrationPayload memory payload =
             MigrationPayload({migration: address(migration), nonce: 0, deadline: block.timestamp + 1000});
@@ -929,7 +929,7 @@ contract UEA_EVMTest is Test {
     }
 
     function testMigration_RevertsWhenValueNonZero() public deployEvmSmartAccount {
-        factory.setUEAMigrationContract(address(migration));
+        factory.updateUEAMigrationContract(address(migration));
 
         UniversalPayload memory payload = UniversalPayload({
             to: address(evmSmartAccountInstance),
@@ -952,7 +952,7 @@ contract UEA_EVMTest is Test {
     }
 
     function testMigration_RevertsWhenTargetNotSelf() public deployEvmSmartAccount {
-        factory.setUEAMigrationContract(address(migration));
+        factory.updateUEAMigrationContract(address(migration));
 
         UniversalPayload memory payload = UniversalPayload({
             to: address(target),
@@ -1011,7 +1011,8 @@ contract UEA_EVMTest is Test {
         // This test verifies that the DOMAIN_SEPARATOR_TYPEHASH constant matches the expected hash
         // If the EIP712Domain struct definition changes, this test will fail
 
-        bytes32 expectedHash = keccak256("EIP712Domain(string version,uint256 chainId,address verifyingContract)");
+        bytes32 expectedHash =
+            keccak256("EIP712Domain(string version,uint256 chainId,address verifyingContract,bytes32 salt)");
 
         // Access the constant from the deployed instance
         bytes32 actualHash = evmSmartAccountInstance.DOMAIN_SEPARATOR_TYPEHASH();

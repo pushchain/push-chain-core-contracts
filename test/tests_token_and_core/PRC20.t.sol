@@ -43,6 +43,8 @@ contract PRC20Test is Test, UpgradeableContractHelper {
     event Approval(address indexed owner, address indexed spender, uint256 value);
     event Deposit(bytes from, address to, uint256 amount);
     event UpdatedUniversalCore(address universalCore);
+    event NameUpdated(string oldName, string newName);
+    event SymbolUpdated(string oldSymbol, string newSymbol);
 
     function setUp() public {
         // Setup actors
@@ -58,7 +60,6 @@ contract PRC20Test is Test, UpgradeableContractHelper {
         address mockWPC = makeAddr("wPC");
         address mockUniswapFactory = makeAddr("uniswapFactory");
         address mockUniswapRouter = makeAddr("uniswapRouter");
-        address mockUniswapQuoter = makeAddr("uniswapQuoter");
 
         // Deploy universalCore implementation
         universalCoreImplementation = new UniversalCore();
@@ -66,24 +67,24 @@ contract PRC20Test is Test, UpgradeableContractHelper {
         // Create initialization data
         bytes memory initData = abi.encodeWithSelector(
             UniversalCore.initialize.selector,
+            address(this),
+            makeAddr("pauser"),
             mockWPC,
             mockUniswapFactory,
-            mockUniswapRouter,
-            mockUniswapQuoter,
-            makeAddr("pauser")
+            mockUniswapRouter
         );
 
         // Deploy proxy and initialize
         address proxyAddress = deployUpgradeableContract(address(universalCoreImplementation), initData);
         universalCore = UniversalCore(payable(proxyAddress));
 
-        // Grant MANAGER_ROLE to uExec so manager functions (e.g. setGasTokenPRC20) are callable
-        universalCore.grantRole(universalCore.MANAGER_ROLE(), uExec);
+        // Grant UVCORE_ADMIN_ROLE to uExec so config functions are callable
+        universalCore.grantRole(universalCore.UVCORE_ADMIN_ROLE(), uExec);
 
         // Configure universalCore
         vm.startPrank(uExec);
         universalCore.setChainMeta(SOURCE_CHAIN_NAMESPACE, GAS_PRICE, 0);
-        universalCore.setGasTokenPRC20(SOURCE_CHAIN_NAMESPACE, address(gasToken));
+        universalCore.updateGasTokenPRC20(SOURCE_CHAIN_NAMESPACE, address(gasToken));
         vm.stopPrank();
 
         // Deploy PRC20 token implementation
@@ -250,10 +251,10 @@ contract PRC20Test is Test, UpgradeableContractHelper {
         vm.prank(bob);
 
         vm.expectEmit(true, true, false, true);
-        emit Transfer(alice, bob, APPROVAL_AMOUNT);
+        emit Approval(alice, bob, 0);
 
         vm.expectEmit(true, true, false, true);
-        emit Approval(alice, bob, 0);
+        emit Transfer(alice, bob, APPROVAL_AMOUNT);
 
         bool success = prc20.transferFrom(alice, bob, APPROVAL_AMOUNT);
 
@@ -276,7 +277,7 @@ contract PRC20Test is Test, UpgradeableContractHelper {
 
     function testTransferFromRevertZeroAddressSender() public {
         vm.prank(bob);
-        vm.expectRevert(CommonErrors.ZeroAddress.selector);
+        vm.expectRevert(PRC20Errors.LowAllowance.selector);
         prc20.transferFrom(address(0), bob, APPROVAL_AMOUNT);
     }
 
@@ -363,9 +364,9 @@ contract PRC20Test is Test, UpgradeableContractHelper {
         vm.expectEmit(true, true, false, true);
         emit Transfer(address(0), bob, depositAmount);
 
-        // Expect Deposit event with UNIVERSAL_EXECUTOR_MODULE as from (encoded as bytes)
+        // Expect Deposit event with msg.sender (universalCore) as from (encoded as bytes)
         vm.expectEmit(false, true, false, true);
-        emit Deposit(abi.encodePacked(uExec), bob, depositAmount);
+        emit Deposit(abi.encodePacked(address(universalCore)), bob, depositAmount);
 
         bool success = prc20.deposit(bob, depositAmount);
 
@@ -448,9 +449,9 @@ contract PRC20Test is Test, UpgradeableContractHelper {
         assertEq(to, bob);
         assertEq(amount, depositAmount);
 
-        // Verify the from field is encoded as UNIVERSAL_EXECUTOR_MODULE, not universalCore
+        // Verify the from field is encoded as msg.sender (universalCore), not UNIVERSAL_EXECUTOR_MODULE
         assertEq(from.length, 20); // Should be 20 bytes (address length)
-        assertEq(address(bytes20(from)), uExec);
+        assertEq(address(bytes20(from)), address(universalCore));
     }
 
     function testFuzzDeposit(address to, uint96 amount) public {
@@ -471,6 +472,45 @@ contract PRC20Test is Test, UpgradeableContractHelper {
     }
 
     // =========================================================================
+    // PAUSE PROPAGATION TESTS
+    // =========================================================================
+
+    function testDepositRevertsWhenCorePaused_ViaModule() public {
+        // Pause UniversalCore
+        vm.prank(makeAddr("pauser"));
+        universalCore.pause();
+
+        // Module tries to deposit directly to PRC20 — should revert
+        vm.prank(uExec);
+        vm.expectRevert(PRC20Errors.CorePaused.selector);
+        prc20.deposit(bob, 1000 ether);
+    }
+
+    function testDepositRevertsWhenCorePaused_ViaCore() public {
+        // Pause UniversalCore
+        vm.prank(makeAddr("pauser"));
+        universalCore.pause();
+
+        // Core tries to deposit — should also revert
+        vm.prank(address(universalCore));
+        vm.expectRevert(PRC20Errors.CorePaused.selector);
+        prc20.deposit(bob, 1000 ether);
+    }
+
+    function testDepositSucceedsAfterUnpause() public {
+        // Pause then unpause: pauser has PAUSER_ROLE (can pause), admin/operator has OPERATOR_ROLE (can unpause)
+        vm.prank(makeAddr("pauser"));
+        universalCore.pause();
+        // address(this) is the admin and holds OPERATOR_ROLE — only OPERATOR_ROLE can unpause
+        universalCore.unpause();
+
+        // Deposit should succeed
+        vm.prank(uExec);
+        bool success = prc20.deposit(bob, 1000 ether);
+        assertTrue(success);
+    }
+
+    // =========================================================================
     // ADMIN & GOVERNANCE CONTROLS
     // =========================================================================
 
@@ -479,27 +519,23 @@ contract PRC20Test is Test, UpgradeableContractHelper {
         address mockWPC = makeAddr("newWPC");
         address mockUniswapFactory = makeAddr("newUniswapFactory");
         address mockUniswapRouter = makeAddr("newUniswapRouter");
-        address mockUniswapQuoter = makeAddr("newUniswapQuoter");
 
         vm.prank(uExec);
         // Deploy new universalCore implementation
         UniversalCore newHandlerImpl = new UniversalCore();
 
-        // Create initialization data
         bytes memory initData = abi.encodeWithSelector(
             UniversalCore.initialize.selector,
+            address(this),
+            makeAddr("pauser"),
             mockWPC,
             mockUniswapFactory,
-            mockUniswapRouter,
-            mockUniswapQuoter,
-            makeAddr("pauser")
+            mockUniswapRouter
         );
 
-        // Deploy proxy and initialize
         address proxyAddress = deployUpgradeableContract(address(newHandlerImpl), initData);
         UniversalCore newHandler = UniversalCore(payable(proxyAddress));
 
-        // Update universalCore contract from Universal Executor Module
         vm.prank(uExec);
 
         vm.expectEmit(false, false, false, true);
@@ -516,23 +552,20 @@ contract PRC20Test is Test, UpgradeableContractHelper {
         address mockWPC = makeAddr("newWPC");
         address mockUniswapFactory = makeAddr("newUniswapFactory");
         address mockUniswapRouter = makeAddr("newUniswapRouter");
-        address mockUniswapQuoter = makeAddr("newUniswapQuoter");
 
         vm.prank(uExec);
         // Deploy new universalCore implementation
         UniversalCore newHandlerImpl = new UniversalCore();
 
-        // Create initialization data
         bytes memory initData = abi.encodeWithSelector(
             UniversalCore.initialize.selector,
+            address(this),
+            makeAddr("pauser"),
             mockWPC,
             mockUniswapFactory,
-            mockUniswapRouter,
-            mockUniswapQuoter,
-            makeAddr("pauser")
+            mockUniswapRouter
         );
 
-        // Deploy proxy and initialize
         address proxyAddress = deployUpgradeableContract(address(newHandlerImpl), initData);
         UniversalCore newHandler = UniversalCore(payable(proxyAddress));
 
@@ -551,12 +584,13 @@ contract PRC20Test is Test, UpgradeableContractHelper {
 
     function testSetNameFromUExec() public {
         string memory newName = "New Push Token";
+        string memory oldName = prc20.name();
 
-        // Set name from Universal Executor Module
         vm.prank(uExec);
+        vm.expectEmit(false, false, false, true);
+        emit NameUpdated(oldName, newName);
         prc20.setName(newName);
 
-        // Verify name was updated
         assertEq(prc20.name(), newName);
     }
 
@@ -571,12 +605,13 @@ contract PRC20Test is Test, UpgradeableContractHelper {
 
     function testSetSymbolFromUExec() public {
         string memory newSymbol = "NPUSH";
+        string memory oldSymbol = prc20.symbol();
 
-        // Set symbol from Universal Executor Module
         vm.prank(uExec);
+        vm.expectEmit(false, false, false, true);
+        emit SymbolUpdated(oldSymbol, newSymbol);
         prc20.setSymbol(newSymbol);
 
-        // Verify symbol was updated
         assertEq(prc20.symbol(), newSymbol);
     }
 

@@ -125,8 +125,8 @@
 
 //         // Setup auto-swap for PSOL
 //         vm.startPrank(deployer);
-//         universalCore.setAutoSwapSupported(PSOL_TOKEN, true);
-//         universalCore.setDefaultFeeTier(PSOL_TOKEN, 500);
+//         universalCore.updateAutoSwapSupported(PSOL_TOKEN, true);
+//         universalCore.updateDefaultFeeTier(PSOL_TOKEN, 500);
 //         universalCore.setSlippageTolerance(PSOL_TOKEN, 300); // 3%
 //         vm.stopPrank();
 
@@ -193,8 +193,8 @@
 //     function test_DepositPRC20WithAutoSwap_PETHToWPC() public {
 //         // Setup auto-swap for PETH
 //         vm.startPrank(deployer);
-//         universalCore.setAutoSwapSupported(PETH_TOKEN, true);
-//         universalCore.setDefaultFeeTier(PETH_TOKEN, 500);
+//         universalCore.updateAutoSwapSupported(PETH_TOKEN, true);
+//         universalCore.updateDefaultFeeTier(PETH_TOKEN, 500);
 //         universalCore.setSlippageTolerance(PETH_TOKEN, 300); // 3%
 //         vm.stopPrank();
 
@@ -250,8 +250,8 @@
 //     function test_DepositPRC20WithAutoSwap_USDTToWPC() public {
 //         // Setup auto-swap for USDT
 //         vm.startPrank(deployer);
-//         universalCore.setAutoSwapSupported(USDT_TOKEN, true);
-//         universalCore.setDefaultFeeTier(USDT_TOKEN, 500);
+//         universalCore.updateAutoSwapSupported(USDT_TOKEN, true);
+//         universalCore.updateDefaultFeeTier(USDT_TOKEN, 500);
 //         universalCore.setSlippageTolerance(USDT_TOKEN, 500); // 5%
 //         vm.stopPrank();
 
@@ -345,7 +345,7 @@
 
 //         // Enable auto-swap but don't set fee tier
 //         vm.startPrank(deployer);
-//         universalCore.setAutoSwapSupported(PSOL_TOKEN, true);
+//         universalCore.updateAutoSwapSupported(PSOL_TOKEN, true);
 //         vm.stopPrank();
 
 //         // Verify auto-swap is enabled but fee tier is not set
@@ -379,8 +379,8 @@
 
 //         // Setup auto-swap
 //         vm.startPrank(deployer);
-//         universalCore.setAutoSwapSupported(PSOL_TOKEN, true);
-//         universalCore.setDefaultFeeTier(PSOL_TOKEN, 500);
+//         universalCore.updateAutoSwapSupported(PSOL_TOKEN, true);
+//         universalCore.updateDefaultFeeTier(PSOL_TOKEN, 500);
 //         vm.stopPrank();
 
 //         // Verify configuration was set
@@ -423,8 +423,8 @@
 
 //         // Setup auto-swap
 //         vm.startPrank(deployer);
-//         universalCore.setAutoSwapSupported(PSOL_TOKEN, true);
-//         universalCore.setDefaultFeeTier(PSOL_TOKEN, 500);
+//         universalCore.updateAutoSwapSupported(PSOL_TOKEN, true);
+//         universalCore.updateDefaultFeeTier(PSOL_TOKEN, 500);
 
 //         // Pause the contract
 //         universalCore.pause();
@@ -626,8 +626,8 @@
 //     function test_DepositPRC20WithAutoSwap_MinPCOutZero_UsesQuoter() public {
 //         // Test when minPCOut=0, should go through quoter route
 //         vm.startPrank(deployer);
-//         universalCore.setAutoSwapSupported(PSOL_TOKEN, true);
-//         universalCore.setDefaultFeeTier(PSOL_TOKEN, 500);
+//         universalCore.updateAutoSwapSupported(PSOL_TOKEN, true);
+//         universalCore.updateDefaultFeeTier(PSOL_TOKEN, 500);
 //         universalCore.setSlippageTolerance(PSOL_TOKEN, 300); // 3%
 //         vm.stopPrank();
 
@@ -686,8 +686,8 @@
 //     function test_DepositPRC20WithAutoSwap_MinPCOutProvided_BypassesQuoter() public {
 //         // Test when minPCOut>0, should bypass quoter
 //         vm.startPrank(deployer);
-//         universalCore.setAutoSwapSupported(PSOL_TOKEN, true);
-//         universalCore.setDefaultFeeTier(PSOL_TOKEN, 500);
+//         universalCore.updateAutoSwapSupported(PSOL_TOKEN, true);
+//         universalCore.updateDefaultFeeTier(PSOL_TOKEN, 500);
 //         vm.stopPrank();
 
 //         uint256 amount = 1e18; // 1 PSOL
@@ -749,8 +749,8 @@
 //     function test_DepositPRC20WithAutoSwap_FeeZero_UsesDefault() public {
 //         // Test when fee=0, should use default fee tier
 //         vm.startPrank(deployer);
-//         universalCore.setAutoSwapSupported(PSOL_TOKEN, true);
-//         universalCore.setDefaultFeeTier(PSOL_TOKEN, 500);
+//         universalCore.updateAutoSwapSupported(PSOL_TOKEN, true);
+//         universalCore.updateDefaultFeeTier(PSOL_TOKEN, 500);
 //         vm.stopPrank();
 
 //         uint256 amount = 1e18;
@@ -812,8 +812,8 @@
 //     function test_DepositPRC20WithAutoSwap_FeeProvided_UsesProvided() public {
 //         // Test when fee>0, should use provided fee (default set to 0.3% but we pass 0.05%)
 //         vm.startPrank(deployer);
-//         universalCore.setAutoSwapSupported(PSOL_TOKEN, true);
-//         universalCore.setDefaultFeeTier(PSOL_TOKEN, 3000); // Set default to 0.3% pool
+//         universalCore.updateAutoSwapSupported(PSOL_TOKEN, true);
+//         universalCore.updateDefaultFeeTier(PSOL_TOKEN, 3000); // Set default to 0.3% pool
 //         vm.stopPrank();
 
 //         uint256 amount = 1e18;
@@ -862,9 +862,9 @@
 //     function test_DepositPRC20WithAutoSwap_DeadlineZero_UsesDefault() public {
 //         // Test when deadline=0, should use default deadline
 //         vm.startPrank(deployer);
-//         universalCore.setAutoSwapSupported(PSOL_TOKEN, true);
-//         universalCore.setDefaultFeeTier(PSOL_TOKEN, 500);
-//         universalCore.setDefaultDeadlineMins(30); // Set default to 30 minutes
+//         universalCore.updateAutoSwapSupported(PSOL_TOKEN, true);
+//         universalCore.updateDefaultFeeTier(PSOL_TOKEN, 500);
+//         universalCore.updateDefaultDeadlineMins(30); // Set default to 30 minutes
 //         vm.stopPrank();
 
 //         uint256 amount = 1e18;
@@ -918,8 +918,8 @@
 //     function test_DepositPRC20WithAutoSwap_DeadlineProvided_UsesProvided() public {
 //         // Test when deadline>0, should use provided deadline
 //         vm.startPrank(deployer);
-//         universalCore.setAutoSwapSupported(PSOL_TOKEN, true);
-//         universalCore.setDefaultFeeTier(PSOL_TOKEN, 500);
+//         universalCore.updateAutoSwapSupported(PSOL_TOKEN, true);
+//         universalCore.updateDefaultFeeTier(PSOL_TOKEN, 500);
 //         vm.stopPrank();
 
 //         uint256 amount = 1e18;
@@ -979,8 +979,8 @@
 //     function test_CalculateMinOutput_SlippageZero_UsesDefault() public {
 //         // Test calculateMinOutput when slippage tolerance=0, should use default 3%
 //         vm.startPrank(deployer);
-//         universalCore.setAutoSwapSupported(PSOL_TOKEN, true);
-//         universalCore.setDefaultFeeTier(PSOL_TOKEN, 500);
+//         universalCore.updateAutoSwapSupported(PSOL_TOKEN, true);
+//         universalCore.updateDefaultFeeTier(PSOL_TOKEN, 500);
 //         // Don't set slippage tolerance (should default to 300 = 3%)
 //         vm.stopPrank();
 
@@ -1035,8 +1035,8 @@
 //     function test_CalculateMinOutput_SlippageSet_UsesSet() public {
 //         // Test calculateMinOutput when slippage tolerance is set
 //         vm.startPrank(deployer);
-//         universalCore.setAutoSwapSupported(PSOL_TOKEN, true);
-//         universalCore.setDefaultFeeTier(PSOL_TOKEN, 500);
+//         universalCore.updateAutoSwapSupported(PSOL_TOKEN, true);
+//         universalCore.updateDefaultFeeTier(PSOL_TOKEN, 500);
 //         universalCore.setSlippageTolerance(PSOL_TOKEN, 500); // 5%
 //         vm.stopPrank();
 
@@ -1092,8 +1092,8 @@
 
 //     function test_GetSwapQuote_QuoterV2Integration() public {
 //         vm.startPrank(deployer);
-//         universalCore.setAutoSwapSupported(PSOL_TOKEN, true);
-//         universalCore.setDefaultFeeTier(PSOL_TOKEN, 500);
+//         universalCore.updateAutoSwapSupported(PSOL_TOKEN, true);
+//         universalCore.updateDefaultFeeTier(PSOL_TOKEN, 500);
 //         vm.stopPrank();
 
 //         uint256 quote = universalCore.getSwapQuote(PSOL_TOKEN, WPC_TOKEN, 500, 1e18);
@@ -1106,13 +1106,13 @@
 //         vm.startPrank(deployer);
 
 //         vm.expectRevert(CommonErrors.ZeroAddress.selector);
-//         universalCore.setUniswapV3Addresses(address(0), address(1), address(1));
+//         universalCore.updateUniswapV3Addresses(address(0), address(1), address(1));
 
 //         vm.expectRevert(CommonErrors.ZeroAddress.selector);
-//         universalCore.setUniswapV3Addresses(address(1), address(0), address(1));
+//         universalCore.updateUniswapV3Addresses(address(1), address(0), address(1));
 
 //         vm.expectRevert(CommonErrors.ZeroAddress.selector);
-//         universalCore.setUniswapV3Addresses(address(1), address(1), address(0));
+//         universalCore.updateUniswapV3Addresses(address(1), address(1), address(0));
 
 //         vm.stopPrank();
 //     }
@@ -1123,7 +1123,7 @@
 //         address newQuoter = address(0x789);
 
 //         vm.prank(deployer);
-//         universalCore.setUniswapV3Addresses(newFactory, newRouter, newQuoter);
+//         universalCore.updateUniswapV3Addresses(newFactory, newRouter, newQuoter);
 
 //         assertEq(universalCore.uniswapV3FactoryAddress(), newFactory);
 //         assertEq(universalCore.uniswapV3SwapRouterAddress(), newRouter);
@@ -1133,14 +1133,14 @@
 //     function test_SetDefaultFeeTier_InvalidFeeTierReverts() public {
 //         vm.prank(deployer);
 //         vm.expectRevert(UniversalCoreErrors.InvalidFeeTier.selector);
-//         universalCore.setDefaultFeeTier(PSOL_TOKEN, 999);
+//         universalCore.updateDefaultFeeTier(PSOL_TOKEN, 999);
 //     }
 
 //     function test_DeadlineExpired_Reverts() public {
 //         // Test when deadline has already passed
 //         vm.startPrank(deployer);
-//         universalCore.setAutoSwapSupported(PSOL_TOKEN, true);
-//         universalCore.setDefaultFeeTier(PSOL_TOKEN, 500);
+//         universalCore.updateAutoSwapSupported(PSOL_TOKEN, true);
+//         universalCore.updateDefaultFeeTier(PSOL_TOKEN, 500);
 //         vm.stopPrank();
 
 //         uint256 amount = 1e18;
@@ -1163,8 +1163,8 @@
 //     function test_PoolNotFound_Reverts() public {
 //         // Test when pool doesn't exist for given fee tier
 //         vm.startPrank(deployer);
-//         universalCore.setAutoSwapSupported(PSOL_TOKEN, true);
-//         universalCore.setDefaultFeeTier(PSOL_TOKEN, 500);
+//         universalCore.updateAutoSwapSupported(PSOL_TOKEN, true);
+//         universalCore.updateDefaultFeeTier(PSOL_TOKEN, 500);
 //         vm.stopPrank();
 
 //         uint256 amount = 1e18;
@@ -1185,8 +1185,8 @@
 
 //     function test_GetSwapQuote_QuoterV2ReturnsZero_ReturnsEstimate() public {
 //         vm.startPrank(deployer);
-//         universalCore.setAutoSwapSupported(PSOL_TOKEN, true);
-//         universalCore.setDefaultFeeTier(PSOL_TOKEN, 500);
+//         universalCore.updateAutoSwapSupported(PSOL_TOKEN, true);
+//         universalCore.updateDefaultFeeTier(PSOL_TOKEN, 500);
 //         vm.stopPrank();
 
 //         // Use a tiny amount to produce 0 output due to tick spacing

@@ -9,7 +9,8 @@ import {UEAProxy} from "./UEAProxy.sol";
 
 import {Clones} from "@openzeppelin/contracts/proxy/Clones.sol";
 import {Initializable} from "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol";
-import {AccessControlUpgradeable} from "@openzeppelin/contracts-upgradeable/access/AccessControlUpgradeable.sol";
+import {AccessControlDefaultAdminRulesUpgradeable} from
+    "@openzeppelin/contracts-upgradeable/access/extensions/AccessControlDefaultAdminRulesUpgradeable.sol";
 import {PausableUpgradeable} from "@openzeppelin/contracts-upgradeable/utils/PausableUpgradeable.sol";
 
 /**
@@ -18,18 +19,21 @@ import {PausableUpgradeable} from "@openzeppelin/contracts-upgradeable/utils/Pau
  * @dev     Uses OZ Clones library for deterministic CREATE2 deployment of UEA proxies.
  *          Maps external chain identities to UEA addresses on Push Chain.
  *
- *          Access control uses OpenZeppelin AccessControl:
- *          - DEFAULT_ADMIN_ROLE: governance — can update all config and grant roles.
- *          - PAUSER_ROLE:        guardian hot-wallet — can pause/unpause only.
+ *          Access control: AccessControlDefaultAdminRulesUpgradeable (2-day delay).
+ *          Roles: DEFAULT_ADMIN_ROLE (root), ROLE_MANAGER_ROLE (grants operational roles),
+ *          UEA_ADMIN_ROLE (implementation + chain config), OPERATOR_ROLE (unpause),
+ *          PAUSER_ROLE (pause only).
  */
-contract UEAFactory is Initializable, AccessControlUpgradeable, PausableUpgradeable, IUEAFactory {
+contract UEAFactory is Initializable, AccessControlDefaultAdminRulesUpgradeable, PausableUpgradeable, IUEAFactory {
     using Clones for address;
 
     // =========================
     //    UF: ROLES
     // =========================
 
-    /// @notice Role that can pause and unpause UEA deployments.
+    bytes32 public constant ROLE_MANAGER_ROLE = keccak256("ROLE_MANAGER_ROLE");
+    bytes32 public constant UEA_ADMIN_ROLE = keccak256("UEA_ADMIN_ROLE");
+    bytes32 public constant OPERATOR_ROLE = keccak256("OPERATOR_ROLE");
     bytes32 public constant PAUSER_ROLE = keccak256("PAUSER_ROLE");
 
     // =========================
@@ -54,6 +58,9 @@ contract UEAFactory is Initializable, AccessControlUpgradeable, PausableUpgradea
     /// @notice The current UEA migration contract address.
     address public UEA_MIGRATION_CONTRACT;
 
+    /// @notice Push Chain numeric identifier used in the `getOriginForUEA` synthetic fallback.
+    string public pushChainId;
+
     // =========================
     //    UF: CONSTRUCTOR
     // =========================
@@ -68,15 +75,26 @@ contract UEAFactory is Initializable, AccessControlUpgradeable, PausableUpgradea
     // =========================
 
     /// @dev                     Initializer for the upgradeable UEAFactory.
-    /// @param initialAdmin      Initial admin — granted DEFAULT_ADMIN_ROLE (governance)
-    /// @param initialPauser     Address granted the PAUSER_ROLE
-    function initialize(address initialAdmin, address initialPauser) public initializer {
-        if (initialAdmin == address(0) || initialPauser == address(0)) revert UEAErrors.InvalidInputArgs();
-        __AccessControl_init();
+    /// @param _admin            Admin address — granted DEFAULT_ADMIN_ROLE + all operational roles
+    /// @param _pauser           Address granted the PAUSER_ROLE
+    /// @param _pushChainId      Push Chain numeric identifier (e.g. "42101")
+    function initialize(address _admin, address _pauser, string memory _pushChainId) public initializer {
+        if (_admin == address(0) || _pauser == address(0)) revert UEAErrors.InvalidInputArgs();
+        if (bytes(_pushChainId).length == 0) revert UEAErrors.InvalidInputArgs();
+
+        __AccessControlDefaultAdminRules_init(1 days, _admin);
         __Pausable_init();
-        _grantRole(DEFAULT_ADMIN_ROLE, initialAdmin);
-        _grantRole(PAUSER_ROLE, initialPauser);
-        emit PauserRoleGranted(initialPauser);
+
+        _setRoleAdmin(UEA_ADMIN_ROLE, ROLE_MANAGER_ROLE);
+        _setRoleAdmin(OPERATOR_ROLE, ROLE_MANAGER_ROLE);
+        _setRoleAdmin(PAUSER_ROLE, ROLE_MANAGER_ROLE);
+
+        _grantRole(ROLE_MANAGER_ROLE, _admin);
+        _grantRole(UEA_ADMIN_ROLE, _admin);
+        _grantRole(OPERATOR_ROLE, _admin);
+        _grantRole(PAUSER_ROLE, _pauser);
+
+        pushChainId = _pushChainId;
     }
 
     // =========================
@@ -124,6 +142,9 @@ contract UEAFactory is Initializable, AccessControlUpgradeable, PausableUpgradea
     }
 
     /// @inheritdoc IUEAFactory
+    /// @dev When `isUEA` is false, `account` is a synthetic fallback built from
+    ///      `"eip155"` + `pushChainId` + `addr` — NOT a registered origin.
+    ///      Callers MUST check `isUEA` before trusting `account`.
     function getOriginForUEA(address addr) external view returns (UniversalAccountId memory account, bool isUEA) {
         account = UEA_to_UOA[addr];
 
@@ -131,7 +152,7 @@ contract UEAFactory is Initializable, AccessControlUpgradeable, PausableUpgradea
             isUEA = true;
         } else {
             account =
-                UniversalAccountId({chainNamespace: "eip155", chainId: "42101", owner: bytes(abi.encodePacked(addr))});
+                UniversalAccountId({chainNamespace: "eip155", chainId: pushChainId, owner: bytes(abi.encodePacked(addr))});
         }
 
         return (account, isUEA);
@@ -199,39 +220,37 @@ contract UEAFactory is Initializable, AccessControlUpgradeable, PausableUpgradea
         _pause();
     }
 
-    /// @notice          Unpause UEA deployments. Only callable by PAUSER_ROLE.
-    function unpause() external onlyRole(PAUSER_ROLE) {
+    /// @notice          Unpause UEA deployments. Only callable by OPERATOR_ROLE.
+    function unpause() external onlyRole(OPERATOR_ROLE) {
         _unpause();
     }
 
-    /// @notice              Grant PAUSER_ROLE to a new address. Only callable by DEFAULT_ADMIN_ROLE.
-    /// @param newPauser     Address to grant pauser role to
-    function setPauserRole(address newPauser) external onlyRole(DEFAULT_ADMIN_ROLE) {
-        if (newPauser == address(0)) revert UEAErrors.InvalidInputArgs();
-        _grantRole(PAUSER_ROLE, newPauser);
-        emit PauserRoleGranted(newPauser);
-    }
-
-    /// @notice                             Sets the UEAProxy implementation address.
+    /// @notice                             Sets the UEAProxy implementation address. Only callable by UEA_ADMIN_ROLE.
     /// @param ueaProxyImplementation       New UEAProxy implementation address
-    function setUEAProxyImplementation(address ueaProxyImplementation) external onlyRole(DEFAULT_ADMIN_ROLE) {
+    function updateUEAProxyImplementation(address ueaProxyImplementation) external onlyRole(UEA_ADMIN_ROLE) {
         if (ueaProxyImplementation == address(0)) {
             revert UEAErrors.InvalidInputArgs();
         }
         UEA_PROXY_IMPLEMENTATION = ueaProxyImplementation;
     }
 
-    /// @notice                         Sets the UEA migration contract address.
+    /// @notice                         Sets the UEA migration contract address. Only callable by UEA_ADMIN_ROLE.
     /// @param ueaMigrationContract     New migration contract address
-    function setUEAMigrationContract(address ueaMigrationContract) external onlyRole(DEFAULT_ADMIN_ROLE) {
+    function updateUEAMigrationContract(address ueaMigrationContract) external onlyRole(UEA_ADMIN_ROLE) {
         if (ueaMigrationContract == address(0)) {
             revert UEAErrors.InvalidInputArgs();
         }
         UEA_MIGRATION_CONTRACT = ueaMigrationContract;
     }
 
+    /// @notice Update `pushChainId`. Reverts on empty string. Only callable by UEA_ADMIN_ROLE.
+    function updatePushChainId(string memory _pushChainId) external onlyRole(UEA_ADMIN_ROLE) {
+        if (bytes(_pushChainId).length == 0) revert UEAErrors.InvalidInputArgs();
+        pushChainId = _pushChainId;
+    }
+
     /// @inheritdoc IUEAFactory
-    function registerNewChain(bytes32 _chainHash, bytes32 _vmHash) external onlyRole(DEFAULT_ADMIN_ROLE) {
+    function registerNewChain(bytes32 _chainHash, bytes32 _vmHash) external onlyRole(UEA_ADMIN_ROLE) {
         (, bool isRegistered) = getVMType(_chainHash);
         if (isRegistered) {
             revert UEAErrors.InvalidInputArgs();
@@ -244,19 +263,28 @@ contract UEAFactory is Initializable, AccessControlUpgradeable, PausableUpgradea
     /// @inheritdoc IUEAFactory
     function registerMultipleUEA(bytes32[] memory _chainHashes, bytes32[] memory _vmHashes, address[] memory _UEA)
         external
-        onlyRole(DEFAULT_ADMIN_ROLE)
+        onlyRole(UEA_ADMIN_ROLE)
     {
         if (_UEA.length != _vmHashes.length || _UEA.length != _chainHashes.length) {
             revert UEAErrors.InvalidInputArgs();
         }
 
         for (uint256 i = 0; i < _UEA.length; i++) {
-            registerUEA(_chainHashes[i], _vmHashes[i], _UEA[i]);
+            _registerUEA(_chainHashes[i], _vmHashes[i], _UEA[i]);
         }
     }
 
     /// @inheritdoc IUEAFactory
-    function registerUEA(bytes32 _chainHash, bytes32 _vmHash, address _UEA) public onlyRole(DEFAULT_ADMIN_ROLE) {
+    function registerUEA(bytes32 _chainHash, bytes32 _vmHash, address _UEA) public onlyRole(UEA_ADMIN_ROLE) {
+        _registerUEA(_chainHash, _vmHash, _UEA);
+    }
+
+    /// @dev Internal registration logic — no role check.
+    ///      Treats registration as a one-time operation per VM hash. If an implementation
+    ///      is already registered for this `_vmHash`, callers must use
+    ///      `updateUEAImplementation` instead. This prevents silent replacement of the
+    ///      VM implementation that all future UEAs of that type delegate to.
+    function _registerUEA(bytes32 _chainHash, bytes32 _vmHash, address _UEA) internal {
         if (_UEA == address(0)) {
             revert UEAErrors.InvalidInputArgs();
         }
@@ -266,8 +294,32 @@ contract UEAFactory is Initializable, AccessControlUpgradeable, PausableUpgradea
             revert UEAErrors.InvalidInputArgs();
         }
 
+        if (UEA_VM[_vmHash] != address(0)) {
+            revert UEAErrors.UEAAlreadyRegistered();
+        }
+
         UEA_VM[_vmHash] = _UEA;
         emit UEARegistered(_chainHash, _UEA, _vmHash);
+    }
+
+    /// @notice                  Replace the registered UEA implementation for a VM hash.
+    /// @dev                     Explicit update path distinct from `registerUEA`, which only
+    ///                          performs first-time registration. Emits `UEAImplementationUpdated`
+    ///                          with both previous and new addresses so off-chain systems can
+    ///                          reconstruct the implementation history.
+    /// @param _vmHash           VM hash whose implementation is being updated
+    /// @param _newUEA           New UEA implementation address (must be non-zero)
+    function updateUEAImplementation(bytes32 _vmHash, address _newUEA) external onlyRole(UEA_ADMIN_ROLE) {
+        if (_newUEA == address(0)) {
+            revert UEAErrors.InvalidInputArgs();
+        }
+        address previous = UEA_VM[_vmHash];
+        if (previous == address(0)) {
+            revert UEAErrors.InvalidInputArgs();
+        }
+
+        UEA_VM[_vmHash] = _newUEA;
+        emit UEAImplementationUpdated(_vmHash, previous, _newUEA);
     }
 
     // =========================

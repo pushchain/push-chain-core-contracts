@@ -11,7 +11,7 @@ import {CEA} from "../../src/cea/CEA.sol";
  * @dev Deploys only the CEA logic contract (no factory, proxy, or admin).
  *      Useful when upgrading the CEA implementation on an existing CEAFactory.
  *
- *      After deployment, call `CEAFactory.updateCEAImplementation(newCEAImpl)`
+ *      After deployment, call `CEAFactory.setCEAImplementation(newCEAImpl)`
  *      on the factory to point clones at the new implementation.
  *
  * CONFIGURATION:
@@ -62,19 +62,13 @@ contract DeployCEAScript is Script {
         console.log(json);
 
         // Write to file
-        string memory filename = string(
-            abi.encodePacked(
-                "deployments/cea-impl-",
-                vm.toString(chainId),
-                ".json"
-            )
-        );
+        string memory filename = string(abi.encodePacked("deployments/cea-impl-", vm.toString(chainId), ".json"));
         vm.writeFile(filename, json);
         console.log("\nDeployment saved to:", filename);
 
         console.log("\n=== Deployment Complete ===");
         console.log(
-            "NEXT STEP: Call CEAFactory.updateCEAImplementation(",
+            "NEXT STEP: Call CEAFactory.setCEAImplementation(",
             address(ceaImplementation),
             ") on the factory proxy to activate this implementation."
         );
@@ -111,7 +105,7 @@ contract DeployCEAScript is Script {
  * Update the factory to use the new implementation:
  *
  * cast send <CEA_FACTORY_PROXY_ADDRESS> \
- *   "updateCEAImplementation(address)" <CEA_IMPLEMENTATION_ADDRESS> \
+ *   "setCEAImplementation(address)" <CEA_IMPLEMENTATION_ADDRESS> \
  *   --rpc-url $RPC_URL \
  *   --private-key $KEY
  */

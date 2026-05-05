@@ -9,7 +9,6 @@ import {UniversalCoreErrors, CommonErrors} from "../../src/libraries/Errors.sol"
 import "../../test/helpers/UpgradeableContractHelper.sol";
 import "../../test/mocks/MockUniswapV3Factory.sol";
 import "../../test/mocks/MockUniswapV3Router.sol";
-import "../../test/mocks/MockUniswapV3Quoter.sol";
 import "../../test/mocks/MockPRC20.sol";
 import "@openzeppelin/contracts-upgradeable/utils/PausableUpgradeable.sol";
 
@@ -52,7 +51,6 @@ contract UniversalCoreRefundTest is Test, UpgradeableContractHelper {
     UniversalCore public universalCore;
     MockUniswapV3Factory public mockFactory;
     MockUniswapV3Router public mockRouter;
-    MockUniswapV3Quoter public mockQuoter;
     MockWPCLike public mockWPC;
     MockPRC20 public gasTokenMock;
 
@@ -81,7 +79,6 @@ contract UniversalCoreRefundTest is Test, UpgradeableContractHelper {
 
         mockFactory = new MockUniswapV3Factory();
         mockRouter = new MockUniswapV3Router();
-        mockQuoter = new MockUniswapV3Quoter();
         mockWPC = new MockWPCLike();
         gasTokenMock = new MockPRC20();
 
@@ -91,19 +88,18 @@ contract UniversalCoreRefundTest is Test, UpgradeableContractHelper {
         UniversalCore implementation = new UniversalCore();
         bytes memory initData = abi.encodeWithSelector(
             UniversalCore.initialize.selector,
+            address(this),
+            pauser,
             address(mockWPC),
             address(mockFactory),
-            address(mockRouter),
-            address(mockQuoter),
-            pauser
+            address(mockRouter)
         );
         address proxyAddress = deployUpgradeableContract(address(implementation), initData);
         universalCore = UniversalCore(payable(proxyAddress));
 
         // Configure auto-swap support
-        universalCore.setAutoSwapSupported(address(gasTokenMock), true);
-        universalCore.setDefaultFeeTier(address(gasTokenMock), FEE_TIER);
-        universalCore.setSlippageTolerance(address(gasTokenMock), 300);
+        universalCore.updateAutoSwapSupported(address(gasTokenMock), true);
+        universalCore.updateDefaultFeeTier(address(gasTokenMock), FEE_TIER);
 
         // Setup mock pool (gasToken <-> wPC)
         address pool = makeAddr("mockPool");
@@ -183,8 +179,8 @@ contract UniversalCoreRefundTest is Test, UpgradeableContractHelper {
 
     function test_RefundUnusedGas_WithSwap_NoPool_Reverts() public {
         MockPRC20 noPool = new MockPRC20();
-        universalCore.setAutoSwapSupported(address(noPool), true);
-        universalCore.setDefaultFeeTier(address(noPool), FEE_TIER);
+        universalCore.updateAutoSwapSupported(address(noPool), true);
+        universalCore.updateDefaultFeeTier(address(noPool), FEE_TIER);
 
         vm.prank(UNIVERSAL_EXECUTOR_MODULE);
         vm.expectRevert(UniversalCoreErrors.PoolNotFound.selector);

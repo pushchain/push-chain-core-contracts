@@ -11,7 +11,10 @@ import {UEA_SVM} from "../../src/uea/UEA_SVM.sol";
 import {UEAMigration} from "../../src/uea/UEAMigration.sol";
 import {UEAErrors as Errors} from "../../src/libraries/Errors.sol";
 import {IUEA} from "../../src/interfaces/IUEA.sol";
+import {IUEAFactory} from "../../src/Interfaces/IUEAFactory.sol";
 import {IAccessControl} from "@openzeppelin/contracts/access/IAccessControl.sol";
+import {IAccessControlDefaultAdminRules} from
+    "@openzeppelin/contracts/access/extensions/IAccessControlDefaultAdminRules.sol";
 import {PausableUpgradeable} from "@openzeppelin/contracts-upgradeable/utils/PausableUpgradeable.sol";
 import {ERC1967Proxy} from "@openzeppelin/contracts/proxy/ERC1967/ERC1967Proxy.sol";
 import {UEAProxy} from "../../src/uea/UEAProxy.sol";
@@ -58,13 +61,13 @@ contract UEAFactoryTest is Test {
         // Deploy the factory implementation
         UEAFactory factoryImpl = new UEAFactory();
 
-        // Deploy and initialize the proxy with initialOwner and initialPauser
-        bytes memory initData = abi.encodeWithSelector(UEAFactory.initialize.selector, deployer, pauser);
+        // Deploy and initialize the proxy with initialOwner, initialPauser, and pushChainId
+        bytes memory initData = abi.encodeWithSelector(UEAFactory.initialize.selector, deployer, pauser, "42101");
         ERC1967Proxy proxy = new ERC1967Proxy(address(factoryImpl), initData);
         factory = UEAFactory(address(proxy));
 
         // Set UEAProxy implementation after initialization
-        factory.setUEAProxyImplementation(ueaProxyImpl);
+        factory.updateUEAProxyImplementation(ueaProxyImpl);
 
         // Set up user and keys
         (owner,) = makeAddrAndKey("owner");
@@ -111,33 +114,35 @@ contract UEAFactoryTest is Test {
     }
 
     function testRegisterUEA() public {
-        bytes32 chainHash = keccak256(abi.encode("KOVAN", "42"));
-        factory.registerNewChain(chainHash, EVM_HASH);
-        factory.registerUEA(chainHash, EVM_HASH, address(ueaEVMImpl));
+        // Use a fresh VM hash so there is no prior implementation registered for it.
+        bytes32 moveChainHash = keccak256(abi.encode("APTOS", "1"));
+        factory.registerNewChain(moveChainHash, MOVE_VM_HASH);
+
+        UEA_EVM moveImpl = new UEA_EVM();
+        factory.registerUEA(moveChainHash, MOVE_VM_HASH, address(moveImpl));
 
         // Check that the UEA implementation is registered
-        assertEq(factory.getUEA(chainHash), address(ueaEVMImpl));
+        assertEq(factory.getUEA(moveChainHash), address(moveImpl));
     }
 
-    function testSetUEAMigrationContractOnlyOwner() public {
+    function testSetUEAMigrationContractOnlyUEAAdmin() public {
         UEAMigration migration = new UEAMigration(address(ueaEVMImpl), address(ueaSVMImpl));
 
-        // Non-owner should revert
-        bytes32 adminRole = factory.DEFAULT_ADMIN_ROLE();
+        bytes32 ueaAdminRole = factory.UEA_ADMIN_ROLE();
         vm.expectRevert(
-            abi.encodeWithSelector(IAccessControl.AccessControlUnauthorizedAccount.selector, nonOwner, adminRole)
+            abi.encodeWithSelector(IAccessControl.AccessControlUnauthorizedAccount.selector, nonOwner, ueaAdminRole)
         );
         vm.prank(nonOwner);
-        factory.setUEAMigrationContract(address(migration));
+        factory.updateUEAMigrationContract(address(migration));
 
-        // Owner can set and value is stored
-        factory.setUEAMigrationContract(address(migration));
+        // Owner (has UEA_ADMIN_ROLE) can set and value is stored
+        factory.updateUEAMigrationContract(address(migration));
         assertEq(factory.UEA_MIGRATION_CONTRACT(), address(migration));
     }
 
     function testSetUEAMigrationContractZeroAddressReverts() public {
         vm.expectRevert(Errors.InvalidInputArgs.selector);
-        factory.setUEAMigrationContract(address(0));
+        factory.updateUEAMigrationContract(address(0));
     }
 
     function testRegisterMultipleUEA() public {
@@ -145,15 +150,19 @@ contract UEAFactoryTest is Test {
         bytes32[] memory vmHashes = new bytes32[](2);
         address[] memory implementations = new address[](2);
 
-        // Use different chains than those in setUp
-        chainHashes[0] = keccak256(abi.encode("KOVAN", "42"));
-        chainHashes[1] = keccak256(abi.encode("METIS", "1088"));
+        // Use distinct VM hashes that have no prior implementation registered.
+        // MOVE_VM_HASH and WASM_VM_HASH are never registered in setUp.
+        chainHashes[0] = keccak256(abi.encode("APTOS", "1"));
+        chainHashes[1] = keccak256(abi.encode("NEAR", "mainnet"));
 
-        vmHashes[0] = EVM_HASH;
-        vmHashes[1] = EVM_HASH;
+        vmHashes[0] = MOVE_VM_HASH;
+        vmHashes[1] = WASM_VM_HASH;
 
-        implementations[0] = address(ueaEVMImpl);
-        implementations[1] = address(ueaEVMImpl);
+        UEA_EVM moveImpl = new UEA_EVM();
+        UEA_EVM wasmImpl = new UEA_EVM();
+
+        implementations[0] = address(moveImpl);
+        implementations[1] = address(wasmImpl);
 
         // Register chains first
         factory.registerNewChain(chainHashes[0], vmHashes[0]);
@@ -314,9 +323,9 @@ contract UEAFactoryTest is Test {
         // Use eip155 chain which is already registered in setUp
         address initialImpl = factory.getUEA(ethereumChainHash);
 
-        // Deploy a new implementation
+        // Deploy a new implementation and update via the dedicated update path.
         UEA_EVM newImpl = new UEA_EVM();
-        factory.registerUEA(ethereumChainHash, EVM_HASH, address(newImpl));
+        factory.updateUEAImplementation(EVM_HASH, address(newImpl));
 
         // Check that the implementation was updated
         assertNotEq(factory.getUEA(ethereumChainHash), initialImpl);
@@ -394,36 +403,34 @@ contract UEAFactoryTest is Test {
 
     function testSetUEAProxyImplementation_RevertsOnZeroAddress() public {
         vm.expectRevert(Errors.InvalidInputArgs.selector);
-        factory.setUEAProxyImplementation(address(0));
+        factory.updateUEAProxyImplementation(address(0));
     }
 
-    function testSetUEAProxyImplementation_OnlyOwner() public {
-        bytes32 adminRole = factory.DEFAULT_ADMIN_ROLE();
+    function testSetUEAProxyImplementation_OnlyUEAAdmin() public {
+        bytes32 ueaAdminRole = factory.UEA_ADMIN_ROLE();
         vm.expectRevert(
-            abi.encodeWithSelector(IAccessControl.AccessControlUnauthorizedAccount.selector, nonOwner, adminRole)
+            abi.encodeWithSelector(IAccessControl.AccessControlUnauthorizedAccount.selector, nonOwner, ueaAdminRole)
         );
         vm.prank(nonOwner);
-        factory.setUEAProxyImplementation(address(ueaEVMImpl));
+        factory.updateUEAProxyImplementation(address(ueaEVMImpl));
     }
 
     function testOwnershipFunctions() public {
-        // Test that only owner can register implementations
-        bytes32 adminRole = factory.DEFAULT_ADMIN_ROLE();
+        bytes32 ueaAdminRole = factory.UEA_ADMIN_ROLE();
         vm.expectRevert(
-            abi.encodeWithSelector(IAccessControl.AccessControlUnauthorizedAccount.selector, nonOwner, adminRole)
+            abi.encodeWithSelector(IAccessControl.AccessControlUnauthorizedAccount.selector, nonOwner, ueaAdminRole)
         );
         vm.prank(nonOwner);
 
         bytes32 chainHash = keccak256(abi.encode("APTOS", "1"));
         factory.registerNewChain(chainHash, MOVE_VM_HASH);
 
-        // Test that owner can register implementations
+        // Owner (has UEA_ADMIN_ROLE) can register
         factory.registerNewChain(chainHash, MOVE_VM_HASH);
 
         UEA_EVM newImpl = new UEA_EVM();
         factory.registerUEA(chainHash, MOVE_VM_HASH, address(newImpl));
 
-        // Verify the implementation was registered
         assertEq(address(factory.getUEA(chainHash)), address(newImpl));
     }
 
@@ -501,34 +508,26 @@ contract UEAFactoryTest is Test {
         assertTrue(ethUEA != polyUEA);
     }
 
-    function testOwnershipTransfer() public {
-        address newOwner = makeAddr("newOwner");
+    function testOwnershipTransfer_ADR() public {
+        address newAdmin = makeAddr("newAdmin");
 
-        // Grant DEFAULT_ADMIN_ROLE to new owner, then revoke from old owner
-        factory.grantRole(factory.DEFAULT_ADMIN_ROLE(), newOwner);
-        factory.revokeRole(factory.DEFAULT_ADMIN_ROLE(), address(this));
+        // ADR blocks direct grantRole for DEFAULT_ADMIN_ROLE
+        // Cache role before vm.expectRevert — argument evaluation is a staticcall that
+        // would otherwise be consumed as the "next call" by vm.expectRevert.
+        bytes32 defaultAdminRole = factory.DEFAULT_ADMIN_ROLE();
+        vm.expectRevert(IAccessControlDefaultAdminRules.AccessControlEnforcedDefaultAdminRules.selector);
+        factory.grantRole(defaultAdminRole, newAdmin);
 
-        // Verify new owner has role, old does not
-        assertTrue(factory.hasRole(factory.DEFAULT_ADMIN_ROLE(), newOwner));
+        // Must use 2-step transfer: begin → wait → accept
+        // OZ _hasSchedulePassed uses strict "<", so warp must be > schedule, not ==.
+        factory.beginDefaultAdminTransfer(newAdmin);
+        vm.warp(block.timestamp + 1 days + 1);
+        vm.prank(newAdmin);
+        factory.acceptDefaultAdminTransfer();
+
+        assertTrue(factory.hasRole(factory.DEFAULT_ADMIN_ROLE(), newAdmin));
         assertFalse(factory.hasRole(factory.DEFAULT_ADMIN_ROLE(), address(this)));
-
-        // Try to register a chain with old owner — should fail
-        bytes32 chainHash = keccak256(abi.encode("TestChain", "123"));
-        vm.expectRevert(
-            abi.encodeWithSelector(
-                IAccessControl.AccessControlUnauthorizedAccount.selector, address(this), factory.DEFAULT_ADMIN_ROLE()
-            )
-        );
-        factory.registerNewChain(chainHash, MOVE_VM_HASH);
-
-        // New owner should be able to register a chain
-        vm.prank(newOwner);
-        factory.registerNewChain(chainHash, MOVE_VM_HASH);
-
-        // Verify chain is registered
-        (bytes32 vmHash, bool isRegistered) = factory.getVMType(chainHash);
-        assertEq(vmHash, MOVE_VM_HASH);
-        assertTrue(isRegistered);
+        assertEq(factory.owner(), newAdmin);
     }
 
     function testFactoryLifecycle() public {
@@ -606,9 +605,8 @@ contract UEAFactoryTest is Test {
         // Deploy a new implementation
         UEA_EVM newImpl = new UEA_EVM();
 
-        // Change implementation for EVM type
-        bytes32 evmChainHash = keccak256(abi.encode("eip155", "1"));
-        factory.registerUEA(evmChainHash, EVM_HASH, address(newImpl));
+        // Change implementation for EVM type via the dedicated update path.
+        factory.updateUEAImplementation(EVM_HASH, address(newImpl));
 
         // Verify implementation has changed
         address updatedImpl = factory.getUEA(chainHash);
@@ -818,7 +816,7 @@ contract UEAFactoryTest is Test {
     function testComputeUEA_RevertsWhenNoProxyImplementation() public {
         // Deploy a fresh factory without proxy implementation
         UEAFactory freshFactoryImpl = new UEAFactory();
-        bytes memory initData = abi.encodeWithSelector(UEAFactory.initialize.selector, address(this), pauser);
+        bytes memory initData = abi.encodeWithSelector(UEAFactory.initialize.selector, address(this), pauser, "42101");
         ERC1967Proxy freshProxy = new ERC1967Proxy(address(freshFactoryImpl), initData);
         UEAFactory freshFactory = UEAFactory(address(freshProxy));
 
@@ -838,7 +836,7 @@ contract UEAFactoryTest is Test {
     function testDeployUEA_RevertsWhenNoProxyImplementation() public {
         // Deploy a fresh factory without proxy implementation
         UEAFactory freshFactoryImpl = new UEAFactory();
-        bytes memory initData = abi.encodeWithSelector(UEAFactory.initialize.selector, address(this), pauser);
+        bytes memory initData = abi.encodeWithSelector(UEAFactory.initialize.selector, address(this), pauser, "42101");
         ERC1967Proxy freshProxy = new ERC1967Proxy(address(freshFactoryImpl), initData);
         UEAFactory freshFactory = UEAFactory(address(freshProxy));
 
@@ -998,15 +996,23 @@ contract UEAFactoryTest is Test {
         assertTrue(factory.paused());
     }
 
-    function testUnpause_OnlyPauser() public {
-        bytes32 role = factory.PAUSER_ROLE();
+    function testUnpause_OnlyOperator() public {
+        bytes32 operatorRole = factory.OPERATOR_ROLE();
         vm.prank(pauser);
         factory.pause();
 
+        // nonOwner cannot unpause
         vm.expectRevert(
-            abi.encodeWithSelector(IAccessControl.AccessControlUnauthorizedAccount.selector, nonOwner, role)
+            abi.encodeWithSelector(IAccessControl.AccessControlUnauthorizedAccount.selector, nonOwner, operatorRole)
         );
         vm.prank(nonOwner);
+        factory.unpause();
+
+        // pauser also cannot unpause (different role now)
+        vm.expectRevert(
+            abi.encodeWithSelector(IAccessControl.AccessControlUnauthorizedAccount.selector, pauser, operatorRole)
+        );
+        vm.prank(pauser);
         factory.unpause();
     }
 
@@ -1015,7 +1021,7 @@ contract UEAFactoryTest is Test {
         factory.pause();
         assertTrue(factory.paused());
 
-        vm.prank(pauser);
+        // deployer has OPERATOR_ROLE
         factory.unpause();
         assertFalse(factory.paused());
     }
@@ -1035,7 +1041,7 @@ contract UEAFactoryTest is Test {
     function testDeployUEA_AfterUnpause_Works() public {
         vm.prank(pauser);
         factory.pause();
-        vm.prank(pauser);
+        // deployer has OPERATOR_ROLE
         factory.unpause();
 
         bytes memory testOwnerBytes = abi.encodePacked(makeAddr("unpausedOwner"));
@@ -1046,29 +1052,25 @@ contract UEAFactoryTest is Test {
         assertTrue(factory.hasCode(ueaAddress));
     }
 
-    function testSetPauserRole_OnlyOwner() public {
+    function testGrantPauserRole_OnlyRoleManager() public {
         address newPauser = makeAddr("newPauser");
+        bytes32 roleManagerRole = factory.ROLE_MANAGER_ROLE();
+        bytes32 pauserRole = factory.PAUSER_ROLE();
 
-        bytes32 adminRole = factory.DEFAULT_ADMIN_ROLE();
         vm.expectRevert(
-            abi.encodeWithSelector(IAccessControl.AccessControlUnauthorizedAccount.selector, nonOwner, adminRole)
+            abi.encodeWithSelector(IAccessControl.AccessControlUnauthorizedAccount.selector, nonOwner, roleManagerRole)
         );
         vm.prank(nonOwner);
-        factory.setPauserRole(newPauser);
+        factory.grantRole(pauserRole, newPauser);
 
-        // Admin can grant pauser role
-        factory.setPauserRole(newPauser);
-        assertTrue(factory.hasRole(factory.PAUSER_ROLE(), newPauser));
+        // deployer has ROLE_MANAGER_ROLE
+        factory.grantRole(pauserRole, newPauser);
+        assertTrue(factory.hasRole(pauserRole, newPauser));
     }
 
-    function testSetPauserRole_ZeroAddressReverts() public {
-        vm.expectRevert(Errors.InvalidInputArgs.selector);
-        factory.setPauserRole(address(0));
-    }
-
-    function testSetPauserRole_NewPauserCanPause() public {
+    function testGrantPauserRole_NewPauserCanPause() public {
         address newPauser = makeAddr("newPauser2");
-        factory.setPauserRole(newPauser);
+        factory.grantRole(factory.PAUSER_ROLE(), newPauser);
 
         vm.prank(newPauser);
         factory.pause();
@@ -1081,11 +1083,67 @@ contract UEAFactoryTest is Test {
 
     function testInitialize_ZeroPauserReverts() public {
         UEAFactory newImpl = new UEAFactory();
-        bytes memory initData = abi.encodeWithSelector(UEAFactory.initialize.selector, deployer, address(0));
         ERC1967Proxy newProxy = new ERC1967Proxy(address(newImpl), "");
 
         vm.expectRevert(Errors.InvalidInputArgs.selector);
-        UEAFactory(address(newProxy)).initialize(deployer, address(0));
+        UEAFactory(address(newProxy)).initialize(deployer, address(0), "42101");
+    }
+
+    // =========================================================================
+    // updateUEAImplementation Tests
+    // =========================================================================
+
+    function testUpdateUEAImplementation_HappyPath() public {
+        address previousImpl = factory.UEA_VM(EVM_HASH);
+        assertTrue(previousImpl != address(0));
+
+        UEA_EVM newImpl = new UEA_EVM();
+        vm.expectEmit(true, false, false, true, address(factory));
+        emit IUEAFactory.UEAImplementationUpdated(EVM_HASH, previousImpl, address(newImpl));
+
+        factory.updateUEAImplementation(EVM_HASH, address(newImpl));
+
+        assertEq(factory.UEA_VM(EVM_HASH), address(newImpl));
+        assertNotEq(factory.UEA_VM(EVM_HASH), previousImpl);
+    }
+
+    function testUpdateUEAImplementation_UpdatesSVMImpl() public {
+        address previousImpl = factory.UEA_VM(SVM_HASH);
+        assertTrue(previousImpl != address(0));
+
+        UEA_SVM newImpl = new UEA_SVM();
+        factory.updateUEAImplementation(SVM_HASH, address(newImpl));
+
+        assertEq(factory.UEA_VM(SVM_HASH), address(newImpl));
+    }
+
+    function testUpdateUEAImplementation_OnlyUEAAdmin() public {
+        UEA_EVM newImpl = new UEA_EVM();
+        bytes32 ueaAdminRole = factory.UEA_ADMIN_ROLE();
+
+        vm.expectRevert(
+            abi.encodeWithSelector(IAccessControl.AccessControlUnauthorizedAccount.selector, nonOwner, ueaAdminRole)
+        );
+        vm.prank(nonOwner);
+        factory.updateUEAImplementation(EVM_HASH, address(newImpl));
+    }
+
+    function testUpdateUEAImplementation_ZeroAddressReverts() public {
+        vm.expectRevert(Errors.InvalidInputArgs.selector);
+        factory.updateUEAImplementation(EVM_HASH, address(0));
+    }
+
+    function testUpdateUEAImplementation_UnregisteredVmHashReverts() public {
+        // CAIRO_VM_HASH has never had an implementation registered — no prior entry.
+        UEA_EVM newImpl = new UEA_EVM();
+        vm.expectRevert(Errors.InvalidInputArgs.selector);
+        factory.updateUEAImplementation(CAIRO_VM_HASH, address(newImpl));
+    }
+
+    function testRegisterUEA_AlreadyRegisteredReverts() public {
+        // EVM_HASH already has an implementation from setUp — a second registerUEA must revert.
+        vm.expectRevert(Errors.UEAAlreadyRegistered.selector);
+        factory.registerUEA(ethereumChainHash, EVM_HASH, address(ueaEVMImpl));
     }
 
     // Test for the case where getOriginForUEA is called with an address that has an owner
@@ -1102,5 +1160,168 @@ contract UEAFactoryTest is Test {
         // Should return true for isUEA since owner.length > 0
         assertTrue(isUEA);
         assertTrue(account.owner.length > 0);
+    }
+
+    // =========================================================================
+    // F-2026-15576: Configurable pushChainId in getOriginForUEA fallback
+    // =========================================================================
+
+    function test_Initialize_SeedsPushChainId() public {
+        // Fresh proxy deployed with pushChainId seeded via initialize
+        UEAFactory freshImpl = new UEAFactory();
+        bytes memory initData = abi.encodeWithSelector(UEAFactory.initialize.selector, deployer, pauser, "9000");
+        ERC1967Proxy proxy = new ERC1967Proxy(address(freshImpl), initData);
+        UEAFactory freshFactory = UEAFactory(address(proxy));
+
+        assertEq(freshFactory.pushChainId(), "9000");
+    }
+
+    function test_Initialize_RevertsOnEmptyPushChainId() public {
+        UEAFactory freshImpl = new UEAFactory();
+        bytes memory initData = abi.encodeWithSelector(UEAFactory.initialize.selector, deployer, pauser, "");
+        vm.expectRevert();
+        new ERC1967Proxy(address(freshImpl), initData);
+    }
+
+    function test_SetPushChainId_HappyPath() public {
+        factory.updatePushChainId("9999");
+        assertEq(factory.pushChainId(), "9999");
+    }
+
+    function test_SetPushChainId_OnlyUEAAdmin() public {
+        bytes32 ueaAdminRole = factory.UEA_ADMIN_ROLE();
+        vm.expectRevert(
+            abi.encodeWithSelector(IAccessControl.AccessControlUnauthorizedAccount.selector, nonOwner, ueaAdminRole)
+        );
+        vm.prank(nonOwner);
+        factory.updatePushChainId("9999");
+    }
+
+    function test_SetPushChainId_RevertsOnEmptyString() public {
+        vm.expectRevert(Errors.InvalidInputArgs.selector);
+        factory.updatePushChainId("");
+    }
+
+    function test_GetOriginForUEA_FallbackUsesConfiguredChainId() public {
+        address randomAddr = makeAddr("random_fallback");
+
+        (UniversalAccountId memory account, bool isUEA) = factory.getOriginForUEA(randomAddr);
+
+        assertFalse(isUEA);
+        assertEq(account.chainNamespace, "eip155");
+        assertEq(account.chainId, factory.pushChainId());
+        assertEq(account.chainId, "42101", "Default seeded value should match setUp");
+        assertEq(account.owner, bytes(abi.encodePacked(randomAddr)));
+    }
+
+    function test_GetOriginForUEA_FallbackUpdatesAfterSetter() public {
+        address randomAddr = makeAddr("random_update");
+
+        // Initial: chainId should be "42101" (seeded in setUp)
+        (UniversalAccountId memory beforeAcc, bool beforeIsUEA) = factory.getOriginForUEA(randomAddr);
+        assertFalse(beforeIsUEA);
+        assertEq(beforeAcc.chainId, "42101");
+
+        // Update pushChainId
+        factory.updatePushChainId("1");
+
+        // After update: fallback returns new chainId
+        (UniversalAccountId memory afterAcc, bool afterIsUEA) = factory.getOriginForUEA(randomAddr);
+        assertFalse(afterIsUEA);
+        assertEq(afterAcc.chainNamespace, "eip155", "namespace stays hardcoded eip155");
+        assertEq(afterAcc.chainId, "1");
+        assertEq(afterAcc.owner, bytes(abi.encodePacked(randomAddr)));
+    }
+
+    // =========================================================================
+    // ADR (AccessControlDefaultAdminRules) Tests
+    // =========================================================================
+
+    function testADR_OwnerReturnsAdmin() public view {
+        assertEq(factory.owner(), deployer);
+    }
+
+    function testADR_DefaultAdminDelay() public view {
+        assertEq(factory.defaultAdminDelay(), 1 days);
+    }
+
+    function testADR_RoleAdminOfUEAAdmin_IsRoleManager() public view {
+        assertEq(factory.getRoleAdmin(factory.UEA_ADMIN_ROLE()), factory.ROLE_MANAGER_ROLE());
+    }
+
+    function testADR_RoleAdminOfOperator_IsRoleManager() public view {
+        assertEq(factory.getRoleAdmin(factory.OPERATOR_ROLE()), factory.ROLE_MANAGER_ROLE());
+    }
+
+    function testADR_RoleAdminOfPauser_IsRoleManager() public view {
+        assertEq(factory.getRoleAdmin(factory.PAUSER_ROLE()), factory.ROLE_MANAGER_ROLE());
+    }
+
+    function testADR_RoleAdminOfRoleManager_IsDefaultAdmin() public view {
+        assertEq(factory.getRoleAdmin(factory.ROLE_MANAGER_ROLE()), factory.DEFAULT_ADMIN_ROLE());
+    }
+
+    function testADR_InitialRolesGrantedToAdmin() public view {
+        assertTrue(factory.hasRole(factory.DEFAULT_ADMIN_ROLE(), deployer));
+        assertTrue(factory.hasRole(factory.ROLE_MANAGER_ROLE(), deployer));
+        assertTrue(factory.hasRole(factory.UEA_ADMIN_ROLE(), deployer));
+        assertTrue(factory.hasRole(factory.OPERATOR_ROLE(), deployer));
+    }
+
+    function testADR_PauserRoleGrantedToPauser() public view {
+        assertTrue(factory.hasRole(factory.PAUSER_ROLE(), pauser));
+        assertFalse(factory.hasRole(factory.PAUSER_ROLE(), deployer));
+    }
+
+    function testADR_TransferFlow() public {
+        address newAdmin = makeAddr("adrNewAdmin");
+
+        factory.beginDefaultAdminTransfer(newAdmin);
+
+        (address pendingAdmin, uint48 schedule) = factory.pendingDefaultAdmin();
+        assertEq(pendingAdmin, newAdmin);
+        assertTrue(schedule > 0);
+
+        // Cannot accept before delay
+        // vm.expectRevert must come before vm.prank — prank is consumed by the very next call.
+        vm.expectRevert();
+        vm.prank(newAdmin);
+        factory.acceptDefaultAdminTransfer();
+
+        // Warp past delay and accept.
+        // OZ _hasSchedulePassed uses strict "<", so warp must be strictly > schedule.
+        vm.warp(block.timestamp + 1 days + 1);
+        vm.prank(newAdmin);
+        factory.acceptDefaultAdminTransfer();
+
+        assertEq(factory.owner(), newAdmin);
+        assertTrue(factory.hasRole(factory.DEFAULT_ADMIN_ROLE(), newAdmin));
+        assertFalse(factory.hasRole(factory.DEFAULT_ADMIN_ROLE(), deployer));
+    }
+
+    function testADR_GrantRoleManager() public {
+        address newRoleManager = makeAddr("newRoleManager");
+
+        // deployer has DEFAULT_ADMIN_ROLE which administers ROLE_MANAGER_ROLE
+        factory.grantRole(factory.ROLE_MANAGER_ROLE(), newRoleManager);
+        assertTrue(factory.hasRole(factory.ROLE_MANAGER_ROLE(), newRoleManager));
+
+        // newRoleManager can now grant UEA_ADMIN_ROLE
+        address newUEAAdmin = makeAddr("newUEAAdmin");
+        vm.prank(newRoleManager);
+        factory.grantRole(factory.UEA_ADMIN_ROLE(), newUEAAdmin);
+        assertTrue(factory.hasRole(factory.UEA_ADMIN_ROLE(), newUEAAdmin));
+    }
+
+    function testPauserCannotUnpause() public {
+        vm.prank(pauser);
+        factory.pause();
+
+        bytes32 operatorRole = factory.OPERATOR_ROLE();
+        vm.expectRevert(
+            abi.encodeWithSelector(IAccessControl.AccessControlUnauthorizedAccount.selector, pauser, operatorRole)
+        );
+        vm.prank(pauser);
+        factory.unpause();
     }
 }
