@@ -68,6 +68,8 @@ contract UniversalCoreTest is Test, UpgradeableContractHelper {
     event SetBaseGasLimitByChain(string chainNamespace, uint256 gasLimit);
     event SetRescueFundsGasLimitByChain(string chainNamespace, uint256 gasLimit);
     event SetMaxStalenessByChain(string chainNamespace, uint256 maxStaleness);
+    event SetL1GasFeeByChain(string chainNamespace, uint256 l1GasFee);
+    event SetTssFundMigrationGasLimitByChain(string chainNamespace, uint256 gasLimit);
     event RescueNativePC(address indexed to, uint256 amount);
 
     function setUp() public {
@@ -1628,5 +1630,63 @@ contract UniversalCoreTest is Test, UpgradeableContractHelper {
         );
         vm.prank(pauser);
         universalCore.unpause();
+    }
+
+    // ============================================
+    //    L1 GAS FEE & TSS MIGRATION GAS LIMIT
+    // ============================================
+
+    function test_SetL1GasFeeByChain_HappyPath() public {
+        uint256 l1Fee = 0.001 ether;
+
+        vm.prank(UNIVERSAL_EXECUTOR_MODULE);
+        vm.expectEmit(false, false, false, true);
+        emit SetL1GasFeeByChain(CHAIN_NAMESPACE, l1Fee);
+        universalCore.setL1GasFeeByChain(CHAIN_NAMESPACE, l1Fee);
+
+        assertEq(universalCore.l1GasFeeByChainNamespace(CHAIN_NAMESPACE), l1Fee);
+    }
+
+    function test_SetL1GasFeeByChain_OnlyUVCoreAdmin() public {
+        vm.expectRevert(
+            abi.encodeWithSelector(
+                IAccessControl.AccessControlUnauthorizedAccount.selector, nonOwner, universalCore.UVCORE_ADMIN_ROLE()
+            )
+        );
+        vm.prank(nonOwner);
+        universalCore.setL1GasFeeByChain(CHAIN_NAMESPACE, 0.001 ether);
+    }
+
+    function test_SetL1GasFeeByChain_ZeroValueAllowed() public {
+        vm.prank(UNIVERSAL_EXECUTOR_MODULE);
+        universalCore.setL1GasFeeByChain(CHAIN_NAMESPACE, 0);
+        assertEq(universalCore.l1GasFeeByChainNamespace(CHAIN_NAMESPACE), 0);
+    }
+
+    function test_SetTssFundMigrationGasLimitByChain_HappyPath() public {
+        uint256 gasLimit = 1_000_000;
+
+        vm.prank(UNIVERSAL_EXECUTOR_MODULE);
+        vm.expectEmit(false, false, false, true);
+        emit SetTssFundMigrationGasLimitByChain(CHAIN_NAMESPACE, gasLimit);
+        universalCore.setTssFundMigrationGasLimitByChain(CHAIN_NAMESPACE, gasLimit);
+
+        assertEq(universalCore.tssFundMigrationGasLimitByChainNamespace(CHAIN_NAMESPACE), gasLimit);
+    }
+
+    function test_SetTssFundMigrationGasLimitByChain_OnlyUVCoreAdmin() public {
+        vm.expectRevert(
+            abi.encodeWithSelector(
+                IAccessControl.AccessControlUnauthorizedAccount.selector, nonOwner, universalCore.UVCORE_ADMIN_ROLE()
+            )
+        );
+        vm.prank(nonOwner);
+        universalCore.setTssFundMigrationGasLimitByChain(CHAIN_NAMESPACE, 1_000_000);
+    }
+
+    function test_SetTssFundMigrationGasLimitByChain_ZeroValueAllowed() public {
+        vm.prank(UNIVERSAL_EXECUTOR_MODULE);
+        universalCore.setTssFundMigrationGasLimitByChain(CHAIN_NAMESPACE, 0);
+        assertEq(universalCore.tssFundMigrationGasLimitByChainNamespace(CHAIN_NAMESPACE), 0);
     }
 }

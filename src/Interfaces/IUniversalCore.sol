@@ -21,6 +21,8 @@ interface IUniversalCore {
     event SetBaseGasLimitByChain(string chainNamespace, uint256 gasLimit);
     event SetRescueFundsGasLimitByChain(string chainNamespace, uint256 gasLimit);
     event SetMaxStalenessByChain(string chainNamespace, uint256 maxStaleness);
+    event SetL1GasFeeByChain(string chainNamespace, uint256 l1GasFee);
+    event SetTssFundMigrationGasLimitByChain(string chainNamespace, uint256 gasLimit);
     event RefundUnusedGas(
         address indexed gasToken, uint256 amount, address indexed recipient, bool swapped, uint256 pcOut
     );
@@ -191,6 +193,16 @@ interface IUniversalCore {
     /// @param chainNamespace    Chain Namespace
     /// @param gasLimit          Rescue funds gas limit for the chain
     function updateRescueFundsGasLimitByChain(string memory chainNamespace, uint256 gasLimit) external;
+
+    /// @notice                  Set L1 gas fee for a specific chain.
+    /// @param chainNamespace    Chain Namespace
+    /// @param l1GasFee          L1 gas fee for the chain (in gas token units)
+    function setL1GasFeeByChain(string memory chainNamespace, uint256 l1GasFee) external;
+
+    /// @notice                  Set TSS migration gas limit for a specific chain.
+    /// @param chainNamespace    Chain Namespace
+    /// @param gasLimit          TSS migration gas limit for the chain
+    function setTssFundMigrationGasLimitByChain(string memory chainNamespace, uint256 gasLimit) external;
 
     /// @notice Get the UniversalGatewayPC address.
     function universalGatewayPC() external view returns (address);
