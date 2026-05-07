@@ -72,7 +72,7 @@ contract UniversalCore is
     address public uniswapV3SwapRouter;
 
     /// @dev Deprecated. Slot retained for storage layout compatibility with deployed testnet proxy.
-    address private __deprecated_uniswapV3Quoter;
+    address private uniswapV3Quoter;
 
     /// @notice Address of the wrapped PC to interact with Uniswap V3.
     address public WPC;
@@ -180,7 +180,7 @@ contract UniversalCore is
         WPC = wpc_;
         uniswapV3Factory = uniswapV3Factory_;
         uniswapV3SwapRouter = uniswapV3SwapRouter_;
-        __deprecated_uniswapV3Quoter = uniswapV3Quoter_;
+        uniswapV3Quoter = uniswapV3Quoter_;
     }
 
     /// @dev                     Reinitializer to migrate to granular RBAC with admin transfer delay.
