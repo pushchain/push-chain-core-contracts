@@ -1,10 +1,10 @@
 // SPDX-License-Identifier: MIT
 pragma solidity 0.8.26;
 
-/// @title  IUniversalCoreV0
-/// @notice Interface for the UniversalCoreV0 (testnet) contract.
-/// @dev    Standalone interface dedicated to UniversalCoreV0.
-interface IUniversalCoreV0 {
+/// @title  IUniversalCore
+/// @notice Interface for the UniversalCore (testnet) contract.
+/// @dev    Standalone interface dedicated to testnet UniversalCore.
+interface IUniversalCore {
     // =========================
     //    UCV0: EVENTS
     // =========================

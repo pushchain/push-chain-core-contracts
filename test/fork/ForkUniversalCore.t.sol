@@ -62,12 +62,7 @@ contract ForkUniversalCoreTest is Test, UpgradeableContractHelper, PushChainAddr
         // Deploy UniversalCore behind proxy
         UniversalCore implementation = new UniversalCore();
         bytes memory initData = abi.encodeWithSelector(
-            UniversalCore.initialize.selector,
-            deployer,
-            makeAddr("pauser"),
-            WPC_TOKEN,
-            UNISWAP_FACTORY,
-            UNISWAP_ROUTER
+            UniversalCore.initialize.selector, deployer, makeAddr("pauser"), WPC_TOKEN, UNISWAP_FACTORY, UNISWAP_ROUTER
         );
         address proxyAddress = deployUpgradeableContract(address(implementation), initData);
         universalCore = UniversalCore(payable(proxyAddress));

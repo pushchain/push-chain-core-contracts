@@ -11,25 +11,25 @@ import {PausableUpgradeable} from "@openzeppelin/contracts-upgradeable/utils/Pau
 import {ReentrancyGuardUpgradeable} from "@openzeppelin/contracts-upgradeable/utils/ReentrancyGuardUpgradeable.sol";
 
 import {IPRC20} from "../interfaces/IPRC20.sol";
-import {IUniversalCoreV0} from "./IUniversalCoreV0.sol";
+import {IUniversalCore} from "./IUniversalCore.sol";
 import {IUniswapV3Factory, ISwapRouter} from "../interfaces/uniswapv3/IUniswapV3.sol";
 import {IWPC} from "../interfaces/IWPC.sol";
 import {UniversalCoreErrors, CommonErrors} from "../libraries/Errors.sol";
 
 /**
- * @title   UniversalCoreV0
+ * @title   UniversalCore (testnet)
  * @notice  Temporary UniversalCore contract for Push Chain TESTNET.
- *          The UniversalCoreV0 acts as the core contract for all functionalities
+ *          The UniversalCore acts as the core contract for all functionalities
  *          needed by the interoperability feature of Push Chain.
- * @dev     The UniversalCoreV0 primarily handles the following functionalities:
+ * @dev     The UniversalCore primarily handles the following functionalities:
  *            - Generation of supported PRC-20 tokens, and transferring it to accurate recipients.
  *            - Setting up the gas tokens for each chain.
  *            - Setting up the gas price for each chain.
  *            - Maintaining a registry of Uniswap V3 pools for each token pair.
  * @dev     All imperative functionalities are handled by the Universal Executor Module.
  */
-contract UniversalCoreV0 is
-    IUniversalCoreV0,
+contract UniversalCore is
+    IUniversalCore,
     Initializable,
     ReentrancyGuardUpgradeable,
     AccessControlDefaultAdminRulesUpgradeable,
@@ -205,7 +205,7 @@ contract UniversalCoreV0 is
     //    UCV0_1: UE MODULE ACTIONS
     // =========================
 
-    /// @inheritdoc IUniversalCoreV0
+    /// @inheritdoc IUniversalCore
     function depositPRC20Token(address prc20, uint256 amount, address recipient)
         external
         onlyUEModule
@@ -216,7 +216,7 @@ contract UniversalCoreV0 is
         if (!IPRC20(prc20).deposit(recipient, amount)) revert UniversalCoreErrors.PRC20OperationFailed();
     }
 
-    /// @inheritdoc IUniversalCoreV0
+    /// @inheritdoc IUniversalCore
     function depositPRC20WithAutoSwap(
         address prc20,
         uint256 amount,
@@ -232,7 +232,7 @@ contract UniversalCoreV0 is
         emit DepositPRC20WithAutoSwap(prc20, amount, WPC, pcOut, resolvedFee, recipient);
     }
 
-    /// @inheritdoc IUniversalCoreV0
+    /// @inheritdoc IUniversalCore
     function refundUnusedGas(
         address gasToken,
         uint256 amount,
@@ -261,7 +261,7 @@ contract UniversalCoreV0 is
     //    UCV0_2: GATEWAY ACTIONS
     // =========================
 
-    /// @inheritdoc IUniversalCoreV0
+    /// @inheritdoc IUniversalCore
     function swapAndBurnGas(address gasToken, uint24 fee, uint256 gasFee, uint256 deadline, address caller)
         external
         payable
@@ -324,7 +324,7 @@ contract UniversalCoreV0 is
     //    UCV0_3: PUBLIC GETTERS
     // =========================
 
-    /// @inheritdoc IUniversalCoreV0
+    /// @inheritdoc IUniversalCore
     function getOutboundTxGasAndFees(address _prc20, uint256 gasLimitWithBaseLimit)
         public
         view
@@ -360,7 +360,7 @@ contract UniversalCoreV0 is
         gasLimitUsed = gasLimitWithBaseLimit;
     }
 
-    /// @inheritdoc IUniversalCoreV0
+    /// @inheritdoc IUniversalCore
     function getRescueFundsGasLimit(address _prc20)
         public
         view
