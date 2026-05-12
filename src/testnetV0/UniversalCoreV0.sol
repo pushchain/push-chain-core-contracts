@@ -72,7 +72,7 @@ contract UniversalCore is
     address public uniswapV3SwapRouter;
 
     /// @dev Deprecated. Slot retained for storage layout compatibility with deployed testnet proxy.
-    address private uniswapV3Quoter;
+    address public uniswapV3Quoter;
 
     /// @notice Address of the wrapped PC to interact with Uniswap V3.
     address public WPC;
