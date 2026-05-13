@@ -14,12 +14,10 @@ import {AccessControlDefaultAdminRulesUpgradeable} from
 import {PausableUpgradeable} from "@openzeppelin/contracts-upgradeable/utils/PausableUpgradeable.sol";
 
 /**
- * @title   UEAFactory
- * @notice  Factory for deploying and managing Universal Executor Accounts (UEAs).
- * @dev     Uses OZ Clones library for deterministic CREATE2 deployment of UEA proxies.
- *          Maps external chain identities to UEA addresses on Push Chain.
+ * @title   UEAFactory  (TESTNET)
+ * @notice  Testnet version of UEAFactory for Push Chain Donut Testnet.
  *
- *          Access control: AccessControlDefaultAdminRulesUpgradeable (2-day delay).
+ *          Access control: AccessControlDefaultAdminRulesUpgradeable (1-day delay).
  *          Roles: DEFAULT_ADMIN_ROLE (root), ROLE_MANAGER_ROLE (grants operational roles),
  *          UEA_ADMIN_ROLE (implementation + chain config), OPERATOR_ROLE (unpause),
  *          PAUSER_ROLE (pause only).
@@ -39,6 +37,9 @@ contract UEAFactory is Initializable, AccessControlDefaultAdminRulesUpgradeable,
     // =========================
     //    UF: STATE VARIABLES
     // =========================
+
+    /// @dev DEAD SLOT — preserved for storage layout compatibility. Do not use.
+    mapping(bytes32 => address) public roles;
 
     /// @notice Maps VM type hashes to their UEA implementation addresses.
     mapping(bytes32 => address) public UEA_VM;
@@ -75,15 +76,21 @@ contract UEAFactory is Initializable, AccessControlDefaultAdminRulesUpgradeable,
     // =========================
 
     /// @dev                     Initializer for the upgradeable UEAFactory.
+    /// @param initialOwner      Initial owner of the contract
+    /// @param initialPauser     Address granted the PAUSER_ROLE
+    function initialize(address initialOwner, address initialPauser) public initializer {
+        if (initialOwner == address(0) || initialPauser == address(0)) revert UEAErrors.InvalidInputArgs();
+        __Pausable_init();
+        roles[PAUSER_ROLE] = initialPauser;
+    }
+
+    /// @dev                     Reinitializer to migrate from OwnableUpgradeable to RBAC.
     /// @param _admin            Admin address — granted DEFAULT_ADMIN_ROLE + all operational roles
     /// @param _pauser           Address granted the PAUSER_ROLE
-    /// @param _pushChainId      Push Chain numeric identifier (e.g. "42101")
-    function initialize(address _admin, address _pauser, string memory _pushChainId) public initializer {
+    function initializeV2(address _admin, address _pauser) public reinitializer(2) {
         if (_admin == address(0) || _pauser == address(0)) revert UEAErrors.InvalidInputArgs();
-        if (bytes(_pushChainId).length == 0) revert UEAErrors.InvalidInputArgs();
 
         __AccessControlDefaultAdminRules_init(1 days, _admin);
-        __Pausable_init();
 
         _setRoleAdmin(UEA_ADMIN_ROLE, ROLE_MANAGER_ROLE);
         _setRoleAdmin(OPERATOR_ROLE, ROLE_MANAGER_ROLE);
@@ -93,8 +100,6 @@ contract UEAFactory is Initializable, AccessControlDefaultAdminRulesUpgradeable,
         _grantRole(UEA_ADMIN_ROLE, _admin);
         _grantRole(OPERATOR_ROLE, _admin);
         _grantRole(PAUSER_ROLE, _pauser);
-
-        pushChainId = _pushChainId;
     }
 
     // =========================
@@ -279,11 +284,7 @@ contract UEAFactory is Initializable, AccessControlDefaultAdminRulesUpgradeable,
         _registerUEA(_chainHash, _vmHash, _UEA);
     }
 
-    /// @dev Internal registration logic — no role check.
-    ///      Treats registration as a one-time operation per VM hash. If an implementation
-    ///      is already registered for this `_vmHash`, callers must use
-    ///      `updateUEAImplementation` instead. This prevents silent replacement of the
-    ///      VM implementation that all future UEAs of that type delegate to.
+    /// @dev Internal registration logic with overwrite protection.
     function _registerUEA(bytes32 _chainHash, bytes32 _vmHash, address _UEA) internal {
         if (_UEA == address(0)) {
             revert UEAErrors.InvalidInputArgs();
@@ -303,10 +304,6 @@ contract UEAFactory is Initializable, AccessControlDefaultAdminRulesUpgradeable,
     }
 
     /// @notice                  Replace the registered UEA implementation for a VM hash.
-    /// @dev                     Explicit update path distinct from `registerUEA`, which only
-    ///                          performs first-time registration. Emits `UEAImplementationUpdated`
-    ///                          with both previous and new addresses so off-chain systems can
-    ///                          reconstruct the implementation history.
     /// @param _vmHash           VM hash whose implementation is being updated
     /// @param _newUEA           New UEA implementation address (must be non-zero)
     function updateUEAImplementation(bytes32 _vmHash, address _newUEA) external onlyRole(UEA_ADMIN_ROLE) {

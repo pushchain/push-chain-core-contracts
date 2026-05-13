@@ -42,9 +42,14 @@ contract UEA_EVM_FuzzTest is Test {
 
         UEAFactory factoryImpl = new UEAFactory();
         bytes memory initData =
-            abi.encodeWithSelector(UEAFactory.initialize.selector, address(this), makeAddr("pauser"), "42101");
+            abi.encodeWithSelector(UEAFactory.initialize.selector, address(this), makeAddr("pauser"));
         ERC1967Proxy proxy = new ERC1967Proxy(address(factoryImpl), initData);
         factory = UEAFactory(address(proxy));
+
+        // Phase 2: initializeV2 to set up RBAC, then set pushChainId
+        factory.initializeV2(address(this), makeAddr("pauser"));
+        factory.updatePushChainId("42101");
+
         factory.updateUEAProxyImplementation(address(ueaProxyImpl));
 
         ueaEVMImpl = new UEA_EVM();

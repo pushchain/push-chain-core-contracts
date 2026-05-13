@@ -22,12 +22,24 @@ contract PRC20_Fuzz is Test, UpgradeableContractHelper {
         address mockRouter = makeAddr("router");
         address mockPauser = makeAddr("pauser");
         bytes memory ucInit = abi.encodeWithSelector(
-            UniversalCore.initialize.selector, address(this), mockPauser, mockWPC, mockFactory, mockRouter
+            UniversalCore.initialize.selector, mockWPC, mockFactory, mockRouter, address(0)
         );
         address ucProxy = deployUpgradeableContract(address(ucImpl), ucInit);
         universalCore = UniversalCore(payable(ucProxy));
 
-        // Deploy PRC20 via proxy
+        // Clear _currentDefaultAdmin set by V0 initialize (simulates real testnet state
+        // where the old implementation used plain AccessControlUpgradeable without the
+        // AccessControlDefaultAdminRules override that writes _currentDefaultAdmin).
+        vm.store(
+            ucProxy,
+            bytes32(uint256(0xeef3dac4538c82c8ace4063ab0acd2d15cdb5883aa1dff7c2673abb3d8698401)),
+            bytes32(0)
+        );
+
+        // Phase 2: initializeV2 to set up RBAC
+        universalCore.initializeV2(address(this), mockPauser);
+
+        // Deploy PRC20 via proxy (V0 PRC20 takes protocolFlatFee_ param)
         PRC20 prc20Impl = new PRC20();
         bytes memory prc20Init = abi.encodeWithSelector(
             PRC20.initialize.selector,
@@ -36,6 +48,7 @@ contract PRC20_Fuzz is Test, UpgradeableContractHelper {
             18,
             "eip155:1",
             IPRC20.TokenType.PC,
+            uint256(0),
             address(universalCore),
             "0x0000000000000000000000000000000000000000"
         );

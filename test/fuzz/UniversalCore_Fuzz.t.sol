@@ -33,10 +33,22 @@ contract UniversalCore_Fuzz is Test, UpgradeableContractHelper {
 
         UniversalCore impl = new UniversalCore();
         bytes memory initData = abi.encodeWithSelector(
-            UniversalCore.initialize.selector, address(this), pauser, mockWPC, mockFactory, mockRouter
+            UniversalCore.initialize.selector, mockWPC, mockFactory, mockRouter, address(0)
         );
         address proxyAddr = deployUpgradeableContract(address(impl), initData);
         universalCore = UniversalCore(payable(proxyAddr));
+
+        // Clear _currentDefaultAdmin set by V0 initialize (simulates real testnet state
+        // where the old implementation used plain AccessControlUpgradeable without the
+        // AccessControlDefaultAdminRules override that writes _currentDefaultAdmin).
+        vm.store(
+            proxyAddr,
+            bytes32(uint256(0xeef3dac4538c82c8ace4063ab0acd2d15cdb5883aa1dff7c2673abb3d8698401)),
+            bytes32(0)
+        );
+
+        // Phase 2: initializeV2 to set up RBAC
+        universalCore.initializeV2(address(this), pauser);
 
         universalCore.grantRole(universalCore.UVCORE_ADMIN_ROLE(), uExec);
 
@@ -52,6 +64,7 @@ contract UniversalCore_Fuzz is Test, UpgradeableContractHelper {
             18,
             CHAIN_NS,
             IPRC20.TokenType.NATIVE,
+            uint256(0),
             address(universalCore),
             "0x0"
         );
@@ -133,6 +146,7 @@ contract UniversalCore_Fuzz is Test, UpgradeableContractHelper {
             18,
             zeroPriceNs,
             IPRC20.TokenType.NATIVE,
+            uint256(0),
             address(universalCore),
             "0x0"
         );
@@ -166,6 +180,7 @@ contract UniversalCore_Fuzz is Test, UpgradeableContractHelper {
             18,
             "nogas",
             IPRC20.TokenType.NATIVE,
+            uint256(0),
             address(universalCore),
             "0x0"
         );

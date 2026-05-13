@@ -120,6 +120,6 @@ scripts/
 └── uvcore/ deployUniversalCore.s.sol, upgradeUniversalCore.s.sol
 ```
 
-### Legacy / Testnet V0
+### Testnet Branch (`core-testnet`)
 
-`src/testnetV0/` contains deprecated `PRC20V0`, `UniversalCoreV0`, `UEAFactoryV0`. These are excluded from coverage and not used in v1 flows.
+On the `core-testnet` branch, `src/UniversalCore.sol`, `src/PRC20.sol`, and `src/uea/UEAFactory.sol` are testnet-specific V0 versions (two-phase initialization, deprecated storage slots for upgrade compatibility). They replace the mainnet equivalents. See `docs/TESTNET_BRANCH_SEPARATION.md`.

@@ -2,7 +2,7 @@
 pragma solidity ^0.8.20;
 
 import "forge-std/Script.sol";
-import {CEA_V2} from "../../src/testnetV0/CEA_V2.sol";
+import {CEA_V2} from "../../src/cea/CEA_V2.sol";
 import {CEAMigration} from "../../src/cea/CEAMigration.sol";
 import {CEAFactory} from "../../src/cea/CEAFactory.sol";
 
@@ -118,7 +118,7 @@ contract DeployCEAMigrationScript is Script {
  * ============================================================================
  *
  * 1. Verify CEA_V2:
- * forge verify-contract <CEA_V2_ADDRESS> src/testnetV0/CEA_V2.sol:CEA_V2 \
+ * forge verify-contract <CEA_V2_ADDRESS> src/cea/CEA_V2.sol:CEA_V2 \
  *   --chain-id 97 --etherscan-api-key $BSCSCAN_API_KEY
  *
  * 2. Verify CEAMigration:

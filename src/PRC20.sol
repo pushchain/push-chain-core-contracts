@@ -2,13 +2,13 @@
 pragma solidity 0.8.26;
 
 import {Initializable} from "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol";
+import {PausableUpgradeable} from "@openzeppelin/contracts-upgradeable/utils/PausableUpgradeable.sol";
 
 import {IPRC20} from "./interfaces/IPRC20.sol";
 import {PRC20Errors, CommonErrors} from "./libraries/Errors.sol";
-import {PausableUpgradeable} from "@openzeppelin/contracts-upgradeable/utils/PausableUpgradeable.sol";
 
 /**
- * @title   PRC20 (Push Chain Synthetic Token)
+ * @title   PRC20 (Push Chain Synthetic Token — V0 Testnet)
  * @notice  ERC-20 compatible synthetic token minted/burned by Push Chain protocol.
  * @dev     PRC20 token represents and acts as an alias for an already existing token
  *          of an external chain.
@@ -16,14 +16,15 @@ import {PausableUpgradeable} from "@openzeppelin/contracts-upgradeable/utils/Pau
  */
 contract PRC20 is IPRC20, Initializable {
     // =========================
-    //    PRC20: STATE VARIABLES
+    //    PRC20V0: STATE VARIABLES
     // =========================
 
     /// @notice The protocol's privileged executor module (auth & fee sink).
-    address public immutable UNIVERSAL_EXECUTOR_MODULE = 0x14191Ea54B4c176fCf86f51b0FAc7CB1E71Df7d7;
+    address public immutable UNIVERSAL_EXECUTOR_MODULE =
+        0x14191Ea54B4c176fCf86f51b0FAc7CB1E71Df7d7;
 
-    /// @notice Source chain this PRC20 mirrors (used for oracle lookups).
-    string public SOURCE_CHAIN_NAMESPACE;
+    /// @notice (Deprecated) Source chain ID this PRC20 mirrors.
+    string public SOURCE_CHAIN_ID;
 
     /// @notice Source chain ERC20 address of the PRC20.
     string public SOURCE_TOKEN_ADDRESS;
@@ -34,6 +35,14 @@ contract PRC20 is IPRC20, Initializable {
     /// @notice UniversalCore contract providing gas oracles (gas coin token & gas price).
     address public UNIVERSAL_CORE;
 
+    /// @notice (Deprecated) Gas limit used in fee computation.
+    /// @dev    Only included to avoid storage collision in Testnet PRC20.
+    uint256 public GAS_LIMIT;
+
+    /// @notice (Deprecated) Flat fee — protocol fees now stored in UniversalCore.
+    /// @dev    Only included to avoid storage collision in Testnet PRC20.
+    uint256 public PC_PROTOCOL_FEE;
+
     string private _name;
     string private _symbol;
     uint8 private _decimals;
@@ -42,8 +51,11 @@ contract PRC20 is IPRC20, Initializable {
     mapping(address => uint256) private _balances;
     mapping(address => mapping(address => uint256)) private _allowances;
 
+    /// @notice Source chain namespace this PRC20 mirrors (used for oracle lookups).
+    string public SOURCE_CHAIN_NAMESPACE;
+
     // =========================
-    //    PRC20: MODIFIERS
+    //    PRC20V0: MODIFIERS
     // =========================
 
     /// @notice Restricts to the Universal Executor Module (protocol owner).
@@ -55,19 +67,20 @@ contract PRC20 is IPRC20, Initializable {
     }
 
     // =========================
-    //    PRC20: CONSTRUCTOR
+    //    PRC20V0: CONSTRUCTOR
     // =========================
 
     constructor() {
         _disableInitializers();
     }
 
-    /// @dev                              Initializer for the upgradeable PRC20 token.
+    /// @dev                              Initializer for the upgradeable PRC20 V0 token.
     /// @param name_                      ERC-20 name
     /// @param symbol_                    ERC-20 symbol
     /// @param decimals_                  ERC-20 decimals
     /// @param sourceChainNamespace_      Source chain identifier this PRC20 represents
     /// @param tokenType_                 Token classification (PC, NATIVE, ERC20)
+    /// @param protocolFlatFee_           Absolute flat fee (units: gas coin PRC20)
     /// @param universalCore_             UniversalCore contract address
     /// @param sourceTokenAddress_        Source chain token address
     function initialize(
@@ -76,6 +89,7 @@ contract PRC20 is IPRC20, Initializable {
         uint8 decimals_,
         string memory sourceChainNamespace_,
         TokenType tokenType_,
+        uint256 protocolFlatFee_,
         address universalCore_,
         string memory sourceTokenAddress_
     ) public virtual initializer {
@@ -87,12 +101,13 @@ contract PRC20 is IPRC20, Initializable {
 
         SOURCE_CHAIN_NAMESPACE = sourceChainNamespace_;
         TOKEN_TYPE = tokenType_;
+        PC_PROTOCOL_FEE = protocolFlatFee_;
         UNIVERSAL_CORE = universalCore_;
         SOURCE_TOKEN_ADDRESS = sourceTokenAddress_;
     }
 
     // =========================
-    //    PRC20_1: ERC-20 VIEW
+    //    PRC20V0_1: ERC-20 VIEW
     // =========================
 
     /// @inheritdoc IPRC20
@@ -121,22 +136,31 @@ contract PRC20 is IPRC20, Initializable {
     }
 
     /// @inheritdoc IPRC20
-    function allowance(address owner, address spender) external view returns (uint256) {
+    function allowance(
+        address owner,
+        address spender
+    ) external view returns (uint256) {
         return _allowances[owner][spender];
     }
 
     // =========================
-    //    PRC20_2: ERC-20 MUTATIVE
+    //    PRC20V0_2: ERC-20 MUTATIVE
     // =========================
 
     /// @inheritdoc IPRC20
-    function transfer(address recipient, uint256 amount) external returns (bool) {
+    function transfer(
+        address recipient,
+        uint256 amount
+    ) external returns (bool) {
         _transfer(msg.sender, recipient, amount);
         return true;
     }
 
     /// @inheritdoc IPRC20
-    function approve(address spender, uint256 amount) external returns (bool) {
+    function approve(
+        address spender,
+        uint256 amount
+    ) external returns (bool) {
         if (spender == address(0)) revert CommonErrors.ZeroAddress();
         _allowances[msg.sender][spender] = amount;
         emit Approval(msg.sender, spender, amount);
@@ -144,13 +168,19 @@ contract PRC20 is IPRC20, Initializable {
     }
 
     /// @inheritdoc IPRC20
-    function transferFrom(address sender, address recipient, uint256 amount) external returns (bool) {
+    function transferFrom(
+        address sender,
+        address recipient,
+        uint256 amount
+    ) external returns (bool) {
         uint256 currentAllowance = _allowances[sender][msg.sender];
         if (currentAllowance < amount) revert PRC20Errors.LowAllowance();
         unchecked {
             _allowances[sender][msg.sender] = currentAllowance - amount;
         }
-        emit Approval(sender, msg.sender, _allowances[sender][msg.sender]);
+        emit Approval(
+            sender, msg.sender, _allowances[sender][msg.sender]
+        );
 
         _transfer(sender, recipient, amount);
 
@@ -164,12 +194,18 @@ contract PRC20 is IPRC20, Initializable {
     }
 
     // =========================
-    //    PRC20_3: BRIDGE ENTRYPOINTS
+    //    PRC20V0_3: BRIDGE ENTRYPOINTS
     // =========================
 
     /// @inheritdoc IPRC20
-    function deposit(address to, uint256 amount) external returns (bool) {
-        if (msg.sender != UNIVERSAL_CORE && msg.sender != UNIVERSAL_EXECUTOR_MODULE) {
+    function deposit(
+        address to,
+        uint256 amount
+    ) external returns (bool) {
+        if (
+            msg.sender != UNIVERSAL_CORE
+                && msg.sender != UNIVERSAL_EXECUTOR_MODULE
+        ) {
             revert PRC20Errors.InvalidSender();
         }
         if (PausableUpgradeable(UNIVERSAL_CORE).paused()) {
@@ -178,17 +214,21 @@ contract PRC20 is IPRC20, Initializable {
 
         _mint(to, amount);
 
-        emit Deposit(abi.encodePacked(msg.sender), to, amount);
+        emit Deposit(
+            abi.encodePacked(msg.sender), to, amount
+        );
         return true;
     }
 
     // =========================
-    //    PRC20_4: ADMIN ACTIONS
+    //    PRC20V0_4: ADMIN ACTIONS
     // =========================
 
     /// @notice          Update UniversalCore contract (gas coin & price oracle source).
     /// @param addr      New UniversalCore address
-    function updateUniversalCore(address addr) external onlyUniversalExecutor {
+    function updateUniversalCore(
+        address addr
+    ) external onlyUniversalExecutor {
         if (addr == address(0)) revert CommonErrors.ZeroAddress();
         UNIVERSAL_CORE = addr;
         emit UpdatedUniversalCore(addr);
@@ -196,7 +236,9 @@ contract PRC20 is IPRC20, Initializable {
 
     /// @notice          Update token name.
     /// @param newName   New name string
-    function setName(string memory newName) external onlyUniversalExecutor {
+    function setName(
+        string memory newName
+    ) external onlyUniversalExecutor {
         string memory oldName = _name;
         _name = newName;
         emit NameUpdated(oldName, newName);
@@ -204,21 +246,27 @@ contract PRC20 is IPRC20, Initializable {
 
     /// @notice            Update token symbol.
     /// @param newSymbol   New symbol string
-    function setSymbol(string memory newSymbol) external onlyUniversalExecutor {
+    function setSymbol(
+        string memory newSymbol
+    ) external onlyUniversalExecutor {
         string memory oldSymbol = _symbol;
         _symbol = newSymbol;
         emit SymbolUpdated(oldSymbol, newSymbol);
     }
 
     // =========================
-    //    PRC20_5: INTERNAL HELPERS
+    //    PRC20V0_5: INTERNAL HELPERS
     // =========================
 
     /// @dev Internal transfer with balance and zero-address checks.
     /// @param sender      Source address
     /// @param recipient   Destination address
     /// @param amount      Amount to transfer
-    function _transfer(address sender, address recipient, uint256 amount) internal {
+    function _transfer(
+        address sender,
+        address recipient,
+        uint256 amount
+    ) internal {
         if (sender == address(0) || recipient == address(0)) {
             revert CommonErrors.ZeroAddress();
         }

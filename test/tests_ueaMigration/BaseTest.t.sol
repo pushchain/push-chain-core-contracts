@@ -175,9 +175,13 @@ contract BaseTest is Test {
         UEAFactory factoryImpl = new UEAFactory();
 
         bytes memory initData =
-            abi.encodeWithSelector(UEAFactory.initialize.selector, deployer, makeAddr("pauser"), "42101");
+            abi.encodeWithSelector(UEAFactory.initialize.selector, deployer, makeAddr("pauser"));
         ERC1967Proxy factoryProxy = new ERC1967Proxy(address(factoryImpl), initData);
         factory = UEAFactory(address(factoryProxy));
+
+        // Phase 2: initializeV2 to set up RBAC, then set pushChainId
+        factory.initializeV2(deployer, makeAddr("pauser"));
+        factory.updatePushChainId("42101");
 
         // Set UEA proxy implementation in factory
         factory.updateUEAProxyImplementation(address(ueaProxyImpl));

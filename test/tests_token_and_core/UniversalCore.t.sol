@@ -89,7 +89,7 @@ contract UniversalCoreTest is Test, UpgradeableContractHelper {
         // Deploy PRC20 token implementation
         PRC20 implementationPrc20 = new PRC20();
 
-        // Deploy proxy and initialize
+        // Deploy proxy and initialize (V0 PRC20 takes protocolFlatFee_ param)
         bytes memory initDataPrc20 = abi.encodeWithSelector(
             PRC20.initialize.selector,
             "Test PRC20",
@@ -97,6 +97,7 @@ contract UniversalCoreTest is Test, UpgradeableContractHelper {
             18,
             CHAIN_NAMESPACE,
             IPRC20.TokenType.ERC20,
+            uint256(0),
             address(0x1), // Temporary address, will be updated
             SOURCE_TOKEN_ADDRESS
         );
@@ -107,18 +108,29 @@ contract UniversalCoreTest is Test, UpgradeableContractHelper {
         // Deploy UniversalCore implementation
         UniversalCore implementation = new UniversalCore();
 
-        // Deploy proxy and initialize
+        // Phase 1: Deploy proxy with V0 initialize (wpc, factory, router, quoter)
         bytes memory initData = abi.encodeWithSelector(
             UniversalCore.initialize.selector,
-            deployer,
-            pauser,
             address(mockWPC),
             address(mockFactory),
-            address(mockRouter)
+            address(mockRouter),
+            address(0)
         );
 
         address proxyAddress = deployUpgradeableContract(address(implementation), initData);
         universalCore = UniversalCore(payable(proxyAddress));
+
+        // Clear _currentDefaultAdmin set by V0 initialize's _grantRole override
+        // so initializeV2 can call __AccessControlDefaultAdminRules_init cleanly.
+        // On real testnet this slot was never set because the old impl used plain AccessControlUpgradeable.
+        vm.store(
+            proxyAddress,
+            bytes32(uint256(0xeef3dac4538c82c8ace4063ab0acd2d15cdb5883aa1dff7c2673abb3d8698401)),
+            bytes32(0)
+        );
+
+        // Phase 2: initializeV2 to set up RBAC
+        universalCore.initializeV2(deployer, pauser);
 
         // Update PRC20 universalCore contract
         vm.prank(UNIVERSAL_EXECUTOR_MODULE);
@@ -149,7 +161,7 @@ contract UniversalCoreTest is Test, UpgradeableContractHelper {
         UniversalCore newHandler = new UniversalCore();
         // Should not be able to call initialize on implementation directly
         vm.expectRevert(Initializable.InvalidInitialization.selector);
-        newHandler.initialize(deployer, pauser, address(mockWPC), address(mockFactory), address(mockRouter));
+        newHandler.initialize(address(mockWPC), address(mockFactory), address(mockRouter), address(0));
     }
 
     function test_Initialize_GrantsAdminRoleToAdmin() public {
@@ -159,15 +171,23 @@ contract UniversalCoreTest is Test, UpgradeableContractHelper {
         UniversalCore newImplementation = new UniversalCore();
         bytes memory initData = abi.encodeWithSelector(
             UniversalCore.initialize.selector,
-            admin,
-            newPauser,
             address(mockWPC),
             address(mockFactory),
-            address(mockRouter)
+            address(mockRouter),
+            address(0)
         );
 
         address newProxyAddress = deployUpgradeableContract(address(newImplementation), initData);
         UniversalCore newHandler = UniversalCore(payable(newProxyAddress));
+
+        vm.store(
+            newProxyAddress,
+            bytes32(uint256(0xeef3dac4538c82c8ace4063ab0acd2d15cdb5883aa1dff7c2673abb3d8698401)),
+            bytes32(0)
+        );
+
+        // Phase 2: initializeV2 sets up RBAC
+        newHandler.initializeV2(admin, newPauser);
 
         assertTrue(newHandler.hasRole(newHandler.DEFAULT_ADMIN_ROLE(), admin));
         assertTrue(newHandler.hasRole(newHandler.ROLE_MANAGER_ROLE(), admin));
@@ -185,7 +205,7 @@ contract UniversalCoreTest is Test, UpgradeableContractHelper {
 
     function test_Initialize_RevertsOnSecondCall() public {
         vm.expectRevert(Initializable.InvalidInitialization.selector);
-        universalCore.initialize(deployer, pauser, address(mockWPC), address(mockFactory), address(mockRouter));
+        universalCore.initialize(address(mockWPC), address(mockFactory), address(mockRouter), address(0));
     }
 
     function test_UniversalExecutorModule_IsImmutable() public view {
@@ -705,6 +725,7 @@ contract UniversalCoreTest is Test, UpgradeableContractHelper {
             18,
             newNs,
             IPRC20.TokenType.ERC20,
+            uint256(0),
             address(universalCore),
             SOURCE_TOKEN_ADDRESS
         );
@@ -733,6 +754,7 @@ contract UniversalCoreTest is Test, UpgradeableContractHelper {
             18,
             "999", // Different chain ID
             IPRC20.TokenType.ERC20,
+            uint256(0),
             address(universalCore),
             SOURCE_TOKEN_ADDRESS
         );
@@ -993,6 +1015,7 @@ contract UniversalCoreTest is Test, UpgradeableContractHelper {
             18,
             "999",
             IPRC20.TokenType.ERC20,
+            uint256(0),
             address(universalCore),
             SOURCE_TOKEN_ADDRESS
         );
@@ -1017,6 +1040,7 @@ contract UniversalCoreTest is Test, UpgradeableContractHelper {
             18,
             "888",
             IPRC20.TokenType.ERC20,
+            uint256(0),
             address(universalCore),
             SOURCE_TOKEN_ADDRESS
         );
@@ -1369,6 +1393,7 @@ contract UniversalCoreTest is Test, UpgradeableContractHelper {
             18,
             freshNs,
             IPRC20.TokenType.ERC20,
+            uint256(0),
             address(universalCore),
             SOURCE_TOKEN_ADDRESS
         );
@@ -1411,6 +1436,7 @@ contract UniversalCoreTest is Test, UpgradeableContractHelper {
             18,
             chainBNs,
             IPRC20.TokenType.ERC20,
+            uint256(0),
             address(universalCore),
             SOURCE_TOKEN_ADDRESS
         );
@@ -1455,6 +1481,7 @@ contract UniversalCoreTest is Test, UpgradeableContractHelper {
             18,
             freshNs,
             IPRC20.TokenType.ERC20,
+            uint256(0),
             address(universalCore),
             SOURCE_TOKEN_ADDRESS
         );

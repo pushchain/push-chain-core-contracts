@@ -17,8 +17,9 @@ import {IWPC} from "./interfaces/IWPC.sol";
 import {UniversalCoreErrors, CommonErrors} from "./libraries/Errors.sol";
 
 /**
- * @title   UniversalCore
- * @notice  The UniversalCore acts as the core contract for all functionalities
+ * @title   UniversalCore (testnet)
+ * @notice  Temporary UniversalCore contract for Push Chain TESTNET.
+ *          The UniversalCore acts as the core contract for all functionalities
  *          needed by the interoperability feature of Push Chain.
  * @dev     The UniversalCore primarily handles the following functionalities:
  *            - Generation of supported PRC-20 tokens, and transferring it to accurate recipients.
@@ -26,11 +27,6 @@ import {UniversalCoreErrors, CommonErrors} from "./libraries/Errors.sol";
  *            - Setting up the gas price for each chain.
  *            - Maintaining a registry of Uniswap V3 pools for each token pair.
  * @dev     All imperative functionalities are handled by the Universal Executor Module.
- *
- *          Access control: AccessControlDefaultAdminRulesUpgradeable (2-day delay).
- *          Roles: DEFAULT_ADMIN_ROLE (root), ROLE_MANAGER_ROLE (grants operational roles),
- *          UVCORE_ADMIN_ROLE (protocol config), OPERATOR_ROLE (address setters + unpause),
- *          PAUSER_ROLE (pause only).
  */
 contract UniversalCore is
     IUniversalCore,
@@ -42,12 +38,57 @@ contract UniversalCore is
     using SafeERC20 for IERC20;
 
     // =========================
-    //    UC: STATE VARIABLES
+    //    UCV0: STATE VARIABLES
     // =========================
 
-    // -- Protocol constants & roles --
+    /// @notice (Deprecated) Map to know the gas price of each chain given a chain id.
+    mapping(uint256 => uint256) public _gasPriceByChainId;
 
+    /// @notice (Deprecated) Map to know the PRC20 address of a token given a chain id, ex pETH, pBNB etc.
+    mapping(uint256 => address) public _gasTokenPRC20ByChainId;
+
+    /// @notice (Deprecated) Map to know Uniswap V3 pool of PC/PRC20 given a chain id.
+    mapping(uint256 => address) public _gasPCPoolByChainId;
+
+    /// @notice Supported token list for auto swap to PC using Uniswap V3.
+    mapping(address => bool) public isAutoSwapSupported;
+
+    /// @notice Default fee tier for each token (0 = not set).
+    mapping(address => uint24) public defaultFeeTier;
+
+    /// @dev Deprecated. Slot retained for storage layout compatibility with deployed testnet proxy.
+    mapping(address => uint256) private __deprecated_slippageTolerance;
+
+    /// @notice Default deadline in minutes for swaps.
+    uint256 public defaultDeadlineMins = 20;
+
+    /// @notice Fungible address is always the same, it's on protocol level.
     address public immutable UNIVERSAL_EXECUTOR_MODULE = 0x14191Ea54B4c176fCf86f51b0FAc7CB1E71Df7d7;
+
+    /// @notice Uniswap V3 Factory.
+    address public uniswapV3Factory;
+
+    /// @notice Uniswap V3 SwapRouter.
+    address public uniswapV3SwapRouter;
+
+    /// @dev Deprecated. Slot retained for storage layout compatibility with deployed testnet proxy.
+    address public uniswapV3Quoter;
+
+    /// @notice Address of the wrapped PC to interact with Uniswap V3.
+    address public WPC;
+
+    /// @notice Map to know the gas price of each chain given a chain namespace.
+    mapping(string => uint256) public gasPriceByChainNamespace;
+
+    /// @notice Map to know the PRC20 address of a token given a chain namespace, ex pETH, pBNB etc.
+    mapping(string => address) public gasTokenPRC20ByChainNamespace;
+
+    /// @notice Map to know Uniswap V3 pool of PC/PRC20 given a chain namespace.
+    mapping(string => address) public gasPCPoolByChainNamespace;
+
+    /// @notice Role for managing gas-related configurations.
+    bytes32 public constant MANAGER_ROLE = keccak256("MANAGER_ROLE");
+
     bytes32 public constant ROLE_MANAGER_ROLE = keccak256("ROLE_MANAGER_ROLE");
     bytes32 public constant UVCORE_ADMIN_ROLE = keccak256("UVCORE_ADMIN_ROLE");
     bytes32 public constant OPERATOR_ROLE = keccak256("OPERATOR_ROLE");
@@ -59,39 +100,36 @@ contract UniversalCore is
     uint24 public constant FEE_TIER_MEDIUM = 3000;
     uint24 public constant FEE_TIER_HIGH = 10000;
 
-    // -- Protocol addresses --
+    // -- Slippage cap (basis points) --
+    uint256 public constant MAX_SLIPPAGE_BPS = 5000;
+
+    /// @notice (Deprecated) Base gas limit — now per-chain via baseGasLimitByChainNamespace.
+    /// @dev Only included to avoid storage collision in Testnet UniversalCore.
+    uint256 public BASE_GAS_LIMIT = 500_000;
+
+    /// @dev Deprecated. Slot retained for storage layout compatibility with deployed testnet proxy.
+    mapping(address => bool) private __deprecated_isSupportedToken;
+
+    /// @notice Address of the UniversalGatewayPC that can call swapAndBurnGas.
     address public universalGatewayPC;
-    address public WPC;
 
-    // -- Chain configuration --
-
-    mapping(string => uint256) public gasPriceByChainNamespace;
-    mapping(string => address) public gasTokenPRC20ByChainNamespace;
-    mapping(string => uint256) public baseGasLimitByChainNamespace;
-    mapping(string => uint256) public rescueFundsGasLimitByChainNamespace;
+    /// @notice External chain block height last observed by relayer.
     mapping(string => uint256) public chainHeightByChainNamespace;
+
+    /// @notice Timestamp when the chain meta was last observed.
     mapping(string => uint256) public timestampObservedAtByChainNamespace;
 
-    /// @notice Maximum acceptable age (seconds) of `timestampObservedAtByChainNamespace`
-    ///         before gas fee quotes for that chain are rejected as stale.
-    /// @dev    `0` disables the check for that chain (opt-in). Set per chain by
-    ///         UVCORE_ADMIN_ROLE via `updateMaxStalenessByChain`.
-    mapping(string => uint256) public maxStalenessByChainNamespace;
-
-    // -- Token configuration --
-
+    /// @notice Protocol fee in native PC per token address.
     mapping(address => uint256) public protocolFeeByToken;
 
-    // -- Uniswap and AMM specific states --
+    /// @notice Base gas limit per chain namespace for cross-chain outbound transactions.
+    mapping(string => uint256) public baseGasLimitByChainNamespace;
 
-    address public uniswapV3Factory;
-    address public uniswapV3SwapRouter;
-    /// @notice Stored gas PC pool per chain — informational only for off-chain consumers.
-    /// @dev    Not used in runtime swap logic. Pool resolution is dynamic via uniswapV3Factory.
-    mapping(string => address) public gasPCPoolByChainNamespace;
-    mapping(address => bool) public isAutoSwapSupported;
-    mapping(address => uint24) public defaultFeeTier;
-    uint256 public defaultDeadlineMins;
+    /// @notice Rescue funds gas limit per chain namespace.
+    mapping(string => uint256) public rescueFundsGasLimitByChainNamespace;
+
+    /// @notice Maximum acceptable age (seconds) of gas data before quotes are rejected as stale.
+    mapping(string => uint256) public maxStalenessByChainNamespace;
 
     /// @notice L1 gas fee per chain namespace (in gas token units).
     mapping(string => uint256) public l1GasFeeByChainNamespace;
@@ -100,7 +138,7 @@ contract UniversalCore is
     mapping(string => uint256) public tssFundMigrationGasLimitByChainNamespace;
 
     // =========================
-    //    UC: MODIFIERS
+    //    UCV0: MODIFIERS
     // =========================
 
     modifier onlyUEModule() {
@@ -118,7 +156,7 @@ contract UniversalCore is
     }
 
     // =========================
-    //    UC: CONSTRUCTOR
+    //    UCV0: CONSTRUCTOR
     // =========================
 
     constructor() {
@@ -126,23 +164,32 @@ contract UniversalCore is
     }
 
     /// @dev                             Initializer function for the upgradeable contract.
-    /// @param _admin                    Admin address — granted DEFAULT_ADMIN_ROLE + all operational roles
-    /// @param _pauser                   Address granted the PAUSER_ROLE
-    /// @param _wpc                      Address of the wrapped PC token
-    /// @param _uniswapV3Factory         Address of the Uniswap V3 factory
-    /// @param _uniswapV3SwapRouter      Address of the Uniswap V3 swap router
-    function initialize(
-        address _admin,
-        address _pauser,
-        address _wpc,
-        address _uniswapV3Factory,
-        address _uniswapV3SwapRouter
-    ) public virtual initializer {
+    /// @param wpc_                      Address of the wrapped PC token
+    /// @param uniswapV3Factory_         Address of the Uniswap V3 factory
+    /// @param uniswapV3SwapRouter_      Address of the Uniswap V3 swap router
+    /// @param uniswapV3Quoter_          Address of the Uniswap V3 quoter
+    function initialize(address wpc_, address uniswapV3Factory_, address uniswapV3SwapRouter_, address uniswapV3Quoter_)
+        public
+        virtual
+        initializer
+    {
+        __ReentrancyGuard_init();
+
+        _grantRole(DEFAULT_ADMIN_ROLE, msg.sender);
+
+        WPC = wpc_;
+        uniswapV3Factory = uniswapV3Factory_;
+        uniswapV3SwapRouter = uniswapV3SwapRouter_;
+        uniswapV3Quoter = uniswapV3Quoter_;
+    }
+
+    /// @dev                     Reinitializer to migrate to granular RBAC with admin transfer delay.
+    /// @param _admin            Admin address — granted DEFAULT_ADMIN_ROLE + all operational roles
+    /// @param _pauser           Address granted the PAUSER_ROLE
+    function initializeV2(address _admin, address _pauser) public reinitializer(2) {
         if (_admin == address(0) || _pauser == address(0)) revert CommonErrors.ZeroAddress();
 
-        __ReentrancyGuard_init();
         __AccessControlDefaultAdminRules_init(1 days, _admin);
-        __Pausable_init();
 
         _setRoleAdmin(UVCORE_ADMIN_ROLE, ROLE_MANAGER_ROLE);
         _setRoleAdmin(OPERATOR_ROLE, ROLE_MANAGER_ROLE);
@@ -152,15 +199,10 @@ contract UniversalCore is
         _grantRole(UVCORE_ADMIN_ROLE, _admin);
         _grantRole(OPERATOR_ROLE, _admin);
         _grantRole(PAUSER_ROLE, _pauser);
-
-        WPC = _wpc;
-        uniswapV3Factory = _uniswapV3Factory;
-        uniswapV3SwapRouter = _uniswapV3SwapRouter;
-        defaultDeadlineMins = 20;
     }
 
     // =========================
-    //    UC_1: UE MODULE ACTIONS
+    //    UCV0_1: UE MODULE ACTIONS
     // =========================
 
     /// @inheritdoc IUniversalCore
@@ -216,7 +258,7 @@ contract UniversalCore is
     }
 
     // =========================
-    //    UC_2: GATEWAY ACTIONS
+    //    UCV0_2: GATEWAY ACTIONS
     // =========================
 
     /// @inheritdoc IUniversalCore
@@ -279,7 +321,7 @@ contract UniversalCore is
     }
 
     // =========================
-    //    UC_3: PUBLIC GETTERS
+    //    UCV0_3: PUBLIC GETTERS
     // =========================
 
     /// @inheritdoc IUniversalCore
@@ -349,7 +391,7 @@ contract UniversalCore is
     }
 
     // =========================
-    //    UC_4: ADMIN CONFIG
+    //    UCV0_4: MANAGER ACTIONS
     // =========================
 
     /// @notice              Set protocol fee (in native PC) for a token.
@@ -362,8 +404,6 @@ contract UniversalCore is
     }
 
     /// @notice                  Set the gas PC pool for a chain (informational — not enforced at runtime).
-    /// @dev                     The stored pool is for off-chain observability only. Runtime swap flows
-    ///                          (swapAndBurnGas, _autoSwap) resolve pools dynamically from the factory.
     /// @param chainNamespace    Chain Namespace (e.g. "eip155:1" for Ethereum Mainnet)
     /// @param gasToken          Gas coin address
     /// @param fee               Uniswap V3 fee tier
@@ -396,7 +436,7 @@ contract UniversalCore is
     }
 
     /// @notice                  Setter for gasTokenPRC20ByChainNamespace map.
-    /// @param chainNamespace    Chain Namespace (e.g. "eip155:1" for Ethereum Mainnet)
+    /// @param chainNamespace    Chain Namespace
     /// @param prc20             PRC20 address
     function updateGasTokenPRC20(string memory chainNamespace, address prc20) external onlyRole(UVCORE_ADMIN_ROLE) {
         if (prc20 == address(0)) revert CommonErrors.ZeroAddress();
@@ -406,8 +446,21 @@ contract UniversalCore is
     }
 
     // =========================
-    //    UC_5: OPERATOR ACTIONS
+    //    UCV0_5: ADMIN ACTIONS
     // =========================
+
+    /// @notice              Deposits PRC20 tokens via admin for testnet liquidity.
+    /// @param prc20         PRC20 address for deposit
+    /// @param amount        Amount to deposit
+    /// @param recipient     Address to deposit tokens to
+    function mintPRCTokensviaAdmin(address prc20, uint256 amount, address recipient)
+        external
+        onlyRole(UVCORE_ADMIN_ROLE)
+        whenNotPaused
+    {
+        _validateParams(prc20, amount, recipient);
+        if (!IPRC20(prc20).deposit(recipient, amount)) revert UniversalCoreErrors.PRC20OperationFailed();
+    }
 
     /// @notice          Set auto-swap support for a token.
     /// @param token     Token address
@@ -449,7 +502,7 @@ contract UniversalCore is
 
     /// @notice          Set default fee tier for a token.
     /// @param token     Token address
-    /// @param feeTier   Fee tier (500, 3000, 10000)
+    /// @param feeTier   Fee tier (100, 500, 3000, 10000)
     function updateDefaultFeeTier(address token, uint24 feeTier) external onlyRole(UVCORE_ADMIN_ROLE) {
         if (token == address(0)) revert CommonErrors.ZeroAddress();
         if (
@@ -548,9 +601,8 @@ contract UniversalCore is
     }
 
     // =========================
-    //    UC_6: PRIVATE HELPERS
+    //    UCV0_6: PRIVATE HELPERS
     // =========================
-
     /// @dev Shared input validation for deposit/refund functions.
     /// @param token      Token address to validate
     /// @param amount     Amount to validate (must be > 0)
@@ -638,7 +690,7 @@ contract UniversalCore is
     }
 
     // =========================
-    //    UC: RECEIVE
+    //    UCV0: RECEIVE
     // =========================
 
     /// @notice Accept native PC transfers (e.g., from WPC withdraw).

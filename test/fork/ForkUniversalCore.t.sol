@@ -62,10 +62,22 @@ contract ForkUniversalCoreTest is Test, UpgradeableContractHelper, PushChainAddr
         // Deploy UniversalCore behind proxy
         UniversalCore implementation = new UniversalCore();
         bytes memory initData = abi.encodeWithSelector(
-            UniversalCore.initialize.selector, deployer, makeAddr("pauser"), WPC_TOKEN, UNISWAP_FACTORY, UNISWAP_ROUTER
+            UniversalCore.initialize.selector, WPC_TOKEN, UNISWAP_FACTORY, UNISWAP_ROUTER, address(0)
         );
         address proxyAddress = deployUpgradeableContract(address(implementation), initData);
         universalCore = UniversalCore(payable(proxyAddress));
+
+        // Clear _currentDefaultAdmin set by V0 initialize (simulates real testnet state
+        // where the old implementation used plain AccessControlUpgradeable without the
+        // AccessControlDefaultAdminRules override that writes _currentDefaultAdmin).
+        vm.store(
+            proxyAddress,
+            bytes32(uint256(0xeef3dac4538c82c8ace4063ab0acd2d15cdb5883aa1dff7c2673abb3d8698401)),
+            bytes32(0)
+        );
+
+        // Phase 2: initializeV2 to set up RBAC
+        universalCore.initializeV2(deployer, makeAddr("pauser"));
 
         // Set gateway
         universalCore.updateUniversalGatewayPC(gateway);

@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 pragma solidity 0.8.26;
 
-import {CEA} from "../cea/CEA.sol";
+import {CEA} from "./CEA.sol";
 
 /// @title  CEA_V2
 /// @notice Testnet-only v2 implementation with a VERSION getter for migration verification.

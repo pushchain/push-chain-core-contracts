@@ -62,10 +62,16 @@ contract UEAFactoryTest is Test {
         // Deploy the factory implementation
         UEAFactory factoryImpl = new UEAFactory();
 
-        // Deploy and initialize the proxy with initialOwner, initialPauser, and pushChainId
-        bytes memory initData = abi.encodeWithSelector(UEAFactory.initialize.selector, deployer, pauser, "42101");
+        // Phase 1: Deploy proxy with V0 initialize (initialOwner, initialPauser)
+        bytes memory initData = abi.encodeWithSelector(UEAFactory.initialize.selector, deployer, pauser);
         ERC1967Proxy proxy = new ERC1967Proxy(address(factoryImpl), initData);
         factory = UEAFactory(address(proxy));
+
+        // Phase 2: initializeV2 to set up RBAC
+        factory.initializeV2(deployer, pauser);
+
+        // Set pushChainId separately (not part of V0 initialize)
+        factory.updatePushChainId("42101");
 
         // Set UEAProxy implementation after initialization
         factory.updateUEAProxyImplementation(ueaProxyImpl);
@@ -817,9 +823,13 @@ contract UEAFactoryTest is Test {
     function testComputeUEA_RevertsWhenNoProxyImplementation() public {
         // Deploy a fresh factory without proxy implementation
         UEAFactory freshFactoryImpl = new UEAFactory();
-        bytes memory initData = abi.encodeWithSelector(UEAFactory.initialize.selector, address(this), pauser, "42101");
+        bytes memory initData = abi.encodeWithSelector(UEAFactory.initialize.selector, address(this), pauser);
         ERC1967Proxy freshProxy = new ERC1967Proxy(address(freshFactoryImpl), initData);
         UEAFactory freshFactory = UEAFactory(address(freshProxy));
+
+        // Phase 2: initializeV2 to set up RBAC, then set pushChainId
+        freshFactory.initializeV2(address(this), pauser);
+        freshFactory.updatePushChainId("42101");
 
         // Register a chain but do NOT set proxy implementation
         bytes32 chainHash = keccak256(abi.encode("eip155", "1"));
@@ -837,9 +847,13 @@ contract UEAFactoryTest is Test {
     function testDeployUEA_RevertsWhenNoProxyImplementation() public {
         // Deploy a fresh factory without proxy implementation
         UEAFactory freshFactoryImpl = new UEAFactory();
-        bytes memory initData = abi.encodeWithSelector(UEAFactory.initialize.selector, address(this), pauser, "42101");
+        bytes memory initData = abi.encodeWithSelector(UEAFactory.initialize.selector, address(this), pauser);
         ERC1967Proxy freshProxy = new ERC1967Proxy(address(freshFactoryImpl), initData);
         UEAFactory freshFactory = UEAFactory(address(freshProxy));
+
+        // Phase 2: initializeV2 to set up RBAC, then set pushChainId
+        freshFactory.initializeV2(address(this), pauser);
+        freshFactory.updatePushChainId("42101");
 
         // Register a chain but do NOT set proxy implementation
         bytes32 chainHash = keccak256(abi.encode("eip155", "1"));
@@ -1087,7 +1101,7 @@ contract UEAFactoryTest is Test {
         ERC1967Proxy newProxy = new ERC1967Proxy(address(newImpl), "");
 
         vm.expectRevert(Errors.InvalidInputArgs.selector);
-        UEAFactory(address(newProxy)).initialize(deployer, address(0), "42101");
+        UEAFactory(address(newProxy)).initialize(deployer, address(0));
     }
 
     // =========================================================================
@@ -1168,20 +1182,33 @@ contract UEAFactoryTest is Test {
     // =========================================================================
 
     function test_Initialize_SeedsPushChainId() public {
-        // Fresh proxy deployed with pushChainId seeded via initialize
+        // Fresh proxy deployed with V0 initialize, then initializeV2 + updatePushChainId
         UEAFactory freshImpl = new UEAFactory();
-        bytes memory initData = abi.encodeWithSelector(UEAFactory.initialize.selector, deployer, pauser, "9000");
+        bytes memory initData = abi.encodeWithSelector(UEAFactory.initialize.selector, deployer, pauser);
         ERC1967Proxy proxy = new ERC1967Proxy(address(freshImpl), initData);
         UEAFactory freshFactory = UEAFactory(address(proxy));
+
+        // pushChainId is empty before updatePushChainId
+        assertEq(freshFactory.pushChainId(), "");
+
+        // initializeV2 grants RBAC roles needed for updatePushChainId
+        freshFactory.initializeV2(deployer, pauser);
+        freshFactory.updatePushChainId("9000");
 
         assertEq(freshFactory.pushChainId(), "9000");
     }
 
-    function test_Initialize_RevertsOnEmptyPushChainId() public {
+    function test_UpdatePushChainId_RevertsOnEmptyString_FreshFactory() public {
+        // Fresh proxy: V0 initialize + initializeV2, then verify empty pushChainId reverts
         UEAFactory freshImpl = new UEAFactory();
-        bytes memory initData = abi.encodeWithSelector(UEAFactory.initialize.selector, deployer, pauser, "");
-        vm.expectRevert();
-        new ERC1967Proxy(address(freshImpl), initData);
+        bytes memory initData = abi.encodeWithSelector(UEAFactory.initialize.selector, deployer, pauser);
+        ERC1967Proxy proxy = new ERC1967Proxy(address(freshImpl), initData);
+        UEAFactory freshFactory = UEAFactory(address(proxy));
+
+        freshFactory.initializeV2(deployer, pauser);
+
+        vm.expectRevert(Errors.InvalidInputArgs.selector);
+        freshFactory.updatePushChainId("");
     }
 
     function test_SetPushChainId_HappyPath() public {

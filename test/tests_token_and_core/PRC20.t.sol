@@ -64,19 +64,30 @@ contract PRC20Test is Test, UpgradeableContractHelper {
         // Deploy universalCore implementation
         universalCoreImplementation = new UniversalCore();
 
-        // Create initialization data
+        // Create initialization data (V0 two-phase init)
         bytes memory initData = abi.encodeWithSelector(
             UniversalCore.initialize.selector,
-            address(this),
-            makeAddr("pauser"),
             mockWPC,
             mockUniswapFactory,
-            mockUniswapRouter
+            mockUniswapRouter,
+            address(0)
         );
 
         // Deploy proxy and initialize
         address proxyAddress = deployUpgradeableContract(address(universalCoreImplementation), initData);
         universalCore = UniversalCore(payable(proxyAddress));
+
+        // Clear _currentDefaultAdmin set by V0 initialize (simulates real testnet state
+        // where the old implementation used plain AccessControlUpgradeable without the
+        // AccessControlDefaultAdminRules override that writes _currentDefaultAdmin).
+        vm.store(
+            proxyAddress,
+            bytes32(uint256(0xeef3dac4538c82c8ace4063ab0acd2d15cdb5883aa1dff7c2673abb3d8698401)),
+            bytes32(0)
+        );
+
+        // Phase 2: initializeV2 to set up RBAC
+        universalCore.initializeV2(address(this), makeAddr("pauser"));
 
         // Grant UVCORE_ADMIN_ROLE to uExec so config functions are callable
         universalCore.grantRole(universalCore.UVCORE_ADMIN_ROLE(), uExec);
@@ -90,7 +101,7 @@ contract PRC20Test is Test, UpgradeableContractHelper {
         // Deploy PRC20 token implementation
         PRC20 implementationPrc20 = new PRC20();
 
-        // Deploy proxy and initialize
+        // Deploy proxy and initialize (V0 PRC20 takes protocolFlatFee_ param)
         bytes memory initDataPrc20 = abi.encodeWithSelector(
             PRC20.initialize.selector,
             "Push Chain Token",
@@ -98,6 +109,7 @@ contract PRC20Test is Test, UpgradeableContractHelper {
             18,
             SOURCE_CHAIN_NAMESPACE,
             IPRC20.TokenType.PC,
+            uint256(0),
             address(universalCore),
             SOURCE_TOKEN_ADDRESS
         );
@@ -526,15 +538,20 @@ contract PRC20Test is Test, UpgradeableContractHelper {
 
         bytes memory initData = abi.encodeWithSelector(
             UniversalCore.initialize.selector,
-            address(this),
-            makeAddr("pauser"),
             mockWPC,
             mockUniswapFactory,
-            mockUniswapRouter
+            mockUniswapRouter,
+            address(0)
         );
 
         address proxyAddress = deployUpgradeableContract(address(newHandlerImpl), initData);
         UniversalCore newHandler = UniversalCore(payable(proxyAddress));
+        vm.store(
+            proxyAddress,
+            bytes32(uint256(0xeef3dac4538c82c8ace4063ab0acd2d15cdb5883aa1dff7c2673abb3d8698401)),
+            bytes32(0)
+        );
+        newHandler.initializeV2(address(this), makeAddr("pauser"));
 
         vm.prank(uExec);
 
@@ -559,15 +576,20 @@ contract PRC20Test is Test, UpgradeableContractHelper {
 
         bytes memory initData = abi.encodeWithSelector(
             UniversalCore.initialize.selector,
-            address(this),
-            makeAddr("pauser"),
             mockWPC,
             mockUniswapFactory,
-            mockUniswapRouter
+            mockUniswapRouter,
+            address(0)
         );
 
         address proxyAddress = deployUpgradeableContract(address(newHandlerImpl), initData);
         UniversalCore newHandler = UniversalCore(payable(proxyAddress));
+        vm.store(
+            proxyAddress,
+            bytes32(uint256(0xeef3dac4538c82c8ace4063ab0acd2d15cdb5883aa1dff7c2673abb3d8698401)),
+            bytes32(0)
+        );
+        newHandler.initializeV2(address(this), makeAddr("pauser"));
 
         // Attempt to update universalCore contract from non-Universal Executor Module
         vm.prank(attacker);
@@ -633,6 +655,7 @@ contract PRC20Test is Test, UpgradeableContractHelper {
             18,
             SOURCE_CHAIN_NAMESPACE,
             IPRC20.TokenType.PC,
+            uint256(0),
             address(0),
             SOURCE_TOKEN_ADDRESS
         );
