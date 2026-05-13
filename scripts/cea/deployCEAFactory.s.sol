@@ -6,7 +6,6 @@ import {CEAFactory} from "../../src/cea/CEAFactory.sol";
 import {CEA} from "../../src/cea/CEA.sol";
 import {CEAProxy} from "../../src/cea/CEAProxy.sol";
 import {TransparentUpgradeableProxy} from "@openzeppelin/contracts/proxy/transparent/TransparentUpgradeableProxy.sol";
-import {ProxyAdmin} from "@openzeppelin/contracts/proxy/transparent/ProxyAdmin.sol";
 
 /**
  * @title DeployCEAFactoryScript
@@ -16,30 +15,32 @@ import {ProxyAdmin} from "@openzeppelin/contracts/proxy/transparent/ProxyAdmin.s
  *  1. CEA implementation (logic contract)
  *  2. CEAProxy implementation (template for cloning)
  *  3. CEAFactory implementation
- *  4. ProxyAdmin (for managing upgrades)
- *  5. TransparentUpgradeableProxy wrapping CEAFactory
- *  6. Initializes CEAFactory with all required addresses
+ *  4. TransparentUpgradeableProxy wrapping CEAFactory (auto-creates ProxyAdmin owned by deployer)
+ *  5. Initializes CEAFactory with all required addresses
+ *
+ * NOTE: OZ5 TransparentUpgradeableProxy auto-creates a ProxyAdmin internally.
+ * The second constructor arg is the initial OWNER of that ProxyAdmin, not a ProxyAdmin address.
+ * The auto-created ProxyAdmin address can be read from the ERC1967 admin slot after deployment.
  *
  * CONFIGURATION:
  *  Update the state variables below with your deployment parameters.
- *  Environment variables needed: KEY, RPC_URL, ETHERSCAN_API_KEY
+ *  Environment variables needed: KEY
  */
 contract DeployCEAFactoryScript is Script {
     // ============================================================================
-    // DEPLOYMENT PARAMETERS - Pre-Deployement Checklist
+    // DEPLOYMENT PARAMETERS — update per chain
     // ============================================================================
 
-    // Owner of the CEAFactory (can update implementations, pause, etc.)
+    // Owner/admin of the CEAFactory (receives all roles, owns ProxyAdmin)
     address public OWNER_ADDRESS = 0x6dD2cA20ec82E819541EB43e1925DbE46a441970;
 
-    // Vault contract address on this chain (handles cross-chain funds)
+    // Vault contract address on this chain
     address public VAULT_ADDRESS = 0xE52AC4f8DD3e0263bDF748F3390cdFA1f02be881;
 
-    // UniversalGateway contract address on this chain (handles cross-chain messages)
+    // UniversalGateway contract address on this chain
     address public UNIVERSAL_GATEWAY_ADDRESS = 0x44aFFC61983F4348DdddB886349eb992C061EaC0;
 
     function run() external {
-        // Get chain ID and deployer info
         uint256 chainId = block.chainid;
         uint256 deployerKey = uint256(vm.envBytes32("KEY"));
         address deployer = vm.addr(deployerKey);
@@ -48,12 +49,10 @@ contract DeployCEAFactoryScript is Script {
         console.log("Chain ID:", chainId);
         console.log("Deployer:", deployer);
 
-        // Use state variables as deployment parameters
         address owner = OWNER_ADDRESS;
         address vault = VAULT_ADDRESS;
         address universalGateway = UNIVERSAL_GATEWAY_ADDRESS;
 
-        // Validate addresses
         require(owner != address(0), "Invalid owner address");
         require(vault != address(0), "Invalid vault address");
         require(universalGateway != address(0), "Invalid universal gateway address");
@@ -67,125 +66,110 @@ contract DeployCEAFactoryScript is Script {
 
         // 1. Deploy CEA implementation (logic contract)
         CEA ceaImplementation = new CEA();
-        console.log("[1/4] CEA Implementation:", address(ceaImplementation));
+        console.log("[1/5] CEA Implementation:", address(ceaImplementation));
 
         // 2. Deploy CEAProxy implementation (template for cloning)
         CEAProxy ceaProxyImplementation = new CEAProxy();
-        console.log("[2/4] CEAProxy Implementation:", address(ceaProxyImplementation));
+        console.log("[2/5] CEAProxy Implementation:", address(ceaProxyImplementation));
 
         // 3. Deploy CEAFactory implementation
         CEAFactory ceaFactoryImplementation = new CEAFactory();
-        console.log("[3/4] CEAFactory Implementation:", address(ceaFactoryImplementation));
+        console.log("[3/5] CEAFactory Implementation:", address(ceaFactoryImplementation));
 
-        // 4. Deploy ProxyAdmin (manages upgrades)
-        ProxyAdmin proxyAdmin = new ProxyAdmin(owner);
-        console.log("[4/7] ProxyAdmin deployed:", address(proxyAdmin));
-
-        // 5. Prepare initialization data for CEAFactory
+        // 4. Prepare initialization data
         bytes memory initData = abi.encodeWithSelector(
             CEAFactory.initialize.selector,
-            owner, // initialAdmin
-            owner, // initialPauser (deployer is pauser)
-            vault, // initialVault
-            address(ceaProxyImplementation), // ceaProxyImplementation
-            address(ceaImplementation), // ceaImplementation
-            universalGateway // universalGateway
+            owner, // _admin (gets DEFAULT_ADMIN + ROLE_MANAGER + CEA_ADMIN + OPERATOR)
+            owner, // _pauser (gets PAUSER_ROLE)
+            vault,
+            address(ceaProxyImplementation),
+            address(ceaImplementation),
+            universalGateway
         );
 
-        // 6. Deploy TransparentUpgradeableProxy wrapping CEAFactory
+        // 5. Deploy TransparentUpgradeableProxy wrapping CEAFactory
+        //    OZ5: second arg = initial owner of the auto-created ProxyAdmin
         TransparentUpgradeableProxy proxy =
-            new TransparentUpgradeableProxy(address(ceaFactoryImplementation), address(proxyAdmin), initData);
-        console.log("[5/7] CEAFactory Proxy (CANONICAL):", address(proxy));
+            new TransparentUpgradeableProxy(address(ceaFactoryImplementation), owner, initData);
+        console.log("[4/5] CEAFactory Proxy:", address(proxy));
 
-        // 7. Wrap proxy in CEAFactory interface for verification
-        CEAFactory ceaFactory = CEAFactory(address(proxy));
-
-        // 8. Transfer ProxyAdmin ownership to the designated owner (if different from deployer)
-        if (address(proxyAdmin.owner()) != owner) {
-            proxyAdmin.transferOwnership(owner);
-            console.log("[6/7] ProxyAdmin ownership transferred to:", owner);
-        } else {
-            console.log("[6/7] ProxyAdmin owner already set to:", owner);
-        }
+        // Read auto-created ProxyAdmin from ERC1967 admin slot
+        bytes32 adminSlot = vm.load(address(proxy), 0xb53127684a568b3173ae13b9f8a6016e243e63b6e8ee1178d6a717850b5d6103);
+        address proxyAdmin = address(uint160(uint256(adminSlot)));
+        console.log("[5/5] ProxyAdmin (auto-created):", proxyAdmin);
 
         vm.stopBroadcast();
 
-        // 9. Post-deployment verification
+        // 6. Post-deployment verification
         console.log("\n=== Post-Deployment Verification ===");
 
+        CEAFactory ceaFactory = CEAFactory(address(proxy));
+
         bool isAdmin = ceaFactory.hasRole(ceaFactory.DEFAULT_ADMIN_ROLE(), owner);
+        bool isRoleManager = ceaFactory.hasRole(ceaFactory.ROLE_MANAGER_ROLE(), owner);
+        bool isCeaAdmin = ceaFactory.hasRole(ceaFactory.CEA_ADMIN_ROLE(), owner);
+        bool isOperator = ceaFactory.hasRole(ceaFactory.OPERATOR_ROLE(), owner);
+        bool isPauser = ceaFactory.hasRole(ceaFactory.PAUSER_ROLE(), owner);
         address verifiedVault = ceaFactory.VAULT();
         address verifiedCEAProxy = ceaFactory.CEA_PROXY_IMPLEMENTATION();
         address verifiedCEA = ceaFactory.CEA_IMPLEMENTATION();
         address verifiedGateway = ceaFactory.UNIVERSAL_GATEWAY();
-        address verifiedProxyAdmin = address(proxyAdmin);
 
-        console.log("Admin role granted to owner:", isAdmin ? "[OK]" : "[MISMATCH]");
-        console.log("Vault:", verifiedVault, verifiedVault == vault ? "[OK]" : "[MISMATCH]");
+        console.log("DEFAULT_ADMIN_ROLE:", isAdmin ? "[OK]" : "[FAIL]");
+        console.log("ROLE_MANAGER_ROLE:", isRoleManager ? "[OK]" : "[FAIL]");
+        console.log("CEA_ADMIN_ROLE:", isCeaAdmin ? "[OK]" : "[FAIL]");
+        console.log("OPERATOR_ROLE:", isOperator ? "[OK]" : "[FAIL]");
+        console.log("PAUSER_ROLE:", isPauser ? "[OK]" : "[FAIL]");
+        console.log("Vault:", verifiedVault, verifiedVault == vault ? "[OK]" : "[FAIL]");
         console.log(
             "CEA Proxy Impl:",
             verifiedCEAProxy,
-            verifiedCEAProxy == address(ceaProxyImplementation) ? "[OK]" : "[MISMATCH]"
+            verifiedCEAProxy == address(ceaProxyImplementation) ? "[OK]" : "[FAIL]"
         );
-        console.log("CEA Impl:", verifiedCEA, verifiedCEA == address(ceaImplementation) ? "[OK]" : "[MISMATCH]");
-        console.log("Gateway:", verifiedGateway, verifiedGateway == universalGateway ? "[OK]" : "[MISMATCH]");
-        console.log("ProxyAdmin:", verifiedProxyAdmin);
+        console.log("CEA Impl:", verifiedCEA, verifiedCEA == address(ceaImplementation) ? "[OK]" : "[FAIL]");
+        console.log("Gateway:", verifiedGateway, verifiedGateway == universalGateway ? "[OK]" : "[FAIL]");
+        console.log("defaultAdmin():", ceaFactory.defaultAdmin());
+        console.log("owner():", ceaFactory.owner());
+        console.log("defaultAdminDelay():", ceaFactory.defaultAdminDelay());
 
-        require(isAdmin, "Owner not granted admin role");
+        require(isAdmin, "Missing DEFAULT_ADMIN_ROLE");
+        require(isRoleManager, "Missing ROLE_MANAGER_ROLE");
+        require(isCeaAdmin, "Missing CEA_ADMIN_ROLE");
+        require(isOperator, "Missing OPERATOR_ROLE");
+        require(isPauser, "Missing PAUSER_ROLE");
         require(verifiedVault == vault, "Vault mismatch");
-        require(verifiedCEAProxy == address(ceaProxyImplementation), "CEA Proxy Implementation mismatch");
-        require(verifiedCEA == address(ceaImplementation), "CEA Implementation mismatch");
-        require(verifiedGateway == universalGateway, "Universal Gateway mismatch");
+        require(verifiedCEAProxy == address(ceaProxyImplementation), "CEA Proxy mismatch");
+        require(verifiedCEA == address(ceaImplementation), "CEA Impl mismatch");
+        require(verifiedGateway == universalGateway, "Gateway mismatch");
 
-        // 10. Generate JSON output for deployment tracking
-        console.log("\n=== Deployment Addresses (JSON) ===");
+        // 7. JSON output
         string memory json = string(
             abi.encodePacked(
                 "{\n",
-                '  "chainId": ',
-                vm.toString(chainId),
-                ",\n",
-                '  "deployer": "',
-                vm.toString(deployer),
-                '",\n',
-                '  "ceaImplementation": "',
-                vm.toString(address(ceaImplementation)),
-                '",\n',
-                '  "ceaProxyImplementation": "',
-                vm.toString(address(ceaProxyImplementation)),
-                '",\n',
-                '  "ceaFactoryImplementation": "',
-                vm.toString(address(ceaFactoryImplementation)),
-                '",\n',
-                '  "proxyAdmin": "',
-                vm.toString(address(proxyAdmin)),
-                '",\n',
-                '  "ceaFactoryProxy": "',
-                vm.toString(address(proxy)),
-                '",\n',
-                '  "owner": "',
-                vm.toString(owner),
-                '",\n',
-                '  "vault": "',
-                vm.toString(vault),
-                '",\n',
-                '  "universalGateway": "',
-                vm.toString(universalGateway),
-                '"\n',
+                '  "chainId": ', vm.toString(chainId), ",\n",
+                '  "deployer": "', vm.toString(deployer), '",\n',
+                '  "ceaImplementation": "', vm.toString(address(ceaImplementation)), '",\n',
+                '  "ceaProxyImplementation": "', vm.toString(address(ceaProxyImplementation)), '",\n',
+                '  "ceaFactoryImplementation": "', vm.toString(address(ceaFactoryImplementation)), '",\n',
+                '  "proxyAdmin": "', vm.toString(proxyAdmin), '",\n',
+                '  "ceaFactoryProxy": "', vm.toString(address(proxy)), '",\n',
+                '  "owner": "', vm.toString(owner), '",\n',
+                '  "vault": "', vm.toString(vault), '",\n',
+                '  "universalGateway": "', vm.toString(universalGateway), '"\n',
                 "}"
             )
         );
+        console.log("\n=== Deployment JSON ===");
         console.log(json);
 
-        // Write to file
         string memory filename = string(abi.encodePacked("deployments/", vm.toString(chainId), ".json"));
         vm.writeFile(filename, json);
-        console.log("\nDeployment saved to:", filename);
+        console.log("\nSaved to:", filename);
 
         console.log("\n=== Deployment Complete ===");
-        console.log("IMPORTANT: Use CEAFactory Proxy address for all interactions:", address(proxy));
-        console.log("IMPORTANT: ProxyAdmin address (needed for upgrades):", address(proxyAdmin));
-        console.log("ProxyAdmin owner (can perform upgrades):", owner);
+        console.log("CEAFactory Proxy (use this for all interactions):", address(proxy));
+        console.log("ProxyAdmin (auto-created, for upgrades):", proxyAdmin);
+        console.log("ProxyAdmin owner:", owner);
     }
 }
 
@@ -196,9 +180,9 @@ contract DeployCEAFactoryScript is Script {
  *
  * Deploy to any EVM chain:
  *
- * forge script scripts/cea/deployCEAFactory.s.sol:DeployCEAFactoryScript \
- *   --rpc-url $RPC_URL \
- *   --private-key $KEY \
+ * source .env && KEY=$KEY_BSC forge script \
+ *   scripts/cea/deployCEAFactory.s.sol:DeployCEAFactoryScript \
+ *   --rpc-url $BSC_TESTNET_RPC_URL \
  *   --broadcast \
  *   -vvvv
  *
@@ -229,22 +213,18 @@ contract DeployCEAFactoryScript is Script {
  *   --chain-id <CHAIN_ID> \
  *   --etherscan-api-key $ETHERSCAN_API_KEY
  *
- * 4. Verify ProxyAdmin:
- * forge verify-contract \
- *   <PROXY_ADMIN_ADDRESS> \
- *   lib/openzeppelin-contracts/contracts/proxy/transparent/ProxyAdmin.sol:ProxyAdmin \
- *   --chain-id <CHAIN_ID> \
- *   --etherscan-api-key $ETHERSCAN_API_KEY
+ * ============================================================================
+ * FINDING THE PROXYADMIN ADDRESS
+ * ============================================================================
  *
- * 5. Verify CEAFactory Proxy:
- * forge verify-contract \
- *   <CEA_FACTORY_PROXY_ADDRESS> \
- *   lib/openzeppelin-contracts/contracts/proxy/transparent/TransparentUpgradeableProxy.sol:TransparentUpgradeableProxy \
- *   --chain-id <CHAIN_ID> \
- *   --etherscan-api-key $ETHERSCAN_API_KEY \
- *   --constructor-args $(cast abi-encode "constructor(address,address,bytes)" <CEA_FACTORY_IMPLEMENTATION_ADDRESS> <PROXY_ADMIN_ADDRESS> <INIT_DATA>)
+ * OZ5 TransparentUpgradeableProxy auto-creates a ProxyAdmin. To find it:
  *
- * Note: Replace <ADDRESS> and <CHAIN_ID> with actual values from deployment output
- * Note: For constructor-args, use the addresses and init data from deployment logs
- * Note: ProxyAdmin address is saved in the deployment JSON output
+ * cast storage <PROXY_ADDRESS> \
+ *   0xb53127684a568b3173ae13b9f8a6016e243e63b6e8ee1178d6a717850b5d6103 \
+ *   --rpc-url $RPC_URL
+ *
+ * The returned address (strip leading zeros) is the ProxyAdmin.
+ * Its owner should be the OWNER_ADDRESS from this script.
+ *
+ * cast call <PROXY_ADMIN_ADDRESS> "owner()(address)" --rpc-url $RPC_URL
  */

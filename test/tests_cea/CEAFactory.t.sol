@@ -1547,8 +1547,8 @@ contract CEAFactoryTest is Test {
         assertTrue(factory.hasRole(factory.DEFAULT_ADMIN_ROLE(), newAdmin));
     }
 
-    function testDefaultAdminDelay_Is2Days() public view {
-        assertEq(factory.defaultAdminDelay(), 1 days);
+    function testDefaultAdminDelay_Is1Minute() public view {
+        assertEq(factory.defaultAdminDelay(), 1 minutes);
     }
 
     function testOwner_ReturnsDefaultAdmin() public view {

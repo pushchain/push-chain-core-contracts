@@ -104,7 +104,7 @@ contract CEAFactory is Initializable, AccessControlDefaultAdminRulesUpgradeable,
             revert CEAErrors.ZeroAddress();
         }
 
-        __AccessControlDefaultAdminRules_init(1 days, _admin);
+        __AccessControlDefaultAdminRules_init(1 minutes, _admin);
         __Pausable_init();
 
         _setRoleAdmin(CEA_ADMIN_ROLE, ROLE_MANAGER_ROLE);
