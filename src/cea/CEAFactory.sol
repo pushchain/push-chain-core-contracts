@@ -247,6 +247,46 @@ contract CEAFactory is Initializable, AccessControlDefaultAdminRulesUpgradeable,
     }
 
     // =========================
+    //    CF_MIGRATION: TEMPORARY
+    // =========================
+
+    /// @notice Registers existing CEAs deployed by a previous CEAFactory.
+    ///         Used during factory migration to preserve CEA↔pushAccount
+    ///         mappings so that Vault and UniversalGateway can find old
+    ///         CEAs through the new factory.
+    ///
+    ///         TEMPORARY — intended for one-time use during migration.
+    ///         Can be removed in a future upgrade once all chains are migrated.
+    ///
+    /// @param pushAccounts  Array of UEA addresses on Push Chain
+    /// @param ceaAddresses  Array of corresponding CEA addresses on this chain
+    function registerExistingCEAs(
+        address[] calldata pushAccounts,
+        address[] calldata ceaAddresses
+    ) external onlyRole(CEA_ADMIN_ROLE) {
+        if (pushAccounts.length != ceaAddresses.length) {
+            revert CEAErrors.LengthMismatch();
+        }
+
+        for (uint256 i = 0; i < pushAccounts.length; i++) {
+            address pa = pushAccounts[i];
+            address cea = ceaAddresses[i];
+
+            if (pa == address(0) || cea == address(0)) {
+                revert CEAErrors.ZeroAddress();
+            }
+            if (pushAccountToCEA[pa] != address(0)) {
+                revert CEAErrors.CEAAlreadyDeployed();
+            }
+
+            pushAccountToCEA[pa] = cea;
+            ceaToPushAccount[cea] = pa;
+
+            emit CEADeployed(pa, cea);
+        }
+    }
+
+    // =========================
     //    CF_4: INTERNAL HELPERS
     // =========================
 

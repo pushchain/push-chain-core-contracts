@@ -98,4 +98,5 @@ library CEAErrors {
     error InvalidRecipient();
     error InvalidImplementation();
     error CEAAlreadyDeployed();
+    error LengthMismatch();
 }
