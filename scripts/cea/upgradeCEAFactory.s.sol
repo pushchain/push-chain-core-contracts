@@ -27,10 +27,10 @@ contract UpgradeCEAFactoryScript is Script {
 
     // Address of the ProxyAdmin contract (manages upgrades)
     // NOTE: This is created automatically when deploying with TransparentUpgradeableProxy
-    address public PROXY_ADMIN_ADDRESS = 0x0000000000000000000000000000000000000000;
+    address public PROXY_ADMIN_ADDRESS = 0x75e53Cf1501692bFa0115888Ff5ee59d03BAc3d9;
 
     // Address of the CEAFactory proxy to upgrade
-    address public CEA_FACTORY_PROXY_ADDRESS = 0x0000000000000000000000000000000000000000;
+    address public CEA_FACTORY_PROXY_ADDRESS = 0x3f1B16e0B072d472951C4563d29d3da6a3EE3Ce8;
 
 
     function run() external {

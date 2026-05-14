@@ -32,13 +32,13 @@ contract DeployCEAFactoryScript is Script {
     // ============================================================================
 
     // Owner/admin of the CEAFactory (receives all roles, owns ProxyAdmin)
-    address public OWNER_ADDRESS = 0x6dD2cA20ec82E819541EB43e1925DbE46a441970;
+    address public OWNER_ADDRESS = 0xe520d4A985A2356Fa615935a822Ce4eFAcA24aB6;
 
     // Vault contract address on this chain
-    address public VAULT_ADDRESS = 0xE52AC4f8DD3e0263bDF748F3390cdFA1f02be881;
+    address public VAULT_ADDRESS = 0xD019Eb12D0d6eF8D299661f22B4B7d262eD4b965;
 
     // UniversalGateway contract address on this chain
-    address public UNIVERSAL_GATEWAY_ADDRESS = 0x44aFFC61983F4348DdddB886349eb992C061EaC0;
+    address public UNIVERSAL_GATEWAY_ADDRESS = 0x05bD7a3D18324c1F7e216f7fBF2b15985aE5281A;
 
     function run() external {
         uint256 chainId = block.chainid;

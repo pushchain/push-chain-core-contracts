@@ -30,7 +30,7 @@ contract RegisterOldCEAsScript is Script {
     // ============================================================================
 
     // New CEAFactory proxy address (from fresh deployment)
-    address public NEW_CEA_FACTORY = address(0);
+    address public NEW_CEA_FACTORY = 0x5E191fbBe22F8866C5e4250557664fCE760e8870;
 
     // Max CEAs per transaction to stay within block gas limit
     uint256 public constant BATCH_SIZE = 50;
@@ -113,13 +113,8 @@ contract RegisterOldCEAsScript is Script {
 
         uint256 totalBatches = (totalPairs + BATCH_SIZE - 1)
             / BATCH_SIZE;
-        console.log(
-            "Batches:",
-            totalBatches,
-            "(batch size:",
-            BATCH_SIZE,
-            ")"
-        );
+        console.log("Batches:", totalBatches);
+        console.log("Batch size:", BATCH_SIZE);
 
         vm.startBroadcast(deployerKey);
 
@@ -139,15 +134,8 @@ contract RegisterOldCEAsScript is Script {
 
             factory.registerExistingCEAs(batchPush, batchCea);
 
-            console.log(
-                "  Batch",
-                b + 1,
-                "/",
-                totalBatches,
-                "registered",
-                batchLen,
-                "pairs"
-            );
+            console.log("  Batch", b + 1, "/", totalBatches);
+            console.log("  Registered", batchLen, "pairs");
         }
 
         vm.stopBroadcast();

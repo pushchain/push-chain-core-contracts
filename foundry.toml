@@ -18,7 +18,7 @@ via_ir = true
 
 no_match_coverage = "(PRC20V0\\.sol|testnetV0/UniversalCore\\.sol|ReceiverExample\\.sol|src/(libraries|[Ii]nterfaces|mocks)/|test/)"
 
-fs_permissions = [{ access = "read-write", path = "deployments/" }]
+fs_permissions = [{ access = "read-write", path = "deployments/" }, { access = "read", path = "migrations/" }]
 
 [fmt]
 ignore = ["src/**"]

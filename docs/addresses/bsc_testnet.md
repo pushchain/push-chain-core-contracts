@@ -4,7 +4,7 @@
 | --------------------------- | -------------------------------------------- |
 | CEA (logic)  (post-audit)   | `0x22b3BC5739Bf16f95511c57107cBE98C106D7df0` |
 | CEAProxy (clone template)   | `0x0ff5d8b7d9Ac3ee2Ad420e9b70Ed6Dc465f593e9` |
-| CEAFactory (implementation) | `0xCB3442F5A2C5386ccFd8C9d27A30cE3000ac2782` |
+| CEAFactory (implementation) | `0xDfeBecDA7b15Ab4071012C47176631098914eB16` |
 | ProxyAdmin                  | `0x75e53Cf1501692bFa0115888Ff5ee59d03BAc3d9` |
 | CEAFactory (proxy)          | `0x3f1B16e0B072d472951C4563d29d3da6a3EE3Ce8` |
 | CEA_V2 (logic)              | `0x102B1652ABEDC1c1761355F1Fc71c8487c3a9168` |
