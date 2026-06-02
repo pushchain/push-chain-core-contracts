@@ -93,6 +93,9 @@ contract UniversalCore is
     mapping(address => uint24) public defaultFeeTier;
     uint256 public defaultDeadlineMins;
 
+    // -- PC20 export config --
+    mapping(string => uint256) public pc20DeploymentGasOverhead;
+
     // =========================
     //    UC: MODIFIERS
     // =========================
@@ -342,6 +345,54 @@ contract UniversalCore is
         gasFee = gasPrice * rescueGasLimit;
     }
 
+    /// @inheritdoc IUniversalCore
+    function getPC20ExportGasAndFees(
+        string memory destChainNamespace,
+        uint256 gasLimit,
+        address pc20Token
+    )
+        public
+        view
+        returns (
+            address gasToken,
+            uint256 gasFee,
+            uint256 protocolFee,
+            uint256 gasPrice,
+            string memory chainNamespace,
+            uint256 gasLimitUsed,
+            bool isFirstExport
+        )
+    {
+        gasToken = gasTokenPRC20ByChainNamespace[destChainNamespace];
+        if (gasToken == address(0)) revert CommonErrors.ZeroAddress();
+
+        gasPrice = gasPriceByChainNamespace[destChainNamespace];
+        if (gasPrice == 0) revert UniversalCoreErrors.ZeroGasPrice();
+
+        uint256 baseLimit = baseGasLimitByChainNamespace[destChainNamespace];
+        if (baseLimit == 0) revert UniversalCoreErrors.ZeroBaseGasLimit();
+
+        _validateGasDataFreshness(destChainNamespace);
+
+        if (gasLimit == 0) {
+            gasLimitUsed = baseLimit;
+        } else if (gasLimit < baseLimit) {
+            revert UniversalCoreErrors.GasLimitBelowBase(gasLimit, baseLimit);
+        } else {
+            gasLimitUsed = gasLimit;
+        }
+
+        uint256 deployOverhead = pc20DeploymentGasOverhead[destChainNamespace];
+        if (deployOverhead > 0) {
+            isFirstExport = true;
+            gasLimitUsed += deployOverhead;
+        }
+
+        gasFee = gasPrice * gasLimitUsed;
+        protocolFee = protocolFeeByToken[pc20Token];
+        chainNamespace = destChainNamespace;
+    }
+
     // =========================
     //    UC_4: ADMIN CONFIG
     // =========================
@@ -483,6 +534,15 @@ contract UniversalCore is
     {
         rescueFundsGasLimitByChainNamespace[chainNamespace] = gasLimit;
         emit SetRescueFundsGasLimitByChain(chainNamespace, gasLimit);
+    }
+
+    /// @inheritdoc IUniversalCore
+    function updatePC20DeploymentGasOverhead(
+        string memory chainNamespace,
+        uint256 overhead
+    ) external onlyRole(UVCORE_ADMIN_ROLE) {
+        pc20DeploymentGasOverhead[chainNamespace] = overhead;
+        emit SetPC20DeploymentGasOverhead(chainNamespace, overhead);
     }
 
     /// @notice                  Set the maximum acceptable age (seconds) of gas data for a chain.

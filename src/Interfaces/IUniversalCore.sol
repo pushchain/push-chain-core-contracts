@@ -194,4 +194,48 @@ interface IUniversalCore {
 
     /// @notice Get the UniversalGatewayPC address.
     function universalGatewayPC() external view returns (address);
+
+    // =========================
+    //    UC: PC20 EXPORT
+    // =========================
+
+    /// @notice                      Get gas and fee quote for a PC20 export to a destination chain.
+    /// @param destChainNamespace    Destination chain (CAIP-2, e.g., "eip155:1")
+    /// @param gasLimit              Caller-provided gas limit (0 = use per-chain base)
+    /// @param pc20Token             PC20 token address (for protocol fee lookup)
+    /// @return gasToken             Gas token PRC20 address for the destination chain
+    /// @return gasFee               Gas fee (gasPrice * gasLimitUsed)
+    /// @return protocolFee          Protocol fee in native PC
+    /// @return gasPrice             Gas price on the destination chain
+    /// @return chainNamespace       Destination chain namespace (echoed back)
+    /// @return gasLimitUsed         Effective gas limit used to compute gasFee
+    /// @return isFirstExport        True if pc20DeploymentGasOverhead > 0 for this chain
+    function getPC20ExportGasAndFees(
+        string memory destChainNamespace,
+        uint256 gasLimit,
+        address pc20Token
+    )
+        external
+        view
+        returns (
+            address gasToken,
+            uint256 gasFee,
+            uint256 protocolFee,
+            uint256 gasPrice,
+            string memory chainNamespace,
+            uint256 gasLimitUsed,
+            bool isFirstExport
+        );
+
+    /// @notice                      Get the PC20 deployment gas overhead for a chain.
+    /// @param chainNamespace        Chain namespace
+    /// @return overhead             Gas overhead (0 = no overhead)
+    function pc20DeploymentGasOverhead(string memory chainNamespace) external view returns (uint256 overhead);
+
+    /// @notice                      Set deployment gas overhead for first-ever PC20 export to a chain.
+    /// @param chainNamespace        Chain namespace
+    /// @param overhead              Gas overhead (0 = reset after first deployment)
+    function updatePC20DeploymentGasOverhead(string memory chainNamespace, uint256 overhead) external;
+
+    event SetPC20DeploymentGasOverhead(string chainNamespace, uint256 overhead);
 }
