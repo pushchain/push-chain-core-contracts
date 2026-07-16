@@ -102,6 +102,11 @@ contract UniversalCore is
     // -- PC20 export config --
     mapping(string => uint256) public pc20DeploymentGasOverhead;
 
+    // -- PC20 registry --
+    mapping(address => mapping(string => address)) public pc20WrapperBySource;
+    mapping(string => mapping(address => address)) public pc20SourceByWrapper;
+    mapping(string => address) public pc20FactoryByChain;
+
     // =========================
     //    UC: MODIFIERS
     // =========================
@@ -389,7 +394,7 @@ contract UniversalCore is
         }
 
         uint256 deployOverhead = pc20DeploymentGasOverhead[destChainNamespace];
-        if (deployOverhead > 0) {
+        if (deployOverhead > 0 && pc20WrapperBySource[pc20Token][destChainNamespace] == address(0)) {
             isFirstExport = true;
             gasLimitUsed += deployOverhead;
         }
@@ -549,6 +554,54 @@ contract UniversalCore is
     ) external onlyRole(UVCORE_ADMIN_ROLE) {
         pc20DeploymentGasOverhead[chainNamespace] = overhead;
         emit SetPC20DeploymentGasOverhead(chainNamespace, overhead);
+    }
+
+    // =========================
+    //    UC: PC20 REGISTRY
+    // =========================
+
+    /// @inheritdoc IUniversalCore
+    function pc20Deployed(address sourceAsset, string memory destChain) external view returns (bool) {
+        return pc20WrapperBySource[sourceAsset][destChain] != address(0);
+    }
+
+    /// @inheritdoc IUniversalCore
+    function getPC20Wrapper(
+        address sourceAsset,
+        string memory destChain
+    ) external view returns (address wrapper, bool deployed) {
+        wrapper = pc20WrapperBySource[sourceAsset][destChain];
+        deployed = wrapper != address(0);
+    }
+
+    /// @inheritdoc IUniversalCore
+    function getPC20Source(
+        address wrapper,
+        string memory destChain
+    ) external view returns (address sourceAsset, bool known) {
+        sourceAsset = pc20SourceByWrapper[destChain][wrapper];
+        known = sourceAsset != address(0);
+    }
+
+    /// @inheritdoc IUniversalCore
+    function setWrapperDeployed(
+        address sourceAsset,
+        string calldata destChain,
+        address wrapper
+    ) external onlyUEModule {
+        if (pc20WrapperBySource[sourceAsset][destChain] != address(0)) return;
+        pc20WrapperBySource[sourceAsset][destChain] = wrapper;
+        pc20SourceByWrapper[destChain][wrapper] = sourceAsset;
+        emit SetPC20Deployed(sourceAsset, destChain, wrapper);
+    }
+
+    /// @inheritdoc IUniversalCore
+    function updatePC20FactoryByChain(
+        string memory chainNamespace,
+        address factory
+    ) external onlyRole(OPERATOR_ROLE) {
+        pc20FactoryByChain[chainNamespace] = factory;
+        emit SetPC20FactoryByChain(chainNamespace, factory);
     }
 
     /// @notice                  Set the maximum acceptable age (seconds) of gas data for a chain.

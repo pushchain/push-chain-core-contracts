@@ -250,4 +250,80 @@ interface IUniversalCore {
     function updatePC20DeploymentGasOverhead(string memory chainNamespace, uint256 overhead) external;
 
     event SetPC20DeploymentGasOverhead(string chainNamespace, uint256 overhead);
+
+    // =========================
+    //    UC: PC20 REGISTRY
+    // =========================
+
+    event SetPC20Deployed(address indexed sourceAsset, string destChain, address wrapper);
+    event SetPC20FactoryByChain(string chainNamespace, address factory);
+
+    /// @notice                  Check if a PC20 wrapper is deployed for a source asset on a chain.
+    /// @param sourceAsset       Source asset address on Push Chain
+    /// @param destChain         Destination chain namespace
+    /// @return                  True if wrapper is deployed
+    function pc20Deployed(address sourceAsset, string memory destChain) external view returns (bool);
+
+    /// @notice                  Get the wrapper address for a source asset on a chain.
+    /// @param sourceAsset       Source asset address on Push Chain
+    /// @param destChain         Destination chain namespace
+    /// @return wrapper          Wrapper address (address(0) if not deployed)
+    /// @return deployed         True if wrapper is deployed
+    function getPC20Wrapper(
+        address sourceAsset,
+        string memory destChain
+    ) external view returns (address wrapper, bool deployed);
+
+    /// @notice                  Get the source asset for a wrapper on a chain.
+    /// @param wrapper           Wrapper address on external chain
+    /// @param destChain         Chain namespace
+    /// @return sourceAsset      Source asset address on Push Chain
+    /// @return known            True if mapping exists
+    function getPC20Source(
+        address wrapper,
+        string memory destChain
+    ) external view returns (address sourceAsset, bool known);
+
+    /// @notice                  Mark a PC20 wrapper as deployed. Idempotent.
+    /// @param sourceAsset       Source asset address on Push Chain
+    /// @param destChain         Destination chain namespace
+    /// @param wrapper           Deployed wrapper address on external chain
+    function setWrapperDeployed(
+        address sourceAsset,
+        string calldata destChain,
+        address wrapper
+    ) external;
+
+    /// @notice                  Set the PC20Factory address for a chain.
+    /// @param chainNamespace    Chain namespace
+    /// @param factory           PC20Factory address on that chain
+    function updatePC20FactoryByChain(
+        string memory chainNamespace,
+        address factory
+    ) external;
+
+    /// @notice                  Get the PC20Factory address for a chain.
+    /// @param chainNamespace    Chain namespace
+    /// @return factory          PC20Factory address
+    function pc20FactoryByChain(
+        string memory chainNamespace
+    ) external view returns (address factory);
+
+    /// @notice                  Get the wrapper address for a source asset on a chain.
+    /// @param sourceAsset       Source asset address
+    /// @param destChain         Destination chain namespace
+    /// @return wrapper          Wrapper address
+    function pc20WrapperBySource(
+        address sourceAsset,
+        string memory destChain
+    ) external view returns (address wrapper);
+
+    /// @notice                  Get the source asset for a wrapper on a chain.
+    /// @param destChain         Chain namespace
+    /// @param wrapper           Wrapper address
+    /// @return sourceAsset      Source asset address
+    function pc20SourceByWrapper(
+        string memory destChain,
+        address wrapper
+    ) external view returns (address sourceAsset);
 }
