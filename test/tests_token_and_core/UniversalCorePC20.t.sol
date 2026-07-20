@@ -35,11 +35,13 @@ contract UniversalCorePC20Test is Test, UpgradeableContractHelper {
     uint256 public constant GAS_PRICE = 50 * 10 ** 9;
     uint256 public constant DEPLOY_OVERHEAD = 1_000_000;
 
-    address public wrapperA;
-    address public wrapperB;
+    address public wrapperAAddr;
+    address public wrapperBAddr;
+    bytes32 public wrapperA;
+    bytes32 public wrapperB;
 
-    event SetPC20Deployed(address indexed sourceAsset, string destChain, address wrapper);
-    event SetPC20FactoryByChain(string chainNamespace, address factory);
+    event SetPC20Deployed(address indexed sourceAsset, string destChain, bytes32 wrapper);
+    event SetPC20FactoryByChain(string chainNamespace, bytes32 factory);
 
     function setUp() public {
         deployer = address(this);
@@ -48,8 +50,10 @@ contract UniversalCorePC20Test is Test, UpgradeableContractHelper {
         pauser = makeAddr("pauser");
         pc20TokenA = makeAddr("pc20TokenA");
         pc20TokenB = makeAddr("pc20TokenB");
-        wrapperA = makeAddr("wrapperA");
-        wrapperB = makeAddr("wrapperB");
+        wrapperAAddr = makeAddr("wrapperA");
+        wrapperBAddr = makeAddr("wrapperB");
+        wrapperA = bytes32(uint256(uint160(wrapperAAddr)));
+        wrapperB = bytes32(uint256(uint160(wrapperBAddr)));
 
         mockFactory = new MockUniswapV3Factory();
         mockRouter = new MockUniswapV3Router();
@@ -227,8 +231,12 @@ contract UniversalCorePC20Test is Test, UpgradeableContractHelper {
     //  updatePC20FactoryByChain
     // ========================================
 
+    function _toBytes32(address a) internal pure returns (bytes32) {
+        return bytes32(uint256(uint160(a)));
+    }
+
     function test_UpdatePC20FactoryByChain_OnlyOperator() public {
-        address factory = makeAddr("factory");
+        bytes32 factory = _toBytes32(makeAddr("factory"));
 
         vm.expectRevert(
             abi.encodeWithSelector(
@@ -240,8 +248,8 @@ contract UniversalCorePC20Test is Test, UpgradeableContractHelper {
     }
 
     function test_UpdatePC20FactoryByChain_SetsAddress() public {
-        address factory = makeAddr("factory");
-        assertEq(universalCore.pc20FactoryByChain(CHAIN_A), address(0));
+        bytes32 factory = _toBytes32(makeAddr("factory"));
+        assertEq(universalCore.pc20FactoryByChain(CHAIN_A), bytes32(0));
 
         universalCore.updatePC20FactoryByChain(CHAIN_A, factory);
 
@@ -249,7 +257,7 @@ contract UniversalCorePC20Test is Test, UpgradeableContractHelper {
     }
 
     function test_UpdatePC20FactoryByChain_EmitsEvent() public {
-        address factory = makeAddr("factory");
+        bytes32 factory = _toBytes32(makeAddr("factory"));
 
         vm.expectEmit(true, true, false, true);
         emit SetPC20FactoryByChain(CHAIN_A, factory);
@@ -258,8 +266,8 @@ contract UniversalCorePC20Test is Test, UpgradeableContractHelper {
     }
 
     function test_UpdatePC20FactoryByChain_Overwrites() public {
-        address factoryA = makeAddr("factoryA");
-        address factoryB = makeAddr("factoryB");
+        bytes32 factoryA = _toBytes32(makeAddr("factoryA"));
+        bytes32 factoryB = _toBytes32(makeAddr("factoryB"));
 
         universalCore.updatePC20FactoryByChain(CHAIN_A, factoryA);
         assertEq(universalCore.pc20FactoryByChain(CHAIN_A), factoryA);
@@ -269,8 +277,8 @@ contract UniversalCorePC20Test is Test, UpgradeableContractHelper {
     }
 
     function test_UpdatePC20FactoryByChain_IndependentChains() public {
-        address factoryA = makeAddr("factoryA");
-        address factoryB = makeAddr("factoryB");
+        bytes32 factoryA = _toBytes32(makeAddr("factoryA"));
+        bytes32 factoryB = _toBytes32(makeAddr("factoryB"));
 
         universalCore.updatePC20FactoryByChain(CHAIN_A, factoryA);
         universalCore.updatePC20FactoryByChain(CHAIN_B, factoryB);
@@ -284,8 +292,8 @@ contract UniversalCorePC20Test is Test, UpgradeableContractHelper {
     // ========================================
 
     function test_GetPC20Wrapper_BeforeDeploy() public view {
-        (address wrapper, bool deployed) = universalCore.getPC20Wrapper(pc20TokenA, CHAIN_A);
-        assertEq(wrapper, address(0));
+        (bytes32 wrapper, bool deployed) = universalCore.getPC20Wrapper(pc20TokenA, CHAIN_A);
+        assertEq(wrapper, bytes32(0));
         assertFalse(deployed);
     }
 
@@ -293,7 +301,7 @@ contract UniversalCorePC20Test is Test, UpgradeableContractHelper {
         vm.prank(UNIVERSAL_EXECUTOR_MODULE);
         universalCore.setWrapperDeployed(pc20TokenA, CHAIN_A, wrapperA);
 
-        (address wrapper, bool deployed) = universalCore.getPC20Wrapper(pc20TokenA, CHAIN_A);
+        (bytes32 wrapper, bool deployed) = universalCore.getPC20Wrapper(pc20TokenA, CHAIN_A);
         assertEq(wrapper, wrapperA);
         assertTrue(deployed);
     }
@@ -302,12 +310,12 @@ contract UniversalCorePC20Test is Test, UpgradeableContractHelper {
         vm.prank(UNIVERSAL_EXECUTOR_MODULE);
         universalCore.setWrapperDeployed(pc20TokenA, CHAIN_A, wrapperA);
 
-        (address wA, bool dA) = universalCore.getPC20Wrapper(pc20TokenA, CHAIN_A);
-        (address wB, bool dB) = universalCore.getPC20Wrapper(pc20TokenA, CHAIN_B);
+        (bytes32 wA, bool dA) = universalCore.getPC20Wrapper(pc20TokenA, CHAIN_A);
+        (bytes32 wB, bool dB) = universalCore.getPC20Wrapper(pc20TokenA, CHAIN_B);
 
         assertEq(wA, wrapperA);
         assertTrue(dA);
-        assertEq(wB, address(0));
+        assertEq(wB, bytes32(0));
         assertFalse(dB);
     }
 

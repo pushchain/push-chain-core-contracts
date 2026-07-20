@@ -255,8 +255,8 @@ interface IUniversalCore {
     //    UC: PC20 REGISTRY
     // =========================
 
-    event SetPC20Deployed(address indexed sourceAsset, string destChain, address wrapper);
-    event SetPC20FactoryByChain(string chainNamespace, address factory);
+    event SetPC20Deployed(address indexed sourceAsset, string destChain, bytes32 wrapper);
+    event SetPC20FactoryByChain(string chainNamespace, bytes32 factory);
 
     /// @notice                  Check if a PC20 wrapper is deployed for a source asset on a chain.
     /// @param sourceAsset       Source asset address on Push Chain
@@ -264,66 +264,66 @@ interface IUniversalCore {
     /// @return                  True if wrapper is deployed
     function pc20Deployed(address sourceAsset, string memory destChain) external view returns (bool);
 
-    /// @notice                  Get the wrapper address for a source asset on a chain.
+    /// @notice                  Get the wrapper identity for a source asset on a chain.
     /// @param sourceAsset       Source asset address on Push Chain
     /// @param destChain         Destination chain namespace
-    /// @return wrapper          Wrapper address (address(0) if not deployed)
+    /// @return wrapper          Wrapper identity (bytes32; 20-byte EVM address left-padded, or 32-byte Solana PDA)
     /// @return deployed         True if wrapper is deployed
     function getPC20Wrapper(
         address sourceAsset,
         string memory destChain
-    ) external view returns (address wrapper, bool deployed);
+    ) external view returns (bytes32 wrapper, bool deployed);
 
     /// @notice                  Get the source asset for a wrapper on a chain.
-    /// @param wrapper           Wrapper address on external chain
+    /// @param wrapper           Wrapper identity (bytes32; left-padded EVM address or raw Solana PDA)
     /// @param destChain         Chain namespace
     /// @return sourceAsset      Source asset address on Push Chain
     /// @return known            True if mapping exists
     function getPC20Source(
-        address wrapper,
+        bytes32 wrapper,
         string memory destChain
     ) external view returns (address sourceAsset, bool known);
 
     /// @notice                  Mark a PC20 wrapper as deployed. Idempotent.
     /// @param sourceAsset       Source asset address on Push Chain
     /// @param destChain         Destination chain namespace
-    /// @param wrapper           Deployed wrapper address on external chain
+    /// @param wrapper           Deployed wrapper identity (bytes32; left-padded EVM address or raw Solana PDA)
     function setWrapperDeployed(
         address sourceAsset,
         string calldata destChain,
-        address wrapper
+        bytes32 wrapper
     ) external;
 
     /// @notice                  Set the PC20Factory address for a chain.
     /// @param chainNamespace    Chain namespace
-    /// @param factory           PC20Factory address on that chain
+    /// @param factory           PC20Factory identity (bytes32; left-padded EVM address or raw Solana program ID)
     function updatePC20FactoryByChain(
         string memory chainNamespace,
-        address factory
+        bytes32 factory
     ) external;
 
-    /// @notice                  Get the PC20Factory address for a chain.
+    /// @notice                  Get the PC20Factory identity for a chain.
     /// @param chainNamespace    Chain namespace
-    /// @return factory          PC20Factory address
+    /// @return factory          PC20Factory identity (bytes32)
     function pc20FactoryByChain(
         string memory chainNamespace
-    ) external view returns (address factory);
+    ) external view returns (bytes32 factory);
 
-    /// @notice                  Get the wrapper address for a source asset on a chain.
+    /// @notice                  Get the wrapper identity for a source asset on a chain.
     /// @param sourceAsset       Source asset address
     /// @param destChain         Destination chain namespace
-    /// @return wrapper          Wrapper address
+    /// @return wrapper          Wrapper identity (bytes32)
     function pc20WrapperBySource(
         address sourceAsset,
         string memory destChain
-    ) external view returns (address wrapper);
+    ) external view returns (bytes32 wrapper);
 
     /// @notice                  Get the source asset for a wrapper on a chain.
     /// @param destChain         Chain namespace
-    /// @param wrapper           Wrapper address
+    /// @param wrapper           Wrapper identity (bytes32)
     /// @return sourceAsset      Source asset address
     function pc20SourceByWrapper(
         string memory destChain,
-        address wrapper
+        bytes32 wrapper
     ) external view returns (address sourceAsset);
 }
