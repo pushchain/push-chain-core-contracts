@@ -218,6 +218,28 @@ contract UniversalCorePC20Test is Test, UpgradeableContractHelper {
         assertTrue(universalCore.pc20Deployed(pc20TokenA, CHAIN_A));
     }
 
+    function test_SetWrapperDeployed_RevertsZeroSourceAsset() public {
+        vm.prank(UNIVERSAL_EXECUTOR_MODULE);
+        vm.expectRevert(abi.encodeWithSelector(CommonErrors.ZeroAddress.selector));
+        universalCore.setWrapperDeployed(address(0), CHAIN_A, wrapperA);
+    }
+
+    function test_SetWrapperDeployed_RevertsZeroWrapper() public {
+        vm.prank(UNIVERSAL_EXECUTOR_MODULE);
+        vm.expectRevert(abi.encodeWithSelector(CommonErrors.InvalidInput.selector));
+        universalCore.setWrapperDeployed(pc20TokenA, CHAIN_A, bytes32(0));
+    }
+
+    function test_SetWrapperDeployed_IdempotentIgnoresDifferentWrapper() public {
+        vm.prank(UNIVERSAL_EXECUTOR_MODULE);
+        universalCore.setWrapperDeployed(pc20TokenA, CHAIN_A, wrapperA);
+
+        vm.prank(UNIVERSAL_EXECUTOR_MODULE);
+        universalCore.setWrapperDeployed(pc20TokenA, CHAIN_A, wrapperB);
+
+        assertEq(universalCore.pc20WrapperBySource(pc20TokenA, CHAIN_A), wrapperA);
+    }
+
     function test_SetWrapperDeployed_MultiChain() public {
         vm.prank(UNIVERSAL_EXECUTOR_MODULE);
         universalCore.setWrapperDeployed(pc20TokenA, CHAIN_A, wrapperA);

@@ -589,6 +589,8 @@ contract UniversalCore is
         string calldata destChain,
         bytes32 wrapper
     ) external onlyUEModule {
+        if (sourceAsset == address(0)) revert CommonErrors.ZeroAddress();
+        if (wrapper == bytes32(0)) revert CommonErrors.InvalidInput();
         if (pc20WrapperBySource[sourceAsset][destChain] != bytes32(0)) return;
         pc20WrapperBySource[sourceAsset][destChain] = wrapper;
         pc20SourceByWrapper[destChain][wrapper] = sourceAsset;
