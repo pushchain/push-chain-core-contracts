@@ -128,14 +128,16 @@ contract UniversalCore is
     /// @notice Rescue funds gas limit per chain namespace.
     mapping(string => uint256) public rescueFundsGasLimitByChainNamespace;
 
-    /// @notice Maximum acceptable age (seconds) of gas data before quotes are rejected as stale.
-    mapping(string => uint256) public maxStalenessByChainNamespace;
-
     /// @notice L1 gas fee per chain namespace (in gas token units).
     mapping(string => uint256) public l1GasFeeByChainNamespace;
 
     /// @notice TSS fund migration gas limit per chain namespace.
     mapping(string => uint256) public tssFundMigrationGasLimitByChainNamespace;
+
+    /// @notice Maximum acceptable age (seconds) of gas data before quotes are rejected as stale.
+    /// @dev    Appended at the end of storage to preserve layout compatibility with the
+    ///         previously deployed testnet implementation (which did not have this slot).
+    mapping(string => uint256) public maxStalenessByChainNamespace;
 
     // =========================
     //    UCV0: MODIFIERS
