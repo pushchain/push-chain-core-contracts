@@ -2,16 +2,25 @@
 pragma solidity 0.8.26;
 
 /// @title  IUniversalCore
-/// @notice Interface for the UniversalCore contract.
-/// @dev    Defines public-facing functions for UniversalCore contract.
+/// @notice Interface for the UniversalCore (testnet) contract.
+/// @dev    Standalone interface dedicated to testnet UniversalCore.
 interface IUniversalCore {
     // =========================
-    //    UC: EVENTS
+    //    UCV0: EVENTS
     // =========================
 
     event SetChainMeta(string chainNamespace, uint256 price, uint256 chainHeight, uint256 observedAt);
     event SetGasToken(string chainNamespace, address prc20);
     event SetDefaultDeadlineMins(uint256 minutesValue);
+    event SetMaxStalenessByChain(string chainNamespace, uint256 maxStaleness);
+    event SetL1GasFeeByChain(string chainNamespace, uint256 l1GasFee);
+    event SetTssFundMigrationGasLimitByChain(string chainNamespace, uint256 gasLimit);
+    event SetAutoSwapSupported(address indexed token, bool supported);
+    event SetWPC(address indexed oldAddr, address indexed newAddr);
+    event SetUniversalGatewayPC(address indexed oldAddr, address indexed newAddr);
+    event SetUniswapV3Addresses(address factory, address swapRouter);
+    event SetDefaultFeeTier(address indexed token, uint24 feeTier);
+    event RescueNativePC(address indexed to, uint256 amount);
     event SetGasPCPool(string chainNamespace, address pool, uint24 fee);
     event DepositPRC20WithAutoSwap(
         address prc20, uint256 amountIn, address pcToken, uint256 amountOut, uint24 fee, address recipient
@@ -20,35 +29,16 @@ interface IUniversalCore {
     event SetProtocolFeeByToken(address indexed token, uint256 fee);
     event SetBaseGasLimitByChain(string chainNamespace, uint256 gasLimit);
     event SetRescueFundsGasLimitByChain(string chainNamespace, uint256 gasLimit);
-    event SetMaxStalenessByChain(string chainNamespace, uint256 maxStaleness);
-    event SetL1GasFeeByChain(string chainNamespace, uint256 l1GasFee);
-    event SetTssFundMigrationGasLimitByChain(string chainNamespace, uint256 gasLimit);
     event RefundUnusedGas(
         address indexed gasToken, uint256 amount, address indexed recipient, bool swapped, uint256 pcOut
     );
-
-    event SetAutoSwapSupported(address indexed token, bool supported);
-    event SetWPC(address indexed oldAddr, address indexed newAddr);
-    event SetUniversalGatewayPC(address indexed oldAddr, address indexed newAddr);
-    event SetUniswapV3Addresses(address factory, address swapRouter);
-    event SetDefaultFeeTier(address indexed token, uint24 feeTier);
-
-    /// @notice                  Emitted when stuck native PC is rescued by admin.
-    /// @param to                Recipient of the rescued PC
-    /// @param amount            Amount of native PC rescued
-    event RescueNativePC(address indexed to, uint256 amount);
+    event SetReadBaseFeeByChain(string chainNamespace, string chainId, uint256 fee);
 
     // =========================
-    //    UC_1: UE MODULE FUNCTIONS
+    //    UCV0_1: UE MODULE FUNCTIONS
     // =========================
 
     /// @notice             Deposits PRC20 tokens to the provided recipient address.
-    /// @dev                Can only be called by the Universal Executor Module.
-    ///                     For any inbound transactions of moving supported tokens
-    ///                     from external chains to Push Chain, the Universal Executor
-    ///                     Module uses this function to deposit the tokens to the
-    ///                     recipient address. The recipient address can be any address
-    ///                     of the user's choice.
     /// @param prc20        PRC20 address for deposit
     /// @param amount       Amount to deposit
     /// @param recipient    Address to deposit tokens to
@@ -56,17 +46,11 @@ interface IUniversalCore {
 
     /// @notice             Deposits PRC20 tokens and automatically swaps them to
     ///                     native PC before sending to recipient.
-    /// @dev                Can only be called by the Universal Executor Module.
-    ///                     Can only be called if the PRC20 token is in the auto-swap
-    ///                     supported list (e.g. pETH, pSOL, pUSDC etc.).
-    ///                     If no pool exists, reverts with appropriate error.
-    ///                     Default values are used when parameters are set to 0.
-    ///                     Recipient address always receives the swapped native PC tokens.
     /// @param prc20        PRC20 address for deposit and swap
     /// @param amount       Amount to deposit and swap
     /// @param recipient    Address to receive the swapped native PC tokens
     /// @param fee          Uniswap V3 fee tier for the pool (0 = use default)
-    /// @param minPCOut     Minimum amount of native PC expected from the swap (must be > 0)
+    /// @param minPCOut     Minimum amount of native PC expected from the swap
     /// @param deadline     Timestamp after which the transaction will revert (0 = use default)
     function depositPRC20WithAutoSwap(
         address prc20,
@@ -94,7 +78,7 @@ interface IUniversalCore {
     ) external;
 
     // =========================
-    //    UC_2: GATEWAY FUNCTIONS
+    //    UCV0_2: GATEWAY FUNCTIONS
     // =========================
 
     /// @notice                 Swap native PC for gas token PRC20 and burn gasFee.
@@ -111,11 +95,11 @@ interface IUniversalCore {
         returns (uint256 gasTokenOut, uint256 refund);
 
     // =========================
-    //    UC_3: PUBLIC GETTERS
+    //    UCV0_3: PUBLIC GETTERS
     // =========================
 
     /// @notice                 Get gas token PRC20 address for a chain.
-    /// @param chainNamespace   Chain Namespace (e.g. "eip155:1" for Ethereum Mainnet)
+    /// @param chainNamespace   Chain Namespace
     /// @return gasToken        Gas token address
     function gasTokenPRC20ByChainNamespace(string memory chainNamespace) external view returns (address gasToken);
 
@@ -124,9 +108,9 @@ interface IUniversalCore {
     /// @return price           Gas price
     function gasPriceByChainNamespace(string memory chainNamespace) external view returns (uint256 price);
 
-    /// @notice                      Get base gas limit for a chain.
-    /// @param chainNamespace        Chain Namespace
-    /// @return baseGasLimit         Base gas limit for the chain
+    /// @notice                 Get base gas limit for a chain.
+    /// @param chainNamespace   Chain Namespace
+    /// @return baseGasLimit    Base gas limit for the chain
     function baseGasLimitByChainNamespace(string memory chainNamespace) external view returns (uint256 baseGasLimit);
 
     /// @notice                      Get rescue funds gas limit for a chain.
@@ -148,7 +132,7 @@ interface IUniversalCore {
     /// @return protocolFee     Protocol fee in native PC from protocolFeeByToken mapping
     /// @return gasPrice        Gas price on the external chain
     /// @return chainNamespace  Source chain namespace
-    /// @return gasLimitUsed    Effective gas limit used to compute gasFee
+    /// @return gasLimitUsed    Effective gas limit used in calculation
     function getOutboundTxGasAndFees(address _prc20, uint256 gasLimitWithBaseLimit)
         external
         view
@@ -206,4 +190,14 @@ interface IUniversalCore {
 
     /// @notice Get the UniversalGatewayPC address.
     function universalGatewayPC() external view returns (address);
+
+    /// @notice                 Get the read base fee for a chain (flat rate, in wei of native PC).
+    /// @param chainNamespace   Chain namespace (e.g. "eip155")
+    /// @param chainId          Chain ID (e.g. "1" for Ethereum mainnet)
+    /// @return fee             Flat read base fee
+    function readBaseFeeByChainNamespace(string memory chainNamespace, string memory chainId)
+        external
+        view
+        returns (uint256 fee);
+
 }

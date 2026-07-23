@@ -99,6 +99,10 @@ contract UniversalCore is
     /// @notice TSS fund migration gas limit per chain namespace.
     mapping(string => uint256) public tssFundMigrationGasLimitByChainNamespace;
 
+    /// @notice Admin-set flat read base fee per chain namespace + chain ID.
+    /// @dev    Used by UniversalCallback to compute the read fee.
+    mapping(string => mapping(string => uint256)) public readBaseFeeByChainNamespace;
+
     // =========================
     //    UC: MODIFIERS
     // =========================
@@ -523,6 +527,18 @@ contract UniversalCore is
     {
         tssFundMigrationGasLimitByChainNamespace[chainNamespace] = gasLimit;
         emit SetTssFundMigrationGasLimitByChain(chainNamespace, gasLimit);
+    }
+
+    /// @notice                  Set the read base fee for a chain.
+    /// @param chainNamespace    Chain namespace (e.g. "eip155")
+    /// @param chainId           Chain ID (e.g. "1")
+    /// @param fee               Flat read base fee in wei of native PC
+    function updateReadBaseFeeByChain(string memory chainNamespace, string memory chainId, uint256 fee)
+        external
+        onlyRole(UVCORE_ADMIN_ROLE)
+    {
+        readBaseFeeByChainNamespace[chainNamespace][chainId] = fee;
+        emit SetReadBaseFeeByChain(chainNamespace, chainId, fee);
     }
 
     /// @notice Pause the contract - stops all deposit functions. Only callable by PAUSER_ROLE.

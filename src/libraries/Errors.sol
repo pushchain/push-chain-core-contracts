@@ -84,6 +84,31 @@ library UEAErrors {
     error UEAAlreadyRegistered();
 }
 
+// =========================
+//  UNIVERSAL_CALLBACK-Specific ERRORS
+// =========================
+
+library UniversalCallbackErrors {
+    error CallerIsNotUEModule();
+    error CallerIsNotAdmin();
+    error ContractIsPaused();
+    error DomainNotSupported(string chainNamespace, string chainId);
+    error InvalidAccountId();
+    error EmptyQuery();
+    error InvalidMinConfirmations();
+    error InvalidMaxAge();
+    error InvalidMaxDelay();
+    error InsufficientFee(uint256 provided, uint256 required);
+    error ExcessiveFee(uint256 provided, uint256 maxFee);
+    error RequestAlreadyFulfilled(uint256 requestId);
+    error CallbackGasLimitExceeded(uint64 provided, uint64 max);
+    error InsufficientContractBalance(uint256 requested, uint256 available);
+    error InvalidRequestId();
+    error ZeroAddressInit();
+    error InvalidCallbackTarget();
+    error UnauthorizedCaller();
+}
+
 library CEAErrors {
     error AlreadyInitialized();
     error ZeroAddress();
@@ -98,4 +123,5 @@ library CEAErrors {
     error InvalidRecipient();
     error InvalidImplementation();
     error CEAAlreadyDeployed();
+    error LengthMismatch();
 }
