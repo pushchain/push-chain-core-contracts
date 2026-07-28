@@ -338,7 +338,7 @@ contract UniversalCallbackTest is Test {
 
     function test_FulfillExternalCallback_RevertWhen_InvalidRequestId() public {
         vm.prank(ueModule);
-        vm.expectRevert(abi.encodeWithSelector(UniversalCallbackErrors.InvalidRequestId.selector));
+        vm.expectRevert(abi.encodeWithSelector(UniversalCallbackErrors.InvalidCallbackTarget.selector));
         callback.fulfillExternalCallback(999, "", 0, bytes32(0));
     }
 

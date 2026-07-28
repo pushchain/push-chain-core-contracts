@@ -38,7 +38,7 @@ interface IUniversalCallback {
     event DomainUpdated(string chainNamespace, string chainId, bool supported);
 
     function requestExternalReadSelf(
-        ReadSpec memory spec,
+        ReadSpec calldata spec,
         bytes4 callbackSelector,
         uint64 callbackGasLimit
     ) external payable returns (uint256 requestId);

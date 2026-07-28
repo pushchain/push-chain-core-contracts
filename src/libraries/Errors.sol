@@ -91,7 +91,6 @@ library UEAErrors {
 library UniversalCallbackErrors {
     error CallerIsNotUEModule();
     error CallerIsNotAdmin();
-    error ContractIsPaused();
     error DomainNotSupported(string chainNamespace, string chainId);
     error InvalidAccountId();
     error EmptyQuery();
@@ -103,7 +102,6 @@ library UniversalCallbackErrors {
     error RequestAlreadyFulfilled(uint256 requestId);
     error CallbackGasLimitExceeded(uint64 provided, uint64 max);
     error InsufficientContractBalance(uint256 requested, uint256 available);
-    error InvalidRequestId();
     error ZeroAddressInit();
     error InvalidCallbackTarget();
     error UnauthorizedCaller();
