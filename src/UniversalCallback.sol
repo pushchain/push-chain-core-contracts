@@ -109,14 +109,17 @@ contract UniversalCallback is
         if (spec.minConfirmations < MIN_CONFIRMATIONS_FLOOR) {
             revert UniversalCallbackErrors.InvalidMinConfirmations();
         }
-        if (spec.maxAgeSeconds == 0) {
-            revert UniversalCallbackErrors.InvalidMaxAge();
-        }
-        if (spec.maxDelaySeconds == 0) {
-            revert UniversalCallbackErrors.InvalidMaxDelay();
-        }
         if (!supportedDomains[spec.account.chainNamespace][spec.account.chainId]) {
             revert UniversalCallbackErrors.DomainNotSupported(spec.account.chainNamespace, spec.account.chainId);
+        }
+        if (
+            spec.blockNumber == 0
+                || spec.blockNumber > _universalCore.chainHeightByChainNamespace(spec.account.chainNamespace)
+        ) {
+            revert UniversalCallbackErrors.InvalidBlockNumber();
+        }
+        if (spec.expiryPushChainHeight <= block.number) {
+            revert UniversalCallbackErrors.InvalidExpiryHeight();
         }
         if (callbackGasLimit == 0 || callbackGasLimit > MAX_CALLBACK_GAS_LIMIT) {
             revert UniversalCallbackErrors.CallbackGasLimitExceeded(callbackGasLimit, MAX_CALLBACK_GAS_LIMIT);
@@ -137,7 +140,8 @@ contract UniversalCallback is
             callbackGasLimit: callbackGasLimit,
             originalFunder: msg.sender,
             feesDeposited: msg.value,
-            protocolFee: protocolFee
+            protocolFee: protocolFee,
+            expiryHeight: spec.expiryPushChainHeight
         });
 
         emit ReadRequested(requestId, spec, msg.sender, msg.sender, msg.value);
@@ -199,6 +203,9 @@ contract UniversalCallback is
         PendingRead memory p = _pending[requestId];
         if (p.callbackTarget == address(0)) {
             revert UniversalCallbackErrors.InvalidRequestId();
+        }
+        if (block.number < p.expiryHeight) {
+            revert UniversalCallbackErrors.RequestNotYetExpired();
         }
         delete _pending[requestId];
 

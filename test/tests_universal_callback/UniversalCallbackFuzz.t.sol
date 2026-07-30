@@ -51,6 +51,8 @@ contract UniversalCallbackFuzzTest is Test {
         vm.prank(uvAdmin);
         callback.updateSupportedDomain("eip155", "1", true);
 
+        mockCore.setChainHeight("eip155", 1000);
+
         crossLend = new CrossLendMock(address(callback));
     }
 
@@ -78,8 +80,8 @@ contract UniversalCallbackFuzzTest is Test {
             }),
             query: abi.encode("fuzzQuery"),
             minConfirmations: 10,
-            maxAgeSeconds: 600,
-            maxDelaySeconds: 300,
+            blockNumber: 100,
+            expiryPushChainHeight: uint64(block.number + 1000),
             maxFee: 10 ether
         });
 
@@ -126,8 +128,8 @@ contract UniversalCallbackFuzzTest is Test {
             }),
             query: abi.encode("fuzzQuery"),
             minConfirmations: 10,
-            maxAgeSeconds: 600,
-            maxDelaySeconds: 300,
+            blockNumber: 100,
+            expiryPushChainHeight: uint64(block.number + 1000),
             maxFee: 10 ether
         });
 

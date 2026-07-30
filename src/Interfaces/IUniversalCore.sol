@@ -200,4 +200,9 @@ interface IUniversalCore {
         view
         returns (uint256 fee);
 
+    /// @notice                 Get the latest external-chain block height observed via the gas oracle.
+    /// @param chainNamespace   Chain namespace (e.g. "eip155")
+    /// @return                 Latest observed external-chain block height for the namespace
+    function chainHeightByChainNamespace(string memory chainNamespace) external view returns (uint256);
+
 }

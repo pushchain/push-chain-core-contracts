@@ -96,8 +96,9 @@ library UniversalCallbackErrors {
     error InvalidAccountId();
     error EmptyQuery();
     error InvalidMinConfirmations();
-    error InvalidMaxAge();
-    error InvalidMaxDelay();
+    error InvalidBlockNumber();
+    error InvalidExpiryHeight();
+    error RequestNotYetExpired();
     error InsufficientFee(uint256 provided, uint256 required);
     error ExcessiveFee(uint256 provided, uint256 maxFee);
     error RequestAlreadyFulfilled(uint256 requestId);
