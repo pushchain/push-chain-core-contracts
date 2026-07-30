@@ -139,6 +139,14 @@ contract UniversalCore is
     ///         previously deployed testnet implementation (which did not have this slot).
     mapping(string => uint256) public maxStalenessByChainNamespace;
 
+    // -- PC20 export config --
+    mapping(string => uint256) public pc20DeploymentGasOverhead;
+
+    // -- PC20 registry --
+    mapping(address => mapping(string => bytes32)) public pc20WrapperBySource;
+    mapping(string => mapping(bytes32 => address)) public pc20SourceByWrapper;
+    mapping(string => bytes32) public pc20FactoryByChain;
+
     // =========================
     //    UCV0: MODIFIERS
     // =========================
@@ -392,6 +400,50 @@ contract UniversalCore is
         gasFee = gasPrice * rescueGasLimit;
     }
 
+    /// @inheritdoc IUniversalCore
+    function getPC20ExportGasAndFees(string memory destChainNamespace, uint256 gasLimit, address pc20Token)
+        public
+        view
+        returns (
+            address gasToken,
+            uint256 gasFee,
+            uint256 protocolFee,
+            uint256 gasPrice,
+            string memory chainNamespace,
+            uint256 gasLimitUsed,
+            bool isFirstExport
+        )
+    {
+        gasToken = gasTokenPRC20ByChainNamespace[destChainNamespace];
+        if (gasToken == address(0)) revert CommonErrors.ZeroAddress();
+
+        gasPrice = gasPriceByChainNamespace[destChainNamespace];
+        if (gasPrice == 0) revert UniversalCoreErrors.ZeroGasPrice();
+
+        uint256 baseLimit = baseGasLimitByChainNamespace[destChainNamespace];
+        if (baseLimit == 0) revert UniversalCoreErrors.ZeroBaseGasLimit();
+
+        _validateGasDataFreshness(destChainNamespace);
+
+        if (gasLimit == 0) {
+            gasLimitUsed = baseLimit;
+        } else if (gasLimit < baseLimit) {
+            revert UniversalCoreErrors.GasLimitBelowBase(gasLimit, baseLimit);
+        } else {
+            gasLimitUsed = gasLimit;
+        }
+
+        uint256 deployOverhead = pc20DeploymentGasOverhead[destChainNamespace];
+        if (deployOverhead > 0 && pc20WrapperBySource[pc20Token][destChainNamespace] == bytes32(0)) {
+            isFirstExport = true;
+            gasLimitUsed += deployOverhead;
+        }
+
+        gasFee = gasPrice * gasLimitUsed;
+        protocolFee = protocolFeeByToken[pc20Token];
+        chainNamespace = destChainNamespace;
+    }
+
     // =========================
     //    UCV0_4: MANAGER ACTIONS
     // =========================
@@ -580,6 +632,15 @@ contract UniversalCore is
         emit SetTssFundMigrationGasLimitByChain(chainNamespace, gasLimit);
     }
 
+    /// @inheritdoc IUniversalCore
+    function updatePC20DeploymentGasOverhead(string memory chainNamespace, uint256 overhead)
+        external
+        onlyRole(UVCORE_ADMIN_ROLE)
+    {
+        pc20DeploymentGasOverhead[chainNamespace] = overhead;
+        emit SetPC20DeploymentGasOverhead(chainNamespace, overhead);
+    }
+
     /// @notice Pause the contract - stops all deposit functions. Only callable by PAUSER_ROLE.
     function pause() external onlyRole(PAUSER_ROLE) {
         _pause();
@@ -600,6 +661,51 @@ contract UniversalCore is
         (bool ok,) = to.call{value: amount}("");
         if (!ok) revert CommonErrors.TransferFailed();
         emit RescueNativePC(to, amount);
+    }
+
+    // =========================
+    //    UCV0_7: PC20 REGISTRY
+    // =========================
+
+    /// @inheritdoc IUniversalCore
+    function pc20Deployed(address sourceAsset, string memory destChain) external view returns (bool) {
+        return pc20WrapperBySource[sourceAsset][destChain] != bytes32(0);
+    }
+
+    /// @inheritdoc IUniversalCore
+    function getPC20Wrapper(address sourceAsset, string memory destChain)
+        external
+        view
+        returns (bytes32 wrapper, bool deployed)
+    {
+        wrapper = pc20WrapperBySource[sourceAsset][destChain];
+        deployed = wrapper != bytes32(0);
+    }
+
+    /// @inheritdoc IUniversalCore
+    function getPC20Source(bytes32 wrapper, string memory destChain)
+        external
+        view
+        returns (address sourceAsset, bool known)
+    {
+        sourceAsset = pc20SourceByWrapper[destChain][wrapper];
+        known = sourceAsset != address(0);
+    }
+
+    /// @inheritdoc IUniversalCore
+    function setWrapperDeployed(address sourceAsset, string calldata destChain, bytes32 wrapper) external onlyUEModule {
+        if (sourceAsset == address(0)) revert CommonErrors.ZeroAddress();
+        if (wrapper == bytes32(0)) revert CommonErrors.InvalidInput();
+        if (pc20WrapperBySource[sourceAsset][destChain] != bytes32(0)) return;
+        pc20WrapperBySource[sourceAsset][destChain] = wrapper;
+        pc20SourceByWrapper[destChain][wrapper] = sourceAsset;
+        emit SetPC20Deployed(sourceAsset, destChain, wrapper);
+    }
+
+    /// @inheritdoc IUniversalCore
+    function updatePC20FactoryByChain(string memory chainNamespace, bytes32 factory) external onlyRole(OPERATOR_ROLE) {
+        pc20FactoryByChain[chainNamespace] = factory;
+        emit SetPC20FactoryByChain(chainNamespace, factory);
     }
 
     // =========================
