@@ -92,7 +92,7 @@ library UniversalCallbackErrors {
     error CallerIsNotUEModule();
     error CallerIsNotAdmin();
     error ContractIsPaused();
-    error DomainNotSupported(string chainNamespace, string chainId);
+    error DomainBlocked(string chainNamespace, string chainId);
     error InvalidAccountId();
     error EmptyQuery();
     error InvalidMinConfirmations();

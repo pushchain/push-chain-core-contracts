@@ -48,9 +48,6 @@ contract UniversalCallbackIntegrationTest is Test {
         callback.grantRole(callback.PAUSER_ROLE(), pauser);
         vm.stopPrank();
 
-        vm.prank(uvAdmin);
-        callback.updateSupportedDomain("eip155", "1", true);
-
         mockCore.setReadBaseFee("eip155", "1", PROTOCOL_FEE);
         mockCore.setChainHeight("eip155", 1000);
 

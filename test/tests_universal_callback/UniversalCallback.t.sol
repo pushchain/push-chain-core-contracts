@@ -62,9 +62,6 @@ contract UniversalCallbackTest is Test {
             maxFee: 10 ether
         });
 
-        vm.prank(uvAdmin);
-        callback.updateSupportedDomain("eip155", "1", true);
-
         mockCore.setReadBaseFee("eip155", "1", 0.01 ether);
         mockCore.setChainHeight("eip155", 1000);
     }
@@ -267,18 +264,18 @@ contract UniversalCallbackTest is Test {
         );
     }
 
-    function test_RequestExternalRead_RevertWhen_DomainNotSupported() public {
+    function test_RequestExternalRead_RevertWhen_DomainBlocked() public {
+        vm.prank(uvAdmin);
+        callback.updateBlockedDomain("eip155", "1", true);
+
         vm.deal(user, 10 ether);
         vm.prank(user);
-        ReadSpec memory spec = defaultSpec;
-        spec.account.chainNamespace = "solana";
-        spec.account.chainId = "mainnet";
 
         vm.expectRevert(
-            abi.encodeWithSelector(UniversalCallbackErrors.DomainNotSupported.selector, "solana", "mainnet")
+            abi.encodeWithSelector(UniversalCallbackErrors.DomainBlocked.selector, "eip155", "1")
         );
         callback.requestExternalReadSelf{value: 1 ether}(
-            spec, CALLBACK_SEL, 50000
+            defaultSpec, CALLBACK_SEL, 50000
         );
     }
 
@@ -423,17 +420,17 @@ contract UniversalCallbackTest is Test {
         assertGe(fee, 0.01 ether);
     }
 
-    function test_UpdateSupportedDomain_SetsValue() public {
+    function test_UpdateBlockedDomain_SetsValue() public {
         vm.prank(uvAdmin);
-        callback.updateSupportedDomain("solana", "mainnet", true);
+        callback.updateBlockedDomain("solana", "mainnet", true);
 
-        assertTrue(callback.isSupportedDomain("solana", "mainnet"));
+        assertTrue(callback.isDomainBlocked("solana", "mainnet"));
     }
 
-    function test_UpdateSupportedDomain_RevertWhen_NotAdmin() public {
+    function test_UpdateBlockedDomain_RevertWhen_NotAdmin() public {
         vm.prank(user);
         vm.expectRevert(abi.encodeWithSelector(UniversalCallbackErrors.CallerIsNotAdmin.selector));
-        callback.updateSupportedDomain("solana", "mainnet", true);
+        callback.updateBlockedDomain("solana", "mainnet", true);
     }
 
     function test_Pause_RevertWhen_NotPauser() public {

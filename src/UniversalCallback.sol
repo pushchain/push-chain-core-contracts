@@ -36,7 +36,7 @@ contract UniversalCallback is
     mapping(uint256 => bool) public fulfilledRequests;
     mapping(uint256 => PendingRead) private _pending;
     uint256 private _requestNonce;
-    mapping(string => mapping(string => bool)) public supportedDomains;
+    mapping(string => mapping(string => bool)) public blockedDomains;
 
     constructor() {
         _disableInitializers();
@@ -109,8 +109,8 @@ contract UniversalCallback is
         if (spec.minConfirmations < MIN_CONFIRMATIONS_FLOOR) {
             revert UniversalCallbackErrors.InvalidMinConfirmations();
         }
-        if (!supportedDomains[spec.account.chainNamespace][spec.account.chainId]) {
-            revert UniversalCallbackErrors.DomainNotSupported(spec.account.chainNamespace, spec.account.chainId);
+        if (blockedDomains[spec.account.chainNamespace][spec.account.chainId]) {
+            revert UniversalCallbackErrors.DomainBlocked(spec.account.chainNamespace, spec.account.chainId);
         }
         if (
             spec.blockNumber == 0
@@ -248,20 +248,20 @@ contract UniversalCallback is
         return _pending[requestId];
     }
 
-    function updateSupportedDomain(
+    function updateBlockedDomain(
         string calldata chainNamespace,
         string calldata chainId,
-        bool supported
+        bool blocked
     ) external onlyUvCallbackAdmin {
-        supportedDomains[chainNamespace][chainId] = supported;
-        emit DomainUpdated(chainNamespace, chainId, supported);
+        blockedDomains[chainNamespace][chainId] = blocked;
+        emit DomainUpdated(chainNamespace, chainId, blocked);
     }
 
-    function isSupportedDomain(
+    function isDomainBlocked(
         string calldata chainNamespace,
         string calldata chainId
     ) external view returns (bool) {
-        return supportedDomains[chainNamespace][chainId];
+        return blockedDomains[chainNamespace][chainId];
     }
 
     function pause() external onlyPauser {

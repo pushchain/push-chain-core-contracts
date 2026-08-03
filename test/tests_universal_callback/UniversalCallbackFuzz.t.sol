@@ -48,9 +48,6 @@ contract UniversalCallbackFuzzTest is Test {
         callback.grantRole(callback.UVCALLBACK_ADMIN_ROLE(), defaultAdmin);
         vm.stopPrank();
 
-        vm.prank(uvAdmin);
-        callback.updateSupportedDomain("eip155", "1", true);
-
         mockCore.setChainHeight("eip155", 1000);
 
         crossLend = new CrossLendMock(address(callback));
@@ -102,16 +99,16 @@ contract UniversalCallbackFuzzTest is Test {
         vm.assume(bytes(chainId).length > 0);
 
         vm.prank(uvAdmin);
-        callback.updateSupportedDomain(chainNamespace, chainId, true);
-        assertTrue(callback.isSupportedDomain(chainNamespace, chainId));
+        callback.updateBlockedDomain(chainNamespace, chainId, true);
+        assertTrue(callback.isDomainBlocked(chainNamespace, chainId));
 
         vm.prank(uvAdmin);
-        callback.updateSupportedDomain(chainNamespace, chainId, false);
-        assertFalse(callback.isSupportedDomain(chainNamespace, chainId));
+        callback.updateBlockedDomain(chainNamespace, chainId, false);
+        assertFalse(callback.isDomainBlocked(chainNamespace, chainId));
 
         vm.prank(uvAdmin);
-        callback.updateSupportedDomain(chainNamespace, chainId, true);
-        assertTrue(callback.isSupportedDomain(chainNamespace, chainId));
+        callback.updateBlockedDomain(chainNamespace, chainId, true);
+        assertTrue(callback.isDomainBlocked(chainNamespace, chainId));
     }
 
     function testFuzz_RequestThenFulfillReturnsResult(bytes memory resultData) public {
