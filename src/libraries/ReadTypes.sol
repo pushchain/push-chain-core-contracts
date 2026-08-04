@@ -7,8 +7,8 @@ struct ReadSpec {
     UniversalAccountId account;
     bytes query;
     uint16 minConfirmations;
-    uint64 maxAgeSeconds;
-    uint64 maxDelaySeconds;
+    uint64 blockNumber;
+    uint64 expiryPushChainHeight;
     uint256 maxFee;
 }
 
@@ -19,6 +19,7 @@ struct PendingRead {
     address originalFunder;
     uint256 feesDeposited;
     uint256 protocolFee;
+    uint64 expiryHeight;
 }
 
 uint16 constant MIN_CONFIRMATIONS_FLOOR = 1;

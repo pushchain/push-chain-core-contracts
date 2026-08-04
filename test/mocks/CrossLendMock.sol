@@ -23,8 +23,8 @@ contract CrossLendMock is UniversalReadClient {
             }),
             query: abi.encode(amount),
             minConfirmations: 10,
-            maxAgeSeconds: 600,
-            maxDelaySeconds: 300,
+            blockNumber: 100,
+            expiryPushChainHeight: uint64(block.number + 1000),
             maxFee: 100 ether
         });
 

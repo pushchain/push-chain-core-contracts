@@ -36,7 +36,7 @@ contract UniversalCallback is
     mapping(uint256 => bool) public fulfilledRequests;
     mapping(uint256 => PendingRead) private _pending;
     uint256 private _requestNonce;
-    mapping(string => mapping(string => bool)) public supportedDomains;
+    mapping(string => mapping(string => bool)) public blockedDomains;
 
     constructor() {
         _disableInitializers();
@@ -109,14 +109,17 @@ contract UniversalCallback is
         if (spec.minConfirmations < MIN_CONFIRMATIONS_FLOOR) {
             revert UniversalCallbackErrors.InvalidMinConfirmations();
         }
-        if (spec.maxAgeSeconds == 0) {
-            revert UniversalCallbackErrors.InvalidMaxAge();
+        if (blockedDomains[spec.account.chainNamespace][spec.account.chainId]) {
+            revert UniversalCallbackErrors.DomainBlocked(spec.account.chainNamespace, spec.account.chainId);
         }
-        if (spec.maxDelaySeconds == 0) {
-            revert UniversalCallbackErrors.InvalidMaxDelay();
+        if (
+            spec.blockNumber == 0
+                || spec.blockNumber > _universalCore.chainHeightByChainNamespace(spec.account.chainNamespace)
+        ) {
+            revert UniversalCallbackErrors.InvalidBlockNumber();
         }
-        if (!supportedDomains[spec.account.chainNamespace][spec.account.chainId]) {
-            revert UniversalCallbackErrors.DomainNotSupported(spec.account.chainNamespace, spec.account.chainId);
+        if (spec.expiryPushChainHeight <= block.number) {
+            revert UniversalCallbackErrors.InvalidExpiryHeight();
         }
         if (callbackGasLimit == 0 || callbackGasLimit > MAX_CALLBACK_GAS_LIMIT) {
             revert UniversalCallbackErrors.CallbackGasLimitExceeded(callbackGasLimit, MAX_CALLBACK_GAS_LIMIT);
@@ -137,7 +140,8 @@ contract UniversalCallback is
             callbackGasLimit: callbackGasLimit,
             originalFunder: msg.sender,
             feesDeposited: msg.value,
-            protocolFee: protocolFee
+            protocolFee: protocolFee,
+            expiryHeight: spec.expiryPushChainHeight
         });
 
         emit ReadRequested(requestId, spec, msg.sender, msg.sender, msg.value);
@@ -200,6 +204,9 @@ contract UniversalCallback is
         if (p.callbackTarget == address(0)) {
             revert UniversalCallbackErrors.InvalidRequestId();
         }
+        if (block.number < p.expiryHeight) {
+            revert UniversalCallbackErrors.RequestNotYetExpired();
+        }
         delete _pending[requestId];
 
         emit RequestExpired(requestId, p.originalFunder);
@@ -241,20 +248,20 @@ contract UniversalCallback is
         return _pending[requestId];
     }
 
-    function updateSupportedDomain(
+    function updateBlockedDomain(
         string calldata chainNamespace,
         string calldata chainId,
-        bool supported
+        bool blocked
     ) external onlyUvCallbackAdmin {
-        supportedDomains[chainNamespace][chainId] = supported;
-        emit DomainUpdated(chainNamespace, chainId, supported);
+        blockedDomains[chainNamespace][chainId] = blocked;
+        emit DomainUpdated(chainNamespace, chainId, blocked);
     }
 
-    function isSupportedDomain(
+    function isDomainBlocked(
         string calldata chainNamespace,
         string calldata chainId
     ) external view returns (bool) {
-        return supportedDomains[chainNamespace][chainId];
+        return blockedDomains[chainNamespace][chainId];
     }
 
     function pause() external onlyPauser {

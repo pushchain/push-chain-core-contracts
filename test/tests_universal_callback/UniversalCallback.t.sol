@@ -57,15 +57,13 @@ contract UniversalCallbackTest is Test {
             }),
             query: abi.encode("someData"),
             minConfirmations: 10,
-            maxAgeSeconds: 600,
-            maxDelaySeconds: 300,
+            blockNumber: 100,
+            expiryPushChainHeight: uint64(block.number + 1000),
             maxFee: 10 ether
         });
 
-        vm.prank(uvAdmin);
-        callback.updateSupportedDomain("eip155", "1", true);
-
         mockCore.setReadBaseFee("eip155", "1", 0.01 ether);
+        mockCore.setChainHeight("eip155", 1000);
     }
 
     function test_Initialize_SetsState() public {
@@ -142,6 +140,7 @@ contract UniversalCallbackTest is Test {
         assertEq(funder, user);
         assertEq(deposited, 1 ether);
         assertEq(p.protocolFee, 0.01 ether);
+        assertEq(p.expiryHeight, defaultSpec.expiryPushChainHeight);
     }
 
     function test_RequestExternalRead_RevertWhen_InsufficientFee() public {
@@ -229,42 +228,54 @@ contract UniversalCallbackTest is Test {
         );
     }
 
-    function test_RequestExternalRead_RevertWhen_ZeroMaxAge() public {
+    function test_RequestExternalRead_RevertWhen_ZeroBlockNumber() public {
         vm.deal(user, 10 ether);
         vm.prank(user);
         ReadSpec memory spec = defaultSpec;
-        spec.maxAgeSeconds = 0;
+        spec.blockNumber = 0;
 
-        vm.expectRevert(abi.encodeWithSelector(UniversalCallbackErrors.InvalidMaxAge.selector));
+        vm.expectRevert(abi.encodeWithSelector(UniversalCallbackErrors.InvalidBlockNumber.selector));
         callback.requestExternalReadSelf{value: 1 ether}(
             spec, CALLBACK_SEL, 50000
         );
     }
 
-    function test_RequestExternalRead_RevertWhen_ZeroMaxDelay() public {
+    function test_RequestExternalRead_RevertWhen_BlockNumberAboveOracleHeight() public {
         vm.deal(user, 10 ether);
         vm.prank(user);
         ReadSpec memory spec = defaultSpec;
-        spec.maxDelaySeconds = 0;
+        spec.blockNumber = 1001; // oracle height is 1000
 
-        vm.expectRevert(abi.encodeWithSelector(UniversalCallbackErrors.InvalidMaxDelay.selector));
+        vm.expectRevert(abi.encodeWithSelector(UniversalCallbackErrors.InvalidBlockNumber.selector));
         callback.requestExternalReadSelf{value: 1 ether}(
             spec, CALLBACK_SEL, 50000
         );
     }
 
-    function test_RequestExternalRead_RevertWhen_DomainNotSupported() public {
+    function test_RequestExternalRead_RevertWhen_ExpiryNotInFuture() public {
         vm.deal(user, 10 ether);
         vm.prank(user);
         ReadSpec memory spec = defaultSpec;
-        spec.account.chainNamespace = "solana";
-        spec.account.chainId = "mainnet";
+        spec.expiryPushChainHeight = uint64(block.number);
+
+        vm.expectRevert(abi.encodeWithSelector(UniversalCallbackErrors.InvalidExpiryHeight.selector));
+        callback.requestExternalReadSelf{value: 1 ether}(
+            spec, CALLBACK_SEL, 50000
+        );
+    }
+
+    function test_RequestExternalRead_RevertWhen_DomainBlocked() public {
+        vm.prank(uvAdmin);
+        callback.updateBlockedDomain("eip155", "1", true);
+
+        vm.deal(user, 10 ether);
+        vm.prank(user);
 
         vm.expectRevert(
-            abi.encodeWithSelector(UniversalCallbackErrors.DomainNotSupported.selector, "solana", "mainnet")
+            abi.encodeWithSelector(UniversalCallbackErrors.DomainBlocked.selector, "eip155", "1")
         );
         callback.requestExternalReadSelf{value: 1 ether}(
-            spec, CALLBACK_SEL, 50000
+            defaultSpec, CALLBACK_SEL, 50000
         );
     }
 
@@ -369,6 +380,8 @@ contract UniversalCallbackTest is Test {
             defaultSpec, CALLBACK_SEL, 50000
         );
 
+        vm.roll(defaultSpec.expiryPushChainHeight);
+
         vm.expectEmit(true, true, true, true);
         emit IUniversalCallback.RequestExpired(requestId, user);
 
@@ -376,6 +389,19 @@ contract UniversalCallbackTest is Test {
         callback.expireExternalRead(requestId);
 
         assertTrue(callback.isFulfilled(requestId));
+    }
+
+    function test_ExpireExternalRead_RevertWhen_NotYetExpired() public {
+        vm.deal(user, 10 ether);
+        vm.prank(user);
+        uint256 requestId = callback.requestExternalReadSelf{value: 1 ether}(
+            defaultSpec, CALLBACK_SEL, 50000
+        );
+
+        // block.number is still below expiryHeight
+        vm.prank(ueModule);
+        vm.expectRevert(abi.encodeWithSelector(UniversalCallbackErrors.RequestNotYetExpired.selector));
+        callback.expireExternalRead(requestId);
     }
 
     function test_ExpireExternalRead_RevertWhen_NotUEModule() public {
@@ -394,17 +420,17 @@ contract UniversalCallbackTest is Test {
         assertGe(fee, 0.01 ether);
     }
 
-    function test_UpdateSupportedDomain_SetsValue() public {
+    function test_UpdateBlockedDomain_SetsValue() public {
         vm.prank(uvAdmin);
-        callback.updateSupportedDomain("solana", "mainnet", true);
+        callback.updateBlockedDomain("solana", "mainnet", true);
 
-        assertTrue(callback.isSupportedDomain("solana", "mainnet"));
+        assertTrue(callback.isDomainBlocked("solana", "mainnet"));
     }
 
-    function test_UpdateSupportedDomain_RevertWhen_NotAdmin() public {
+    function test_UpdateBlockedDomain_RevertWhen_NotAdmin() public {
         vm.prank(user);
         vm.expectRevert(abi.encodeWithSelector(UniversalCallbackErrors.CallerIsNotAdmin.selector));
-        callback.updateSupportedDomain("solana", "mainnet", true);
+        callback.updateBlockedDomain("solana", "mainnet", true);
     }
 
     function test_Pause_RevertWhen_NotPauser() public {
