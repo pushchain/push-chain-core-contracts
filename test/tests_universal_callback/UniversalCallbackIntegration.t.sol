@@ -48,10 +48,8 @@ contract UniversalCallbackIntegrationTest is Test {
         callback.grantRole(callback.PAUSER_ROLE(), pauser);
         vm.stopPrank();
 
-        vm.prank(uvAdmin);
-        callback.updateSupportedDomain("eip155", "1", true);
-
         mockCore.setReadBaseFee("eip155", "1", PROTOCOL_FEE);
+        mockCore.setChainHeight("eip155", 1000);
 
         crossLend = new CrossLendMock(address(callback));
         revertingClient = new RevertingReadClient(address(callback));
@@ -146,6 +144,8 @@ contract UniversalCallbackIntegrationTest is Test {
 
         uint256 requestId = crossLend.lastRequestId();
         uint256 balanceBefore = address(crossLend).balance;
+
+        vm.roll(block.number + 1000);
 
         vm.prank(ueModule);
         callback.expireExternalRead(requestId);

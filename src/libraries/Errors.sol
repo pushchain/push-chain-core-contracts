@@ -91,12 +91,14 @@ library UEAErrors {
 library UniversalCallbackErrors {
     error CallerIsNotUEModule();
     error CallerIsNotAdmin();
-    error DomainNotSupported(string chainNamespace, string chainId);
+    error ContractIsPaused();
+    error DomainBlocked(string chainNamespace, string chainId);
     error InvalidAccountId();
     error EmptyQuery();
     error InvalidMinConfirmations();
-    error InvalidMaxAge();
-    error InvalidMaxDelay();
+    error InvalidBlockNumber();
+    error InvalidExpiryHeight();
+    error RequestNotYetExpired();
     error InsufficientFee(uint256 provided, uint256 required);
     error ExcessiveFee(uint256 provided, uint256 maxFee);
     error RequestAlreadyFulfilled(uint256 requestId);
