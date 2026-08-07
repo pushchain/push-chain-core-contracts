@@ -7,9 +7,10 @@ import {ERC1967Proxy} from "@openzeppelin/contracts/proxy/ERC1967/ERC1967Proxy.s
 import {UniversalCallback} from "../../src/UniversalCallback.sol";
 import {CrossLendMock} from "../mocks/CrossLendMock.sol";
 import {RevertingReadClient} from "../mocks/RevertingReadClient.sol";
+import {NoReceiveReadClient} from "../mocks/NoReceiveReadClient.sol";
 import {MockUniversalCore} from "../mocks/MockUniversalCore.sol";
 import {MockVaultPC} from "../mocks/MockVaultPC.sol";
-import {UniversalCallbackErrors} from "../../src/libraries/Errors.sol";
+import {UniversalCallbackErrors, CommonErrors} from "../../src/libraries/Errors.sol";
 import {IUniversalCallback} from "../../src/interfaces/IUniversalCallback.sol";
 
 contract UniversalReadClientTest is Test {
@@ -119,6 +120,47 @@ contract UniversalReadClientTest is Test {
         uint256 requestId = crossLend.lastRequestId();
         bytes memory ctx = crossLend.getLocalContext(requestId);
         assertGt(ctx.length, 0);
+    }
+
+    function test_WithdrawRefunds_ReturnsZeroWhenNothingOwed() public {
+        // Idempotent by design: safe to call unconditionally.
+        assertEq(crossLend.reclaim(), 0);
+    }
+
+    function test_WithdrawRefunds_PullsCreditedRefund() public {
+        vm.deal(address(crossLend), 1 ether);
+        vm.prank(address(crossLend));
+        crossLend.requestSync{value: 1 ether}(1000);
+
+        uint256 requestId = crossLend.lastRequestId();
+        vm.roll(block.number + 1000);
+        vm.prank(ueModule);
+        callback.expireExternalRead(requestId);
+
+        uint256 credited = 1 ether - 0.01 ether;
+        uint256 before = address(crossLend).balance;
+
+        assertEq(crossLend.reclaim(), credited);
+        assertEq(address(crossLend).balance, before + credited);
+        assertEq(callback.withdrawable(address(crossLend)), 0);
+    }
+
+    function test_WithdrawRefunds_RevertWhen_ClientHasNoReceive() public {
+        NoReceiveReadClient noReceive = new NoReceiveReadClient(address(callback));
+
+        vm.deal(address(noReceive), 1 ether);
+        vm.prank(address(noReceive));
+        noReceive.requestSync{value: 1 ether}(1000);
+
+        uint256 requestId = noReceive.lastRequestId();
+        vm.roll(block.number + 1000);
+        vm.prank(ueModule);
+        callback.expireExternalRead(requestId);
+
+        // The refund is credited, but a client without receive() can never claim it.
+        assertEq(callback.withdrawable(address(noReceive)), 1 ether - 0.01 ether);
+        vm.expectRevert(abi.encodeWithSelector(CommonErrors.TransferFailed.selector));
+        noReceive.reclaim();
     }
 
     function test_GetLocalContext_ClearedAfterCallback() public {

@@ -107,6 +107,7 @@ library UniversalCallbackErrors {
     error ZeroAddressInit();
     error InvalidCallbackTarget();
     error UnauthorizedCaller();
+    error NothingToWithdraw();
 }
 
 library CEAErrors {

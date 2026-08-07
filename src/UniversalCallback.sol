@@ -38,6 +38,16 @@ contract UniversalCallback is
     uint256 private _requestNonce;
     mapping(string => mapping(string => bool)) public blockedDomains;
 
+    /// @notice Pull-payment ledger. Settlement credits refunds here rather than
+    ///         pushing them, so an unreceptive recipient can never brick a
+    ///         fulfillment or an expiry.
+    /// @dev    Append-only storage: new variables MUST go after this block.
+    mapping(address => uint256) public withdrawable;
+
+    /// @notice Sum of every unclaimed balance in `withdrawable`. Held funds are
+    ///         user-owned and are excluded from what `sweepFees` may take.
+    uint256 public totalWithdrawable;
+
     constructor() {
         _disableInitializers();
     }
@@ -153,13 +163,18 @@ contract UniversalCallback is
         if (fulfilledRequests[requestId]) {
             revert UniversalCallbackErrors.RequestAlreadyFulfilled(requestId);
         }
-        fulfilledRequests[requestId] = true;
 
         PendingRead memory p = _pending[requestId];
         if (p.callbackTarget == address(0)) {
             revert UniversalCallbackErrors.InvalidCallbackTarget();
         }
+
+        // Effects and settlement complete before any untrusted code runs. The
+        // financial outcome is identical whether the callback succeeds or reverts:
+        // the protocol fee is earned either way, so only the event differs.
+        fulfilledRequests[requestId] = true;
         delete _pending[requestId];
+        _settle(requestId, p);
 
         (bool success, bytes memory reason) =
             p.callbackTarget.call{gas: p.callbackGasLimit}(
@@ -168,26 +183,8 @@ contract UniversalCallback is
 
         if (success) {
             emit ReadFulfilled(requestId, resultData, observedBlockHeight, observedBlockHash);
-
-            if (p.protocolFee > 0 && address(this).balance >= p.protocolFee) {
-                (bool ok, ) = _vaultPC.call{value: p.protocolFee}("");
-                if (!ok) revert CommonErrors.TransferFailed();
-                emit ProtocolFeeDistributed(requestId, _vaultPC, p.protocolFee);
-            }
-
-            uint256 refund = p.feesDeposited - p.protocolFee;
-            if (refund > 0) {
-                (bool ok, ) = p.originalFunder.call{value: refund}("");
-                if (!ok) revert CommonErrors.TransferFailed();
-                emit FeeRefunded(requestId, p.originalFunder, refund);
-            }
         } else {
             emit CallbackFailed(requestId, reason);
-            if (p.feesDeposited > 0) {
-                (bool ok, ) = p.originalFunder.call{value: p.feesDeposited}("");
-                if (!ok) revert CommonErrors.TransferFailed();
-                emit FeeRefunded(requestId, p.originalFunder, p.feesDeposited);
-            }
         }
     }
 
@@ -195,7 +192,6 @@ contract UniversalCallback is
         if (fulfilledRequests[requestId]) {
             revert UniversalCallbackErrors.RequestAlreadyFulfilled(requestId);
         }
-        fulfilledRequests[requestId] = true;
 
         PendingRead memory p = _pending[requestId];
         if (p.callbackTarget == address(0)) {
@@ -204,15 +200,76 @@ contract UniversalCallback is
         if (block.number < p.expiryHeight) {
             revert UniversalCallbackErrors.RequestNotYetExpired();
         }
+
+        fulfilledRequests[requestId] = true;
         delete _pending[requestId];
+        _settle(requestId, p);
 
         emit RequestExpired(requestId, p.originalFunder);
     }
 
+    /// @notice             Claim refunds credited to the caller.
+    /// @dev                Deliberately not `whenNotPaused`: pausing halts new
+    ///                     requests, it must never trap funds already owed.
+    /// @return amount      Amount transferred to the caller.
+    function withdraw() external override nonReentrant returns (uint256 amount) {
+        amount = withdrawable[msg.sender];
+        if (amount == 0) revert UniversalCallbackErrors.NothingToWithdraw();
+
+        withdrawable[msg.sender] = 0;
+        totalWithdrawable -= amount;
+
+        (bool ok, ) = msg.sender.call{value: amount}("");
+        if (!ok) revert CommonErrors.TransferFailed();
+
+        emit RefundWithdrawn(msg.sender, amount);
+    }
+
+    /// @dev                Splits a consumed request's deposit: protocol fee to the
+    ///                     vault, remainder credited to the funder's pull ledger.
+    ///                     Callers MUST have already set `fulfilledRequests` and
+    ///                     deleted `_pending` for this request.
+    /// @param requestId    Request being settled
+    /// @param p            Snapshot of the consumed pending read
+    function _settle(uint256 requestId, PendingRead memory p) private {
+        uint256 protocolFee = p.protocolFee;
+        if (protocolFee > 0) {
+            _payProtocolFee(requestId, protocolFee);
+        }
+
+        // `feesDeposited >= protocolFee` holds by construction: `_estimateFee`
+        // returns `fee = protocolFee + callbackGasCost` and requests below `fee`
+        // are rejected at entry.
+        uint256 refund = p.feesDeposited - protocolFee;
+        if (refund > 0) {
+            withdrawable[p.originalFunder] += refund;
+            totalWithdrawable += refund;
+            emit FeeRefundCredited(requestId, p.originalFunder, refund);
+        }
+    }
+
+    /// @dev                Pushes the protocol fee to the vault. Reverts loudly on
+    ///                     failure rather than masking it: VaultPC accepts plain
+    ///                     transfers unconditionally, so a failure here means the
+    ///                     contract is short and settlement accounting is wrong.
+    ///                     Any future vault MUST keep accepting plain transfers.
+    /// @param requestId    Request the fee belongs to
+    /// @param amount       Protocol fee amount
+    function _payProtocolFee(uint256 requestId, uint256 amount) private {
+        address vault = _vaultPC;
+        (bool ok, ) = vault.call{value: amount}("");
+        if (!ok) revert CommonErrors.TransferFailed();
+        emit ProtocolFeeDistributed(requestId, vault, amount);
+    }
+
     function sweepFees(address payable recipient, uint256 amount) external onlyRole(DEFAULT_ADMIN_ROLE) {
         if (recipient == address(0)) revert CommonErrors.ZeroAddress();
-        if (amount > address(this).balance) {
-            revert UniversalCallbackErrors.InsufficientContractBalance(amount, address(this).balance);
+        // Credited refunds are user-owned and must never be sweepable.
+        // NOTE: once in-flight deposits are tracked, this becomes
+        //       `address(this).balance - totalWithdrawable - totalEscrowed`.
+        uint256 available = address(this).balance - totalWithdrawable;
+        if (amount > available) {
+            revert UniversalCallbackErrors.InsufficientContractBalance(amount, available);
         }
         (bool ok, ) = recipient.call{value: amount}("");
         if (!ok) revert CommonErrors.TransferFailed();
@@ -278,5 +335,8 @@ contract UniversalCallback is
         return _vaultPC;
     }
 
+    /// @dev No flow pays into this contract outside `requestExternalReadSelf`.
+    ///      Kept as a recovery surface so accidentally-sent PC remains reachable
+    ///      via `sweepFees`, which excludes credited refunds.
     receive() external payable {}
 }

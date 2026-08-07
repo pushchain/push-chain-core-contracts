@@ -5,10 +5,10 @@ import {UniversalReadClient} from "../../src/UniversalReadClient.sol";
 import {ReadSpec} from "../../src/libraries/ReadTypes.sol";
 import {UniversalAccountId} from "../../src/libraries/Types.sol";
 
-contract CrossLendMock is UniversalReadClient {
+/// @dev Client that deliberately omits `receive()`. Pins the documented footgun:
+///      a refund can be credited to it, but never claimed.
+contract NoReceiveReadClient is UniversalReadClient {
     uint256 public lastRequestId;
-    bytes public lastResultData;
-    bytes public lastLocalState;
 
     constructor(
         address universalCallback_
@@ -28,13 +28,8 @@ contract CrossLendMock is UniversalReadClient {
             maxFee: 100 ether
         });
 
-        bytes memory localState = abi.encode(amount, msg.sender);
-
-        uint256 requestId = _requestRead(spec, localState, 200000);
-        lastRequestId = requestId;
+        lastRequestId = _requestRead(spec, "", 200000);
     }
-
-    receive() external payable {}
 
     function reclaim() external returns (uint256) {
         return _withdrawRefunds();
@@ -44,9 +39,5 @@ contract CrossLendMock is UniversalReadClient {
         uint256 requestId,
         bytes calldata resultData,
         bytes memory localState
-    ) internal override {
-        lastRequestId = requestId;
-        lastResultData = resultData;
-        lastLocalState = localState;
-    }
+    ) internal override {}
 }

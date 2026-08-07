@@ -111,6 +111,97 @@ contract UniversalCallbackFuzzTest is Test {
         assertTrue(callback.isDomainBlocked(chainNamespace, chainId));
     }
 
+    /// @dev The core accounting guarantee: whatever the outcome, every wei the
+    ///      user deposited ends up either at the vault or owed back to them.
+    function testFuzz_SettlementConservesValue(
+        uint256 deposit,
+        uint256 baseFee,
+        bool expire
+    ) public {
+        deposit = bound(deposit, 0.01 ether, 100 ether);
+        baseFee = bound(baseFee, 0, deposit);
+        mockCore.setReadBaseFee("eip155", "1", baseFee);
+
+        ReadSpec memory spec = ReadSpec({
+            account: UniversalAccountId({
+                chainNamespace: "eip155",
+                chainId: "1",
+                owner: abi.encode(user)
+            }),
+            query: abi.encode("q"),
+            minConfirmations: 10,
+            blockNumber: 100,
+            expiryPushChainHeight: uint64(block.number + 1000),
+            maxFee: 1000 ether
+        });
+
+        vm.deal(user, deposit);
+        vm.prank(user);
+        uint256 requestId = callback.requestExternalReadSelf{value: deposit}(
+            spec, bytes4(keccak256("onResponse(uint256,bytes)")), 50000
+        );
+
+        uint256 vaultBefore = address(mockVault).balance;
+
+        if (expire) {
+            vm.roll(spec.expiryPushChainHeight);
+            vm.prank(ueModule);
+            callback.expireExternalRead(requestId);
+        } else {
+            vm.prank(ueModule);
+            callback.fulfillExternalCallback(requestId, "", 0, bytes32(0));
+        }
+
+        uint256 toVault = address(mockVault).balance - vaultBefore;
+        uint256 owed = callback.withdrawable(user);
+
+        assertEq(toVault + owed, deposit, "value must be conserved");
+        assertEq(toVault, baseFee, "protocol fee retained on every path");
+        assertEq(callback.totalWithdrawable(), owed);
+        assertGe(address(callback).balance, callback.totalWithdrawable());
+    }
+
+    function testFuzz_WithdrawNeverExceedsCredit(uint256 deposit, uint256 baseFee) public {
+        deposit = bound(deposit, 0.01 ether, 100 ether);
+        baseFee = bound(baseFee, 0, deposit);
+        mockCore.setReadBaseFee("eip155", "1", baseFee);
+
+        ReadSpec memory spec = ReadSpec({
+            account: UniversalAccountId({
+                chainNamespace: "eip155",
+                chainId: "1",
+                owner: abi.encode(user)
+            }),
+            query: abi.encode("q"),
+            minConfirmations: 10,
+            blockNumber: 100,
+            expiryPushChainHeight: uint64(block.number + 1000),
+            maxFee: 1000 ether
+        });
+
+        vm.deal(user, deposit);
+        vm.prank(user);
+        uint256 requestId = callback.requestExternalReadSelf{value: deposit}(
+            spec, bytes4(keccak256("onResponse(uint256,bytes)")), 50000
+        );
+
+        vm.roll(spec.expiryPushChainHeight);
+        vm.prank(ueModule);
+        callback.expireExternalRead(requestId);
+
+        uint256 credited = callback.withdrawable(user);
+        if (credited == 0) return;
+
+        uint256 before = user.balance;
+        vm.prank(user);
+        uint256 claimed = callback.withdraw();
+
+        assertEq(claimed, credited);
+        assertEq(user.balance, before + credited);
+        assertEq(callback.withdrawable(user), 0);
+        assertEq(callback.totalWithdrawable(), 0);
+    }
+
     function testFuzz_RequestThenFulfillReturnsResult(bytes memory resultData) public {
         vm.assume(resultData.length <= 4096);
 

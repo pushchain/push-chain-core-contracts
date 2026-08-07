@@ -7,9 +7,12 @@ import {ERC1967Proxy} from "@openzeppelin/contracts/proxy/ERC1967/ERC1967Proxy.s
 import {UniversalCallback} from "../../src/UniversalCallback.sol";
 import {CrossLendMock} from "../mocks/CrossLendMock.sol";
 import {RevertingReadClient} from "../mocks/RevertingReadClient.sol";
+import {ReentrantReadClient} from "../mocks/ReentrantReadClient.sol";
 import {MockUniversalCore} from "../mocks/MockUniversalCore.sol";
 import {MockVaultPC} from "../mocks/MockVaultPC.sol";
-import {UniversalCallbackErrors} from "../../src/libraries/Errors.sol";
+import {RevertingVaultPC} from "../mocks/RevertingVaultPC.sol";
+import {UniversalCallbackErrors, CommonErrors} from "../../src/libraries/Errors.sol";
+import {IUniversalCallback} from "../../src/interfaces/IUniversalCallback.sol";
 
 contract UniversalCallbackIntegrationTest is Test {
     UniversalCallback callback;
@@ -55,15 +58,16 @@ contract UniversalCallbackIntegrationTest is Test {
         revertingClient = new RevertingReadClient(address(callback));
     }
 
-    function testIntegration_FullFlow_RequestFulfillRefund() public {
-        uint256 balanceBefore = address(crossLend).balance;
-
+    function testIntegration_FullFlow_RequestFulfillCreditsRefund() public {
         vm.deal(address(crossLend), DEPOSIT_FEE);
         vm.prank(address(crossLend));
         crossLend.requestSync{value: DEPOSIT_FEE}(1000);
 
         uint256 requestId = crossLend.lastRequestId();
         assertGt(requestId, 0);
+
+        uint256 balanceBefore = address(crossLend).balance;
+        uint256 vaultBefore = mockVault.totalReceived();
 
         bytes memory result = abi.encode("ethPrice:3500");
         vm.prank(ueModule);
@@ -73,11 +77,17 @@ contract UniversalCallbackIntegrationTest is Test {
         assertEq(crossLend.lastResultData(), result);
 
         uint256 refundAmount = DEPOSIT_FEE - PROTOCOL_FEE;
-        uint256 balanceAfter = address(crossLend).balance;
-        assertGe(balanceAfter, balanceBefore + refundAmount);
+        // Pull, not push: the balance does not move until withdraw() is called.
+        assertEq(address(crossLend).balance, balanceBefore);
+        assertEq(callback.withdrawable(address(crossLend)), refundAmount);
+        assertEq(mockVault.totalReceived(), vaultBefore + PROTOCOL_FEE);
+
+        crossLend.reclaim();
+        assertEq(address(crossLend).balance, balanceBefore + refundAmount);
+        assertEq(callback.withdrawable(address(crossLend)), 0);
     }
 
-    function testIntegration_FullFlow_RequestFulfillCallbackFails_Refund() public {
+    function testIntegration_FullFlow_CallbackFails_CreditsRefundMinusProtocolFee() public {
         vm.deal(address(revertingClient), DEPOSIT_FEE);
         vm.prank(address(revertingClient));
         revertingClient.requestSync{value: DEPOSIT_FEE}(1000);
@@ -86,13 +96,17 @@ contract UniversalCallbackIntegrationTest is Test {
         bytes memory result = abi.encode("ethPrice:3500");
 
         uint256 balanceBefore = address(revertingClient).balance;
+        uint256 vaultBefore = mockVault.totalReceived();
 
         vm.prank(ueModule);
         callback.fulfillExternalCallback(requestId, result, 500, bytes32(uint256(0x123)));
 
         assertTrue(callback.isFulfilled(requestId));
-        uint256 balanceAfter = address(revertingClient).balance;
-        assertEq(balanceAfter, balanceBefore + DEPOSIT_FEE);
+        // A reverting callback no longer earns a full refund -- the protocol fee is
+        // retained because validators still did the work.
+        assertEq(address(revertingClient).balance, balanceBefore);
+        assertEq(callback.withdrawable(address(revertingClient)), DEPOSIT_FEE - PROTOCOL_FEE);
+        assertEq(mockVault.totalReceived(), vaultBefore + PROTOCOL_FEE);
     }
 
     function testIntegration_MultipleRequestsConcurrent() public {
@@ -137,41 +151,191 @@ contract UniversalCallbackIntegrationTest is Test {
         assertTrue(callback.isFulfilled(requestId));
     }
 
-    function testIntegration_Expiry_NoRefund() public {
+    function testIntegration_Expiry_CreditsRefund() public {
         vm.deal(address(crossLend), DEPOSIT_FEE);
         vm.prank(address(crossLend));
         crossLend.requestSync{value: DEPOSIT_FEE}(1000);
 
         uint256 requestId = crossLend.lastRequestId();
         uint256 balanceBefore = address(crossLend).balance;
+        uint256 vaultBefore = mockVault.totalReceived();
 
         vm.roll(block.number + 1000);
 
         vm.prank(ueModule);
         callback.expireExternalRead(requestId);
 
-        uint256 balanceAfter = address(crossLend).balance;
-        assertEq(balanceAfter, balanceBefore);
+        uint256 refundAmount = DEPOSIT_FEE - PROTOCOL_FEE;
+        assertEq(address(crossLend).balance, balanceBefore);
+        assertEq(callback.withdrawable(address(crossLend)), refundAmount);
+        assertEq(callback.totalWithdrawable(), refundAmount);
+        assertEq(mockVault.totalReceived(), vaultBefore + PROTOCOL_FEE);
+
+        crossLend.reclaim();
+        assertEq(address(crossLend).balance, balanceBefore + refundAmount);
+        assertEq(callback.totalWithdrawable(), 0);
     }
 
-    function testIntegration_AdminSweepsFees() public {
+    function testIntegration_ExpiryThenFulfill_Reverts() public {
+        vm.deal(address(crossLend), DEPOSIT_FEE);
+        vm.prank(address(crossLend));
+        crossLend.requestSync{value: DEPOSIT_FEE}(1000);
+
+        uint256 requestId = crossLend.lastRequestId();
+        vm.roll(block.number + 1000);
+
+        vm.prank(ueModule);
+        callback.expireExternalRead(requestId);
+
+        uint256 creditedOnce = callback.withdrawable(address(crossLend));
+
+        vm.prank(ueModule);
+        vm.expectRevert(
+            abi.encodeWithSelector(UniversalCallbackErrors.RequestAlreadyFulfilled.selector, requestId)
+        );
+        callback.fulfillExternalCallback(requestId, "", 0, bytes32(0));
+
+        assertEq(callback.withdrawable(address(crossLend)), creditedOnce);
+    }
+
+    function testIntegration_MultipleExpiries_LedgerAccumulates() public {
+        uint256[] memory ids = new uint256[](3);
+        for (uint256 i = 0; i < 3; i++) {
+            vm.deal(address(crossLend), DEPOSIT_FEE);
+            vm.prank(address(crossLend));
+            crossLend.requestSync{value: DEPOSIT_FEE}(100 * (i + 1));
+            ids[i] = crossLend.lastRequestId();
+        }
+
+        vm.roll(block.number + 1000);
+        for (uint256 i = 0; i < 3; i++) {
+            vm.prank(ueModule);
+            callback.expireExternalRead(ids[i]);
+        }
+
+        uint256 expected = 3 * (DEPOSIT_FEE - PROTOCOL_FEE);
+        assertEq(callback.withdrawable(address(crossLend)), expected);
+        assertEq(callback.totalWithdrawable(), expected);
+
+        uint256 balanceBefore = address(crossLend).balance;
+        crossLend.reclaim();
+        assertEq(address(crossLend).balance, balanceBefore + expected);
+    }
+
+    function testIntegration_AdminCannotSweepCreditedRefunds() public {
         vm.deal(address(crossLend), 3 ether);
         vm.prank(address(crossLend));
         crossLend.requestSync{value: 3 ether}(1000);
 
         uint256 requestId = crossLend.lastRequestId();
-        bytes memory result = abi.encode("ethPrice:3500");
 
         vm.prank(ueModule);
-        callback.fulfillExternalCallback(requestId, result, 500, bytes32(uint256(0x123)));
+        callback.fulfillExternalCallback(requestId, abi.encode("x"), 500, bytes32(uint256(0x123)));
 
-        uint256 vaultBalanceBefore = address(mockVault).balance;
+        // The whole deposit is now either at the vault or owed to the client, so
+        // nothing is sweepable.
+        uint256 credited = callback.withdrawable(address(crossLend));
+        assertEq(address(callback).balance, credited);
 
-        uint256 sweepable = address(callback).balance;
         vm.prank(defaultAdmin);
-        callback.sweepFees(payable(address(mockVault)), sweepable);
+        vm.expectRevert(
+            abi.encodeWithSelector(
+                UniversalCallbackErrors.InsufficientContractBalance.selector, 1, 0
+            )
+        );
+        callback.sweepFees(payable(address(mockVault)), 1);
+    }
 
-        assertEq(mockVault.totalReceived(), vaultBalanceBefore + sweepable);
+    function testIntegration_AdminSweepsOnlyStrayFunds() public {
+        vm.deal(address(crossLend), DEPOSIT_FEE);
+        vm.prank(address(crossLend));
+        crossLend.requestSync{value: DEPOSIT_FEE}(1000);
+
+        uint256 requestId = crossLend.lastRequestId();
+        vm.roll(block.number + 1000);
+        vm.prank(ueModule);
+        callback.expireExternalRead(requestId);
+
+        uint256 credited = callback.withdrawable(address(crossLend));
+        assertGt(credited, 0);
+
+        uint256 stray = 0.5 ether;
+        vm.deal(address(callback), address(callback).balance + stray);
+
+        // Only the stray amount is sweepable; the credited refund is untouchable.
+        vm.prank(defaultAdmin);
+        vm.expectRevert(
+            abi.encodeWithSelector(
+                UniversalCallbackErrors.InsufficientContractBalance.selector, stray + 1, stray
+            )
+        );
+        callback.sweepFees(payable(address(mockVault)), stray + 1);
+
+        uint256 vaultBefore = mockVault.totalReceived();
+        vm.prank(defaultAdmin);
+        callback.sweepFees(payable(address(mockVault)), stray);
+        assertEq(mockVault.totalReceived(), vaultBefore + stray);
+
+        // The client can still claim in full after the sweep.
+        crossLend.reclaim();
+        assertEq(callback.totalWithdrawable(), 0);
+    }
+
+    function testIntegration_SettlementRevertsWhenVaultRejectsFee() public {
+        // VaultPC accepts plain transfers unconditionally, so this can only happen
+        // if a future vault breaks that contract. Settlement must fail loudly
+        // rather than silently converting the fee into an unpayable credit.
+        RevertingVaultPC badVault = new RevertingVaultPC();
+        UniversalCallback impl = new UniversalCallback();
+        ERC1967Proxy proxy = new ERC1967Proxy(
+            address(impl),
+            abi.encodeWithSelector(
+                UniversalCallback.initialize.selector,
+                address(mockCore),
+                address(badVault),
+                defaultAdmin
+            )
+        );
+        UniversalCallback cb = UniversalCallback(payable(address(proxy)));
+        CrossLendMock client = new CrossLendMock(address(cb));
+
+        vm.deal(address(client), DEPOSIT_FEE);
+        vm.prank(address(client));
+        client.requestSync{value: DEPOSIT_FEE}(1000);
+        uint256 requestId = client.lastRequestId();
+
+        vm.roll(block.number + 1000);
+
+        vm.prank(ueModule);
+        vm.expectRevert(abi.encodeWithSelector(CommonErrors.TransferFailed.selector));
+        cb.expireExternalRead(requestId);
+
+        // Nothing was credited and the request stays live.
+        assertEq(cb.totalWithdrawable(), 0);
+        assertFalse(cb.isFulfilled(requestId));
+    }
+
+    function testIntegration_CallbackReentersWithdraw_Blocked() public {
+        ReentrantReadClient reentrant = new ReentrantReadClient(address(callback));
+
+        vm.deal(address(reentrant), DEPOSIT_FEE);
+        vm.prank(address(reentrant));
+        reentrant.requestSync{value: DEPOSIT_FEE}(1000);
+        uint256 requestId = reentrant.lastRequestId();
+
+        vm.prank(ueModule);
+        callback.fulfillExternalCallback(requestId, abi.encode("x"), 500, bytes32(0));
+
+        uint256 credited = DEPOSIT_FEE - PROTOCOL_FEE;
+        // Settlement completed before the callback ran, so the client saw its credit.
+        assertEq(reentrant.creditSeenDuringCallback(), credited);
+        // ...but re-entering withdraw() from inside the callback was blocked.
+        assertFalse(reentrant.reentrySucceeded());
+        assertEq(callback.withdrawable(address(reentrant)), credited);
+
+        // The credit survives and is claimable afterwards.
+        reentrant.reclaimRefunds();
+        assertEq(address(reentrant).balance, credited);
     }
 
     function testIntegration_EstimateFeePlusDeposit() public {

@@ -5,10 +5,12 @@ import {UniversalReadClient} from "../../src/UniversalReadClient.sol";
 import {ReadSpec} from "../../src/libraries/ReadTypes.sol";
 import {UniversalAccountId} from "../../src/libraries/Types.sol";
 
-contract CrossLendMock is UniversalReadClient {
+/// @dev Client that re-enters `withdraw()` from inside its own callback, and
+///      records the balance it was credited before the callback ran.
+contract ReentrantReadClient is UniversalReadClient {
     uint256 public lastRequestId;
-    bytes public lastResultData;
-    bytes public lastLocalState;
+    uint256 public creditSeenDuringCallback;
+    bool public reentrySucceeded;
 
     constructor(
         address universalCallback_
@@ -28,15 +30,12 @@ contract CrossLendMock is UniversalReadClient {
             maxFee: 100 ether
         });
 
-        bytes memory localState = abi.encode(amount, msg.sender);
-
-        uint256 requestId = _requestRead(spec, localState, 200000);
-        lastRequestId = requestId;
+        lastRequestId = _requestRead(spec, "", 500000);
     }
 
     receive() external payable {}
 
-    function reclaim() external returns (uint256) {
+    function reclaimRefunds() external returns (uint256) {
         return _withdrawRefunds();
     }
 
@@ -45,8 +44,12 @@ contract CrossLendMock is UniversalReadClient {
         bytes calldata resultData,
         bytes memory localState
     ) internal override {
-        lastRequestId = requestId;
-        lastResultData = resultData;
-        lastLocalState = localState;
+        creditSeenDuringCallback = UNIVERSAL_CALLBACK.withdrawable(address(this));
+
+        try UNIVERSAL_CALLBACK.withdraw() {
+            reentrySucceeded = true;
+        } catch {
+            reentrySucceeded = false;
+        }
     }
 }

@@ -46,6 +46,19 @@ abstract contract UniversalReadClient is IUniversalReadClient {
         bytes memory localState
     ) internal virtual;
 
+    /// @notice         Claim any refunds credited to this contract by the callback.
+    /// @dev            Returns 0 instead of reverting when nothing is owed, so it is
+    ///                 safe to call unconditionally. The reclaimed PC arrives via
+    ///                 this contract's `receive()`, which inheriting contracts MUST
+    ///                 declare -- without one the transfer reverts and the refund
+    ///                 stays unclaimable.
+    /// @return amount  Amount reclaimed, or 0 when nothing was owed.
+    function _withdrawRefunds() internal returns (uint256 amount) {
+        amount = UNIVERSAL_CALLBACK.withdrawable(address(this));
+        if (amount == 0) return 0;
+        UNIVERSAL_CALLBACK.withdraw();
+    }
+
     function universalCallback() external view returns (IUniversalCallback) {
         return UNIVERSAL_CALLBACK;
     }
