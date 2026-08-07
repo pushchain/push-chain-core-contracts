@@ -682,5 +682,122 @@ contract UniversalCallbackTest is Test {
         assertEq(callback.totalWithdrawable(), 0);
     }
 
+    // =========================
+    //   IN-FLIGHT ESCROW
+    // =========================
+
+    function _request() private returns (uint256 requestId) {
+        vm.deal(user, 10 ether);
+        vm.prank(user);
+        requestId = callback.requestExternalReadSelf{value: 1 ether}(
+            defaultSpec, CALLBACK_SEL, 50000
+        );
+    }
+
+    function test_TotalEscrowed_IncrementsOnRequest() public {
+        assertEq(callback.totalEscrowed(), 0);
+        _request();
+        assertEq(callback.totalEscrowed(), 1 ether);
+    }
+
+    function test_TotalEscrowed_ReturnsToZeroAfterFulfill() public {
+        uint256 requestId = _request();
+
+        vm.prank(ueModule);
+        callback.fulfillExternalCallback(requestId, "", 0, bytes32(0));
+
+        assertEq(callback.totalEscrowed(), 0);
+    }
+
+    function test_TotalEscrowed_ReturnsToZeroAfterExpire() public {
+        uint256 requestId = _request();
+
+        vm.roll(defaultSpec.expiryPushChainHeight);
+        vm.prank(ueModule);
+        callback.expireExternalRead(requestId);
+
+        assertEq(callback.totalEscrowed(), 0);
+    }
+
+    function test_TotalEscrowed_MultipleConcurrentRequests() public {
+        vm.deal(user, 10 ether);
+
+        uint256[] memory ids = new uint256[](3);
+        for (uint256 i = 0; i < 3; i++) {
+            ReadSpec memory spec = defaultSpec;
+            spec.query = abi.encode(i);
+            vm.prank(user);
+            ids[i] = callback.requestExternalReadSelf{value: 1 ether}(spec, CALLBACK_SEL, 50000);
+            assertEq(callback.totalEscrowed(), (i + 1) * 1 ether);
+        }
+
+        vm.roll(defaultSpec.expiryPushChainHeight);
+        for (uint256 i = 0; i < 3; i++) {
+            vm.prank(ueModule);
+            callback.expireExternalRead(ids[i]);
+        }
+
+        assertEq(callback.totalEscrowed(), 0);
+    }
+
+    function test_SweepFees_ExcludesInFlightDeposit() public {
+        _request();
+        assertEq(callback.totalEscrowed(), 1 ether);
+
+        uint256 stray = 0.3 ether;
+        vm.deal(address(callback), address(callback).balance + stray);
+
+        address recipient = makeAddr("recipient");
+
+        // The in-flight deposit is user money and must not be sweepable.
+        vm.prank(defaultAdmin);
+        vm.expectRevert(
+            abi.encodeWithSelector(
+                UniversalCallbackErrors.InsufficientContractBalance.selector, stray + 1, stray
+            )
+        );
+        callback.sweepFees(payable(recipient), stray + 1);
+
+        // Only the stray amount is available.
+        vm.prank(defaultAdmin);
+        callback.sweepFees(payable(recipient), stray);
+        assertEq(recipient.balance, stray);
+    }
+
+    function test_SettlementSucceedsAfterMaxSweep() public {
+        uint256 requestId = _request();
+
+        uint256 stray = 0.3 ether;
+        vm.deal(address(callback), address(callback).balance + stray);
+
+        // What an admin could take if escrow were ignored -- this is the amount
+        // that drains the deposit and bricks settlement.
+        uint256 unsafeSweep = address(callback).balance - callback.totalWithdrawable();
+        assertGt(unsafeSweep, stray, "test must actually attempt an over-sweep");
+
+        vm.prank(defaultAdmin);
+        vm.expectRevert(
+            abi.encodeWithSelector(
+                UniversalCallbackErrors.InsufficientContractBalance.selector, unsafeSweep, stray
+            )
+        );
+        callback.sweepFees(payable(makeAddr("recipient")), unsafeSweep);
+
+        // The most that may legitimately be taken is the stray amount.
+        vm.prank(defaultAdmin);
+        callback.sweepFees(payable(makeAddr("recipient")), stray);
+
+        // The request still settles and the funder is still made whole.
+        vm.prank(ueModule);
+        callback.fulfillExternalCallback(requestId, "", 0, bytes32(0));
+
+        assertEq(callback.withdrawable(user), 1 ether - 0.01 ether);
+
+        uint256 before = user.balance;
+        vm.prank(user);
+        callback.withdraw();
+        assertEq(user.balance, before + (1 ether - 0.01 ether));
+    }
+
     receive() external payable {}
 }

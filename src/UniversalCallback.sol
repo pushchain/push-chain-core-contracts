@@ -48,6 +48,10 @@ contract UniversalCallback is
     ///         user-owned and are excluded from what `sweepFees` may take.
     uint256 public totalWithdrawable;
 
+    /// @notice Total deposits held for requests that have not settled yet. Escrowed
+    ///         funds are user-owned and are excluded from what `sweepFees` may take.
+    uint256 public totalEscrowed;
+
     constructor() {
         _disableInitializers();
     }
@@ -150,6 +154,7 @@ contract UniversalCallback is
             protocolFee: protocolFee,
             expiryHeight: spec.expiryPushChainHeight
         });
+        totalEscrowed += msg.value;
 
         emit ReadRequested(requestId, spec, msg.sender, msg.sender, msg.value);
     }
@@ -232,6 +237,11 @@ contract UniversalCallback is
     /// @param requestId    Request being settled
     /// @param p            Snapshot of the consumed pending read
     function _settle(uint256 requestId, PendingRead memory p) private {
+        // Release escrow before any value leaves, so that
+        // `balance >= totalWithdrawable + totalEscrowed` holds across the vault
+        // push. `sweepFees` is not `nonReentrant`, so this ordering matters.
+        totalEscrowed -= p.feesDeposited;
+
         uint256 protocolFee = p.protocolFee;
         if (protocolFee > 0) {
             _payProtocolFee(requestId, protocolFee);
@@ -264,10 +274,9 @@ contract UniversalCallback is
 
     function sweepFees(address payable recipient, uint256 amount) external onlyRole(DEFAULT_ADMIN_ROLE) {
         if (recipient == address(0)) revert CommonErrors.ZeroAddress();
-        // Credited refunds are user-owned and must never be sweepable.
-        // NOTE: once in-flight deposits are tracked, this becomes
-        //       `address(this).balance - totalWithdrawable - totalEscrowed`.
-        uint256 available = address(this).balance - totalWithdrawable;
+        // Escrowed deposits and credited refunds are both user-owned and must
+        // never be sweepable. Only unattributed balance may be taken.
+        uint256 available = address(this).balance - totalWithdrawable - totalEscrowed;
         if (amount > available) {
             revert UniversalCallbackErrors.InsufficientContractBalance(amount, available);
         }

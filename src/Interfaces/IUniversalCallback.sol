@@ -83,4 +83,7 @@ interface IUniversalCallback {
 
     /// @notice         Sum of all unclaimed refund balances.
     function totalWithdrawable() external view returns (uint256);
+
+    /// @notice         Total deposits held for requests that have not settled yet.
+    function totalEscrowed() external view returns (uint256);
 }

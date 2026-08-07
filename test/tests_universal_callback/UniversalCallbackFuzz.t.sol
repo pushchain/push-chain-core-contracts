@@ -143,6 +143,14 @@ contract UniversalCallbackFuzzTest is Test {
 
         uint256 vaultBefore = address(mockVault).balance;
 
+        // In-flight: the deposit is escrowed and fully backed by the balance.
+        assertEq(callback.totalEscrowed(), deposit);
+        assertGe(
+            address(callback).balance,
+            callback.totalWithdrawable() + callback.totalEscrowed(),
+            "user funds must be backed while in flight"
+        );
+
         if (expire) {
             vm.roll(spec.expiryPushChainHeight);
             vm.prank(ueModule);
@@ -158,7 +166,12 @@ contract UniversalCallbackFuzzTest is Test {
         assertEq(toVault + owed, deposit, "value must be conserved");
         assertEq(toVault, baseFee, "protocol fee retained on every path");
         assertEq(callback.totalWithdrawable(), owed);
-        assertGe(address(callback).balance, callback.totalWithdrawable());
+        assertEq(callback.totalEscrowed(), 0, "escrow released on settlement");
+        assertGe(
+            address(callback).balance,
+            callback.totalWithdrawable() + callback.totalEscrowed(),
+            "user funds must remain backed after settlement"
+        );
     }
 
     function testFuzz_WithdrawNeverExceedsCredit(uint256 deposit, uint256 baseFee) public {
