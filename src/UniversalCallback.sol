@@ -83,24 +83,15 @@ contract UniversalCallback is
     }
 
     function requestExternalReadSelf(
-        ReadSpec memory spec,
+        ReadSpec calldata spec,
         bytes4 callbackSelector,
         uint64 callbackGasLimit
     ) external payable override whenNotPaused nonReentrant returns (uint256 requestId) {
-        uint256 fee = _estimateFee(spec.account.chainNamespace, spec.account.chainId, callbackGasLimit);
-        if (msg.value < fee) {
-            revert UniversalCallbackErrors.InsufficientFee(msg.value, fee);
-        }
-        if (msg.value > spec.maxFee) {
-            revert UniversalCallbackErrors.ExcessiveFee(msg.value, spec.maxFee);
-        }
-        if (bytes(spec.account.chainNamespace).length == 0) {
-            revert UniversalCallbackErrors.InvalidAccountId();
-        }
-        if (bytes(spec.account.chainId).length == 0) {
-            revert UniversalCallbackErrors.InvalidAccountId();
-        }
-        if (spec.account.owner.length == 0) {
+        if (
+            bytes(spec.account.chainNamespace).length == 0
+            || bytes(spec.account.chainId).length == 0
+            || spec.account.owner.length == 0
+        ) {
             revert UniversalCallbackErrors.InvalidAccountId();
         }
         if (spec.query.length == 0) {
@@ -125,9 +116,15 @@ contract UniversalCallback is
             revert UniversalCallbackErrors.CallbackGasLimitExceeded(callbackGasLimit, MAX_CALLBACK_GAS_LIMIT);
         }
 
-        uint256 protocolFee = _universalCore.readBaseFeeByChainNamespace(
-            spec.account.chainNamespace, spec.account.chainId
+        (uint256 fee, uint256 protocolFee) = _estimateFee(
+            spec.account.chainNamespace, spec.account.chainId, callbackGasLimit
         );
+        if (msg.value < fee) {
+            revert UniversalCallbackErrors.InsufficientFee(msg.value, fee);
+        }
+        if (msg.value > spec.maxFee) {
+            revert UniversalCallbackErrors.ExcessiveFee(msg.value, spec.maxFee);
+        }
 
         requestId = uint256(keccak256(abi.encode(
             block.chainid, block.number, address(this),
@@ -160,7 +157,7 @@ contract UniversalCallback is
 
         PendingRead memory p = _pending[requestId];
         if (p.callbackTarget == address(0)) {
-            revert UniversalCallbackErrors.InvalidRequestId();
+            revert UniversalCallbackErrors.InvalidCallbackTarget();
         }
         delete _pending[requestId];
 
@@ -202,7 +199,7 @@ contract UniversalCallback is
 
         PendingRead memory p = _pending[requestId];
         if (p.callbackTarget == address(0)) {
-            revert UniversalCallbackErrors.InvalidRequestId();
+            revert UniversalCallbackErrors.InvalidCallbackTarget();
         }
         if (block.number < p.expiryHeight) {
             revert UniversalCallbackErrors.RequestNotYetExpired();
@@ -223,13 +220,13 @@ contract UniversalCallback is
     }
 
     function _estimateFee(
-        string memory chainNamespace,
-        string memory chainId,
+        string calldata chainNamespace,
+        string calldata chainId,
         uint64 callbackGasLimit
-    ) internal view returns (uint256) {
-        uint256 base = _universalCore.readBaseFeeByChainNamespace(chainNamespace, chainId);
+    ) internal view returns (uint256 fee, uint256 baseFee) {
+        baseFee = _universalCore.readBaseFeeByChainNamespace(chainNamespace, chainId);
         uint256 callbackGasCost = uint256(callbackGasLimit) * tx.gasprice;
-        return base + callbackGasCost;
+        fee = baseFee + callbackGasCost;
     }
 
     function estimateFee(
@@ -237,7 +234,8 @@ contract UniversalCallback is
         string calldata chainId,
         uint64 callbackGasLimit
     ) external view override returns (uint256) {
-        return _estimateFee(chainNamespace, chainId, callbackGasLimit);
+        (uint256 fee,) = _estimateFee(chainNamespace, chainId, callbackGasLimit);
+        return fee;
     }
 
     function isFulfilled(uint256 requestId) external view override returns (bool) {
