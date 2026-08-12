@@ -27,11 +27,8 @@ interface IUniversalCallback {
         uint256 amount
     );
 
-    event FeeRefunded(
-        uint256 indexed requestId,
-        address indexed recipient,
-        uint256 amount
-    );
+    /// @notice Emitted when unattributed native PC is rescued from the contract.
+    event NativePCRescued(address indexed to, uint256 amount);
 
     /// @notice Emitted when a refund is credited to the pull ledger. The funds
     ///         have NOT been transferred yet -- the recipient must call withdraw().

@@ -45,11 +45,11 @@ contract UniversalCallback is
     mapping(address => uint256) public withdrawable;
 
     /// @notice Sum of every unclaimed balance in `withdrawable`. Held funds are
-    ///         user-owned and are excluded from what `sweepFees` may take.
+    ///         user-owned and are excluded from what `rescueNativePC` may take.
     uint256 public totalWithdrawable;
 
     /// @notice Total deposits held for requests that have not settled yet. Escrowed
-    ///         funds are user-owned and are excluded from what `sweepFees` may take.
+    ///         funds are user-owned and are excluded from what `rescueNativePC` may take.
     uint256 public totalEscrowed;
 
     constructor() {
@@ -239,7 +239,7 @@ contract UniversalCallback is
     function _settle(uint256 requestId, PendingRead memory p) private {
         // Release escrow before any value leaves, so that
         // `balance >= totalWithdrawable + totalEscrowed` holds across the vault
-        // push. `sweepFees` is not `nonReentrant`, so this ordering matters.
+        // push. `rescueNativePC` is not `nonReentrant`, so this ordering matters.
         totalEscrowed -= p.feesDeposited;
 
         uint256 protocolFee = p.protocolFee;
@@ -272,17 +272,24 @@ contract UniversalCallback is
         emit ProtocolFeeDistributed(requestId, vault, amount);
     }
 
-    function sweepFees(address payable recipient, uint256 amount) external onlyRole(DEFAULT_ADMIN_ROLE) {
+    /// @notice             Recover unattributed native PC -- funds sent here by
+    ///                     accident or force-fed via `selfdestruct`/coinbase.
+    /// @dev                Protocol fees never accumulate here (they are forwarded
+    ///                     to VaultPC during settlement), so this is a rescue hatch
+    ///                     rather than a fee sweep. Escrowed deposits and credited
+    ///                     refunds are user-owned and are excluded from the cap.
+    /// @param recipient    Address to receive the rescued PC
+    /// @param amount       Amount to rescue, capped at the unattributed balance
+    function rescueNativePC(address payable recipient, uint256 amount) external onlyRole(DEFAULT_ADMIN_ROLE) {
         if (recipient == address(0)) revert CommonErrors.ZeroAddress();
-        // Escrowed deposits and credited refunds are both user-owned and must
-        // never be sweepable. Only unattributed balance may be taken.
+        if (amount == 0) revert CommonErrors.ZeroAmount();
         uint256 available = address(this).balance - totalWithdrawable - totalEscrowed;
         if (amount > available) {
             revert UniversalCallbackErrors.InsufficientContractBalance(amount, available);
         }
         (bool ok, ) = recipient.call{value: amount}("");
         if (!ok) revert CommonErrors.TransferFailed();
-        emit FeeRefunded(0, recipient, amount);
+        emit NativePCRescued(recipient, amount);
     }
 
     function _estimateFee(
@@ -346,6 +353,6 @@ contract UniversalCallback is
 
     /// @dev No flow pays into this contract outside `requestExternalReadSelf`.
     ///      Kept as a recovery surface so accidentally-sent PC remains reachable
-    ///      via `sweepFees`, which excludes credited refunds.
+    ///      via `rescueNativePC`, which excludes user-owned funds.
     receive() external payable {}
 }

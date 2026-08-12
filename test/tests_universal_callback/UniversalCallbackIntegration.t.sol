@@ -222,7 +222,7 @@ contract UniversalCallbackIntegrationTest is Test {
         assertEq(address(crossLend).balance, balanceBefore + expected);
     }
 
-    function testIntegration_AdminCannotSweepCreditedRefunds() public {
+    function testIntegration_AdminCannotRescueCreditedRefunds() public {
         vm.deal(address(crossLend), 3 ether);
         vm.prank(address(crossLend));
         crossLend.requestSync{value: 3 ether}(1000);
@@ -243,10 +243,10 @@ contract UniversalCallbackIntegrationTest is Test {
                 UniversalCallbackErrors.InsufficientContractBalance.selector, 1, 0
             )
         );
-        callback.sweepFees(payable(address(mockVault)), 1);
+        callback.rescueNativePC(payable(address(mockVault)), 1);
     }
 
-    function testIntegration_AdminSweepsOnlyStrayFunds() public {
+    function testIntegration_AdminRescuesOnlyStrayFunds() public {
         vm.deal(address(crossLend), DEPOSIT_FEE);
         vm.prank(address(crossLend));
         crossLend.requestSync{value: DEPOSIT_FEE}(1000);
@@ -269,11 +269,11 @@ contract UniversalCallbackIntegrationTest is Test {
                 UniversalCallbackErrors.InsufficientContractBalance.selector, stray + 1, stray
             )
         );
-        callback.sweepFees(payable(address(mockVault)), stray + 1);
+        callback.rescueNativePC(payable(address(mockVault)), stray + 1);
 
         uint256 vaultBefore = mockVault.totalReceived();
         vm.prank(defaultAdmin);
-        callback.sweepFees(payable(address(mockVault)), stray);
+        callback.rescueNativePC(payable(address(mockVault)), stray);
         assertEq(mockVault.totalReceived(), vaultBefore + stray);
 
         // The client can still claim in full after the sweep.

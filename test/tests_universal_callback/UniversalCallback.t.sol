@@ -490,17 +490,44 @@ contract UniversalCallbackTest is Test {
         );
     }
 
-    function test_SweepFees_OnlyDefaultAdmin() public {
+    function test_RescueNativePC_OnlyDefaultAdmin() public {
         vm.deal(address(callback), 1 ether);
         address recipient = makeAddr("recipient");
 
         vm.prank(uvAdmin);
         vm.expectRevert();
-        callback.sweepFees(payable(recipient), 0.5 ether);
+        callback.rescueNativePC(payable(recipient), 0.5 ether);
 
         vm.prank(defaultAdmin);
-        callback.sweepFees(payable(recipient), 0.5 ether);
+        callback.rescueNativePC(payable(recipient), 0.5 ether);
         assertEq(recipient.balance, 0.5 ether);
+    }
+
+    function test_RescueNativePC_RevertWhen_ZeroAmount() public {
+        vm.deal(address(callback), 1 ether);
+
+        vm.prank(defaultAdmin);
+        vm.expectRevert(abi.encodeWithSelector(CommonErrors.ZeroAmount.selector));
+        callback.rescueNativePC(payable(makeAddr("recipient")), 0);
+    }
+
+    function test_RescueNativePC_RevertWhen_ZeroRecipient() public {
+        vm.deal(address(callback), 1 ether);
+
+        vm.prank(defaultAdmin);
+        vm.expectRevert(abi.encodeWithSelector(CommonErrors.ZeroAddress.selector));
+        callback.rescueNativePC(payable(address(0)), 0.5 ether);
+    }
+
+    function test_RescueNativePC_EmitsEvent() public {
+        vm.deal(address(callback), 1 ether);
+        address recipient = makeAddr("recipient");
+
+        vm.expectEmit(true, true, true, true);
+        emit IUniversalCallback.NativePCRescued(recipient, 0.5 ether);
+
+        vm.prank(defaultAdmin);
+        callback.rescueNativePC(payable(recipient), 0.5 ether);
     }
 
     // =========================
@@ -650,7 +677,7 @@ contract UniversalCallbackTest is Test {
         assertEq(mockVault.totalReceived(), vaultBefore);
     }
 
-    function test_SweepFees_ExcludesWithdrawable() public {
+    function test_RescueNativePC_ExcludesWithdrawable() public {
         _requestAndExpire();
 
         address recipient = makeAddr("recipient");
@@ -662,10 +689,10 @@ contract UniversalCallbackTest is Test {
                 UniversalCallbackErrors.InsufficientContractBalance.selector, 1, 0
             )
         );
-        callback.sweepFees(payable(recipient), 1);
+        callback.rescueNativePC(payable(recipient), 1);
     }
 
-    function test_SweepFees_AllowsStrayEth() public {
+    function test_RescueNativePC_AllowsStrayEth() public {
         _requestAndExpire();
 
         uint256 stray = 0.25 ether;
@@ -673,7 +700,7 @@ contract UniversalCallbackTest is Test {
 
         address recipient = makeAddr("recipient");
         vm.prank(defaultAdmin);
-        callback.sweepFees(payable(recipient), stray);
+        callback.rescueNativePC(payable(recipient), stray);
 
         assertEq(recipient.balance, stray);
         // The credited refund survived the sweep.
@@ -740,7 +767,7 @@ contract UniversalCallbackTest is Test {
         assertEq(callback.totalEscrowed(), 0);
     }
 
-    function test_SweepFees_ExcludesInFlightDeposit() public {
+    function test_RescueNativePC_ExcludesInFlightDeposit() public {
         _request();
         assertEq(callback.totalEscrowed(), 1 ether);
 
@@ -756,11 +783,11 @@ contract UniversalCallbackTest is Test {
                 UniversalCallbackErrors.InsufficientContractBalance.selector, stray + 1, stray
             )
         );
-        callback.sweepFees(payable(recipient), stray + 1);
+        callback.rescueNativePC(payable(recipient), stray + 1);
 
         // Only the stray amount is available.
         vm.prank(defaultAdmin);
-        callback.sweepFees(payable(recipient), stray);
+        callback.rescueNativePC(payable(recipient), stray);
         assertEq(recipient.balance, stray);
     }
 
@@ -781,11 +808,11 @@ contract UniversalCallbackTest is Test {
                 UniversalCallbackErrors.InsufficientContractBalance.selector, unsafeSweep, stray
             )
         );
-        callback.sweepFees(payable(makeAddr("recipient")), unsafeSweep);
+        callback.rescueNativePC(payable(makeAddr("recipient")), unsafeSweep);
 
         // The most that may legitimately be taken is the stray amount.
         vm.prank(defaultAdmin);
-        callback.sweepFees(payable(makeAddr("recipient")), stray);
+        callback.rescueNativePC(payable(makeAddr("recipient")), stray);
 
         // The request still settles and the funder is still made whole.
         vm.prank(ueModule);
