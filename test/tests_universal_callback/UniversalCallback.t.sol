@@ -5,7 +5,13 @@ import {Test, console2} from "forge-std/Test.sol";
 import {ERC1967Proxy} from "@openzeppelin/contracts/proxy/ERC1967/ERC1967Proxy.sol";
 
 import {UniversalCallback} from "../../src/UniversalCallback.sol";
-import {ReadSpec, PendingRead, MIN_CONFIRMATIONS_FLOOR, MAX_CALLBACK_GAS_LIMIT} from "../../src/libraries/ReadTypes.sol";
+import {
+    ReadSpec,
+    PendingRead,
+    RequestStatus,
+    MIN_CONFIRMATIONS_FLOOR,
+    MAX_CALLBACK_GAS_LIMIT
+} from "../../src/libraries/ReadTypes.sol";
 import {UniversalCallbackErrors, CommonErrors} from "../../src/libraries/Errors.sol";
 import {UniversalAccountId} from "../../src/libraries/Types.sol";
 import {IUniversalCallback} from "../../src/interfaces/IUniversalCallback.sol";
@@ -18,7 +24,7 @@ contract UniversalCallbackTest is Test {
     MockVaultPC mockVault;
 
     address defaultAdmin = address(0xAAAA);
-    address ueModule = 0x14191Ea54B4c176fCf86f51b0FAc7CB1E71Df7d7;
+    address ucallbackModule = 0x07a0258D367A4A4cd9d6E4b7eEE8E7eF491CC519;
     address uvAdmin = address(0xBBBB);
     address user = address(0xCCCC);
     address pauser = address(0xDDDD);
@@ -26,6 +32,54 @@ contract UniversalCallbackTest is Test {
 
     ReadSpec defaultSpec;
     bytes4 constant CALLBACK_SEL = bytes4(keccak256("onResponse(uint256,bytes)"));
+
+    uint256 constant DEPOSIT = 1 ether;
+    uint256 constant PROTOCOL_FEE = 0.01 ether;
+    /// @dev Derived, never hardcoded: the protocol fee leaves at request time, so
+    ///      only this remains escrowed and refundable.
+    uint256 constant BUDGET = DEPOSIT - PROTOCOL_FEE;
+
+    /// @dev Drives one request through fulfill + report, asserting the model at
+    ///      each step, then simulates the module's burn.
+    function _fulfillAndBurn(uint256 requestId, bytes memory data, uint256 gasBurned)
+        internal
+        returns (uint256 burned)
+    {
+        uint256 balBefore = address(callback).balance;
+        uint256 escBefore = callback.totalEscrowed();
+        address recipient = callback.getPendingRead(requestId).revertRecipient;
+        uint256 recipientBefore = recipient.balance;
+
+        vm.prank(ucallbackModule);
+        callback.fulfillExternalCallback(requestId, data, 0, bytes32(0));
+
+        // Fulfillment must not move a wei.
+        assertEq(address(callback).balance, balBefore, "fulfill moved value");
+        assertEq(callback.totalEscrowed(), escBefore, "fulfill touched escrow");
+        assertEq(recipient.balance, recipientBefore, "fulfill paid the recipient");
+
+        vm.prank(ucallbackModule);
+        burned = callback.reportCallbackGas(requestId, gasBurned);
+
+        // The strong form: proves escrow released exactly the budget, the refund was
+        // pushed in full, and the leftover slack is precisely what the module may
+        // take. assertGe here would pass with wrong amounts.
+        assertEq(
+            address(callback).balance,
+            callback.totalEscrowed() + burned,
+            "slack must equal exactly the pending burn"
+        );
+
+        // Simulate the module's BurnCoins -- vm.deal removes supply, which a
+        // transfer to address(0) would not.
+        vm.deal(address(callback), address(callback).balance - burned);
+
+        assertGe(
+            address(callback).balance,
+            callback.totalEscrowed(),
+            "invariant broken after burn"
+        );
+    }
 
     function setUp() public {
         mockCore = new MockUniversalCore();
@@ -59,7 +113,8 @@ contract UniversalCallbackTest is Test {
             minConfirmations: 10,
             blockNumber: 100,
             expiryPushChainHeight: uint64(block.number + 1000),
-            maxFee: 10 ether
+            maxFee: 10 ether,
+            revertRecipient: user
         });
 
         mockCore.setReadBaseFee("eip155", "1", 0.01 ether);
@@ -116,31 +171,70 @@ contract UniversalCallbackTest is Test {
 
         vm.expectEmit(false, true, true, true);
         emit IUniversalCallback.ReadRequested(
-            0, defaultSpec, user, user, 1 ether
+            0, defaultSpec, user, user, DEPOSIT, PROTOCOL_FEE, BUDGET
         );
 
-        uint256 requestId = callback.requestExternalReadSelf{value: 1 ether}(
+        uint256 requestId = callback.requestExternalReadSelf{value: DEPOSIT}(
             defaultSpec, CALLBACK_SEL, 50000
         );
         assertGt(requestId, 0);
     }
 
     function test_RequestExternalRead_StoresPending() public {
-        vm.deal(user, 10 ether);
+        vm.deal(user, DEPOSIT);
         vm.prank(user);
-        uint256 requestId = callback.requestExternalReadSelf{value: 1 ether}(
+        uint256 requestId = callback.requestExternalReadSelf{value: DEPOSIT}(
             defaultSpec, CALLBACK_SEL, 50000
         );
 
         PendingRead memory p = callback.getPendingRead(requestId);
-        address target = p.callbackTarget;
-        address funder = p.originalFunder;
-        uint256 deposited = p.feesDeposited;
-        assertEq(target, user);
-        assertEq(funder, user);
-        assertEq(deposited, 1 ether);
-        assertEq(p.protocolFee, 0.01 ether);
+        assertEq(p.callbackTarget, user);
+        assertEq(p.originalFunder, user);
+        assertEq(p.callbackBudget, BUDGET, "budget excludes the protocol fee");
+        assertEq(p.revertRecipient, defaultSpec.revertRecipient);
         assertEq(p.expiryHeight, defaultSpec.expiryPushChainHeight);
+        assertEq(uint8(callback.statusOf(requestId)), uint8(RequestStatus.PENDING));
+    }
+
+    function test_Request_PushesFeeToVaultImmediately() public {
+        // Snapshot BEFORE the request -- the fee has already moved by the time
+        // requestExternalReadSelf returns.
+        uint256 vaultBefore = mockVault.totalReceived();
+
+        vm.deal(user, 10 ether);
+        vm.prank(user);
+        callback.requestExternalReadSelf{value: DEPOSIT}(defaultSpec, CALLBACK_SEL, 50000);
+
+        assertEq(mockVault.totalReceived(), vaultBefore + PROTOCOL_FEE);
+        assertEq(callback.totalEscrowed(), BUDGET, "escrow excludes the fee");
+        assertEq(address(callback).balance, BUDGET);
+    }
+
+    function test_Request_ExactMinimumFee_ZeroBudget() public {
+        vm.deal(user, PROTOCOL_FEE);
+        vm.prank(user);
+        uint256 requestId =
+            callback.requestExternalReadSelf{value: PROTOCOL_FEE}(defaultSpec, CALLBACK_SEL, 50000);
+
+        assertEq(callback.getPendingRead(requestId).callbackBudget, 0);
+        assertEq(callback.totalEscrowed(), 0);
+    }
+
+    function test_Request_RevertWhen_ZeroRevertRecipient() public {
+        vm.deal(user, 10 ether);
+        vm.prank(user);
+        ReadSpec memory spec = defaultSpec;
+        spec.revertRecipient = address(0);
+
+        vm.expectRevert(abi.encodeWithSelector(UniversalCallbackErrors.ZeroRevertRecipient.selector));
+        callback.requestExternalReadSelf{value: DEPOSIT}(spec, CALLBACK_SEL, 50000);
+    }
+
+    function test_EstimateFee_IgnoresGasPrice() public {
+        vm.txGasPrice(500 gwei);
+        assertEq(callback.estimateFee("eip155", "1"), PROTOCOL_FEE);
+        vm.txGasPrice(1);
+        assertEq(callback.estimateFee("eip155", "1"), PROTOCOL_FEE);
     }
 
     function test_RequestExternalRead_RevertWhen_InsufficientFee() public {
@@ -283,7 +377,7 @@ contract UniversalCallbackTest is Test {
         vm.deal(user, 10 ether);
         vm.prank(user);
         vm.expectRevert(
-            abi.encodeWithSelector(UniversalCallbackErrors.CallbackGasLimitExceeded.selector, uint64(0), MAX_CALLBACK_GAS_LIMIT)
+            abi.encodeWithSelector(UniversalCallbackErrors.ZeroCallbackGasLimit.selector)
         );
         callback.requestExternalReadSelf{value: 1 ether}(
             defaultSpec, CALLBACK_SEL, 0
@@ -313,20 +407,20 @@ contract UniversalCallbackTest is Test {
         vm.expectEmit(true, true, true, true);
         emit IUniversalCallback.ReadFulfilled(requestId, resultData, 500, bytes32(uint256(0x123)));
 
-        vm.prank(ueModule);
+        vm.prank(ucallbackModule);
         callback.fulfillExternalCallback(requestId, resultData, 500, bytes32(uint256(0x123)));
 
         assertTrue(callback.isFulfilled(requestId));
     }
 
-    function test_FulfillExternalCallback_RevertWhen_NotUEModule() public {
+    function test_FulfillExternalCallback_RevertWhen_NotUCallbackModule() public {
         vm.deal(user, 10 ether);
         vm.prank(user);
         uint256 requestId = callback.requestExternalReadSelf{value: 1 ether}(
             defaultSpec, CALLBACK_SEL, 50000
         );
 
-        vm.expectRevert(abi.encodeWithSelector(UniversalCallbackErrors.CallerIsNotUEModule.selector));
+        vm.expectRevert(abi.encodeWithSelector(UniversalCallbackErrors.CallerIsNotUCallbackModule.selector));
         callback.fulfillExternalCallback(requestId, "", 0, bytes32(0));
     }
 
@@ -337,19 +431,27 @@ contract UniversalCallbackTest is Test {
             defaultSpec, CALLBACK_SEL, 50000
         );
 
-        vm.prank(ueModule);
+        vm.prank(ucallbackModule);
         callback.fulfillExternalCallback(requestId, "", 0, bytes32(0));
 
-        vm.prank(ueModule);
+        vm.prank(ucallbackModule);
         vm.expectRevert(
-            abi.encodeWithSelector(UniversalCallbackErrors.RequestAlreadyFulfilled.selector, requestId)
+            abi.encodeWithSelector(
+                UniversalCallbackErrors.InvalidRequestStatus.selector,
+                requestId, uint8(RequestStatus.EXECUTED), uint8(RequestStatus.PENDING)
+            )
         );
         callback.fulfillExternalCallback(requestId, "", 0, bytes32(0));
     }
 
     function test_FulfillExternalCallback_RevertWhen_InvalidRequestId() public {
-        vm.prank(ueModule);
-        vm.expectRevert(abi.encodeWithSelector(UniversalCallbackErrors.InvalidCallbackTarget.selector));
+        vm.prank(ucallbackModule);
+        vm.expectRevert(
+            abi.encodeWithSelector(
+                UniversalCallbackErrors.InvalidRequestStatus.selector,
+                uint256(999), uint8(RequestStatus.NONE), uint8(RequestStatus.PENDING)
+            )
+        );
         callback.fulfillExternalCallback(999, "", 0, bytes32(0));
     }
 
@@ -369,64 +471,72 @@ contract UniversalCallbackTest is Test {
         vm.expectEmit(true, true, true, true);
         emit IUniversalCallback.CallbackFailed(requestId, abi.encodeWithSignature("CustomError()"));
 
-        vm.prank(ueModule);
+        vm.prank(ucallbackModule);
         callback.fulfillExternalCallback(requestId, "", 0, bytes32(0));
     }
 
     function test_ExpireExternalRead_Success() public {
-        vm.deal(user, 10 ether);
+        vm.deal(user, DEPOSIT);
         vm.prank(user);
-        uint256 requestId = callback.requestExternalReadSelf{value: 1 ether}(
+        uint256 requestId = callback.requestExternalReadSelf{value: DEPOSIT}(
             defaultSpec, CALLBACK_SEL, 50000
         );
 
         vm.roll(defaultSpec.expiryPushChainHeight);
 
         vm.expectEmit(true, true, true, true);
-        emit IUniversalCallback.RequestExpired(requestId, user);
+        emit IUniversalCallback.RequestExpired(requestId, defaultSpec.revertRecipient, BUDGET);
 
-        vm.prank(ueModule);
+        vm.prank(ucallbackModule);
         callback.expireExternalRead(requestId);
 
         assertTrue(callback.isFulfilled(requestId));
-        assertEq(callback.withdrawable(user), 1 ether - 0.01 ether);
-        assertEq(callback.totalWithdrawable(), 1 ether - 0.01 ether);
+        assertEq(uint8(callback.statusOf(requestId)), uint8(RequestStatus.EXPIRED));
+        assertEq(defaultSpec.revertRecipient.balance, BUDGET);
     }
 
-    function test_ExpireExternalRead_CreditsRefundAndPaysProtocolFee() public {
-        vm.deal(user, 10 ether);
+    function test_ExpireExternalRead_RefundsFullBudget_KeepsProtocolFee() public {
+        // Snapshot BEFORE the request: the fee moves at request time now.
+        uint256 vaultBefore = mockVault.totalReceived();
+
+        vm.deal(user, DEPOSIT);
         vm.prank(user);
-        uint256 requestId = callback.requestExternalReadSelf{value: 1 ether}(
+        uint256 requestId = callback.requestExternalReadSelf{value: DEPOSIT}(
             defaultSpec, CALLBACK_SEL, 50000
         );
 
-        uint256 userBalanceBefore = user.balance;
-        uint256 vaultBefore = mockVault.totalReceived();
+        uint256 recipientBalanceBefore = defaultSpec.revertRecipient.balance;
 
         vm.roll(defaultSpec.expiryPushChainHeight);
-        vm.prank(ueModule);
+        vm.prank(ucallbackModule);
         callback.expireExternalRead(requestId);
 
-        // Value conservation: everything the user paid is accounted for.
-        assertEq(mockVault.totalReceived(), vaultBefore + 0.01 ether);
-        assertEq(callback.withdrawable(user), 1 ether - 0.01 ether);
-        assertEq(user.balance, userBalanceBefore, "pull, not push");
-        assertEq(address(callback).balance, callback.totalWithdrawable());
+        // No callback ran, so nothing burned: the whole budget is refundable and
+        // the fee stays with the vault.
+        assertEq(mockVault.totalReceived(), vaultBefore + PROTOCOL_FEE);
+        assertEq(defaultSpec.revertRecipient.balance, BUDGET);
+        assertEq(
+            defaultSpec.revertRecipient.balance,
+            recipientBalanceBefore + BUDGET,
+            "budget pushed straight to the recipient"
+        );
+        assertEq(address(callback).balance, 0, "refund was pushed out");
+        assertEq(callback.totalEscrowed(), 0);
     }
 
     function test_ExpireExternalRead_EmitsFeeRefundCredited() public {
-        vm.deal(user, 10 ether);
+        vm.deal(user, DEPOSIT);
         vm.prank(user);
-        uint256 requestId = callback.requestExternalReadSelf{value: 1 ether}(
+        uint256 requestId = callback.requestExternalReadSelf{value: DEPOSIT}(
             defaultSpec, CALLBACK_SEL, 50000
         );
 
         vm.roll(defaultSpec.expiryPushChainHeight);
 
         vm.expectEmit(true, true, true, true);
-        emit IUniversalCallback.FeeRefundCredited(requestId, user, 1 ether - 0.01 ether);
+        emit IUniversalCallback.RefundSent(requestId, defaultSpec.revertRecipient, BUDGET);
 
-        vm.prank(ueModule);
+        vm.prank(ucallbackModule);
         callback.expireExternalRead(requestId);
     }
 
@@ -438,24 +548,24 @@ contract UniversalCallbackTest is Test {
         );
 
         // block.number is still below expiryHeight
-        vm.prank(ueModule);
+        vm.prank(ucallbackModule);
         vm.expectRevert(abi.encodeWithSelector(UniversalCallbackErrors.RequestNotYetExpired.selector));
         callback.expireExternalRead(requestId);
     }
 
-    function test_ExpireExternalRead_RevertWhen_NotUEModule() public {
+    function test_ExpireExternalRead_RevertWhen_NotUCallbackModule() public {
         vm.deal(user, 10 ether);
         vm.prank(user);
         uint256 requestId = callback.requestExternalReadSelf{value: 1 ether}(
             defaultSpec, CALLBACK_SEL, 50000
         );
 
-        vm.expectRevert(abi.encodeWithSelector(UniversalCallbackErrors.CallerIsNotUEModule.selector));
+        vm.expectRevert(abi.encodeWithSelector(UniversalCallbackErrors.CallerIsNotUCallbackModule.selector));
         callback.expireExternalRead(requestId);
     }
 
     function test_EstimateFee_Works() public view {
-        uint256 fee = callback.estimateFee("eip155", "1", 50000);
+        uint256 fee = callback.estimateFee("eip155", "1");
         assertGe(fee, 0.01 ether);
     }
 
@@ -535,110 +645,64 @@ contract UniversalCallbackTest is Test {
     // =========================
 
     function _requestAndExpire() private returns (uint256 requestId, uint256 credited) {
-        vm.deal(user, 10 ether);
+        vm.deal(user, DEPOSIT);
         vm.prank(user);
-        requestId = callback.requestExternalReadSelf{value: 1 ether}(
+        requestId = callback.requestExternalReadSelf{value: DEPOSIT}(
             defaultSpec, CALLBACK_SEL, 50000
         );
         vm.roll(defaultSpec.expiryPushChainHeight);
-        vm.prank(ueModule);
+        vm.prank(ucallbackModule);
         callback.expireExternalRead(requestId);
-        credited = 1 ether - 0.01 ether;
+        // Expiry runs no callback, so the entire budget comes back.
+        credited = BUDGET;
     }
 
-    function test_Withdraw_TransfersCreditedAmount() public {
-        (, uint256 credited) = _requestAndExpire();
 
-        uint256 before = user.balance;
 
-        vm.expectEmit(true, true, true, true);
-        emit IUniversalCallback.RefundWithdrawn(user, credited);
 
+
+
+    function test_Fulfill_MovesNoMoney() public {
+        vm.deal(user, DEPOSIT);
         vm.prank(user);
-        uint256 amount = callback.withdraw();
-
-        assertEq(amount, credited);
-        assertEq(user.balance, before + credited);
-    }
-
-    function test_Withdraw_ZeroesLedgerAndTotal() public {
-        _requestAndExpire();
-
-        vm.prank(user);
-        callback.withdraw();
-
-        assertEq(callback.withdrawable(user), 0);
-        assertEq(callback.totalWithdrawable(), 0);
-    }
-
-    function test_Withdraw_RevertWhen_NothingToWithdraw() public {
-        vm.prank(user);
-        vm.expectRevert(abi.encodeWithSelector(UniversalCallbackErrors.NothingToWithdraw.selector));
-        callback.withdraw();
-    }
-
-    function test_Withdraw_WorksWhenPaused() public {
-        (, uint256 credited) = _requestAndExpire();
-
-        vm.prank(pauser);
-        callback.pause();
-
-        uint256 before = user.balance;
-        vm.prank(user);
-        callback.withdraw();
-
-        // Pausing halts new requests; it must never trap funds already owed.
-        assertEq(user.balance, before + credited);
-    }
-
-    function test_Withdraw_MultipleCreditsAccumulate() public {
-        vm.deal(user, 10 ether);
-
-        uint256[] memory ids = new uint256[](2);
-        for (uint256 i = 0; i < 2; i++) {
-            ReadSpec memory spec = defaultSpec;
-            spec.query = abi.encode(i);
-            vm.prank(user);
-            ids[i] = callback.requestExternalReadSelf{value: 1 ether}(spec, CALLBACK_SEL, 50000);
-        }
-
-        vm.roll(defaultSpec.expiryPushChainHeight);
-        for (uint256 i = 0; i < 2; i++) {
-            vm.prank(ueModule);
-            callback.expireExternalRead(ids[i]);
-        }
-
-        uint256 expected = 2 * (1 ether - 0.01 ether);
-        assertEq(callback.withdrawable(user), expected);
-
-        uint256 before = user.balance;
-        vm.prank(user);
-        assertEq(callback.withdraw(), expected);
-        assertEq(user.balance, before + expected);
-    }
-
-    function test_Fulfill_Success_CreditsRefundNotPush() public {
-        vm.deal(user, 10 ether);
-        vm.prank(user);
-        uint256 requestId = callback.requestExternalReadSelf{value: 1 ether}(
+        uint256 requestId = callback.requestExternalReadSelf{value: DEPOSIT}(
             defaultSpec, CALLBACK_SEL, 50000
         );
 
-        uint256 before = user.balance;
+        uint256 balBefore = address(callback).balance;
         uint256 vaultBefore = mockVault.totalReceived();
 
-        vm.prank(ueModule);
+        vm.prank(ucallbackModule);
         callback.fulfillExternalCallback(requestId, "", 0, bytes32(0));
 
-        assertEq(user.balance, before, "success path must credit, not push");
-        assertEq(callback.withdrawable(user), 1 ether - 0.01 ether);
-        assertEq(mockVault.totalReceived(), vaultBefore + 0.01 ether);
+        // The clearest single expression of the new design.
+        assertEq(address(callback).balance, balBefore);
+        assertEq(mockVault.totalReceived(), vaultBefore);
+        assertEq(user.balance, 0);
+        assertEq(callback.totalEscrowed(), BUDGET);
+        assertEq(uint8(callback.statusOf(requestId)), uint8(RequestStatus.EXECUTED));
     }
 
-    function test_Fulfill_Failure_RetainsProtocolFee() public {
-        vm.deal(user, 10 ether);
+    function test_Report_CreditsRemainderAfterBurn() public {
+        vm.deal(user, DEPOSIT);
         vm.prank(user);
-        uint256 requestId = callback.requestExternalReadSelf{value: 1 ether}(
+        uint256 requestId = callback.requestExternalReadSelf{value: DEPOSIT}(
+            defaultSpec, CALLBACK_SEL, 50000
+        );
+
+        uint256 gasBurned = 0.4 ether;
+        uint256 burned = _fulfillAndBurn(requestId, "", gasBurned);
+
+        assertEq(burned, gasBurned);
+        assertEq(user.balance, BUDGET - gasBurned);
+        assertEq(callback.totalEscrowed(), 0);
+        assertEq(uint8(callback.statusOf(requestId)), uint8(RequestStatus.SETTLED));
+    }
+
+    function test_Report_FailedCallbackChargedIdentically() public {
+        vm.deal(user, DEPOSIT);
+        vm.prank(user);
+        uint256 requestId = callback.requestExternalReadSelf{value: DEPOSIT}(
             defaultSpec, CALLBACK_SEL, 50000
         );
 
@@ -648,32 +712,29 @@ contract UniversalCallbackTest is Test {
             abi.encodeWithSignature("CustomError()")
         );
 
-        uint256 vaultBefore = mockVault.totalReceived();
+        uint256 gasBurned = 0.4 ether;
+        _fulfillAndBurn(requestId, "", gasBurned);
 
-        vm.prank(ueModule);
-        callback.fulfillExternalCallback(requestId, "", 0, bytes32(0));
-
-        // A reverting callback no longer escapes the protocol fee.
-        assertEq(callback.withdrawable(user), 1 ether - 0.01 ether);
-        assertEq(mockVault.totalReceived(), vaultBefore + 0.01 ether);
+        // Success and failure settle identically -- the gas was spent either way.
+        assertEq(user.balance, BUDGET - gasBurned);
     }
 
     function test_ZeroProtocolFee_CreditsFullDeposit() public {
         mockCore.setReadBaseFee("eip155", "1", 0);
 
-        vm.deal(user, 10 ether);
+        vm.deal(user, DEPOSIT);
         vm.prank(user);
-        uint256 requestId = callback.requestExternalReadSelf{value: 1 ether}(
+        uint256 requestId = callback.requestExternalReadSelf{value: DEPOSIT}(
             defaultSpec, CALLBACK_SEL, 50000
         );
 
         uint256 vaultBefore = mockVault.totalReceived();
 
         vm.roll(defaultSpec.expiryPushChainHeight);
-        vm.prank(ueModule);
+        vm.prank(ucallbackModule);
         callback.expireExternalRead(requestId);
 
-        assertEq(callback.withdrawable(user), 1 ether);
+        assertEq(user.balance, DEPOSIT);
         assertEq(mockVault.totalReceived(), vaultBefore);
     }
 
@@ -681,7 +742,7 @@ contract UniversalCallbackTest is Test {
         _requestAndExpire();
 
         address recipient = makeAddr("recipient");
-        assertEq(address(callback).balance, callback.totalWithdrawable());
+        assertEq(address(callback).balance, 0, "refund was pushed out");
 
         vm.prank(defaultAdmin);
         vm.expectRevert(
@@ -703,10 +764,8 @@ contract UniversalCallbackTest is Test {
         callback.rescueNativePC(payable(recipient), stray);
 
         assertEq(recipient.balance, stray);
-        // The credited refund survived the sweep.
-        vm.prank(user);
-        callback.withdraw();
-        assertEq(callback.totalWithdrawable(), 0);
+        // The refund had already been pushed out and was untouched by the sweep.
+        assertEq(user.balance, BUDGET);
     }
 
     // =========================
@@ -714,9 +773,9 @@ contract UniversalCallbackTest is Test {
     // =========================
 
     function _request() private returns (uint256 requestId) {
-        vm.deal(user, 10 ether);
+        vm.deal(user, DEPOSIT);
         vm.prank(user);
-        requestId = callback.requestExternalReadSelf{value: 1 ether}(
+        requestId = callback.requestExternalReadSelf{value: DEPOSIT}(
             defaultSpec, CALLBACK_SEL, 50000
         );
     }
@@ -724,15 +783,19 @@ contract UniversalCallbackTest is Test {
     function test_TotalEscrowed_IncrementsOnRequest() public {
         assertEq(callback.totalEscrowed(), 0);
         _request();
-        assertEq(callback.totalEscrowed(), 1 ether);
+        // Escrow holds the budget only -- the protocol fee already left.
+        assertEq(callback.totalEscrowed(), BUDGET);
     }
 
-    function test_TotalEscrowed_ReturnsToZeroAfterFulfill() public {
+    function test_TotalEscrowed_HeldUntilReport() public {
         uint256 requestId = _request();
 
-        vm.prank(ueModule);
+        vm.prank(ucallbackModule);
         callback.fulfillExternalCallback(requestId, "", 0, bytes32(0));
+        assertEq(callback.totalEscrowed(), BUDGET, "fulfill must not release escrow");
 
+        vm.prank(ucallbackModule);
+        callback.reportCallbackGas(requestId, 0);
         assertEq(callback.totalEscrowed(), 0);
     }
 
@@ -740,7 +803,7 @@ contract UniversalCallbackTest is Test {
         uint256 requestId = _request();
 
         vm.roll(defaultSpec.expiryPushChainHeight);
-        vm.prank(ueModule);
+        vm.prank(ucallbackModule);
         callback.expireExternalRead(requestId);
 
         assertEq(callback.totalEscrowed(), 0);
@@ -754,13 +817,13 @@ contract UniversalCallbackTest is Test {
             ReadSpec memory spec = defaultSpec;
             spec.query = abi.encode(i);
             vm.prank(user);
-            ids[i] = callback.requestExternalReadSelf{value: 1 ether}(spec, CALLBACK_SEL, 50000);
-            assertEq(callback.totalEscrowed(), (i + 1) * 1 ether);
+            ids[i] = callback.requestExternalReadSelf{value: DEPOSIT}(spec, CALLBACK_SEL, 50000);
+            assertEq(callback.totalEscrowed(), (i + 1) * BUDGET);
         }
 
         vm.roll(defaultSpec.expiryPushChainHeight);
         for (uint256 i = 0; i < 3; i++) {
-            vm.prank(ueModule);
+            vm.prank(ucallbackModule);
             callback.expireExternalRead(ids[i]);
         }
 
@@ -769,7 +832,7 @@ contract UniversalCallbackTest is Test {
 
     function test_RescueNativePC_ExcludesInFlightDeposit() public {
         _request();
-        assertEq(callback.totalEscrowed(), 1 ether);
+        assertEq(callback.totalEscrowed(), BUDGET);
 
         uint256 stray = 0.3 ether;
         vm.deal(address(callback), address(callback).balance + stray);
@@ -799,7 +862,7 @@ contract UniversalCallbackTest is Test {
 
         // What an admin could take if escrow were ignored -- this is the amount
         // that drains the deposit and bricks settlement.
-        uint256 unsafeSweep = address(callback).balance - callback.totalWithdrawable();
+        uint256 unsafeSweep = address(callback).balance;
         assertGt(unsafeSweep, stray, "test must actually attempt an over-sweep");
 
         vm.prank(defaultAdmin);
@@ -815,15 +878,251 @@ contract UniversalCallbackTest is Test {
         callback.rescueNativePC(payable(makeAddr("recipient")), stray);
 
         // The request still settles and the funder is still made whole.
-        vm.prank(ueModule);
+        _fulfillAndBurn(requestId, "", 0);
+
+        assertEq(user.balance, BUDGET, "refund pushed on settlement");
+    }
+
+    // =========================
+    //   STATE MACHINE
+    // =========================
+
+    function _expectBadStatus(uint256 id, RequestStatus actual, RequestStatus expected) private {
+        vm.expectRevert(
+            abi.encodeWithSelector(
+                UniversalCallbackErrors.InvalidRequestStatus.selector,
+                id, uint8(actual), uint8(expected)
+            )
+        );
+    }
+
+    function test_Transition_ReportBeforeFulfill_Reverts() public {
+        uint256 requestId = _request();
+
+        vm.prank(ucallbackModule);
+        _expectBadStatus(requestId, RequestStatus.PENDING, RequestStatus.EXECUTED);
+        callback.reportCallbackGas(requestId, 0);
+    }
+
+    function test_Transition_DoubleReport_Reverts() public {
+        uint256 requestId = _request();
+        _fulfillAndBurn(requestId, "", 0);
+
+        vm.prank(ucallbackModule);
+        _expectBadStatus(requestId, RequestStatus.SETTLED, RequestStatus.EXECUTED);
+        callback.reportCallbackGas(requestId, 0);
+    }
+
+    function test_Transition_ExpireAfterExecute_Reverts() public {
+        uint256 requestId = _request();
+
+        vm.prank(ucallbackModule);
         callback.fulfillExternalCallback(requestId, "", 0, bytes32(0));
 
-        assertEq(callback.withdrawable(user), 1 ether - 0.01 ether);
+        vm.roll(defaultSpec.expiryPushChainHeight);
 
-        uint256 before = user.balance;
+        // An executed callback consumed real gas -- it must settle via the report
+        // path, never be refunded in full.
+        vm.prank(ucallbackModule);
+        _expectBadStatus(requestId, RequestStatus.EXECUTED, RequestStatus.PENDING);
+        callback.expireExternalRead(requestId);
+    }
+
+    function test_Transition_ReportAfterExpire_Reverts() public {
+        (uint256 requestId,) = _requestAndExpire();
+
+        vm.prank(ucallbackModule);
+        _expectBadStatus(requestId, RequestStatus.EXPIRED, RequestStatus.EXECUTED);
+        callback.reportCallbackGas(requestId, 0);
+    }
+
+    function test_Transition_FulfillAfterExpire_Reverts() public {
+        (uint256 requestId,) = _requestAndExpire();
+
+        vm.prank(ucallbackModule);
+        _expectBadStatus(requestId, RequestStatus.EXPIRED, RequestStatus.PENDING);
+        callback.fulfillExternalCallback(requestId, "", 0, bytes32(0));
+    }
+
+    function test_Transition_DoubleExpire_Reverts() public {
+        (uint256 requestId,) = _requestAndExpire();
+
+        vm.prank(ucallbackModule);
+        _expectBadStatus(requestId, RequestStatus.EXPIRED, RequestStatus.PENDING);
+        callback.expireExternalRead(requestId);
+    }
+
+    /// @dev Regression test for NONE being the zero enum value: an id that was
+    ///      never created must not read as a live PENDING request.
+    function test_Transition_UnknownId_RevertsEverywhere() public {
+        uint256 ghost = 123456789;
+        assertEq(uint8(callback.statusOf(ghost)), uint8(RequestStatus.NONE));
+
+        vm.prank(ucallbackModule);
+        _expectBadStatus(ghost, RequestStatus.NONE, RequestStatus.PENDING);
+        callback.fulfillExternalCallback(ghost, "", 0, bytes32(0));
+
+        vm.prank(ucallbackModule);
+        _expectBadStatus(ghost, RequestStatus.NONE, RequestStatus.EXECUTED);
+        callback.reportCallbackGas(ghost, 0);
+
+        vm.prank(ucallbackModule);
+        _expectBadStatus(ghost, RequestStatus.NONE, RequestStatus.PENDING);
+        callback.expireExternalRead(ghost);
+    }
+
+    function test_Report_RevertWhen_NotUCallbackModule() public {
+        uint256 requestId = _request();
+        vm.prank(ucallbackModule);
+        callback.fulfillExternalCallback(requestId, "", 0, bytes32(0));
+
+        vm.expectRevert(abi.encodeWithSelector(UniversalCallbackErrors.CallerIsNotUCallbackModule.selector));
+        callback.reportCallbackGas(requestId, 0);
+    }
+
+    // =========================
+    //   BURN CLAMPING
+    // =========================
+
+    function test_Report_ClampsToBudget() public {
+        uint256 requestId = _request();
+        uint256 burned = _fulfillAndBurn(requestId, "", BUDGET + 1);
+
+        assertEq(burned, BUDGET, "burn clamped to the authorized budget");
+        assertEq(user.balance, 0);
+    }
+
+    function test_Report_ClampsAtExtreme() public {
+        uint256 requestId = _request();
+        uint256 burned = _fulfillAndBurn(requestId, "", type(uint256).max);
+
+        assertEq(burned, BUDGET, "no overflow, still clamped");
+    }
+
+    function test_Report_ExactBudget_NoRefund() public {
+        uint256 requestId = _request();
+        uint256 burned = _fulfillAndBurn(requestId, "", BUDGET);
+
+        assertEq(burned, BUDGET);
+        assertEq(user.balance, 0);
+    }
+
+    function test_Report_ZeroGasBurned_RefundsFullBudget() public {
+        uint256 requestId = _request();
+        uint256 burned = _fulfillAndBurn(requestId, "", 0);
+
+        assertEq(burned, 0);
+        assertEq(user.balance, BUDGET);
+    }
+
+    function test_Report_ZeroBudget_NoRevert() public {
+        vm.deal(user, PROTOCOL_FEE);
         vm.prank(user);
-        callback.withdraw();
-        assertEq(user.balance, before + (1 ether - 0.01 ether));
+        uint256 requestId =
+            callback.requestExternalReadSelf{value: PROTOCOL_FEE}(defaultSpec, CALLBACK_SEL, 50000);
+
+        uint256 burned = _fulfillAndBurn(requestId, "", 5 ether);
+
+        assertEq(burned, 0, "nothing to burn against a zero budget");
+        assertEq(user.balance, 0);
+    }
+
+    function test_Report_EmitsRawAndClamped() public {
+        uint256 requestId = _request();
+        vm.prank(ucallbackModule);
+        callback.fulfillExternalCallback(requestId, "", 0, bytes32(0));
+
+        // Over-reporting must be observable on-chain.
+        vm.expectEmit(true, true, true, true);
+        emit IUniversalCallback.CallbackGasReported(requestId, BUDGET + 5, BUDGET, 0);
+
+        vm.prank(ucallbackModule);
+        callback.reportCallbackGas(requestId, BUDGET + 5);
+    }
+
+    // =========================
+    //   REVERT RECIPIENT
+    // =========================
+
+    function test_RevertRecipient_EOAReceivesAndWithdraws() public {
+        address payable eoa = payable(makeAddr("eoaRecipient"));
+        ReadSpec memory spec = defaultSpec;
+        spec.revertRecipient = eoa;
+
+        vm.deal(user, DEPOSIT);
+        vm.prank(user);
+        uint256 requestId = callback.requestExternalReadSelf{value: DEPOSIT}(spec, CALLBACK_SEL, 50000);
+
+        _fulfillAndBurn(requestId, "", 0.2 ether);
+
+        uint256 credited = BUDGET - 0.2 ether;
+        assertEq(eoa.balance, credited);
+        assertEq(user.balance, 0, "funder is not credited");
+
+
+    }
+
+    function test_RevertRecipient_ReceivesOnExpiry() public {
+        address eoa = makeAddr("eoaRecipient");
+        ReadSpec memory spec = defaultSpec;
+        spec.revertRecipient = eoa;
+
+        vm.deal(user, DEPOSIT);
+        vm.prank(user);
+        uint256 requestId = callback.requestExternalReadSelf{value: DEPOSIT}(spec, CALLBACK_SEL, 50000);
+
+        vm.roll(spec.expiryPushChainHeight);
+        vm.prank(ucallbackModule);
+        callback.expireExternalRead(requestId);
+
+        assertEq(eoa.balance, BUDGET);
+        assertEq(user.balance, 0);
+    }
+
+    /// @dev Proves the invariant assertion has teeth: burning more than the
+    ///      contract authorized must break `balance >= withdrawable + escrowed`.
+    ///      An invariant check that can never fail is worthless.
+    function test_Invariant_OverBurnBreaksBacking() public {
+        uint256 requestId = _request();
+
+        vm.prank(ucallbackModule);
+        callback.fulfillExternalCallback(requestId, "", 0, bytes32(0));
+        vm.prank(ucallbackModule);
+        uint256 burned = callback.reportCallbackGas(requestId, 0.2 ether);
+
+        // A second request keeps real escrow on the books to measure against.
+        ReadSpec memory spec = defaultSpec;
+        spec.query = abi.encode("second");
+        vm.deal(user, DEPOSIT);
+        vm.prank(user);
+        callback.requestExternalReadSelf{value: DEPOSIT}(spec, CALLBACK_SEL, 50000);
+
+        assertGe(address(callback).balance, callback.totalEscrowed() + burned);
+
+        // Burn one wei more than the contract sanctioned.
+        vm.deal(address(callback), address(callback).balance - burned - 1);
+
+        assertLt(
+            address(callback).balance,
+            callback.totalEscrowed(),
+            "over-burn must leave user funds unbacked"
+        );
+    }
+
+    function test_RevertRecipient_ChangesRequestId() public {
+        vm.deal(user, 10 ether);
+
+        ReadSpec memory a = defaultSpec;
+        a.revertRecipient = makeAddr("a");
+        ReadSpec memory b = defaultSpec;
+        b.revertRecipient = makeAddr("b");
+
+        vm.prank(user);
+        uint256 idA = callback.requestExternalReadSelf{value: DEPOSIT}(a, CALLBACK_SEL, 50000);
+        vm.prank(user);
+        uint256 idB = callback.requestExternalReadSelf{value: DEPOSIT}(b, CALLBACK_SEL, 50000);
+
+        assertTrue(idA != idB);
     }
 
     receive() external payable {}

@@ -10,7 +10,6 @@ import {UniversalAccountId} from "../../src/libraries/Types.sol";
 contract ReentrantReadClient is UniversalReadClient {
     uint256 public lastRequestId;
     uint256 public creditSeenDuringCallback;
-    bool public reentrySucceeded;
 
     constructor(
         address universalCallback_
@@ -27,7 +26,8 @@ contract ReentrantReadClient is UniversalReadClient {
             minConfirmations: 10,
             blockNumber: 100,
             expiryPushChainHeight: uint64(block.number + 1000),
-            maxFee: 100 ether
+            maxFee: 100 ether,
+            revertRecipient: address(this)
         });
 
         lastRequestId = _requestRead(spec, "", 500000);
@@ -35,21 +35,14 @@ contract ReentrantReadClient is UniversalReadClient {
 
     receive() external payable {}
 
-    function reclaimRefunds() external returns (uint256) {
-        return _withdrawRefunds();
-    }
 
     function _onReadResult(
         uint256 requestId,
         bytes calldata resultData,
         bytes memory localState
     ) internal override {
-        creditSeenDuringCallback = UNIVERSAL_CALLBACK.withdrawable(address(this));
-
-        try UNIVERSAL_CALLBACK.withdraw() {
-            reentrySucceeded = true;
-        } catch {
-            reentrySucceeded = false;
-        }
+        // Refunds are pushed at report time, which is after this callback runs,
+        // so a client can never observe its refund from in here.
+        creditSeenDuringCallback = address(this).balance;
     }
 }

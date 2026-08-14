@@ -89,7 +89,7 @@ library UEAErrors {
 // =========================
 
 library UniversalCallbackErrors {
-    error CallerIsNotUEModule();
+    error CallerIsNotUCallbackModule();
     error CallerIsNotAdmin();
     error ContractIsPaused();
     error DomainBlocked(string chainNamespace, string chainId);
@@ -101,13 +101,14 @@ library UniversalCallbackErrors {
     error RequestNotYetExpired();
     error InsufficientFee(uint256 provided, uint256 required);
     error ExcessiveFee(uint256 provided, uint256 maxFee);
-    error RequestAlreadyFulfilled(uint256 requestId);
+    error InvalidRequestStatus(uint256 requestId, uint8 actual, uint8 expected);
+    error ZeroCallbackGasLimit();
+    error ZeroRevertRecipient();
     error CallbackGasLimitExceeded(uint64 provided, uint64 max);
     error InsufficientContractBalance(uint256 requested, uint256 available);
     error ZeroAddressInit();
     error InvalidCallbackTarget();
     error UnauthorizedCaller();
-    error NothingToWithdraw();
 }
 
 library CEAErrors {

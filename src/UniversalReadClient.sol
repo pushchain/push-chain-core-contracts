@@ -17,11 +17,19 @@ abstract contract UniversalReadClient is IUniversalReadClient {
         UNIVERSAL_CALLBACK = IUniversalCallback(universalCallback_);
     }
 
+    /// @dev    Defaults `revertRecipient` to this contract when unset. Refunds are
+    ///         PUSHED there on settlement, so an inheriting contract that keeps the
+    ///         default MUST declare a payable `receive()` -- otherwise the push is
+    ///         rejected and the refund is forfeited. Point `revertRecipient` at an
+    ///         EOA to avoid that entirely.
     function _requestRead(
         ReadSpec memory spec,
         bytes memory localState,
         uint64 callbackGasLimit
     ) internal returns (uint256 requestId) {
+        if (spec.revertRecipient == address(0)) {
+            spec.revertRecipient = address(this);
+        }
         requestId = UNIVERSAL_CALLBACK.requestExternalReadSelf{value: msg.value}(
             spec, this.onUniversalData.selector, callbackGasLimit
         );
@@ -45,19 +53,6 @@ abstract contract UniversalReadClient is IUniversalReadClient {
         bytes calldata resultData,
         bytes memory localState
     ) internal virtual;
-
-    /// @notice         Claim any refunds credited to this contract by the callback.
-    /// @dev            Returns 0 instead of reverting when nothing is owed, so it is
-    ///                 safe to call unconditionally. The reclaimed PC arrives via
-    ///                 this contract's `receive()`, which inheriting contracts MUST
-    ///                 declare -- without one the transfer reverts and the refund
-    ///                 stays unclaimable.
-    /// @return amount  Amount reclaimed, or 0 when nothing was owed.
-    function _withdrawRefunds() internal returns (uint256 amount) {
-        amount = UNIVERSAL_CALLBACK.withdrawable(address(this));
-        if (amount == 0) return 0;
-        UNIVERSAL_CALLBACK.withdraw();
-    }
 
     function universalCallback() external view returns (IUniversalCallback) {
         return UNIVERSAL_CALLBACK;

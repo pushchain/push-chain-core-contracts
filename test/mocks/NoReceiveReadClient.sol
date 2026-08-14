@@ -25,15 +25,13 @@ contract NoReceiveReadClient is UniversalReadClient {
             minConfirmations: 10,
             blockNumber: 100,
             expiryPushChainHeight: uint64(block.number + 1000),
-            maxFee: 100 ether
+            maxFee: 100 ether,
+            revertRecipient: address(this)
         });
 
         lastRequestId = _requestRead(spec, "", 200000);
     }
 
-    function reclaim() external returns (uint256) {
-        return _withdrawRefunds();
-    }
 
     function _onReadResult(
         uint256 requestId,

@@ -24,7 +24,8 @@ contract RevertingReadClient is UniversalReadClient {
             minConfirmations: 10,
             blockNumber: 100,
             expiryPushChainHeight: uint64(block.number + 1000),
-            maxFee: 100 ether
+            maxFee: 100 ether,
+            revertRecipient: address(this)
         });
 
         lastRequestId = _requestRead(spec, "", 200000);

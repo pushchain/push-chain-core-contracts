@@ -21,7 +21,7 @@ contract UniversalReadClientTest is Test {
     RevertingReadClient revertingClient;
 
     address defaultAdmin = address(0xAAAA);
-    address ueModule = 0x14191Ea54B4c176fCf86f51b0FAc7CB1E71Df7d7;
+    address ucallbackModule = 0x07a0258D367A4A4cd9d6E4b7eEE8E7eF491CC519;
     address uvAdmin = address(0xBBBB);
     address user = address(0xCCCC);
     address pauser = address(0xDDDD);
@@ -74,7 +74,7 @@ contract UniversalReadClientTest is Test {
         uint256 requestId = crossLend.lastRequestId();
         bytes memory resultData = abi.encode("ethPrice");
 
-        vm.prank(ueModule);
+        vm.prank(ucallbackModule);
         callback.fulfillExternalCallback(requestId, resultData, 500, bytes32(uint256(0x123)));
 
         assertEq(crossLend.lastResultData(), resultData);
@@ -93,7 +93,7 @@ contract UniversalReadClientTest is Test {
         uint256 firstId = crossLend.lastRequestId();
         bytes memory data1 = abi.encode("data1");
 
-        vm.prank(ueModule);
+        vm.prank(ucallbackModule);
         callback.fulfillExternalCallback(firstId, data1, 100, bytes32(uint256(0x1)));
 
         assertEq(crossLend.lastResultData(), data1);
@@ -106,7 +106,7 @@ contract UniversalReadClientTest is Test {
 
         uint256 requestId = revertingClient.lastRequestId();
 
-        vm.prank(ueModule);
+        vm.prank(ucallbackModule);
         vm.expectEmit(true, true, true, true);
         emit IUniversalCallback.CallbackFailed(requestId, abi.encodeWithSelector(RevertingReadClient.IntentionalRevert.selector));
         callback.fulfillExternalCallback(requestId, "", 0, bytes32(0));
@@ -122,30 +122,24 @@ contract UniversalReadClientTest is Test {
         assertGt(ctx.length, 0);
     }
 
-    function test_WithdrawRefunds_ReturnsZeroWhenNothingOwed() public {
-        // Idempotent by design: safe to call unconditionally.
-        assertEq(crossLend.reclaim(), 0);
-    }
-
-    function test_WithdrawRefunds_PullsCreditedRefund() public {
+    function test_Refund_PushedToClientOnExpiry() public {
         vm.deal(address(crossLend), 1 ether);
         vm.prank(address(crossLend));
         crossLend.requestSync{value: 1 ether}(1000);
 
         uint256 requestId = crossLend.lastRequestId();
         vm.roll(block.number + 1000);
-        vm.prank(ueModule);
+        vm.prank(ucallbackModule);
         callback.expireExternalRead(requestId);
 
-        uint256 credited = 1 ether - 0.01 ether;
-        uint256 before = address(crossLend).balance;
-
-        assertEq(crossLend.reclaim(), credited);
-        assertEq(address(crossLend).balance, before + credited);
-        assertEq(callback.withdrawable(address(crossLend)), 0);
+        // No claim step: the budget arrives via the client's receive().
+        assertEq(address(crossLend).balance, 1 ether - 0.01 ether);
+        assertEq(callback.totalEscrowed(), 0);
     }
 
-    function test_WithdrawRefunds_RevertWhen_ClientHasNoReceive() public {
+    /// @dev A client without `receive()` rejects the push. Settlement must still
+    ///      complete -- reverting would wedge the request and lock its escrow.
+    function test_Refund_ClientWithoutReceive_ForfeitsButSettles() public {
         NoReceiveReadClient noReceive = new NoReceiveReadClient(address(callback));
 
         vm.deal(address(noReceive), 1 ether);
@@ -153,14 +147,21 @@ contract UniversalReadClientTest is Test {
         noReceive.requestSync{value: 1 ether}(1000);
 
         uint256 requestId = noReceive.lastRequestId();
+        uint256 budget = 1 ether - 0.01 ether;
+
         vm.roll(block.number + 1000);
-        vm.prank(ueModule);
+
+        vm.expectEmit(true, true, true, true);
+        emit IUniversalCallback.RefundFailed(requestId, address(noReceive), budget);
+
+        vm.prank(ucallbackModule);
         callback.expireExternalRead(requestId);
 
-        // The refund is credited, but a client without receive() can never claim it.
-        assertEq(callback.withdrawable(address(noReceive)), 1 ether - 0.01 ether);
-        vm.expectRevert(abi.encodeWithSelector(CommonErrors.TransferFailed.selector));
-        noReceive.reclaim();
+        // Escrow released and the request settled, even though the push failed.
+        assertEq(callback.totalEscrowed(), 0);
+        assertEq(address(noReceive).balance, 0, "recipient forfeited its refund");
+        // The stranded PC is now unattributed and recoverable by admin.
+        assertEq(address(callback).balance, budget);
     }
 
     function test_GetLocalContext_ClearedAfterCallback() public {
@@ -170,7 +171,7 @@ contract UniversalReadClientTest is Test {
 
         uint256 requestId = crossLend.lastRequestId();
 
-        vm.prank(ueModule);
+        vm.prank(ucallbackModule);
         callback.fulfillExternalCallback(requestId, "", 0, bytes32(0));
 
         bytes memory ctx = crossLend.getLocalContext(requestId);
