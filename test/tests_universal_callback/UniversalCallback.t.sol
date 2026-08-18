@@ -171,7 +171,7 @@ contract UniversalCallbackTest is Test {
 
         vm.expectEmit(false, true, true, true);
         emit IUniversalCallback.ReadRequested(
-            0, defaultSpec, user, user, DEPOSIT, PROTOCOL_FEE, BUDGET
+            0, defaultSpec, user, user, 50000, DEPOSIT, PROTOCOL_FEE, BUDGET
         );
 
         uint256 requestId = callback.requestExternalReadSelf{value: DEPOSIT}(

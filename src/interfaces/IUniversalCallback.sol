@@ -7,11 +7,14 @@ interface IUniversalCallback {
     /// @notice Emitted when a read is requested. `protocolFee` has ALREADY been
     ///         forwarded to VaultPC by the time this fires; only `callbackBudget`
     ///         remains held by the contract.
+    /// @dev    `callbackGasLimit` is not part of `readSpec`, so it is emitted
+    ///         separately -- observers need it to reproduce the execution bound.
     event ReadRequested(
         uint256 indexed requestId,
         ReadSpec readSpec,
         address indexed callbackTarget,
         address indexed originalFunder,
+        uint64 callbackGasLimit,
         uint256 totalPaid,
         uint256 protocolFee,
         uint256 callbackBudget

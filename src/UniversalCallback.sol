@@ -160,7 +160,9 @@ contract UniversalCallback is
 
         totalEscrowed += callbackBudget;
 
-        emit ReadRequested(requestId, spec, msg.sender, msg.sender, msg.value, protocolFee, callbackBudget);
+        emit ReadRequested(
+            requestId, spec, msg.sender, msg.sender, callbackGasLimit, msg.value, protocolFee, callbackBudget
+        );
 
         if (protocolFee > 0) {
             _payProtocolFee(requestId, protocolFee);
