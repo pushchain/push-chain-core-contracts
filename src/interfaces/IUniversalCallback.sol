@@ -23,12 +23,7 @@ interface IUniversalCallback {
     /// @notice Emitted when the callback ran successfully.
     /// @dev    NO money moves at fulfillment. The request sits in EXECUTED until
     ///         the module reports consumed gas.
-    event ReadFulfilled(
-        uint256 indexed requestId,
-        bytes resultData,
-        uint64 observedBlockHeight,
-        bytes32 observedBlockHash
-    );
+    event ReadFulfilled(uint256 indexed requestId, bytes resultData);
 
     /// @notice Emitted when the callback reverted. Financially identical to
     ///         success -- the request still awaits a gas report.
@@ -96,12 +91,7 @@ interface IUniversalCallback {
 
     /// @notice     Execute the callback with the read result. Moves no money;
     ///             leaves the request in EXECUTED awaiting `reportCallbackGas`.
-    function fulfillExternalCallback(
-        uint256 requestId,
-        bytes calldata resultData,
-        uint64 observedBlockHeight,
-        bytes32 observedBlockHash
-    ) external;
+    function fulfillExternalCallback(uint256 requestId, bytes calldata resultData) external;
 
     /// @notice             Report gas consumed by an executed callback and settle.
     /// @dev                Performs NO burn. The caller MUST burn exactly the

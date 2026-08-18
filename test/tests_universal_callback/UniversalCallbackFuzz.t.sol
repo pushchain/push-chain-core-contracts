@@ -162,7 +162,7 @@ contract UniversalCallbackFuzzTest is Test {
             callback.expireExternalRead(requestId);
         } else {
             vm.prank(ucallbackModule);
-            callback.fulfillExternalCallback(requestId, "", 0, bytes32(0));
+            callback.fulfillExternalCallback(requestId, "");
 
             // Fulfillment settles nothing.
             assertEq(callback.totalEscrowed(), budget, "fulfill released escrow");
@@ -213,7 +213,7 @@ contract UniversalCallbackFuzzTest is Test {
         );
 
         vm.prank(ucallbackModule);
-        callback.fulfillExternalCallback(requestId, resultData, 500, bytes32(uint256(0x123)));
+        callback.fulfillExternalCallback(requestId, resultData);
 
         assertTrue(callback.isFulfilled(requestId));
     }

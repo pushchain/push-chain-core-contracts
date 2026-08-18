@@ -51,7 +51,7 @@ contract UniversalCallbackTest is Test {
         uint256 recipientBefore = recipient.balance;
 
         vm.prank(ucallbackModule);
-        callback.fulfillExternalCallback(requestId, data, 0, bytes32(0));
+        callback.fulfillExternalCallback(requestId, data);
 
         // Fulfillment must not move a wei.
         assertEq(address(callback).balance, balBefore, "fulfill moved value");
@@ -405,10 +405,10 @@ contract UniversalCallbackTest is Test {
         bytes memory resultData = abi.encode("result");
 
         vm.expectEmit(true, true, true, true);
-        emit IUniversalCallback.ReadFulfilled(requestId, resultData, 500, bytes32(uint256(0x123)));
+        emit IUniversalCallback.ReadFulfilled(requestId, resultData);
 
         vm.prank(ucallbackModule);
-        callback.fulfillExternalCallback(requestId, resultData, 500, bytes32(uint256(0x123)));
+        callback.fulfillExternalCallback(requestId, resultData);
 
         assertTrue(callback.isFulfilled(requestId));
     }
@@ -421,7 +421,7 @@ contract UniversalCallbackTest is Test {
         );
 
         vm.expectRevert(abi.encodeWithSelector(UniversalCallbackErrors.CallerIsNotUCallbackModule.selector));
-        callback.fulfillExternalCallback(requestId, "", 0, bytes32(0));
+        callback.fulfillExternalCallback(requestId, "");
     }
 
     function test_FulfillExternalCallback_RevertWhen_AlreadyFulfilled() public {
@@ -432,7 +432,7 @@ contract UniversalCallbackTest is Test {
         );
 
         vm.prank(ucallbackModule);
-        callback.fulfillExternalCallback(requestId, "", 0, bytes32(0));
+        callback.fulfillExternalCallback(requestId, "");
 
         vm.prank(ucallbackModule);
         vm.expectRevert(
@@ -441,7 +441,7 @@ contract UniversalCallbackTest is Test {
                 requestId, uint8(RequestStatus.EXECUTED), uint8(RequestStatus.PENDING)
             )
         );
-        callback.fulfillExternalCallback(requestId, "", 0, bytes32(0));
+        callback.fulfillExternalCallback(requestId, "");
     }
 
     function test_FulfillExternalCallback_RevertWhen_InvalidRequestId() public {
@@ -452,7 +452,7 @@ contract UniversalCallbackTest is Test {
                 uint256(999), uint8(RequestStatus.NONE), uint8(RequestStatus.PENDING)
             )
         );
-        callback.fulfillExternalCallback(999, "", 0, bytes32(0));
+        callback.fulfillExternalCallback(999, "");
     }
 
     function test_FulfillExternalCallback_CallbackReverts_EmitsCallbackFailed() public {
@@ -472,7 +472,7 @@ contract UniversalCallbackTest is Test {
         emit IUniversalCallback.CallbackFailed(requestId, abi.encodeWithSignature("CustomError()"));
 
         vm.prank(ucallbackModule);
-        callback.fulfillExternalCallback(requestId, "", 0, bytes32(0));
+        callback.fulfillExternalCallback(requestId, "");
     }
 
     function test_ExpireExternalRead_Success() public {
@@ -673,7 +673,7 @@ contract UniversalCallbackTest is Test {
         uint256 vaultBefore = mockVault.totalReceived();
 
         vm.prank(ucallbackModule);
-        callback.fulfillExternalCallback(requestId, "", 0, bytes32(0));
+        callback.fulfillExternalCallback(requestId, "");
 
         // The clearest single expression of the new design.
         assertEq(address(callback).balance, balBefore);
@@ -791,7 +791,7 @@ contract UniversalCallbackTest is Test {
         uint256 requestId = _request();
 
         vm.prank(ucallbackModule);
-        callback.fulfillExternalCallback(requestId, "", 0, bytes32(0));
+        callback.fulfillExternalCallback(requestId, "");
         assertEq(callback.totalEscrowed(), BUDGET, "fulfill must not release escrow");
 
         vm.prank(ucallbackModule);
@@ -917,7 +917,7 @@ contract UniversalCallbackTest is Test {
         uint256 requestId = _request();
 
         vm.prank(ucallbackModule);
-        callback.fulfillExternalCallback(requestId, "", 0, bytes32(0));
+        callback.fulfillExternalCallback(requestId, "");
 
         vm.roll(defaultSpec.expiryPushChainHeight);
 
@@ -941,7 +941,7 @@ contract UniversalCallbackTest is Test {
 
         vm.prank(ucallbackModule);
         _expectBadStatus(requestId, RequestStatus.EXPIRED, RequestStatus.PENDING);
-        callback.fulfillExternalCallback(requestId, "", 0, bytes32(0));
+        callback.fulfillExternalCallback(requestId, "");
     }
 
     function test_Transition_DoubleExpire_Reverts() public {
@@ -960,7 +960,7 @@ contract UniversalCallbackTest is Test {
 
         vm.prank(ucallbackModule);
         _expectBadStatus(ghost, RequestStatus.NONE, RequestStatus.PENDING);
-        callback.fulfillExternalCallback(ghost, "", 0, bytes32(0));
+        callback.fulfillExternalCallback(ghost, "");
 
         vm.prank(ucallbackModule);
         _expectBadStatus(ghost, RequestStatus.NONE, RequestStatus.EXECUTED);
@@ -974,7 +974,7 @@ contract UniversalCallbackTest is Test {
     function test_Report_RevertWhen_NotUCallbackModule() public {
         uint256 requestId = _request();
         vm.prank(ucallbackModule);
-        callback.fulfillExternalCallback(requestId, "", 0, bytes32(0));
+        callback.fulfillExternalCallback(requestId, "");
 
         vm.expectRevert(abi.encodeWithSelector(UniversalCallbackErrors.CallerIsNotUCallbackModule.selector));
         callback.reportCallbackGas(requestId, 0);
@@ -1030,7 +1030,7 @@ contract UniversalCallbackTest is Test {
     function test_Report_EmitsRawAndClamped() public {
         uint256 requestId = _request();
         vm.prank(ucallbackModule);
-        callback.fulfillExternalCallback(requestId, "", 0, bytes32(0));
+        callback.fulfillExternalCallback(requestId, "");
 
         // Over-reporting must be observable on-chain.
         vm.expectEmit(true, true, true, true);
@@ -1086,7 +1086,7 @@ contract UniversalCallbackTest is Test {
         uint256 requestId = _request();
 
         vm.prank(ucallbackModule);
-        callback.fulfillExternalCallback(requestId, "", 0, bytes32(0));
+        callback.fulfillExternalCallback(requestId, "");
         vm.prank(ucallbackModule);
         uint256 burned = callback.reportCallbackGas(requestId, 0.2 ether);
 

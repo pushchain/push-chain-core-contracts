@@ -169,12 +169,12 @@ contract UniversalCallback is
         }
     }
 
-    function fulfillExternalCallback(
-        uint256 requestId,
-        bytes calldata resultData,
-        uint64 observedBlockHeight,
-        bytes32 observedBlockHash
-    ) external override onlyUCallbackModule nonReentrant {
+    function fulfillExternalCallback(uint256 requestId, bytes calldata resultData)
+        external
+        override
+        onlyUCallbackModule
+        nonReentrant
+    {
         _requireStatus(requestId, RequestStatus.PENDING);
 
         PendingRead memory p = _pending[requestId];
@@ -189,7 +189,7 @@ contract UniversalCallback is
         );
 
         if (success) {
-            emit ReadFulfilled(requestId, resultData, observedBlockHeight, observedBlockHash);
+            emit ReadFulfilled(requestId, resultData);
         } else {
             emit CallbackFailed(requestId, reason);
         }

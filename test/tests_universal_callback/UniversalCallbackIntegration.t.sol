@@ -78,7 +78,7 @@ contract UniversalCallbackIntegrationTest is Test {
 
         bytes memory result = abi.encode("ethPrice:3500");
         vm.prank(ucallbackModule);
-        callback.fulfillExternalCallback(requestId, result, 500, bytes32(uint256(0x123)));
+        callback.fulfillExternalCallback(requestId, result);
 
         assertTrue(callback.isFulfilled(requestId));
         assertEq(crossLend.lastResultData(), result);
@@ -105,7 +105,7 @@ contract UniversalCallbackIntegrationTest is Test {
         uint256 balanceBefore = address(revertingClient).balance;
 
         vm.prank(ucallbackModule);
-        callback.fulfillExternalCallback(requestId, result, 500, bytes32(uint256(0x123)));
+        callback.fulfillExternalCallback(requestId, result);
 
         uint256 gasBurned = 0.3 ether;
         vm.prank(ucallbackModule);
@@ -132,7 +132,7 @@ contract UniversalCallbackIntegrationTest is Test {
         for (uint256 i = 0; i < 3; i++) {
             bytes memory result = abi.encode(ids[i]);
             vm.prank(ucallbackModule);
-            callback.fulfillExternalCallback(ids[i], result, uint64(100 + i), bytes32(uint256(i)));
+            callback.fulfillExternalCallback(ids[i], result);
         }
 
         assertTrue(callback.isFulfilled(ids[0]));
@@ -156,7 +156,7 @@ contract UniversalCallbackIntegrationTest is Test {
 
         bytes memory result = abi.encode("ethPrice:3500");
         vm.prank(ucallbackModule);
-        callback.fulfillExternalCallback(requestId, result, 500, bytes32(uint256(0x123)));
+        callback.fulfillExternalCallback(requestId, result);
 
         assertTrue(callback.isFulfilled(requestId));
     }
@@ -198,7 +198,7 @@ contract UniversalCallbackIntegrationTest is Test {
                 requestId, uint8(RequestStatus.EXPIRED), uint8(RequestStatus.PENDING)
             )
         );
-        callback.fulfillExternalCallback(requestId, "", 0, bytes32(0));
+        callback.fulfillExternalCallback(requestId, "");
 
         assertEq(address(crossLend).balance, creditedOnce);
     }
@@ -229,7 +229,7 @@ contract UniversalCallbackIntegrationTest is Test {
         uint256 requestId = crossLend.lastRequestId();
 
         vm.prank(ucallbackModule);
-        callback.fulfillExternalCallback(requestId, abi.encode("x"), 500, bytes32(uint256(0x123)));
+        callback.fulfillExternalCallback(requestId, abi.encode("x"));
         vm.prank(ucallbackModule);
         uint256 burned = callback.reportCallbackGas(requestId, 0);
         vm.deal(address(callback), address(callback).balance - burned);
@@ -352,7 +352,7 @@ contract UniversalCallbackIntegrationTest is Test {
         uint256 requestId = reentrant.lastRequestId();
 
         vm.prank(ucallbackModule);
-        callback.fulfillExternalCallback(requestId, abi.encode("x"), 500, bytes32(0));
+        callback.fulfillExternalCallback(requestId, abi.encode("x"));
 
         // Semantic change integrators must know about: settlement now happens
         // AFTER the callback, so a client reading its own withdrawable balance
@@ -380,7 +380,7 @@ contract UniversalCallbackIntegrationTest is Test {
         uint256 requestId = crossLend.lastRequestId();
 
         vm.prank(ucallbackModule);
-        callback.fulfillExternalCallback(requestId, "", 0, bytes32(0));
+        callback.fulfillExternalCallback(requestId, "");
 
         vm.prank(pauser);
         callback.pause();

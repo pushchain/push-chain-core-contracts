@@ -75,7 +75,7 @@ contract UniversalReadClientTest is Test {
         bytes memory resultData = abi.encode("ethPrice");
 
         vm.prank(ucallbackModule);
-        callback.fulfillExternalCallback(requestId, resultData, 500, bytes32(uint256(0x123)));
+        callback.fulfillExternalCallback(requestId, resultData);
 
         assertEq(crossLend.lastResultData(), resultData);
         assertTrue(crossLend.lastLocalState().length > 0);
@@ -94,7 +94,7 @@ contract UniversalReadClientTest is Test {
         bytes memory data1 = abi.encode("data1");
 
         vm.prank(ucallbackModule);
-        callback.fulfillExternalCallback(firstId, data1, 100, bytes32(uint256(0x1)));
+        callback.fulfillExternalCallback(firstId, data1);
 
         assertEq(crossLend.lastResultData(), data1);
     }
@@ -109,7 +109,7 @@ contract UniversalReadClientTest is Test {
         vm.prank(ucallbackModule);
         vm.expectEmit(true, true, true, true);
         emit IUniversalCallback.CallbackFailed(requestId, abi.encodeWithSelector(RevertingReadClient.IntentionalRevert.selector));
-        callback.fulfillExternalCallback(requestId, "", 0, bytes32(0));
+        callback.fulfillExternalCallback(requestId, "");
     }
 
     function test_GetLocalContext_ReturnsStoredState() public {
@@ -172,7 +172,7 @@ contract UniversalReadClientTest is Test {
         uint256 requestId = crossLend.lastRequestId();
 
         vm.prank(ucallbackModule);
-        callback.fulfillExternalCallback(requestId, "", 0, bytes32(0));
+        callback.fulfillExternalCallback(requestId, "");
 
         bytes memory ctx = crossLend.getLocalContext(requestId);
         assertEq(ctx.length, 0);
