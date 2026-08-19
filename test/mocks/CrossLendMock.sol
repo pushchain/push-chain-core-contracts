@@ -25,7 +25,8 @@ contract CrossLendMock is UniversalReadClient {
             minConfirmations: 10,
             blockNumber: 100,
             expiryPushChainHeight: uint64(block.number + 1000),
-            maxFee: 100 ether
+            maxFee: 100 ether,
+            revertRecipient: address(this)
         });
 
         bytes memory localState = abi.encode(amount, msg.sender);
@@ -35,6 +36,7 @@ contract CrossLendMock is UniversalReadClient {
     }
 
     receive() external payable {}
+
 
     function _onReadResult(
         uint256 requestId,

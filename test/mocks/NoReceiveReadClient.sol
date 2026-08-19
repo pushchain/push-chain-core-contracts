@@ -5,8 +5,9 @@ import {UniversalReadClient} from "../../src/UniversalReadClient.sol";
 import {ReadSpec} from "../../src/libraries/ReadTypes.sol";
 import {UniversalAccountId} from "../../src/libraries/Types.sol";
 
-contract RevertingReadClient is UniversalReadClient {
-    error IntentionalRevert();
+/// @dev Client that deliberately omits `receive()`. Pins the documented footgun:
+///      a refund can be credited to it, but never claimed.
+contract NoReceiveReadClient is UniversalReadClient {
     uint256 public lastRequestId;
 
     constructor(
@@ -31,13 +32,10 @@ contract RevertingReadClient is UniversalReadClient {
         lastRequestId = _requestRead(spec, "", 200000);
     }
 
-    receive() external payable {}
 
     function _onReadResult(
         uint256 requestId,
         bytes calldata resultData,
         bytes memory localState
-    ) internal override {
-        revert IntentionalRevert();
-    }
+    ) internal override {}
 }

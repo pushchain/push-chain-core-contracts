@@ -21,7 +21,7 @@ contract UniversalCallbackFuzzTest is Test {
     CrossLendMock crossLend;
 
     address defaultAdmin = address(0xAAAA);
-    address ueModule = 0x14191Ea54B4c176fCf86f51b0FAc7CB1E71Df7d7;
+    address ucallbackModule = 0x07a0258D367A4A4cd9d6E4b7eEE8E7eF491CC519;
     address uvAdmin = address(0xBBBB);
     address user = address(0xCCCC);
     address pauser = address(0xDDDD);
@@ -79,7 +79,8 @@ contract UniversalCallbackFuzzTest is Test {
             minConfirmations: 10,
             blockNumber: 100,
             expiryPushChainHeight: uint64(block.number + 1000),
-            maxFee: 10 ether
+            maxFee: 10 ether,
+            revertRecipient: user
         });
 
         vm.deal(user, 10 ether);
@@ -111,6 +112,82 @@ contract UniversalCallbackFuzzTest is Test {
         assertTrue(callback.isDomainBlocked(chainNamespace, chainId));
     }
 
+    /// @dev The core accounting guarantee: every wei deposited ends up at the
+    ///      vault, burned, or owed back -- on every path, for any gas report.
+    function testFuzz_SettlementConservesValue(
+        uint256 deposit,
+        uint256 baseFee,
+        uint256 gasBurned,
+        bool expire
+    ) public {
+        deposit = bound(deposit, 0.01 ether, 100 ether);
+        baseFee = bound(baseFee, 0, deposit);
+        mockCore.setReadBaseFee("eip155", "1", baseFee);
+
+        ReadSpec memory spec = ReadSpec({
+            account: UniversalAccountId({
+                chainNamespace: "eip155",
+                chainId: "1",
+                owner: abi.encode(user)
+            }),
+            query: abi.encode("q"),
+            minConfirmations: 10,
+            blockNumber: 100,
+            expiryPushChainHeight: uint64(block.number + 1000),
+            maxFee: 1000 ether,
+            revertRecipient: user
+        });
+
+        vm.deal(user, deposit);
+        vm.prank(user);
+        uint256 requestId = callback.requestExternalReadSelf{value: deposit}(
+            spec, bytes4(keccak256("onResponse(uint256,bytes)")), 50000
+        );
+
+        uint256 budget = deposit - baseFee;
+
+        // The fee left at request time; only the budget is escrowed.
+        assertEq(callback.totalEscrowed(), budget);
+        assertEq(address(mockVault).balance, baseFee, "fee paid at request time");
+        assertGe(
+            address(callback).balance,
+            callback.totalEscrowed(),
+            "user funds must be backed while in flight"
+        );
+
+        uint256 burned;
+        if (expire) {
+            vm.roll(spec.expiryPushChainHeight);
+            vm.prank(ucallbackModule);
+            callback.expireExternalRead(requestId);
+        } else {
+            vm.prank(ucallbackModule);
+            callback.fulfillExternalCallback(requestId, "");
+
+            // Fulfillment settles nothing.
+            assertEq(callback.totalEscrowed(), budget, "fulfill released escrow");
+
+            vm.prank(ucallbackModule);
+            burned = callback.reportCallbackGas(requestId, gasBurned);
+            assertLe(burned, budget, "burn must never exceed the budget");
+
+            // Simulate the module's burn.
+            vm.deal(address(callback), address(callback).balance - burned);
+        }
+
+        uint256 owed = user.balance;
+
+        assertEq(address(mockVault).balance + burned + owed, deposit, "value must be conserved");
+        assertEq(address(mockVault).balance, baseFee, "protocol fee retained on every path");
+        assertEq(callback.totalEscrowed(), 0, "escrow released on settlement");
+        assertGe(
+            address(callback).balance,
+            callback.totalEscrowed(),
+            "user funds must remain backed after settlement"
+        );
+    }
+
+
     function testFuzz_RequestThenFulfillReturnsResult(bytes memory resultData) public {
         vm.assume(resultData.length <= 4096);
 
@@ -127,15 +204,16 @@ contract UniversalCallbackFuzzTest is Test {
             minConfirmations: 10,
             blockNumber: 100,
             expiryPushChainHeight: uint64(block.number + 1000),
-            maxFee: 10 ether
+            maxFee: 10 ether,
+            revertRecipient: user
         });
 
         uint256 requestId = callback.requestExternalReadSelf{value: 1 ether}(
             spec, bytes4(keccak256("onResponse(uint256,bytes)")), 50000
         );
 
-        vm.prank(ueModule);
-        callback.fulfillExternalCallback(requestId, resultData, 500, bytes32(uint256(0x123)));
+        vm.prank(ucallbackModule);
+        callback.fulfillExternalCallback(requestId, resultData);
 
         assertTrue(callback.isFulfilled(requestId));
     }

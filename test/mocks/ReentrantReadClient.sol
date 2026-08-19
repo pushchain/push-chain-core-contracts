@@ -5,9 +5,11 @@ import {UniversalReadClient} from "../../src/UniversalReadClient.sol";
 import {ReadSpec} from "../../src/libraries/ReadTypes.sol";
 import {UniversalAccountId} from "../../src/libraries/Types.sol";
 
-contract RevertingReadClient is UniversalReadClient {
-    error IntentionalRevert();
+/// @dev Client that re-enters `withdraw()` from inside its own callback, and
+///      records the balance it was credited before the callback ran.
+contract ReentrantReadClient is UniversalReadClient {
     uint256 public lastRequestId;
+    uint256 public creditSeenDuringCallback;
 
     constructor(
         address universalCallback_
@@ -28,16 +30,19 @@ contract RevertingReadClient is UniversalReadClient {
             revertRecipient: address(this)
         });
 
-        lastRequestId = _requestRead(spec, "", 200000);
+        lastRequestId = _requestRead(spec, "", 500000);
     }
 
     receive() external payable {}
+
 
     function _onReadResult(
         uint256 requestId,
         bytes calldata resultData,
         bytes memory localState
     ) internal override {
-        revert IntentionalRevert();
+        // Refunds are pushed at report time, which is after this callback runs,
+        // so a client can never observe its refund from in here.
+        creditSeenDuringCallback = address(this).balance;
     }
 }

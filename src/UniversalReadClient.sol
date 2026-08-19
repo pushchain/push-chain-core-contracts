@@ -17,11 +17,19 @@ abstract contract UniversalReadClient is IUniversalReadClient {
         UNIVERSAL_CALLBACK = IUniversalCallback(universalCallback_);
     }
 
+    /// @dev    Defaults `revertRecipient` to this contract when unset. Refunds are
+    ///         PUSHED there on settlement, so an inheriting contract that keeps the
+    ///         default MUST declare a payable `receive()` -- otherwise the push is
+    ///         rejected and the refund is forfeited. Point `revertRecipient` at an
+    ///         EOA to avoid that entirely.
     function _requestRead(
         ReadSpec memory spec,
         bytes memory localState,
         uint64 callbackGasLimit
     ) internal returns (uint256 requestId) {
+        if (spec.revertRecipient == address(0)) {
+            spec.revertRecipient = address(this);
+        }
         requestId = UNIVERSAL_CALLBACK.requestExternalReadSelf{value: msg.value}(
             spec, this.onUniversalData.selector, callbackGasLimit
         );
