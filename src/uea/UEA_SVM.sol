@@ -40,7 +40,7 @@ contract UEA_SVM is ReentrancyGuard, IUEA {
 
     /// @notice Ed25519 verifier precompile address.
     address public constant VERIFIER_PRECOMPILE =
-        0x00000000000000000000000000000000000000ca;
+        0xEC00000000000000000000000000000000000001;
 
     /// @notice Universal Executor Module — authorized to execute without signature.
     address public constant UNIVERSAL_EXECUTOR_MODULE =
