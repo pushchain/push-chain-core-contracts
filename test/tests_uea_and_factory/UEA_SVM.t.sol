@@ -14,8 +14,21 @@ import {IUEA} from "../../src/interfaces/IUEA.sol";
 import {ERC1967Proxy} from "@openzeppelin/contracts/proxy/ERC1967/ERC1967Proxy.sol";
 import {UEAProxy} from "../../src/uea/UEAProxy.sol";
 import {UEAMigration} from "../../src/uea/UEAMigration.sol";
+import {Clones} from "@openzeppelin/contracts/proxy/Clones.sol";
 
 contract UEASVMTest is Test {
+    using Clones for address;
+
+    /// @dev Incremented per clone so each gets a unique CREATE2 salt.
+    uint256 internal cloneSalt;
+
+    /// @dev Deploys an uninitialized UEA_SVM the way UEAFactory does — as an EIP-1167 clone.
+    ///      The implementation is locked by its constructor (F-2026-18955), so it can never be
+    ///      initialized directly; only clones can, and only once.
+    function _newUninitializedUEA() internal returns (UEA_SVM) {
+        return UEA_SVM(payable(address(svmSmartAccountImpl).cloneDeterministic(bytes32(++cloneSalt))));
+    }
+
     Target target;
     UEAFactory factory;
     UEA_SVM svmSmartAccountImpl;
@@ -81,7 +94,7 @@ contract UEASVMTest is Test {
 
     function testInitializeFunction() public {
         // Deploy a new implementation without using the factory
-        UEA_SVM newUEA = new UEA_SVM();
+        UEA_SVM newUEA = _newUninitializedUEA();
 
         // Create account ID
         UniversalAccountId memory _id =
@@ -99,7 +112,7 @@ contract UEASVMTest is Test {
 
     function testRevertWhenInitializingTwice() public {
         // Deploy a new implementation without using the factory
-        UEA_SVM newUEA = new UEA_SVM();
+        UEA_SVM newUEA = _newUninitializedUEA();
 
         // Create account ID
         UniversalAccountId memory _id =
@@ -134,7 +147,7 @@ contract UEASVMTest is Test {
 
     function testVersionConstant() public {
         // Deploy a new implementation
-        UEA_SVM newUEA = new UEA_SVM();
+        UEA_SVM newUEA = _newUninitializedUEA();
 
         // Check the version constant
         assertEq(newUEA.VERSION(), "1.0.0", "VERSION constant should be 1.0.0");
@@ -142,7 +155,7 @@ contract UEASVMTest is Test {
 
     function testVerifierPrecompileConstant() public {
         // Deploy a new implementation
-        UEA_SVM newUEA = new UEA_SVM();
+        UEA_SVM newUEA = _newUninitializedUEA();
 
         // Check the VERIFIER_PRECOMPILE constant
         assertEq(
@@ -734,7 +747,7 @@ contract UEASVMTest is Test {
 
     function testReceiveFunction() public {
         // Deploy a new implementation
-        UEA_SVM newUEA = new UEA_SVM();
+        UEA_SVM newUEA = _newUninitializedUEA();
 
         // Initialize it
         UniversalAccountId memory _id =
@@ -1285,6 +1298,40 @@ contract UEASVMTest is Test {
         svmSmartAccountInstance.executeUniversalTx(payload, signature);
 
         assertEq(previousNonce, svmSmartAccountInstance.nonce(), "Nonce should not have changed");
+    }
+
+    // =========================
+    //  SINGLETON INITIALIZATION LOCK (F-2026-18955 / PCORSCDD-23)
+    // =========================
+
+    /// @notice The UEA_SVM implementation singleton must be locked at deployment.
+    /// @dev    An attacker who initialized the singleton would control `ueaFactory`, and so the
+    ///         `delegatecall` target resolved by `_handleMigration`.
+    function testImplementation_isLockedAtDeployment() public {
+        UEA_SVM freshImpl = new UEA_SVM();
+
+        UniversalAccountId memory attackerId = UniversalAccountId({
+            chainNamespace: "solana",
+            chainId: "5eykt4UsFv8P8NJdTREpY1vzqKqZKvdpKuc147dw2N9d",
+            owner: abi.encodePacked(address(0xBAD))
+        });
+
+        vm.prank(address(0xBAD));
+        vm.expectRevert(Errors.AccountAlreadyExists.selector);
+        freshImpl.initialize(attackerId, address(0xBAD));
+    }
+
+    /// @notice The singleton deployed in setUp is locked too, not just a freshly built one.
+    function testDeployedImplementation_cannotBeClaimed() public {
+        UniversalAccountId memory attackerId = UniversalAccountId({
+            chainNamespace: "solana",
+            chainId: "5eykt4UsFv8P8NJdTREpY1vzqKqZKvdpKuc147dw2N9d",
+            owner: abi.encodePacked(address(0xBAD))
+        });
+
+        vm.prank(address(0xBAD));
+        vm.expectRevert(Errors.AccountAlreadyExists.selector);
+        svmSmartAccountImpl.initialize(attackerId, address(0xBAD));
     }
 }
 

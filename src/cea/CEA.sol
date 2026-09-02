@@ -47,6 +47,15 @@ contract CEA is ICEA, ReentrancyGuard {
     //    CEA: INITIALIZER
     // =========================
 
+    /// @notice Locks the implementation singleton so it can never be initialized.
+    /// @dev    Only clones are initialized, via CEAFactory. The singleton itself must stay
+    ///         unclaimed: an attacker who initialized it would control `factory`, which backs
+    ///         both the `onlyVault` check and the `delegatecall` target in `_handleMigration`.
+    ///         Constructors do not run for clones, so clone storage is unaffected.
+    constructor() {
+        _initialized = true;
+    }
+
     /// @inheritdoc ICEA
     function initializeCEA(address _pushAccount, address _factory) external {
         if (_initialized) revert CEAErrors.AlreadyInitialized();

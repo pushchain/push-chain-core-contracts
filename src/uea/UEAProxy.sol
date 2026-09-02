@@ -27,6 +27,14 @@ contract UEAProxy is Initializable, Proxy {
     //    UP: INITIALIZER
     // =========================
 
+    /// @notice Locks the proxy template so it can never be initialized.
+    /// @dev    Only clones of this template are initialized, via UEAFactory.
+    ///         Constructors do not run for clones, so clone storage is unaffected.
+    /// @custom:oz-upgrades-unsafe-allow constructor
+    constructor() {
+        _disableInitializers();
+    }
+
     /// @notice              Initializes the proxy with a UEA implementation.
     /// @dev                 Can only be called once. Intended caller: UEAFactory.
     /// @param _logic        Address of the UEA implementation contract

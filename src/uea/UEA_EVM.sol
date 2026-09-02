@@ -70,6 +70,15 @@ contract UEA_EVM is ReentrancyGuard, IUEA {
     //    UE: INITIALIZER
     // =========================
 
+    /// @notice Locks the implementation singleton so it can never be initialized.
+    /// @dev    Only clones are initialized, via UEAFactory. The singleton itself must stay
+    ///         unclaimed: an attacker who initialized it would control `ueaFactory`, and thus
+    ///         the `delegatecall` target resolved in `_handleMigration`.
+    ///         Constructors do not run for clones, so clone storage is unaffected.
+    constructor() {
+        _initialized = true;
+    }
+
     /// @inheritdoc IUEA
     function initialize(UniversalAccountId memory _id, address _factory) external {
         if (_initialized) {

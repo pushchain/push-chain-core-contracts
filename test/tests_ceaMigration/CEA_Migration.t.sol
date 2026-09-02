@@ -11,12 +11,25 @@ import "../../src/cea/CEAMigration.sol";
 import {CEAErrors as Errors} from "../../src/libraries/Errors.sol";
 import {Multicall, MULTICALL_SELECTOR, MIGRATION_SELECTOR} from "../../src/libraries/Types.sol";
 import {ERC1967Proxy} from "@openzeppelin/contracts/proxy/ERC1967/ERC1967Proxy.sol";
+import {Clones} from "@openzeppelin/contracts/proxy/Clones.sol";
 
 /**
  * @title CEA_MigrationTest
  * @notice Unit tests for CEA migration functionality
  */
 contract CEA_MigrationTest is Test {
+    using Clones for address;
+
+    /// @dev Incremented per clone so each gets a unique CREATE2 salt.
+    uint256 internal cloneSalt;
+
+    /// @dev Deploys an uninitialized CEA the way CEAFactory does — as an EIP-1167 clone.
+    ///      The CEA implementation is locked by its constructor (F-2026-18955), so it can never
+    ///      be initialized directly; only clones can, and only once.
+    function _newUninitializedCEA() internal returns (CEA) {
+        return CEA(payable(address(ceaImplementation).cloneDeterministic(bytes32(++cloneSalt))));
+    }
+
     CEA public ceaImplementation;
     CEAProxy public ceaProxyImplementation;
     CEAFactory public factory;
@@ -85,7 +98,7 @@ contract CEA_MigrationTest is Test {
     // =========================================================================
 
     function test_initializeCEA_WithFactory() public {
-        CEA newCEA = new CEA();
+        CEA newCEA = _newUninitializedCEA();
 
         newCEA.initializeCEA(ueaOnPush, address(factory));
 
@@ -94,7 +107,7 @@ contract CEA_MigrationTest is Test {
     }
 
     function test_initializeCEA_ZeroFactory() public {
-        CEA newCEA = new CEA();
+        CEA newCEA = _newUninitializedCEA();
 
         vm.expectRevert(Errors.ZeroAddress.selector);
         newCEA.initializeCEA(ueaOnPush, address(0));

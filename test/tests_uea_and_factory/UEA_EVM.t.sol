@@ -15,8 +15,22 @@ import {IUEA} from "../../src/interfaces/IUEA.sol";
 import {ERC1967Proxy} from "@openzeppelin/contracts/proxy/ERC1967/ERC1967Proxy.sol";
 import {UEAProxy} from "../../src/uea/UEAProxy.sol";
 import {UEAMigration} from "../../src/uea/UEAMigration.sol";
+import {Initializable} from "@openzeppelin/contracts/proxy/utils/Initializable.sol";
+import {Clones} from "@openzeppelin/contracts/proxy/Clones.sol";
 
 contract UEA_EVMTest is Test {
+    using Clones for address;
+
+    /// @dev Incremented per clone so each gets a unique CREATE2 salt.
+    uint256 internal cloneSalt;
+
+    /// @dev Deploys an uninitialized UEA_EVM the way UEAFactory does — as an EIP-1167 clone.
+    ///      The implementation is locked by its constructor (F-2026-18955), so it can never be
+    ///      initialized directly; only clones can, and only once.
+    function _newUninitializedUEA() internal returns (UEA_EVM) {
+        return UEA_EVM(payable(address(ueaEVMImpl).cloneDeterministic(bytes32(++cloneSalt))));
+    }
+
     Target target;
     UEAFactory factory;
     UEA_EVM ueaEVMImpl;
@@ -93,7 +107,7 @@ contract UEA_EVMTest is Test {
 
     function testInitializeFunction() public {
         // Deploy a new implementation without using the factory
-        UEA_EVM newUEA = new UEA_EVM();
+        UEA_EVM newUEA = _newUninitializedUEA();
 
         // Create account ID
         UniversalAccountId memory _id = UniversalAccountId({chainNamespace: "eip155", chainId: "1", owner: ownerBytes});
@@ -110,7 +124,7 @@ contract UEA_EVMTest is Test {
 
     function testRevertWhenInitializingTwice() public {
         // Deploy a new implementation without using the factory
-        UEA_EVM newUEA = new UEA_EVM();
+        UEA_EVM newUEA = _newUninitializedUEA();
 
         // Create account ID
         UniversalAccountId memory _id = UniversalAccountId({chainNamespace: "eip155", chainId: "1", owner: ownerBytes});
@@ -146,7 +160,7 @@ contract UEA_EVMTest is Test {
 
     function testVersionConstant() public {
         // Deploy a new implementation
-        UEA_EVM newUEA = new UEA_EVM();
+        UEA_EVM newUEA = _newUninitializedUEA();
 
         // Check the version constant
         assertEq(newUEA.VERSION(), "1.0.0", "VERSION constant should be 1.0.0");
@@ -811,7 +825,7 @@ contract UEA_EVMTest is Test {
 
     function testReceiveFunction() public {
         // Deploy a new implementation
-        UEA_EVM newUEA = new UEA_EVM();
+        UEA_EVM newUEA = _newUninitializedUEA();
 
         // Initialize it
         UniversalAccountId memory _id = UniversalAccountId({chainNamespace: "eip155", chainId: "1", owner: ownerBytes});
@@ -1207,6 +1221,63 @@ contract UEA_EVMTest is Test {
 
         // Verify execution succeeded
         assertEq(target.getMagicNumber(), 999, "Execution should succeed with valid signature");
+    }
+
+    // =========================
+    //  SINGLETON INITIALIZATION LOCK (F-2026-18955 / PCORSCDD-23)
+    // =========================
+
+    /// @notice The UEA_EVM implementation singleton must be locked at deployment.
+    /// @dev    An attacker who initialized the singleton would control `ueaFactory`, and so the
+    ///         `delegatecall` target resolved by `_handleMigration`.
+    function testImplementation_isLockedAtDeployment() public {
+        UEA_EVM freshImpl = new UEA_EVM();
+
+        UniversalAccountId memory attackerId =
+            UniversalAccountId({chainNamespace: "eip155", chainId: "1", owner: abi.encodePacked(address(0xBAD))});
+
+        vm.prank(address(0xBAD));
+        vm.expectRevert(Errors.AccountAlreadyExists.selector);
+        freshImpl.initialize(attackerId, address(0xBAD));
+    }
+
+    /// @notice The singleton deployed in setUp is locked too, not just a freshly built one.
+    function testDeployedImplementation_cannotBeClaimed() public {
+        UniversalAccountId memory attackerId =
+            UniversalAccountId({chainNamespace: "eip155", chainId: "1", owner: abi.encodePacked(address(0xBAD))});
+
+        vm.prank(address(0xBAD));
+        vm.expectRevert(Errors.AccountAlreadyExists.selector);
+        ueaEVMImpl.initialize(attackerId, address(0xBAD));
+    }
+
+    /// @notice The UEAProxy template must be locked, while its clones still initialize normally.
+    function testUEAProxyImplementation_isLockedAtDeployment() public {
+        UEAProxy freshProxyImpl = new UEAProxy();
+
+        vm.prank(address(0xBAD));
+        vm.expectRevert(Initializable.InvalidInitialization.selector);
+        freshProxyImpl.initializeUEA(address(ueaEVMImpl));
+    }
+
+    /// @notice Locking the templates must not break the normal factory deployment path.
+    /// @dev    Clones do not run constructors, so their `_initialized` flag starts false and the
+    ///         factory can still initialize them.
+    function testCloneDeployment_stillWorksAfterLock() public {
+        UniversalAccountId memory id =
+            UniversalAccountId({chainNamespace: "eip155", chainId: "1", owner: abi.encodePacked(address(0xC0FFEE))});
+
+        address clone = factory.deployUEA(id);
+
+        assertTrue(clone != address(0), "Clone should deploy");
+        assertTrue(clone != address(ueaEVMImpl), "Clone must not be the singleton");
+        assertEq(
+            UEAProxy(payable(clone)).getImplementation(), address(ueaEVMImpl), "Clone should point at the singleton"
+        );
+
+        // The clone is initialized, so re-initializing it must revert.
+        vm.expectRevert(Errors.AccountAlreadyExists.selector);
+        IUEA(payable(clone)).initialize(id, address(factory));
     }
 }
 

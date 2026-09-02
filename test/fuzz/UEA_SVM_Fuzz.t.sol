@@ -13,8 +13,21 @@ import {UEAProxy} from "../../src/uea/UEAProxy.sol";
 import {UEAMigration} from "../../src/uea/UEAMigration.sol";
 import {IUEA} from "../../src/interfaces/IUEA.sol";
 import {ERC1967Proxy} from "@openzeppelin/contracts/proxy/ERC1967/ERC1967Proxy.sol";
+import {Clones} from "@openzeppelin/contracts/proxy/Clones.sol";
 
 contract UEA_SVM_FuzzTest is Test {
+    using Clones for address;
+
+    /// @dev Incremented per clone so each gets a unique CREATE2 salt.
+    uint256 internal cloneSalt;
+
+    /// @dev Deploys an uninitialized UEA_SVM the way UEAFactory does — as an EIP-1167 clone.
+    ///      The implementation is locked by its constructor (F-2026-18955), so it can never be
+    ///      initialized directly; only clones can, and only once.
+    function _newUninitializedUEA() internal returns (UEA_SVM) {
+        return UEA_SVM(payable(address(ueaSVMImpl).cloneDeterministic(bytes32(++cloneSalt))));
+    }
+
     Target target;
     UEAFactory factory;
     UEA_EVM ueaEVMImpl;
@@ -93,7 +106,7 @@ contract UEA_SVM_FuzzTest is Test {
         vm.assume(bytes(chainId).length > 0 && bytes(chainId).length < 64);
 
         // Deploy fresh SVM impl with a string chainId
-        UEA_SVM freshSVM = new UEA_SVM();
+        UEA_SVM freshSVM = _newUninitializedUEA();
         bytes memory ownerB = abi.encodePacked(bytes32(uint256(0xabcd)));
         UniversalAccountId memory id = UniversalAccountId({chainNamespace: "solana", chainId: chainId, owner: ownerB});
         freshSVM.initialize(id, address(factory));
@@ -107,7 +120,7 @@ contract UEA_SVM_FuzzTest is Test {
 
         // Verify that a different chainId produces a different domain separator
         string memory differentChainId = string(abi.encodePacked(chainId, "x"));
-        UEA_SVM otherSVM = new UEA_SVM();
+        UEA_SVM otherSVM = _newUninitializedUEA();
         UniversalAccountId memory otherId =
             UniversalAccountId({chainNamespace: "solana", chainId: differentChainId, owner: ownerB});
         otherSVM.initialize(otherId, address(factory));

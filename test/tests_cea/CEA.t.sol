@@ -25,8 +25,26 @@ import {TokenSpenderTarget} from "../mocks/TokenSpenderTarget.sol";
 import {RevertingTarget} from "../mocks/RevertingTarget.sol";
 import {ERC1967Proxy} from "@openzeppelin/contracts/proxy/ERC1967/ERC1967Proxy.sol";
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
+import {Clones} from "@openzeppelin/contracts/proxy/Clones.sol";
 
 contract CEATest is Test {
+    using Clones for address;
+
+    /// @dev Incremented per clone so each gets a unique CREATE2 salt.
+    uint256 internal cloneSalt;
+
+    /// @dev Deploys an uninitialized CEA the way CEAFactory does — as an EIP-1167 clone.
+    ///      The CEA implementation is locked by its constructor (F-2026-18955), so it can never
+    ///      be initialized directly; only clones can, and only once.
+    function _newUninitializedCEA() internal returns (CEA) {
+        return CEA(payable(address(ceaImplementation).cloneDeterministic(bytes32(++cloneSalt))));
+    }
+
+    /// @dev Deploys an uninitialized CEAProxy as a clone of the locked template.
+    function _newUninitializedCEAProxy() internal returns (CEAProxy) {
+        return CEAProxy(payable(address(ceaProxyImplementation).cloneDeterministic(bytes32(++cloneSalt))));
+    }
+
     // Core contracts
     CEA public ceaImplementation;
     CEAProxy public ceaProxyImplementation;
@@ -284,7 +302,7 @@ contract CEATest is Test {
     }
 
     function testRevertWhenInitializingTwice() public {
-        CEA newCEA = new CEA();
+        CEA newCEA = _newUninitializedCEA();
 
         newCEA.initializeCEA(ueaOnPush, address(factory));
 
@@ -293,23 +311,29 @@ contract CEATest is Test {
     }
 
     function testRevertWhenInitializingWithZeroUEA() public {
-        CEA newCEA = new CEA();
+        CEA newCEA = _newUninitializedCEA();
 
         vm.expectRevert(Errors.ZeroAddress.selector);
         newCEA.initializeCEA(address(0), address(factory));
     }
 
     function testRevertWhenInitializingWithZeroFactory() public {
-        CEA newCEA = new CEA();
+        CEA newCEA = _newUninitializedCEA();
 
         vm.expectRevert(Errors.ZeroAddress.selector);
         newCEA.initializeCEA(ueaOnPush, address(0));
     }
 
     function testIsInitializedBeforeInitialization() public {
-        CEA newCEA = new CEA();
+        CEA newCEA = _newUninitializedCEA();
 
         assertFalse(newCEA.isInitialized(), "CEA should not be initialized before initializeCEA is called");
+    }
+
+    /// @dev F-2026-18955: the implementation singleton is locked at deployment, so unlike a
+    ///      clone it reports initialized immediately and can never be claimed.
+    function testIsInitialized_implementationIsLockedFromDeployment() public view {
+        assertTrue(ceaImplementation.isInitialized(), "CEA implementation must be locked at deployment");
     }
 
     function testFactoryDeployment() public {
@@ -1765,7 +1789,7 @@ contract CEATest is Test {
     // =========================================================================
 
     function testCEAProxy_InitializeWithZeroLogic_Reverts() public {
-        CEAProxy proxy = new CEAProxy();
+        CEAProxy proxy = _newUninitializedCEAProxy();
         vm.expectRevert(Errors.InvalidCall.selector);
         proxy.initializeCEAProxy(address(0));
     }
@@ -1785,6 +1809,57 @@ contract CEATest is Test {
         // because _implementation() reverts when impl == address(0)
         vm.expectRevert(Errors.InvalidCall.selector);
         CEA(payable(rawClone)).pushAccount();
+    }
+
+    // =========================
+    //  SINGLETON INITIALIZATION LOCK (F-2026-18955 / PCORSCDD-23)
+    // =========================
+
+    /// @notice The CEA implementation singleton must be locked at deployment.
+    /// @dev    An attacker who initialized the singleton would control `factory`, which backs both
+    ///         the `onlyVault` check and the `delegatecall` target in `_handleMigration`.
+    function testImplementation_isLockedAtDeployment() public {
+        CEA freshImpl = new CEA();
+
+        vm.prank(address(0xBAD));
+        vm.expectRevert(Errors.AlreadyInitialized.selector);
+        freshImpl.initializeCEA(address(0xBAD), address(0xBAD));
+    }
+
+    /// @notice The singleton deployed in setUp is locked too, not just a freshly built one.
+    function testDeployedImplementation_cannotBeClaimed() public {
+        vm.prank(address(0xBAD));
+        vm.expectRevert(Errors.AlreadyInitialized.selector);
+        ceaImplementation.initializeCEA(address(0xBAD), address(0xBAD));
+    }
+
+    /// @notice The CEAProxy template must be locked against direct initialization.
+    /// @dev    Uses the raw OZ `InvalidInitialization()` selector rather than importing
+    ///         Initializable, which would clash with the upgradeable variant used by CEAFactory.
+    function testCEAProxyImplementation_isLockedAtDeployment() public {
+        CEAProxy freshProxyImpl = new CEAProxy();
+
+        vm.prank(address(0xBAD));
+        vm.expectRevert(bytes4(keccak256("InvalidInitialization()")));
+        freshProxyImpl.initializeCEAProxy(address(ceaImplementation));
+    }
+
+    /// @notice Locking the templates must not break the normal factory deployment path.
+    /// @dev    Clones do not run constructors, so their `_initialized` flag starts false and the
+    ///         factory can still initialize them.
+    function testCloneDeployment_stillWorksAfterLock() public {
+        address newUea = makeAddr("newUeaOnPush");
+
+        vm.prank(vault);
+        address clone = factory.deployCEA(newUea);
+
+        assertTrue(clone != address(0), "Clone should deploy");
+        assertTrue(clone != address(ceaImplementation), "Clone must not be the singleton");
+        assertEq(CEA(payable(clone)).pushAccount(), newUea, "Clone should be initialized");
+
+        // The clone is initialized, so re-initializing it must revert.
+        vm.expectRevert(Errors.AlreadyInitialized.selector);
+        CEA(payable(clone)).initializeCEA(address(0xBAD), address(0xBAD));
     }
 }
 
