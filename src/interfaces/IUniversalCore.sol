@@ -191,6 +191,126 @@ interface IUniversalCore {
     /// @notice Get the UniversalGatewayPC address.
     function universalGatewayPC() external view returns (address);
 
+    // =========================
+    //    UC: PC20 EXPORT
+    // =========================
+
+    /// @notice                      Get gas and fee quote for a PC20 export to a destination chain.
+    /// @param destChainNamespace    Destination chain (CAIP-2, e.g., "eip155:1")
+    /// @param gasLimit              Caller-provided gas limit (0 = use per-chain base)
+    /// @param pc20Token             PC20 token address (for protocol fee lookup)
+    /// @return gasToken             Gas token PRC20 address for the destination chain
+    /// @return gasFee               Gas fee (gasPrice * gasLimitUsed)
+    /// @return protocolFee          Protocol fee in native PC
+    /// @return gasPrice             Gas price on the destination chain
+    /// @return chainNamespace       Destination chain namespace (echoed back)
+    /// @return gasLimitUsed         Effective gas limit used to compute gasFee
+    /// @return isFirstExport        True if pc20DeploymentGasOverhead > 0 for this chain
+    function getPC20ExportGasAndFees(
+        string memory destChainNamespace,
+        uint256 gasLimit,
+        address pc20Token
+    )
+        external
+        view
+        returns (
+            address gasToken,
+            uint256 gasFee,
+            uint256 protocolFee,
+            uint256 gasPrice,
+            string memory chainNamespace,
+            uint256 gasLimitUsed,
+            bool isFirstExport
+        );
+
+    /// @notice                      Get the PC20 deployment gas overhead for a chain.
+    /// @param chainNamespace        Chain namespace
+    /// @return overhead             Gas overhead (0 = no overhead)
+    function pc20DeploymentGasOverhead(string memory chainNamespace) external view returns (uint256 overhead);
+
+    /// @notice                      Set deployment gas overhead for first-ever PC20 export to a chain.
+    /// @param chainNamespace        Chain namespace
+    /// @param overhead              Gas overhead (0 = reset after first deployment)
+    function updatePC20DeploymentGasOverhead(string memory chainNamespace, uint256 overhead) external;
+
+    event SetPC20DeploymentGasOverhead(string chainNamespace, uint256 overhead);
+
+    // =========================
+    //    UC: PC20 REGISTRY
+    // =========================
+
+    event SetPC20Deployed(address indexed sourceAsset, string destChain, bytes32 wrapper);
+    event SetPC20FactoryByChain(string chainNamespace, bytes32 factory);
+
+    /// @notice                  Check if a PC20 wrapper is deployed for a source asset on a chain.
+    /// @param sourceAsset       Source asset address on Push Chain
+    /// @param destChain         Destination chain namespace
+    /// @return                  True if wrapper is deployed
+    function pc20Deployed(address sourceAsset, string memory destChain) external view returns (bool);
+
+    /// @notice                  Get the wrapper identity for a source asset on a chain.
+    /// @param sourceAsset       Source asset address on Push Chain
+    /// @param destChain         Destination chain namespace
+    /// @return wrapper          Wrapper identity (bytes32; 20-byte EVM address left-padded, or 32-byte Solana PDA)
+    /// @return deployed         True if wrapper is deployed
+    function getPC20Wrapper(
+        address sourceAsset,
+        string memory destChain
+    ) external view returns (bytes32 wrapper, bool deployed);
+
+    /// @notice                  Get the source asset for a wrapper on a chain.
+    /// @param wrapper           Wrapper identity (bytes32; left-padded EVM address or raw Solana PDA)
+    /// @param destChain         Chain namespace
+    /// @return sourceAsset      Source asset address on Push Chain
+    /// @return known            True if mapping exists
+    function getPC20Source(
+        bytes32 wrapper,
+        string memory destChain
+    ) external view returns (address sourceAsset, bool known);
+
+    /// @notice                  Mark a PC20 wrapper as deployed. Idempotent.
+    /// @param sourceAsset       Source asset address on Push Chain
+    /// @param destChain         Destination chain namespace
+    /// @param wrapper           Deployed wrapper identity (bytes32; left-padded EVM address or raw Solana PDA)
+    function setWrapperDeployed(
+        address sourceAsset,
+        string calldata destChain,
+        bytes32 wrapper
+    ) external;
+
+    /// @notice                  Set the PC20Factory address for a chain.
+    /// @param chainNamespace    Chain namespace
+    /// @param factory           PC20Factory identity (bytes32; left-padded EVM address or raw Solana program ID)
+    function updatePC20FactoryByChain(
+        string memory chainNamespace,
+        bytes32 factory
+    ) external;
+
+    /// @notice                  Get the PC20Factory identity for a chain.
+    /// @param chainNamespace    Chain namespace
+    /// @return factory          PC20Factory identity (bytes32)
+    function pc20FactoryByChain(
+        string memory chainNamespace
+    ) external view returns (bytes32 factory);
+
+    /// @notice                  Get the wrapper identity for a source asset on a chain.
+    /// @param sourceAsset       Source asset address
+    /// @param destChain         Destination chain namespace
+    /// @return wrapper          Wrapper identity (bytes32)
+    function pc20WrapperBySource(
+        address sourceAsset,
+        string memory destChain
+    ) external view returns (bytes32 wrapper);
+
+    /// @notice                  Get the source asset for a wrapper on a chain.
+    /// @param destChain         Chain namespace
+    /// @param wrapper           Wrapper identity (bytes32)
+    /// @return sourceAsset      Source asset address
+    function pc20SourceByWrapper(
+        string memory destChain,
+        bytes32 wrapper
+    ) external view returns (address sourceAsset);
+
     /// @notice                 Get the read base fee for a chain (flat rate, in wei of native PC).
     /// @param chainNamespace   Chain namespace (e.g. "eip155")
     /// @param chainId          Chain ID (e.g. "1" for Ethereum mainnet)

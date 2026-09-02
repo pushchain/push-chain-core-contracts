@@ -99,8 +99,19 @@ contract UniversalCore is
     /// @notice TSS fund migration gas limit per chain namespace.
     mapping(string => uint256) public tssFundMigrationGasLimitByChainNamespace;
 
+    // -- PC20 export config --
+    mapping(string => uint256) public pc20DeploymentGasOverhead;
+
+    // -- PC20 registry --
+    mapping(address => mapping(string => bytes32)) public pc20WrapperBySource;
+    mapping(string => mapping(bytes32 => address)) public pc20SourceByWrapper;
+    mapping(string => bytes32) public pc20FactoryByChain;
+
     /// @notice Admin-set flat read base fee per chain namespace + chain ID.
-    /// @dev    Used by UniversalCallback to compute the read fee.
+    /// @dev    Read by UniversalCallback (0x…C2) when pricing a read request.
+    ///         Appended after every pre-existing variable on purpose: this contract
+    ///         is live behind the 0x…C0 proxy, so inserting anywhere earlier would
+    ///         shift the slot of every variable below it and corrupt existing state.
     mapping(string => mapping(string => uint256)) public readBaseFeeByChainNamespace;
 
     // =========================
@@ -352,6 +363,54 @@ contract UniversalCore is
         gasFee = gasPrice * rescueGasLimit;
     }
 
+    /// @inheritdoc IUniversalCore
+    function getPC20ExportGasAndFees(
+        string memory destChainNamespace,
+        uint256 gasLimit,
+        address pc20Token
+    )
+        public
+        view
+        returns (
+            address gasToken,
+            uint256 gasFee,
+            uint256 protocolFee,
+            uint256 gasPrice,
+            string memory chainNamespace,
+            uint256 gasLimitUsed,
+            bool isFirstExport
+        )
+    {
+        gasToken = gasTokenPRC20ByChainNamespace[destChainNamespace];
+        if (gasToken == address(0)) revert CommonErrors.ZeroAddress();
+
+        gasPrice = gasPriceByChainNamespace[destChainNamespace];
+        if (gasPrice == 0) revert UniversalCoreErrors.ZeroGasPrice();
+
+        uint256 baseLimit = baseGasLimitByChainNamespace[destChainNamespace];
+        if (baseLimit == 0) revert UniversalCoreErrors.ZeroBaseGasLimit();
+
+        _validateGasDataFreshness(destChainNamespace);
+
+        if (gasLimit == 0) {
+            gasLimitUsed = baseLimit;
+        } else if (gasLimit < baseLimit) {
+            revert UniversalCoreErrors.GasLimitBelowBase(gasLimit, baseLimit);
+        } else {
+            gasLimitUsed = gasLimit;
+        }
+
+        uint256 deployOverhead = pc20DeploymentGasOverhead[destChainNamespace];
+        if (deployOverhead > 0 && pc20WrapperBySource[pc20Token][destChainNamespace] == bytes32(0)) {
+            isFirstExport = true;
+            gasLimitUsed += deployOverhead;
+        }
+
+        gasFee = gasPrice * gasLimitUsed;
+        protocolFee = protocolFeeByToken[pc20Token];
+        chainNamespace = destChainNamespace;
+    }
+
     // =========================
     //    UC_4: ADMIN CONFIG
     // =========================
@@ -493,6 +552,65 @@ contract UniversalCore is
     {
         rescueFundsGasLimitByChainNamespace[chainNamespace] = gasLimit;
         emit SetRescueFundsGasLimitByChain(chainNamespace, gasLimit);
+    }
+
+    /// @inheritdoc IUniversalCore
+    function updatePC20DeploymentGasOverhead(
+        string memory chainNamespace,
+        uint256 overhead
+    ) external onlyRole(UVCORE_ADMIN_ROLE) {
+        pc20DeploymentGasOverhead[chainNamespace] = overhead;
+        emit SetPC20DeploymentGasOverhead(chainNamespace, overhead);
+    }
+
+    // =========================
+    //    UC: PC20 REGISTRY
+    // =========================
+
+    /// @inheritdoc IUniversalCore
+    function pc20Deployed(address sourceAsset, string memory destChain) external view returns (bool) {
+        return pc20WrapperBySource[sourceAsset][destChain] != bytes32(0);
+    }
+
+    /// @inheritdoc IUniversalCore
+    function getPC20Wrapper(
+        address sourceAsset,
+        string memory destChain
+    ) external view returns (bytes32 wrapper, bool deployed) {
+        wrapper = pc20WrapperBySource[sourceAsset][destChain];
+        deployed = wrapper != bytes32(0);
+    }
+
+    /// @inheritdoc IUniversalCore
+    function getPC20Source(
+        bytes32 wrapper,
+        string memory destChain
+    ) external view returns (address sourceAsset, bool known) {
+        sourceAsset = pc20SourceByWrapper[destChain][wrapper];
+        known = sourceAsset != address(0);
+    }
+
+    /// @inheritdoc IUniversalCore
+    function setWrapperDeployed(
+        address sourceAsset,
+        string calldata destChain,
+        bytes32 wrapper
+    ) external onlyUEModule {
+        if (sourceAsset == address(0)) revert CommonErrors.ZeroAddress();
+        if (wrapper == bytes32(0)) revert CommonErrors.InvalidInput();
+        if (pc20WrapperBySource[sourceAsset][destChain] != bytes32(0)) return;
+        pc20WrapperBySource[sourceAsset][destChain] = wrapper;
+        pc20SourceByWrapper[destChain][wrapper] = sourceAsset;
+        emit SetPC20Deployed(sourceAsset, destChain, wrapper);
+    }
+
+    /// @inheritdoc IUniversalCore
+    function updatePC20FactoryByChain(
+        string memory chainNamespace,
+        bytes32 factory
+    ) external onlyRole(OPERATOR_ROLE) {
+        pc20FactoryByChain[chainNamespace] = factory;
+        emit SetPC20FactoryByChain(chainNamespace, factory);
     }
 
     /// @notice                  Set the maximum acceptable age (seconds) of gas data for a chain.
