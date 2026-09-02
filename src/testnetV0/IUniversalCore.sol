@@ -1,55 +1,36 @@
 // SPDX-License-Identifier: MIT
 pragma solidity 0.8.26;
 
-/// @title  IUniversalCoreV0
-/// @notice Interface for the UniversalCoreV0 (testnet) contract.
-/// @dev    Standalone interface dedicated to UniversalCoreV0.
-interface IUniversalCoreV0 {
+/// @title  IUniversalCore
+/// @notice Interface for the UniversalCore (testnet) contract.
+/// @dev    Standalone interface dedicated to testnet UniversalCore.
+interface IUniversalCore {
     // =========================
     //    UCV0: EVENTS
     // =========================
 
-    event SetChainMeta(
-        string chainNamespace,
-        uint256 price,
-        uint256 chainHeight,
-        uint256 observedAt
-    );
-    event SetGasPrice(string chainNamespace, uint256 price);
+    event SetChainMeta(string chainNamespace, uint256 price, uint256 chainHeight, uint256 observedAt);
     event SetGasToken(string chainNamespace, address prc20);
     event SetDefaultDeadlineMins(uint256 minutesValue);
-    event SetSupportedToken(address indexed prc20, bool supported);
-    event SetGasPCPool(
-        string chainNamespace, address pool, uint24 fee
-    );
+    event SetMaxStalenessByChain(string chainNamespace, uint256 maxStaleness);
+    event SetL1GasFeeByChain(string chainNamespace, uint256 l1GasFee);
+    event SetTssFundMigrationGasLimitByChain(string chainNamespace, uint256 gasLimit);
+    event SetAutoSwapSupported(address indexed token, bool supported);
+    event SetWPC(address indexed oldAddr, address indexed newAddr);
+    event SetUniversalGatewayPC(address indexed oldAddr, address indexed newAddr);
+    event SetUniswapV3Addresses(address factory, address swapRouter);
+    event SetDefaultFeeTier(address indexed token, uint24 feeTier);
+    event RescueNativePC(address indexed to, uint256 amount);
+    event SetGasPCPool(string chainNamespace, address pool, uint24 fee);
     event DepositPRC20WithAutoSwap(
-        address prc20,
-        uint256 amountIn,
-        address pcToken,
-        uint256 amountOut,
-        uint24 fee,
-        address recipient
+        address prc20, uint256 amountIn, address pcToken, uint256 amountOut, uint24 fee, address recipient
     );
-    event SwapAndBurnGas(
-        address indexed gasToken,
-        uint256 pcIn,
-        uint256 gasFee,
-        uint24 fee,
-        address indexed caller
-    );
+    event SwapAndBurnGas(address indexed gasToken, uint256 pcIn, uint256 gasFee, uint24 fee, address indexed caller);
     event SetProtocolFeeByToken(address indexed token, uint256 fee);
-    event SetBaseGasLimitByChain(
-        string chainNamespace, uint256 gasLimit
-    );
-    event SetRescueFundsGasLimitByChain(
-        string chainNamespace, uint256 gasLimit
-    );
+    event SetBaseGasLimitByChain(string chainNamespace, uint256 gasLimit);
+    event SetRescueFundsGasLimitByChain(string chainNamespace, uint256 gasLimit);
     event RefundUnusedGas(
-        address indexed gasToken,
-        uint256 amount,
-        address indexed recipient,
-        bool swapped,
-        uint256 pcOut
+        address indexed gasToken, uint256 amount, address indexed recipient, bool swapped, uint256 pcOut
     );
 
     // =========================
@@ -60,11 +41,7 @@ interface IUniversalCoreV0 {
     /// @param prc20        PRC20 address for deposit
     /// @param amount       Amount to deposit
     /// @param recipient    Address to deposit tokens to
-    function depositPRC20Token(
-        address prc20,
-        uint256 amount,
-        address recipient
-    ) external;
+    function depositPRC20Token(address prc20, uint256 amount, address recipient) external;
 
     /// @notice             Deposits PRC20 tokens and automatically swaps them to
     ///                     native PC before sending to recipient.
@@ -99,15 +76,6 @@ interface IUniversalCoreV0 {
         uint256 minPCOut
     ) external;
 
-    /// @notice             Set gas price for a chain.
-    /// @dev                To Be Removed — use setChainMeta instead.
-    /// @param chainNamespace Chain Namespace
-    /// @param price        New gas price
-    function setGasPrice(
-        string memory chainNamespace,
-        uint256 price
-    ) external;
-
     // =========================
     //    UCV0_2: GATEWAY FUNCTIONS
     // =========================
@@ -120,52 +88,37 @@ interface IUniversalCoreV0 {
     /// @param caller           Address to receive unused PC refund
     /// @return gasTokenOut     Total gas token swapped (gasFee)
     /// @return refund          Unused PC refunded to caller
-    function swapAndBurnGas(
-        address gasToken,
-        uint24 fee,
-        uint256 gasFee,
-        uint256 deadline,
-        address caller
-    ) external payable returns (uint256 gasTokenOut, uint256 refund);
+    function swapAndBurnGas(address gasToken, uint24 fee, uint256 gasFee, uint256 deadline, address caller)
+        external
+        payable
+        returns (uint256 gasTokenOut, uint256 refund);
 
     // =========================
     //    UCV0_3: PUBLIC GETTERS
     // =========================
 
-    /// @notice                 Check if a PRC20 token is supported.
-    /// @param prc20            PRC20 token address
-    /// @return supported       Whether the token is supported
-    function isSupportedToken(
-        address prc20
-    ) external view returns (bool supported);
-
     /// @notice                 Get gas token PRC20 address for a chain.
     /// @param chainNamespace   Chain Namespace
     /// @return gasToken        Gas token address
-    function gasTokenPRC20ByChainNamespace(
-        string memory chainNamespace
-    ) external view returns (address gasToken);
+    function gasTokenPRC20ByChainNamespace(string memory chainNamespace) external view returns (address gasToken);
 
     /// @notice                 Get gas price for a chain.
     /// @param chainNamespace   Chain Namespace
     /// @return price           Gas price
-    function gasPriceByChainNamespace(
-        string memory chainNamespace
-    ) external view returns (uint256 price);
+    function gasPriceByChainNamespace(string memory chainNamespace) external view returns (uint256 price);
 
     /// @notice                 Get base gas limit for a chain.
     /// @param chainNamespace   Chain Namespace
     /// @return baseGasLimit    Base gas limit for the chain
-    function baseGasLimitByChainNamespace(
-        string memory chainNamespace
-    ) external view returns (uint256 baseGasLimit);
+    function baseGasLimitByChainNamespace(string memory chainNamespace) external view returns (uint256 baseGasLimit);
 
     /// @notice                      Get rescue funds gas limit for a chain.
     /// @param chainNamespace        Chain Namespace
     /// @return rescueGasLimit       Rescue funds gas limit for the chain
-    function rescueFundsGasLimitByChainNamespace(
-        string memory chainNamespace
-    ) external view returns (uint256 rescueGasLimit);
+    function rescueFundsGasLimitByChainNamespace(string memory chainNamespace)
+        external
+        view
+        returns (uint256 rescueGasLimit);
 
     /// @notice                 Get gas fee for a PRC20 token, split into gasFee and protocolFee.
     /// @dev                    When gasLimitWithBaseLimit is 0, falls back to per-chain base gas limit.
@@ -178,10 +131,8 @@ interface IUniversalCoreV0 {
     /// @return protocolFee     Protocol fee in native PC from protocolFeeByToken mapping
     /// @return gasPrice        Gas price on the external chain
     /// @return chainNamespace  Source chain namespace
-    function getOutboundTxGasAndFees(
-        address _prc20,
-        uint256 gasLimitWithBaseLimit
-    )
+    /// @return gasLimitUsed    Effective gas limit used in calculation
+    function getOutboundTxGasAndFees(address _prc20, uint256 gasLimitWithBaseLimit)
         external
         view
         returns (
@@ -189,7 +140,8 @@ interface IUniversalCoreV0 {
             uint256 gasFee,
             uint256 protocolFee,
             uint256 gasPrice,
-            string memory chainNamespace
+            string memory chainNamespace,
+            uint256 gasLimitUsed
         );
 
     /// @notice                 Get rescue funds gas limit, fee, and related config for a PRC20 token.
@@ -199,9 +151,7 @@ interface IUniversalCoreV0 {
     /// @return rescueGasLimit  Rescue funds gas limit for the chain
     /// @return gasPrice        Gas price on the external chain
     /// @return chainNamespace  Source chain namespace
-    function getRescueFundsGasLimit(
-        address _prc20
-    )
+    function getRescueFundsGasLimit(address _prc20)
         external
         view
         returns (
@@ -215,25 +165,27 @@ interface IUniversalCoreV0 {
     /// @notice                 Get the protocol fee (in native PC) for a given token.
     /// @param token            Token address
     /// @return                 Protocol fee amount in native PC
-    function protocolFeeByToken(
-        address token
-    ) external view returns (uint256);
+    function protocolFeeByToken(address token) external view returns (uint256);
 
     /// @notice                 Set protocol fee (in native PC) for a token.
     /// @param token            Token address
     /// @param fee              Protocol fee amount in native PC
-    function setProtocolFeeByToken(
-        address token,
-        uint256 fee
-    ) external;
+    function updateProtocolFeeByToken(address token, uint256 fee) external;
 
     /// @notice                  Set rescue funds gas limit for a specific chain.
     /// @param chainNamespace    Chain Namespace
     /// @param gasLimit          Rescue funds gas limit for the chain
-    function setRescueFundsGasLimitByChain(
-        string memory chainNamespace,
-        uint256 gasLimit
-    ) external;
+    function updateRescueFundsGasLimitByChain(string memory chainNamespace, uint256 gasLimit) external;
+
+    /// @notice                  Set L1 gas fee for a specific chain.
+    /// @param chainNamespace    Chain Namespace
+    /// @param l1GasFee          L1 gas fee for the chain (in gas token units)
+    function setL1GasFeeByChain(string memory chainNamespace, uint256 l1GasFee) external;
+
+    /// @notice                  Set TSS migration gas limit for a specific chain.
+    /// @param chainNamespace    Chain Namespace
+    /// @param gasLimit          TSS migration gas limit for the chain
+    function setTssFundMigrationGasLimitByChain(string memory chainNamespace, uint256 gasLimit) external;
 
     /// @notice Get the UniversalGatewayPC address.
     function universalGatewayPC() external view returns (address);
@@ -246,9 +198,5 @@ interface IUniversalCoreV0 {
     /// @param prc20        PRC20 address to mint
     /// @param amount       Amount to mint
     /// @param recipient    Address to receive minted tokens
-    function mintPRCTokensviaAdmin(
-        address prc20,
-        uint256 amount,
-        address recipient
-    ) external;
+    function mintPRCTokensviaAdmin(address prc20, uint256 amount, address recipient) external;
 }

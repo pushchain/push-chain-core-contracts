@@ -8,12 +8,15 @@ import "../../src/cea/CEA.sol";
 import "../../src/cea/CEAMigration.sol";
 import {CEAProxy} from "../../src/cea/CEAProxy.sol";
 import {CEAErrors as Errors, CommonErrors} from "../../src/libraries/Errors.sol";
+import {Clones} from "@openzeppelin/contracts/proxy/Clones.sol";
 
 /**
  * @title CEAMigrationTest
  * @notice Unit tests for CEAMigration contract
  */
 contract CEAMigrationTest is Test {
+    using Clones for address;
+
     CEA public ceaV1Implementation;
     CEA public ceaV2Implementation;
     CEAMigration public migration;
@@ -88,8 +91,9 @@ contract CEAMigrationTest is Test {
     function test_migrateCEA_Delegatecall() public {
         migration = new CEAMigration(address(ceaV2Implementation));
 
-        // Deploy proxy and initialize with CEA v1
-        proxy = new CEAProxy();
+        // Deploy proxy as a clone of the locked template and initialize with CEA v1
+        // (matching CEAFactory.deployCEA — see F-2026-18955).
+        proxy = CEAProxy(payable(address(new CEAProxy()).cloneDeterministic(bytes32(uint256(1)))));
         proxy.initializeCEAProxy(address(ceaV1Implementation));
 
         // Verify initial implementation

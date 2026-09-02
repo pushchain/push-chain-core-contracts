@@ -5,6 +5,7 @@ import {Initializable} from "@openzeppelin/contracts-upgradeable/proxy/utils/Ini
 
 import {IPRC20} from "./interfaces/IPRC20.sol";
 import {PRC20Errors, CommonErrors} from "./libraries/Errors.sol";
+import {PausableUpgradeable} from "@openzeppelin/contracts-upgradeable/utils/PausableUpgradeable.sol";
 
 /**
  * @title   PRC20 (Push Chain Synthetic Token)
@@ -144,14 +145,14 @@ contract PRC20 is IPRC20, Initializable {
 
     /// @inheritdoc IPRC20
     function transferFrom(address sender, address recipient, uint256 amount) external returns (bool) {
-        _transfer(sender, recipient, amount);
-
         uint256 currentAllowance = _allowances[sender][msg.sender];
         if (currentAllowance < amount) revert PRC20Errors.LowAllowance();
         unchecked {
             _allowances[sender][msg.sender] = currentAllowance - amount;
         }
         emit Approval(sender, msg.sender, _allowances[sender][msg.sender]);
+
+        _transfer(sender, recipient, amount);
 
         return true;
     }
@@ -171,10 +172,13 @@ contract PRC20 is IPRC20, Initializable {
         if (msg.sender != UNIVERSAL_CORE && msg.sender != UNIVERSAL_EXECUTOR_MODULE) {
             revert PRC20Errors.InvalidSender();
         }
+        if (PausableUpgradeable(UNIVERSAL_CORE).paused()) {
+            revert PRC20Errors.CorePaused();
+        }
 
         _mint(to, amount);
 
-        emit Deposit(abi.encodePacked(UNIVERSAL_EXECUTOR_MODULE), to, amount);
+        emit Deposit(abi.encodePacked(msg.sender), to, amount);
         return true;
     }
 
@@ -193,13 +197,17 @@ contract PRC20 is IPRC20, Initializable {
     /// @notice          Update token name.
     /// @param newName   New name string
     function setName(string memory newName) external onlyUniversalExecutor {
+        string memory oldName = _name;
         _name = newName;
+        emit NameUpdated(oldName, newName);
     }
 
     /// @notice            Update token symbol.
     /// @param newSymbol   New symbol string
     function setSymbol(string memory newSymbol) external onlyUniversalExecutor {
+        string memory oldSymbol = _symbol;
         _symbol = newSymbol;
+        emit SymbolUpdated(oldSymbol, newSymbol);
     }
 
     // =========================

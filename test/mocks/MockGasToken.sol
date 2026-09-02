@@ -126,7 +126,7 @@ contract MockGasToken is IPRC20 {
     function getOutboundTxGasAndFees(address, uint256)
         external
         pure
-        returns (address, uint256, uint256, uint256, string memory)
+        returns (address, uint256, uint256, uint256, string memory, uint256)
     {
         revert("Not implemented");
     }

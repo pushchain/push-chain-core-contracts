@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: MIT
 pragma solidity 0.8.26;
 
+import {StringUtilsErrors} from "./Errors.sol";
+
 /// @title  StringUtils
 /// @notice Utility library for string-to-number conversion.
 library StringUtils {
@@ -15,11 +17,11 @@ library StringUtils {
         bytes memory b = bytes(s);
         uint256 len = b.length;
 
-        require(len > 0, "Empty string cannot be converted.");
+        if (len == 0) revert StringUtilsErrors.EmptyString();
 
         for (uint256 i = 0; i < len; ++i) {
             uint8 c = uint8(b[i]);
-            require(c >= 48 && c <= 57, "Non-digit character found.");
+            if (c < 48 || c > 57) revert StringUtilsErrors.NonDigitCharacter();
 
             result = result * 10 + (c - 48);
         }

@@ -17,8 +17,9 @@ contract UEAMigrationTest is BaseTest {
     function setUp() public override {
         super.setUp();
 
-        // Deploy real UEAProxy for realistic testing
-        ueaProxy = new UEAProxy();
+        // Deploy real UEAProxy for realistic testing, as a clone of the locked template
+        // (matching UEAFactory.deployUEA — see F-2026-18955).
+        ueaProxy = _newUEAProxyClone();
 
         // Setup test account ID
         testAccountId =
@@ -185,7 +186,7 @@ contract UEAMigrationTest is BaseTest {
      */
     function test_migrateUEASVM_SuccessOnDelegateCall() public {
         // Deploy separate proxy for SVM testing
-        UEAProxy svmProxy = new UEAProxy();
+        UEAProxy svmProxy = _newUEAProxyClone();
 
         // Initialize UEA proxy with V1 SVM implementation
         svmProxy.initializeUEA(address(ueaSVMImplV1));

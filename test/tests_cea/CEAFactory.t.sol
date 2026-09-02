@@ -13,6 +13,9 @@ import {CEAErrors} from "../../src/libraries/Errors.sol";
 import {MockUniversalGateway} from "../mocks/MockUniversalGateway.sol";
 import {ERC1967Proxy} from "@openzeppelin/contracts/proxy/ERC1967/ERC1967Proxy.sol";
 import {IAccessControl} from "@openzeppelin/contracts/access/IAccessControl.sol";
+import {
+    IAccessControlDefaultAdminRules
+} from "@openzeppelin/contracts/access/extensions/IAccessControlDefaultAdminRules.sol";
 import {PausableUpgradeable} from "@openzeppelin/contracts-upgradeable/utils/PausableUpgradeable.sol";
 import {ICEAFactory} from "../../src/interfaces/ICEAFactory.sol";
 
@@ -189,25 +192,25 @@ contract CEAFactoryTest is Test {
     // Admin Functions - setVault
     // =========================================================================
 
-    function testSetVaultOnlyOwner() public {
+    function testUpdateVault_OnlyOperator() public {
         address newVault = makeAddr("newVault");
 
-        bytes32 adminRole = factory.DEFAULT_ADMIN_ROLE();
+        bytes32 operatorRole = factory.OPERATOR_ROLE();
         vm.expectRevert(
-            abi.encodeWithSelector(IAccessControl.AccessControlUnauthorizedAccount.selector, nonOwner, adminRole)
+            abi.encodeWithSelector(IAccessControl.AccessControlUnauthorizedAccount.selector, nonOwner, operatorRole)
         );
         vm.prank(nonOwner);
-        factory.setVault(newVault);
+        factory.updateVault(newVault);
 
         vm.prank(owner);
-        factory.setVault(newVault);
+        factory.updateVault(newVault);
         assertEq(factory.VAULT(), newVault, "Vault should be updated");
     }
 
     function testSetVaultZeroAddressReverts() public {
         vm.prank(owner);
         vm.expectRevert(CEAErrors.ZeroAddress.selector);
-        factory.setVault(address(0));
+        factory.updateVault(address(0));
     }
 
     function testSetVaultUpdatesState() public {
@@ -215,7 +218,7 @@ contract CEAFactoryTest is Test {
         address oldVault = factory.VAULT();
 
         vm.prank(owner);
-        factory.setVault(newVault);
+        factory.updateVault(newVault);
 
         assertEq(factory.VAULT(), newVault, "Vault should be updated");
         assertNotEq(factory.VAULT(), oldVault, "Vault should be different from old");
@@ -228,7 +231,7 @@ contract CEAFactoryTest is Test {
         vm.prank(owner);
         vm.expectEmit(true, true, false, false);
         emit ICEAFactory.VaultUpdated(oldVault, newVault);
-        factory.setVault(newVault);
+        factory.updateVault(newVault);
     }
 
     function testSetVaultMultipleTimes() public {
@@ -237,13 +240,13 @@ contract CEAFactoryTest is Test {
         address vault3 = makeAddr("vault3");
 
         vm.startPrank(owner);
-        factory.setVault(vault1);
+        factory.updateVault(vault1);
         assertEq(factory.VAULT(), vault1);
 
-        factory.setVault(vault2);
+        factory.updateVault(vault2);
         assertEq(factory.VAULT(), vault2);
 
-        factory.setVault(vault3);
+        factory.updateVault(vault3);
         assertEq(factory.VAULT(), vault3);
         vm.stopPrank();
     }
@@ -252,7 +255,7 @@ contract CEAFactoryTest is Test {
         address currentVault = factory.VAULT();
 
         vm.prank(owner);
-        factory.setVault(currentVault);
+        factory.updateVault(currentVault);
 
         assertEq(factory.VAULT(), currentVault, "Vault should remain the same");
     }
@@ -263,7 +266,7 @@ contract CEAFactoryTest is Test {
 
         address newVault = makeAddr("newVault");
         vm.prank(owner);
-        factory.setVault(newVault);
+        factory.updateVault(newVault);
 
         assertTrue(hasCode(cea), "CEA should still have code");
         assertEq(factory.getPushAccountForCEA(cea), ueaOnPush, "Mapping should persist");
@@ -274,17 +277,17 @@ contract CEAFactoryTest is Test {
         address contractAddress = address(contractVault);
 
         vm.prank(owner);
-        factory.setVault(contractAddress);
+        factory.updateVault(contractAddress);
 
         assertEq(factory.VAULT(), contractAddress, "Vault can be a contract");
     }
 
-    function testSetCEAProxyImplementationOnlyOwner() public {
+    function testSetCEAProxyImplementation_OnlyCEAAdmin() public {
         CEAProxy newProxyImpl = new CEAProxy();
 
-        bytes32 adminRole = factory.DEFAULT_ADMIN_ROLE();
+        bytes32 ceaAdminRole = factory.CEA_ADMIN_ROLE();
         vm.expectRevert(
-            abi.encodeWithSelector(IAccessControl.AccessControlUnauthorizedAccount.selector, nonOwner, adminRole)
+            abi.encodeWithSelector(IAccessControl.AccessControlUnauthorizedAccount.selector, nonOwner, ceaAdminRole)
         );
         vm.prank(nonOwner);
         factory.setCEAProxyImplementation(address(newProxyImpl));
@@ -366,12 +369,12 @@ contract CEAFactoryTest is Test {
         factory.deployCEA(newUEA);
     }
 
-    function testSetCEAImplementationOnlyOwner() public {
+    function testSetCEAImplementation_OnlyCEAAdmin() public {
         CEA newCEAImpl = new CEA();
 
-        bytes32 adminRole = factory.DEFAULT_ADMIN_ROLE();
+        bytes32 ceaAdminRole = factory.CEA_ADMIN_ROLE();
         vm.expectRevert(
-            abi.encodeWithSelector(IAccessControl.AccessControlUnauthorizedAccount.selector, nonOwner, adminRole)
+            abi.encodeWithSelector(IAccessControl.AccessControlUnauthorizedAccount.selector, nonOwner, ceaAdminRole)
         );
         vm.prank(nonOwner);
         factory.setCEAImplementation(address(newCEAImpl));
@@ -455,25 +458,25 @@ contract CEAFactoryTest is Test {
     // Admin Functions - setUniversalGateway
     // =========================================================================
 
-    function testSetUniversalGatewayOnlyOwner() public {
+    function testUpdateUniversalGateway_OnlyOperator() public {
         MockUniversalGateway newGateway = new MockUniversalGateway();
 
-        bytes32 adminRole = factory.DEFAULT_ADMIN_ROLE();
+        bytes32 operatorRole = factory.OPERATOR_ROLE();
         vm.expectRevert(
-            abi.encodeWithSelector(IAccessControl.AccessControlUnauthorizedAccount.selector, nonOwner, adminRole)
+            abi.encodeWithSelector(IAccessControl.AccessControlUnauthorizedAccount.selector, nonOwner, operatorRole)
         );
         vm.prank(nonOwner);
-        factory.setUniversalGateway(address(newGateway));
+        factory.updateUniversalGateway(address(newGateway));
 
         vm.prank(owner);
-        factory.setUniversalGateway(address(newGateway));
+        factory.updateUniversalGateway(address(newGateway));
         assertEq(factory.UNIVERSAL_GATEWAY(), address(newGateway));
     }
 
     function testSetUniversalGatewayZeroAddressReverts() public {
         vm.prank(owner);
         vm.expectRevert(CEAErrors.ZeroAddress.selector);
-        factory.setUniversalGateway(address(0));
+        factory.updateUniversalGateway(address(0));
     }
 
     function testSetUniversalGatewayUpdatesState() public {
@@ -481,7 +484,7 @@ contract CEAFactoryTest is Test {
         address oldGateway = factory.UNIVERSAL_GATEWAY();
 
         vm.prank(owner);
-        factory.setUniversalGateway(address(newGateway));
+        factory.updateUniversalGateway(address(newGateway));
 
         assertEq(factory.UNIVERSAL_GATEWAY(), address(newGateway));
         assertNotEq(factory.UNIVERSAL_GATEWAY(), oldGateway);
@@ -819,7 +822,7 @@ contract CEAFactoryTest is Test {
         // Similar to above - setter prevents zero address
         vm.prank(owner);
         vm.expectRevert(CEAErrors.ZeroAddress.selector);
-        factory.setUniversalGateway(address(0));
+        factory.updateUniversalGateway(address(0));
     }
 
     // =========================================================================
@@ -1021,7 +1024,7 @@ contract CEAFactoryTest is Test {
     function testDeployCEAWithUpdatedVault() public {
         address newVault = makeAddr("newVault");
         vm.prank(owner);
-        factory.setVault(newVault);
+        factory.updateVault(newVault);
 
         // Deploy with new vault
         vm.prank(newVault);
@@ -1034,7 +1037,7 @@ contract CEAFactoryTest is Test {
     function testDeployCEAWithUpdatedGateway() public {
         MockUniversalGateway newGateway = new MockUniversalGateway();
         vm.prank(owner);
-        factory.setUniversalGateway(address(newGateway));
+        factory.updateUniversalGateway(address(newGateway));
 
         address cea = deployCEAHelper(ueaOnPush);
         CEA ceaInstance = CEA(payable(cea));
@@ -1218,7 +1221,7 @@ contract CEAFactoryTest is Test {
         assertTrue(hasCode(cea), "Should deploy with new proxy implementation");
     }
 
-    function testUpdateCEAImplementationBeforeDeployment() public {
+    function testsetCEAImplementationBeforeDeployment() public {
         CEA newCEAImpl = new CEA();
         vm.prank(owner);
         factory.setCEAImplementation(address(newCEAImpl));
@@ -1230,7 +1233,7 @@ contract CEAFactoryTest is Test {
     function testUpdateGatewayBeforeDeployment() public {
         MockUniversalGateway newGateway = new MockUniversalGateway();
         vm.prank(owner);
-        factory.setUniversalGateway(address(newGateway));
+        factory.updateUniversalGateway(address(newGateway));
 
         address cea = deployCEAHelper(ueaOnPush);
         CEA ceaInstance = CEA(payable(cea));
@@ -1240,7 +1243,7 @@ contract CEAFactoryTest is Test {
     function testUpdateVaultBeforeDeployment() public {
         address newVault = makeAddr("newVault");
         vm.prank(owner);
-        factory.setVault(newVault);
+        factory.updateVault(newVault);
 
         vm.prank(newVault);
         address cea = factory.deployCEA(ueaOnPush);
@@ -1252,15 +1255,17 @@ contract CEAFactoryTest is Test {
         // Deploy first
         address cea = deployCEAHelper(ueaOnPush);
         CEA ceaInstance = CEA(payable(cea));
-        address originalGateway = ceaInstance.UNIVERSAL_GATEWAY();
 
         // Update gateway
         MockUniversalGateway newGateway = new MockUniversalGateway();
         vm.prank(owner);
-        factory.setUniversalGateway(address(newGateway));
+        factory.updateUniversalGateway(address(newGateway));
 
-        // Existing CEA should still have old gateway
-        assertEq(ceaInstance.UNIVERSAL_GATEWAY(), originalGateway, "Existing CEA should keep old gateway");
+        // UNIVERSAL_GATEWAY() delegates to the factory, so all existing CEAs immediately
+        // reflect the factory's current value — there is no per-CEA stored copy.
+        assertEq(
+            ceaInstance.UNIVERSAL_GATEWAY(), address(newGateway), "Existing CEA should see new gateway via factory"
+        );
     }
 
     // =========================================================================
@@ -1269,50 +1274,48 @@ contract CEAFactoryTest is Test {
 
     function testPreventUnauthorizedVaultChange() public {
         address newVault = makeAddr("newVault");
-        bytes32 adminRole = factory.DEFAULT_ADMIN_ROLE();
+        bytes32 operatorRole = factory.OPERATOR_ROLE();
 
         // Vault cannot change itself
         vm.expectRevert(
-            abi.encodeWithSelector(IAccessControl.AccessControlUnauthorizedAccount.selector, vault, adminRole)
+            abi.encodeWithSelector(IAccessControl.AccessControlUnauthorizedAccount.selector, vault, operatorRole)
         );
         vm.prank(vault);
-        factory.setVault(newVault);
+        factory.updateVault(newVault);
 
         // Non-owner cannot change
         vm.expectRevert(
-            abi.encodeWithSelector(IAccessControl.AccessControlUnauthorizedAccount.selector, nonOwner, adminRole)
+            abi.encodeWithSelector(IAccessControl.AccessControlUnauthorizedAccount.selector, nonOwner, operatorRole)
         );
         vm.prank(nonOwner);
-        factory.setVault(newVault);
+        factory.updateVault(newVault);
     }
 
     function testPreventUnauthorizedImplementationChange() public {
         CEA newImpl = new CEA();
-        bytes32 adminRole = factory.DEFAULT_ADMIN_ROLE();
+        bytes32 ceaAdminRole = factory.CEA_ADMIN_ROLE();
 
         // Vault cannot change
         vm.expectRevert(
-            abi.encodeWithSelector(IAccessControl.AccessControlUnauthorizedAccount.selector, vault, adminRole)
+            abi.encodeWithSelector(IAccessControl.AccessControlUnauthorizedAccount.selector, vault, ceaAdminRole)
         );
         vm.prank(vault);
         factory.setCEAImplementation(address(newImpl));
 
         // Non-owner cannot change
         vm.expectRevert(
-            abi.encodeWithSelector(IAccessControl.AccessControlUnauthorizedAccount.selector, nonOwner, adminRole)
+            abi.encodeWithSelector(IAccessControl.AccessControlUnauthorizedAccount.selector, nonOwner, ceaAdminRole)
         );
         vm.prank(nonOwner);
         factory.setCEAImplementation(address(newImpl));
     }
 
     function testPreventVaultFromChangingOwner() public {
-        // Vault cannot grant DEFAULT_ADMIN_ROLE (only admin can)
+        // With ADR, grantRole(DEFAULT_ADMIN_ROLE) always reverts
         address newOwner = makeAddr("newOwner");
-
         bytes32 adminRole = factory.DEFAULT_ADMIN_ROLE();
-        vm.expectRevert(
-            abi.encodeWithSelector(IAccessControl.AccessControlUnauthorizedAccount.selector, vault, adminRole)
-        );
+
+        vm.expectRevert(IAccessControlDefaultAdminRules.AccessControlEnforcedDefaultAdminRules.selector);
         vm.prank(vault);
         factory.grantRole(adminRole, newOwner);
     }
@@ -1403,15 +1406,27 @@ contract CEAFactoryTest is Test {
         assertTrue(factory.paused());
     }
 
-    function testUnpause_OnlyPauser() public {
-        bytes32 role = factory.PAUSER_ROLE();
+    function testUnpause_OnlyOperator() public {
+        bytes32 operatorRole = factory.OPERATOR_ROLE();
         vm.prank(pauser);
         factory.pause();
 
         vm.expectRevert(
-            abi.encodeWithSelector(IAccessControl.AccessControlUnauthorizedAccount.selector, nonOwner, role)
+            abi.encodeWithSelector(IAccessControl.AccessControlUnauthorizedAccount.selector, nonOwner, operatorRole)
         );
         vm.prank(nonOwner);
+        factory.unpause();
+    }
+
+    function testUnpause_PauserCannotUnpause() public {
+        bytes32 operatorRole = factory.OPERATOR_ROLE();
+        vm.prank(pauser);
+        factory.pause();
+
+        vm.expectRevert(
+            abi.encodeWithSelector(IAccessControl.AccessControlUnauthorizedAccount.selector, pauser, operatorRole)
+        );
+        vm.prank(pauser);
         factory.unpause();
     }
 
@@ -1420,7 +1435,7 @@ contract CEAFactoryTest is Test {
         factory.pause();
         assertTrue(factory.paused());
 
-        vm.prank(pauser);
+        vm.prank(owner);
         factory.unpause();
         assertFalse(factory.paused());
     }
@@ -1437,7 +1452,7 @@ contract CEAFactoryTest is Test {
     function testDeployCEA_AfterUnpause_Works() public {
         vm.prank(pauser);
         factory.pause();
-        vm.prank(pauser);
+        vm.prank(owner);
         factory.unpause();
 
         address uea = makeAddr("unpausedUEA");
@@ -1446,31 +1461,27 @@ contract CEAFactoryTest is Test {
         assertTrue(factory.isCEA(cea));
     }
 
-    function testSetPauserRole_OnlyOwner() public {
+    function testGrantPauserRole_OnlyRoleManager() public {
         address newPauser = makeAddr("newPauser");
+        bytes32 roleManagerRole = factory.ROLE_MANAGER_ROLE();
+        bytes32 pauserRole = factory.PAUSER_ROLE();
 
-        bytes32 adminRole = factory.DEFAULT_ADMIN_ROLE();
         vm.expectRevert(
-            abi.encodeWithSelector(IAccessControl.AccessControlUnauthorizedAccount.selector, nonOwner, adminRole)
+            abi.encodeWithSelector(IAccessControl.AccessControlUnauthorizedAccount.selector, nonOwner, roleManagerRole)
         );
         vm.prank(nonOwner);
-        factory.setPauserRole(newPauser);
+        factory.grantRole(pauserRole, newPauser);
 
         vm.prank(owner);
-        factory.setPauserRole(newPauser);
-        assertTrue(factory.hasRole(factory.PAUSER_ROLE(), newPauser));
+        factory.grantRole(pauserRole, newPauser);
+        assertTrue(factory.hasRole(pauserRole, newPauser));
     }
 
-    function testSetPauserRole_ZeroAddressReverts() public {
-        vm.prank(owner);
-        vm.expectRevert(CEAErrors.ZeroAddress.selector);
-        factory.setPauserRole(address(0));
-    }
-
-    function testSetPauserRole_NewPauserCanPause() public {
+    function testGrantPauserRole_NewPauserCanPause() public {
         address newPauser = makeAddr("newPauser2");
+        bytes32 pauserRole = factory.PAUSER_ROLE();
         vm.prank(owner);
-        factory.setPauserRole(newPauser);
+        factory.grantRole(pauserRole, newPauser);
 
         vm.prank(newPauser);
         factory.pause();
@@ -1489,6 +1500,95 @@ contract CEAFactoryTest is Test {
             address(ceaImplementation),
             address(mockUniversalGateway)
         );
+    }
+
+    // =========================================================================
+    // ADR & Role Hierarchy Tests
+    // =========================================================================
+
+    function testInitialize_SetsRoleAdmins() public {
+        assertEq(factory.getRoleAdmin(factory.CEA_ADMIN_ROLE()), factory.ROLE_MANAGER_ROLE());
+        assertEq(factory.getRoleAdmin(factory.OPERATOR_ROLE()), factory.ROLE_MANAGER_ROLE());
+        assertEq(factory.getRoleAdmin(factory.PAUSER_ROLE()), factory.ROLE_MANAGER_ROLE());
+        assertEq(factory.getRoleAdmin(factory.ROLE_MANAGER_ROLE()), factory.DEFAULT_ADMIN_ROLE());
+    }
+
+    function testInitialize_GrantsAllRolesToAdmin() public {
+        assertTrue(factory.hasRole(factory.DEFAULT_ADMIN_ROLE(), owner));
+        assertTrue(factory.hasRole(factory.ROLE_MANAGER_ROLE(), owner));
+        assertTrue(factory.hasRole(factory.CEA_ADMIN_ROLE(), owner));
+        assertTrue(factory.hasRole(factory.OPERATOR_ROLE(), owner));
+    }
+
+    function testGrantRole_DEFAULT_ADMIN_ROLE_Reverts() public {
+        address newAdmin = makeAddr("newAdmin");
+        bytes32 adminRole = factory.DEFAULT_ADMIN_ROLE();
+        vm.expectRevert(IAccessControlDefaultAdminRules.AccessControlEnforcedDefaultAdminRules.selector);
+        vm.prank(owner);
+        factory.grantRole(adminRole, newAdmin);
+    }
+
+    function testBeginDefaultAdminTransfer_HappyPath() public {
+        address newAdmin = makeAddr("newAdmin");
+
+        vm.prank(owner);
+        factory.beginDefaultAdminTransfer(newAdmin);
+
+        (address pending,) = factory.pendingDefaultAdmin();
+        assertEq(pending, newAdmin);
+
+        vm.warp(block.timestamp + 1 days + 1);
+
+        vm.prank(newAdmin);
+        factory.acceptDefaultAdminTransfer();
+
+        assertEq(factory.defaultAdmin(), newAdmin);
+        assertFalse(factory.hasRole(factory.DEFAULT_ADMIN_ROLE(), owner));
+        assertTrue(factory.hasRole(factory.DEFAULT_ADMIN_ROLE(), newAdmin));
+    }
+
+    function testDefaultAdminDelay_Is2Days() public view {
+        assertEq(factory.defaultAdminDelay(), 1 days);
+    }
+
+    function testOwner_ReturnsDefaultAdmin() public view {
+        assertEq(factory.owner(), owner);
+    }
+
+    function testRoleManager_CanGrantOperator() public {
+        address newOperator = makeAddr("newOperator");
+        bytes32 operatorRole = factory.OPERATOR_ROLE();
+        vm.prank(owner);
+        factory.grantRole(operatorRole, newOperator);
+        assertTrue(factory.hasRole(operatorRole, newOperator));
+    }
+
+    function testRoleManager_CanGrantCEAAdmin() public {
+        address newCEAAdmin = makeAddr("newCEAAdmin");
+        bytes32 ceaAdminRole = factory.CEA_ADMIN_ROLE();
+        vm.prank(owner);
+        factory.grantRole(ceaAdminRole, newCEAAdmin);
+        assertTrue(factory.hasRole(ceaAdminRole, newCEAAdmin));
+    }
+
+    function testRoleManager_CannotBeGrantedByNonAdmin() public {
+        address attacker = makeAddr("attacker");
+        bytes32 adminRole = factory.DEFAULT_ADMIN_ROLE();
+        bytes32 roleManagerRole = factory.ROLE_MANAGER_ROLE();
+        vm.expectRevert(
+            abi.encodeWithSelector(IAccessControl.AccessControlUnauthorizedAccount.selector, attacker, adminRole)
+        );
+        vm.prank(attacker);
+        factory.grantRole(roleManagerRole, attacker);
+    }
+
+    function testPause_OperatorCannotPause() public {
+        bytes32 pauserRole = factory.PAUSER_ROLE();
+        vm.expectRevert(
+            abi.encodeWithSelector(IAccessControl.AccessControlUnauthorizedAccount.selector, owner, pauserRole)
+        );
+        vm.prank(owner);
+        factory.pause();
     }
 
     // =========================================================================

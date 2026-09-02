@@ -42,10 +42,10 @@ contract UEA_EVM_FuzzTest is Test {
 
         UEAFactory factoryImpl = new UEAFactory();
         bytes memory initData =
-            abi.encodeWithSelector(UEAFactory.initialize.selector, address(this), makeAddr("pauser"));
+            abi.encodeWithSelector(UEAFactory.initialize.selector, address(this), makeAddr("pauser"), "42101");
         ERC1967Proxy proxy = new ERC1967Proxy(address(factoryImpl), initData);
         factory = UEAFactory(address(proxy));
-        factory.setUEAProxyImplementation(address(ueaProxyImpl));
+        factory.updateUEAProxyImplementation(address(ueaProxyImpl));
 
         ueaEVMImpl = new UEA_EVM();
         (owner, ownerPK) = makeAddrAndKey("owner");
@@ -58,7 +58,7 @@ contract UEA_EVM_FuzzTest is Test {
         ueaEVMImpl2 = new UEA_EVM();
         ueaSVMImpl = new UEA_SVM();
         migration = new UEAMigration(address(ueaEVMImpl2), address(ueaSVMImpl));
-        factory.setUEAMigrationContract(address(migration));
+        factory.updateUEAMigrationContract(address(migration));
     }
 
     modifier deployEvmSmartAccount() {
@@ -239,9 +239,9 @@ contract UEA_EVM_FuzzTest is Test {
         evmSmartAccountInstance.executeUniversalTx(firstPayload, firstSig);
         assertEq(evmSmartAccountInstance.nonce(), 1);
 
-        // Replay the old signature (signed at nonce 0) — the hash no longer matches
-        // because the contract nonce is now 1, so signature verification fails
-        vm.expectRevert(UEAErrors.InvalidEVMSignature.selector);
+        // Replay the old payload (nonce=0) — the account expects nonce 1 now,
+        // so the nonce check fires before signature verification
+        vm.expectRevert(abi.encodeWithSelector(UEAErrors.NonceMismatch.selector, 1, 0));
         evmSmartAccountInstance.executeUniversalTx(firstPayload, firstSig);
     }
 
@@ -338,9 +338,20 @@ contract UEA_EVM_FuzzTest is Test {
 
         // Now test migration selector goes to migration path
         // Migration requires payload.to == address(this), so it will revert with InvalidCall
-        // when targeting a different address — confirming migration path was taken
+        // when targeting a different address — confirming migration path was taken.
+        // Use nonce=1 since the first transaction above incremented the account nonce.
         bytes memory migData = abi.encodePacked(MIGRATION_SELECTOR);
-        UniversalPayload memory migPayload = _buildPayload(address(target), 0, migData, 0);
+        UniversalPayload memory migPayload = UniversalPayload({
+            to: address(target),
+            value: 0,
+            data: migData,
+            gasLimit: 1_000_000,
+            maxFeePerGas: 0,
+            maxPriorityFeePerGas: 0,
+            nonce: 1,
+            deadline: 0,
+            vType: VerificationType(0)
+        });
         bytes memory migSig = _signPayload(evmSmartAccountInstance, migPayload, ownerPK);
         vm.expectRevert(UEAErrors.InvalidCall.selector);
         evmSmartAccountInstance.executeUniversalTx(migPayload, migSig);

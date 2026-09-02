@@ -20,12 +20,25 @@ import {UEA_SVM_V2} from "../mocks/UEA_SVM_V2.sol";
 
 import {ECDSA} from "@openzeppelin/contracts/utils/cryptography/ECDSA.sol";
 import {ERC1967Proxy} from "@openzeppelin/contracts/proxy/ERC1967/ERC1967Proxy.sol";
+import {Clones} from "@openzeppelin/contracts/proxy/Clones.sol";
 
 /**
  * @title   BaseTest
  * @dev     Base test contract providing common setup for UEA Migration tests
  */
 contract BaseTest is Test {
+    using Clones for address;
+
+    /// @dev Incremented per clone so each gets a unique CREATE2 salt.
+    uint256 internal proxyCloneSalt;
+
+    /// @dev Deploys a UEAProxy the way UEAFactory does — as an EIP-1167 clone.
+    ///      The UEAProxy template is locked by its constructor (F-2026-18955), so it can
+    ///      never be initialized directly; only clones can, and only once.
+    function _newUEAProxyClone() internal returns (UEAProxy) {
+        return UEAProxy(payable(address(ueaProxyImpl).cloneDeterministic(bytes32(++proxyCloneSalt))));
+    }
+
     // V1 Implementations (original - version 1.0.0)
     UEA_EVM public ueaEVMImplV1;
     UEA_SVM public ueaSVMImplV1;
@@ -174,12 +187,13 @@ contract BaseTest is Test {
 
         UEAFactory factoryImpl = new UEAFactory();
 
-        bytes memory initData = abi.encodeWithSelector(UEAFactory.initialize.selector, deployer, makeAddr("pauser"));
+        bytes memory initData =
+            abi.encodeWithSelector(UEAFactory.initialize.selector, deployer, makeAddr("pauser"), "42101");
         ERC1967Proxy factoryProxy = new ERC1967Proxy(address(factoryImpl), initData);
         factory = UEAFactory(address(factoryProxy));
 
         // Set UEA proxy implementation in factory
-        factory.setUEAProxyImplementation(address(ueaProxyImpl));
+        factory.updateUEAProxyImplementation(address(ueaProxyImpl));
     }
 
     function _deployMigrationContract() internal {
@@ -189,7 +203,7 @@ contract BaseTest is Test {
         assertEq(migration.UEA_SVM_IMPLEMENTATION(), address(ueaSVMImplV2), "Migration SVM implementation mismatch");
 
         // Set migration contract in factory so UEAs can fetch it
-        factory.setUEAMigrationContract(address(migration));
+        factory.updateUEAMigrationContract(address(migration));
     }
 
     function _setupChainRegistrations() internal {

@@ -8,7 +8,9 @@ import {CEAErrors} from "../libraries/Errors.sol";
 
 import {Clones} from "@openzeppelin/contracts/proxy/Clones.sol";
 import {Initializable} from "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol";
-import {AccessControlUpgradeable} from "@openzeppelin/contracts-upgradeable/access/AccessControlUpgradeable.sol";
+import {
+    AccessControlDefaultAdminRulesUpgradeable
+} from "@openzeppelin/contracts-upgradeable/access/extensions/AccessControlDefaultAdminRulesUpgradeable.sol";
 import {PausableUpgradeable} from "@openzeppelin/contracts-upgradeable/utils/PausableUpgradeable.sol";
 
 /**
@@ -18,18 +20,21 @@ import {PausableUpgradeable} from "@openzeppelin/contracts-upgradeable/utils/Pau
  *          implementation. Maintains a 1:1 mapping between UEA (on Push) and
  *          CEA (on this chain).
  *
- *          Access control uses OpenZeppelin AccessControl:
- *          - DEFAULT_ADMIN_ROLE: governance — can update all config and grant roles.
- *          - PAUSER_ROLE:        guardian hot-wallet — can pause/unpause only.
+ *          Access control: AccessControlDefaultAdminRulesUpgradeable (2-day delay).
+ *          Roles: DEFAULT_ADMIN_ROLE (root), ROLE_MANAGER_ROLE (grants operational roles),
+ *          CEA_ADMIN_ROLE (implementation config), OPERATOR_ROLE (address setters + unpause),
+ *          PAUSER_ROLE (pause only).
  */
-contract CEAFactory is Initializable, AccessControlUpgradeable, PausableUpgradeable, ICEAFactory {
+contract CEAFactory is Initializable, AccessControlDefaultAdminRulesUpgradeable, PausableUpgradeable, ICEAFactory {
     using Clones for address;
 
     // =========================
     //    CF: ROLES
     // =========================
 
-    /// @notice Role that can pause and unpause CEA deployments.
+    bytes32 public constant ROLE_MANAGER_ROLE = keccak256("ROLE_MANAGER_ROLE");
+    bytes32 public constant CEA_ADMIN_ROLE = keccak256("CEA_ADMIN_ROLE");
+    bytes32 public constant OPERATOR_ROLE = keccak256("OPERATOR_ROLE");
     bytes32 public constant PAUSER_ROLE = keccak256("PAUSER_ROLE");
 
     // =========================
@@ -77,39 +82,44 @@ contract CEAFactory is Initializable, AccessControlUpgradeable, PausableUpgradea
     }
 
     /// @dev                              Initializer for the upgradeable CEAFactory.
-    /// @param initialAdmin               Owner of the factory (governance) — granted DEFAULT_ADMIN_ROLE
-    /// @param initialPauser              Address granted the PAUSER_ROLE
-    /// @param initialVault               Vault address on this chain
-    /// @param ceaProxyImplementation     CEA proxy implementation to clone (CEAProxy)
-    /// @param ceaImplementation          CEA logic implementation (CEA)
-    /// @param universalGateway           Universal Gateway on this chain
+    /// @param _admin                     Admin address — granted DEFAULT_ADMIN_ROLE + all operational roles
+    /// @param _pauser                    Address granted the PAUSER_ROLE
+    /// @param _vault                     Vault address on this chain
+    /// @param _ceaProxyImplementation    CEA proxy implementation to clone (CEAProxy)
+    /// @param _ceaImplementation         CEA logic implementation (CEA)
+    /// @param _universalGateway          Universal Gateway on this chain
     function initialize(
-        address initialAdmin,
-        address initialPauser,
-        address initialVault,
-        address ceaProxyImplementation,
-        address ceaImplementation,
-        address universalGateway
+        address _admin,
+        address _pauser,
+        address _vault,
+        address _ceaProxyImplementation,
+        address _ceaImplementation,
+        address _universalGateway
     ) external initializer {
         if (
-            initialAdmin == address(0) || initialPauser == address(0) || initialVault == address(0)
-                || ceaProxyImplementation == address(0) || ceaImplementation == address(0)
-                || universalGateway == address(0)
+            _admin == address(0) || _pauser == address(0) || _vault == address(0)
+                || _ceaProxyImplementation == address(0) || _ceaImplementation == address(0)
+                || _universalGateway == address(0)
         ) {
             revert CEAErrors.ZeroAddress();
         }
 
-        __AccessControl_init();
+        __AccessControlDefaultAdminRules_init(1 days, _admin);
         __Pausable_init();
 
-        _grantRole(DEFAULT_ADMIN_ROLE, initialAdmin);
-        _grantRole(PAUSER_ROLE, initialPauser);
-        emit PauserRoleGranted(initialPauser);
+        _setRoleAdmin(CEA_ADMIN_ROLE, ROLE_MANAGER_ROLE);
+        _setRoleAdmin(OPERATOR_ROLE, ROLE_MANAGER_ROLE);
+        _setRoleAdmin(PAUSER_ROLE, ROLE_MANAGER_ROLE);
 
-        VAULT = initialVault;
-        CEA_PROXY_IMPLEMENTATION = ceaProxyImplementation;
-        CEA_IMPLEMENTATION = ceaImplementation;
-        UNIVERSAL_GATEWAY = universalGateway;
+        _grantRole(ROLE_MANAGER_ROLE, _admin);
+        _grantRole(CEA_ADMIN_ROLE, _admin);
+        _grantRole(OPERATOR_ROLE, _admin);
+        _grantRole(PAUSER_ROLE, _pauser);
+
+        VAULT = _vault;
+        CEA_PROXY_IMPLEMENTATION = _ceaProxyImplementation;
+        CEA_IMPLEMENTATION = _ceaImplementation;
+        UNIVERSAL_GATEWAY = _universalGateway;
     }
 
     // =========================
@@ -169,7 +179,7 @@ contract CEAFactory is Initializable, AccessControlUpgradeable, PausableUpgradea
 
         ICEAProxy(cea).initializeCEAProxy(CEA_IMPLEMENTATION);
 
-        ICEA(cea).initializeCEA(pushAccount, VAULT, UNIVERSAL_GATEWAY, address(this));
+        ICEA(cea).initializeCEA(pushAccount, address(this));
 
         pushAccountToCEA[pushAccount] = cea;
         ceaToPushAccount[cea] = pushAccount;
@@ -186,58 +196,50 @@ contract CEAFactory is Initializable, AccessControlUpgradeable, PausableUpgradea
         _pause();
     }
 
-    /// @notice          Unpause CEA deployments. Only callable by PAUSER_ROLE.
-    function unpause() external onlyRole(PAUSER_ROLE) {
+    /// @notice          Unpause CEA deployments. Only callable by OPERATOR_ROLE.
+    function unpause() external onlyRole(OPERATOR_ROLE) {
         _unpause();
     }
 
-    /// @notice              Grant PAUSER_ROLE to a new address. Only callable by DEFAULT_ADMIN_ROLE.
-    /// @param newPauser     Address to grant pauser role to
-    function setPauserRole(address newPauser) external onlyRole(DEFAULT_ADMIN_ROLE) {
-        if (newPauser == address(0)) revert CEAErrors.ZeroAddress();
-        _grantRole(PAUSER_ROLE, newPauser);
-        emit PauserRoleGranted(newPauser);
-    }
-
-    /// @notice              Sets the Vault address. Only callable by DEFAULT_ADMIN_ROLE.
+    /// @notice              Updates the Vault address. Only callable by OPERATOR_ROLE.
     /// @param newVault      New Vault address
-    function setVault(address newVault) external onlyRole(DEFAULT_ADMIN_ROLE) {
+    function updateVault(address newVault) external onlyRole(OPERATOR_ROLE) {
         if (newVault == address(0)) revert CEAErrors.ZeroAddress();
         address old = VAULT;
         VAULT = newVault;
         emit VaultUpdated(old, newVault);
     }
 
-    /// @notice                    Sets the CEA proxy implementation (CEAProxy template).
+    /// @notice                    Sets the CEA proxy implementation (CEAProxy template). Only callable by CEA_ADMIN_ROLE.
     /// @param newImplementation   New CEA proxy implementation address
-    function setCEAProxyImplementation(address newImplementation) external onlyRole(DEFAULT_ADMIN_ROLE) {
+    function setCEAProxyImplementation(address newImplementation) external onlyRole(CEA_ADMIN_ROLE) {
         if (newImplementation == address(0)) revert CEAErrors.ZeroAddress();
         address old = CEA_PROXY_IMPLEMENTATION;
         CEA_PROXY_IMPLEMENTATION = newImplementation;
         emit CEAProxyImplementationUpdated(old, newImplementation);
     }
 
-    /// @notice                    Sets the CEA logic implementation.
+    /// @notice                    Sets the CEA logic implementation. Only callable by CEA_ADMIN_ROLE.
     /// @param newImplementation   New CEA logic implementation address
-    function setCEAImplementation(address newImplementation) external onlyRole(DEFAULT_ADMIN_ROLE) {
+    function setCEAImplementation(address newImplementation) external onlyRole(CEA_ADMIN_ROLE) {
         if (newImplementation == address(0)) revert CEAErrors.ZeroAddress();
         address old = CEA_IMPLEMENTATION;
         CEA_IMPLEMENTATION = newImplementation;
         emit CEAImplementationUpdated(old, newImplementation);
     }
 
-    /// @notice          Sets the Universal Gateway address. Only callable by DEFAULT_ADMIN_ROLE.
+    /// @notice          Updates the Universal Gateway address. Only callable by OPERATOR_ROLE.
     /// @param newUG     New Universal Gateway address
-    function setUniversalGateway(address newUG) external onlyRole(DEFAULT_ADMIN_ROLE) {
+    function updateUniversalGateway(address newUG) external onlyRole(OPERATOR_ROLE) {
         if (newUG == address(0)) revert CEAErrors.ZeroAddress();
         address old = UNIVERSAL_GATEWAY;
         UNIVERSAL_GATEWAY = newUG;
         emit UniversalGatewayUpdated(old, newUG);
     }
 
-    /// @notice                       Sets the CEA migration contract address.
+    /// @notice                       Sets the CEA migration contract address. Only callable by CEA_ADMIN_ROLE.
     /// @param newMigrationContract   Address of the new migration contract
-    function setCEAMigrationContract(address newMigrationContract) external onlyRole(DEFAULT_ADMIN_ROLE) {
+    function updateCEAMigrationContract(address newMigrationContract) external onlyRole(CEA_ADMIN_ROLE) {
         if (newMigrationContract == address(0)) revert CEAErrors.ZeroAddress();
         address old = CEA_MIGRATION_CONTRACT;
         CEA_MIGRATION_CONTRACT = newMigrationContract;

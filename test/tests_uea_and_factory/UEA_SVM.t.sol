@@ -14,8 +14,21 @@ import {IUEA} from "../../src/interfaces/IUEA.sol";
 import {ERC1967Proxy} from "@openzeppelin/contracts/proxy/ERC1967/ERC1967Proxy.sol";
 import {UEAProxy} from "../../src/uea/UEAProxy.sol";
 import {UEAMigration} from "../../src/uea/UEAMigration.sol";
+import {Clones} from "@openzeppelin/contracts/proxy/Clones.sol";
 
 contract UEASVMTest is Test {
+    using Clones for address;
+
+    /// @dev Incremented per clone so each gets a unique CREATE2 salt.
+    uint256 internal cloneSalt;
+
+    /// @dev Deploys an uninitialized UEA_SVM the way UEAFactory does — as an EIP-1167 clone.
+    ///      The implementation is locked by its constructor (F-2026-18955), so it can never be
+    ///      initialized directly; only clones can, and only once.
+    function _newUninitializedUEA() internal returns (UEA_SVM) {
+        return UEA_SVM(payable(address(svmSmartAccountImpl).cloneDeterministic(bytes32(++cloneSalt))));
+    }
+
     Target target;
     UEAFactory factory;
     UEA_SVM svmSmartAccountImpl;
@@ -45,12 +58,12 @@ contract UEASVMTest is Test {
 
         // Deploy and initialize the proxy with initialOwner
         bytes memory initData =
-            abi.encodeWithSelector(UEAFactory.initialize.selector, address(this), makeAddr("pauser"));
+            abi.encodeWithSelector(UEAFactory.initialize.selector, address(this), makeAddr("pauser"), "42101");
         ERC1967Proxy proxy = new ERC1967Proxy(address(factoryImpl), initData);
         factory = UEAFactory(address(proxy));
 
         // Set UEAProxy implementation after initialization
-        factory.setUEAProxyImplementation(address(ueaProxyImpl));
+        factory.updateUEAProxyImplementation(address(ueaProxyImpl));
 
         // Deploy SVM implementation
         svmSmartAccountImpl = new UEA_SVM();
@@ -81,7 +94,7 @@ contract UEASVMTest is Test {
 
     function testInitializeFunction() public {
         // Deploy a new implementation without using the factory
-        UEA_SVM newUEA = new UEA_SVM();
+        UEA_SVM newUEA = _newUninitializedUEA();
 
         // Create account ID
         UniversalAccountId memory _id =
@@ -99,7 +112,7 @@ contract UEASVMTest is Test {
 
     function testRevertWhenInitializingTwice() public {
         // Deploy a new implementation without using the factory
-        UEA_SVM newUEA = new UEA_SVM();
+        UEA_SVM newUEA = _newUninitializedUEA();
 
         // Create account ID
         UniversalAccountId memory _id =
@@ -134,7 +147,7 @@ contract UEASVMTest is Test {
 
     function testVersionConstant() public {
         // Deploy a new implementation
-        UEA_SVM newUEA = new UEA_SVM();
+        UEA_SVM newUEA = _newUninitializedUEA();
 
         // Check the version constant
         assertEq(newUEA.VERSION(), "1.0.0", "VERSION constant should be 1.0.0");
@@ -142,7 +155,7 @@ contract UEASVMTest is Test {
 
     function testVerifierPrecompileConstant() public {
         // Deploy a new implementation
-        UEA_SVM newUEA = new UEA_SVM();
+        UEA_SVM newUEA = _newUninitializedUEA();
 
         // Check the VERIFIER_PRECOMPILE constant
         assertEq(
@@ -734,7 +747,7 @@ contract UEASVMTest is Test {
 
     function testReceiveFunction() public {
         // Deploy a new implementation
-        UEA_SVM newUEA = new UEA_SVM();
+        UEA_SVM newUEA = _newUninitializedUEA();
 
         // Initialize it
         UniversalAccountId memory _id =
@@ -830,7 +843,7 @@ contract UEASVMTest is Test {
 
     function test_SuccessfulMigrationUpdatesImplementation() public deploySvmSmartAccount {
         // Set migration contract in factory
-        factory.setUEAMigrationContract(address(migration));
+        factory.updateUEAMigrationContract(address(migration));
 
         MigrationPayload memory payload =
             MigrationPayload({migration: address(migration), nonce: 0, deadline: block.timestamp + 1000});
@@ -874,7 +887,7 @@ contract UEASVMTest is Test {
     }
 
     function testMigration_RevertsWhenValueNonZero() public deploySvmSmartAccount {
-        factory.setUEAMigrationContract(address(migration));
+        factory.updateUEAMigrationContract(address(migration));
 
         UniversalPayload memory payload = UniversalPayload({
             to: address(svmSmartAccountInstance),
@@ -894,7 +907,7 @@ contract UEASVMTest is Test {
     }
 
     function testMigration_RevertsWhenTargetNotSelf() public deploySvmSmartAccount {
-        factory.setUEAMigrationContract(address(migration));
+        factory.updateUEAMigrationContract(address(migration));
 
         UniversalPayload memory payload = UniversalPayload({
             to: address(target),
@@ -945,8 +958,9 @@ contract UEASVMTest is Test {
             abi.encode(
                 svmSmartAccountInstance.DOMAIN_SEPARATOR_TYPEHASH_SVM(),
                 keccak256(bytes(svmSmartAccountInstance.VERSION())),
-                "101",
-                address(svmSmartAccountInstance)
+                keccak256(bytes("101")),
+                address(svmSmartAccountInstance),
+                bytes32(block.chainid)
             )
         );
 
@@ -957,7 +971,8 @@ contract UEASVMTest is Test {
         // This test verifies that the DOMAIN_SEPARATOR_TYPEHASH_SVM constant matches the expected hash
         // If the EIP712Domain_SVM struct definition changes, this test will fail
 
-        bytes32 expectedHash = keccak256("EIP712Domain_SVM(string version,string chainId,address verifyingContract)");
+        bytes32 expectedHash =
+            keccak256("EIP712Domain_SVM(string version,string chainId,address verifyingContract,bytes32 salt)");
 
         // Access the constant from the deployed instance
         bytes32 actualHash = svmSmartAccountInstance.DOMAIN_SEPARATOR_TYPEHASH_SVM();
@@ -1260,6 +1275,63 @@ contract UEASVMTest is Test {
 
         // Verify execution succeeded
         assertEq(target.getMagicNumber(), 999, "Execution should succeed with valid signature");
+    }
+
+    function testRevertWhenIncorrectNonce() public deploySvmSmartAccount {
+        uint256 previousNonce = svmSmartAccountInstance.nonce();
+
+        UniversalPayload memory payload = UniversalPayload({
+            to: address(target),
+            value: 0,
+            data: abi.encodeWithSignature("setMagicNumber(uint256)", 786),
+            gasLimit: 1000000,
+            maxFeePerGas: 0,
+            nonce: 100,
+            deadline: block.timestamp + 1000,
+            maxPriorityFeePerGas: 0,
+            vType: VerificationType(0)
+        });
+
+        bytes memory signature = hex"00";
+
+        vm.expectRevert(abi.encodeWithSelector(Errors.NonceMismatch.selector, 0, 100));
+        svmSmartAccountInstance.executeUniversalTx(payload, signature);
+
+        assertEq(previousNonce, svmSmartAccountInstance.nonce(), "Nonce should not have changed");
+    }
+
+    // =========================
+    //  SINGLETON INITIALIZATION LOCK (F-2026-18955 / PCORSCDD-23)
+    // =========================
+
+    /// @notice The UEA_SVM implementation singleton must be locked at deployment.
+    /// @dev    An attacker who initialized the singleton would control `ueaFactory`, and so the
+    ///         `delegatecall` target resolved by `_handleMigration`.
+    function testImplementation_isLockedAtDeployment() public {
+        UEA_SVM freshImpl = new UEA_SVM();
+
+        UniversalAccountId memory attackerId = UniversalAccountId({
+            chainNamespace: "solana",
+            chainId: "5eykt4UsFv8P8NJdTREpY1vzqKqZKvdpKuc147dw2N9d",
+            owner: abi.encodePacked(address(0xBAD))
+        });
+
+        vm.prank(address(0xBAD));
+        vm.expectRevert(Errors.AccountAlreadyExists.selector);
+        freshImpl.initialize(attackerId, address(0xBAD));
+    }
+
+    /// @notice The singleton deployed in setUp is locked too, not just a freshly built one.
+    function testDeployedImplementation_cannotBeClaimed() public {
+        UniversalAccountId memory attackerId = UniversalAccountId({
+            chainNamespace: "solana",
+            chainId: "5eykt4UsFv8P8NJdTREpY1vzqKqZKvdpKuc147dw2N9d",
+            owner: abi.encodePacked(address(0xBAD))
+        });
+
+        vm.prank(address(0xBAD));
+        vm.expectRevert(Errors.AccountAlreadyExists.selector);
+        svmSmartAccountImpl.initialize(attackerId, address(0xBAD));
     }
 }
 

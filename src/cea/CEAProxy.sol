@@ -34,6 +34,14 @@ contract CEAProxy is Initializable, Proxy {
     //    CP: INITIALIZER
     // =========================
 
+    /// @notice Locks the proxy template so it can never be initialized.
+    /// @dev    Only clones of this template are initialized, via CEAFactory.
+    ///         Constructors do not run for clones, so clone storage is unaffected.
+    /// @custom:oz-upgrades-unsafe-allow constructor
+    constructor() {
+        _disableInitializers();
+    }
+
     /// @notice                  Initializes the proxy with a CEA implementation.
     /// @dev                     Can only be called once. Intended caller: CEAFactory.
     /// @param _logic            Address of the CEA implementation contract

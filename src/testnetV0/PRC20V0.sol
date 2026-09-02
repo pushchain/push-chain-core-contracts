@@ -2,6 +2,7 @@
 pragma solidity 0.8.26;
 
 import {Initializable} from "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol";
+import {PausableUpgradeable} from "@openzeppelin/contracts-upgradeable/utils/PausableUpgradeable.sol";
 
 import {IPRC20} from "../interfaces/IPRC20.sol";
 import {PRC20Errors, CommonErrors} from "../libraries/Errors.sol";
@@ -172,8 +173,6 @@ contract PRC20 is IPRC20, Initializable {
         address recipient,
         uint256 amount
     ) external returns (bool) {
-        _transfer(sender, recipient, amount);
-
         uint256 currentAllowance = _allowances[sender][msg.sender];
         if (currentAllowance < amount) revert PRC20Errors.LowAllowance();
         unchecked {
@@ -182,6 +181,8 @@ contract PRC20 is IPRC20, Initializable {
         emit Approval(
             sender, msg.sender, _allowances[sender][msg.sender]
         );
+
+        _transfer(sender, recipient, amount);
 
         return true;
     }
@@ -207,11 +208,14 @@ contract PRC20 is IPRC20, Initializable {
         ) {
             revert PRC20Errors.InvalidSender();
         }
+        if (PausableUpgradeable(UNIVERSAL_CORE).paused()) {
+            revert PRC20Errors.CorePaused();
+        }
 
         _mint(to, amount);
 
         emit Deposit(
-            abi.encodePacked(UNIVERSAL_EXECUTOR_MODULE), to, amount
+            abi.encodePacked(msg.sender), to, amount
         );
         return true;
     }
@@ -235,7 +239,9 @@ contract PRC20 is IPRC20, Initializable {
     function setName(
         string memory newName
     ) external onlyUniversalExecutor {
+        string memory oldName = _name;
         _name = newName;
+        emit NameUpdated(oldName, newName);
     }
 
     /// @notice            Update token symbol.
@@ -243,7 +249,9 @@ contract PRC20 is IPRC20, Initializable {
     function setSymbol(
         string memory newSymbol
     ) external onlyUniversalExecutor {
+        string memory oldSymbol = _symbol;
         _symbol = newSymbol;
+        emit SymbolUpdated(oldSymbol, newSymbol);
     }
 
     // =========================
