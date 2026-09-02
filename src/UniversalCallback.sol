@@ -110,10 +110,8 @@ contract UniversalCallback is
         if (blockedDomains[spec.account.chainNamespace][spec.account.chainId]) {
             revert UniversalCallbackErrors.DomainBlocked(spec.account.chainNamespace, spec.account.chainId);
         }
-        if (
-            spec.blockNumber == 0
-                || spec.blockNumber > _universalCore.chainHeightByChainNamespace(spec.account.chainNamespace)
-        ) {
+        string memory chainKey = string.concat(spec.account.chainNamespace, ":", spec.account.chainId);
+        if (spec.blockNumber == 0 || spec.blockNumber > _universalCore.chainHeightByChainNamespace(chainKey)) {
             revert UniversalCallbackErrors.InvalidBlockNumber();
         }
         if (spec.expiryPushChainHeight <= block.number) {

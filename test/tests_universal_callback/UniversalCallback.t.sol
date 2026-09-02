@@ -118,7 +118,7 @@ contract UniversalCallbackTest is Test {
         });
 
         mockCore.setReadBaseFee("eip155", "1", 0.01 ether);
-        mockCore.setChainHeight("eip155", 1000);
+        mockCore.setChainHeight("eip155:1", 1000);
     }
 
     function test_Initialize_SetsState() public {

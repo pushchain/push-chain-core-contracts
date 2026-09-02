@@ -48,7 +48,7 @@ contract UniversalReadClientTest is Test {
         vm.stopPrank();
 
         mockCore.setReadBaseFee("eip155", "1", 0.01 ether);
-        mockCore.setChainHeight("eip155", 1000);
+        mockCore.setChainHeight("eip155:1", 1000);
 
         crossLend = new CrossLendMock(address(callback));
         revertingClient = new RevertingReadClient(address(callback));

@@ -48,7 +48,7 @@ contract UniversalCallbackFuzzTest is Test {
         callback.grantRole(callback.UVCALLBACK_ADMIN_ROLE(), defaultAdmin);
         vm.stopPrank();
 
-        mockCore.setChainHeight("eip155", 1000);
+        mockCore.setChainHeight("eip155:1", 1000);
 
         crossLend = new CrossLendMock(address(callback));
     }
