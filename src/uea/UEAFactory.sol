@@ -2,15 +2,16 @@
 pragma solidity 0.8.26;
 
 import {IUEA} from "../interfaces/IUEA.sol";
-import {IUEAFactory} from "../interfaces/IUEAFactory.sol";
+import {IUEAFactory, CEAConfig} from "../interfaces/IUEAFactory.sol";
 import {UEAErrors} from "../libraries/Errors.sol";
 import {UniversalAccountId} from "../libraries/Types.sol";
 import {UEAProxy} from "./UEAProxy.sol";
 
 import {Clones} from "@openzeppelin/contracts/proxy/Clones.sol";
 import {Initializable} from "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol";
-import {AccessControlDefaultAdminRulesUpgradeable} from
-    "@openzeppelin/contracts-upgradeable/access/extensions/AccessControlDefaultAdminRulesUpgradeable.sol";
+import {
+    AccessControlDefaultAdminRulesUpgradeable
+} from "@openzeppelin/contracts-upgradeable/access/extensions/AccessControlDefaultAdminRulesUpgradeable.sol";
 import {PausableUpgradeable} from "@openzeppelin/contracts-upgradeable/utils/PausableUpgradeable.sol";
 
 /**
@@ -60,6 +61,9 @@ contract UEAFactory is Initializable, AccessControlDefaultAdminRulesUpgradeable,
 
     /// @notice Push Chain numeric identifier used in the `getOriginForUEA` synthetic fallback.
     string public pushChainId;
+
+    /// @notice Maps chain identifier hashes to their CEA deployment config on external chains.
+    mapping(bytes32 => CEAConfig) public CEA_CONFIG;
 
     // =========================
     //    UF: CONSTRUCTOR
@@ -142,6 +146,16 @@ contract UEAFactory is Initializable, AccessControlDefaultAdminRulesUpgradeable,
     }
 
     /// @inheritdoc IUEAFactory
+    function getCEAForPushAccount(bytes32 chainHash, address pushAccount) external view returns (address cea) {
+        CEAConfig memory config = CEA_CONFIG[chainHash];
+        if (config.ceaFactory == address(0) || config.ceaProxyImplementation == address(0)) {
+            revert UEAErrors.InvalidInputArgs();
+        }
+        bytes32 salt = keccak256(abi.encode(pushAccount));
+        cea = config.ceaProxyImplementation.predictDeterministicAddress(salt, config.ceaFactory);
+    }
+
+    /// @inheritdoc IUEAFactory
     /// @dev When `isUEA` is false, `account` is a synthetic fallback built from
     ///      `"eip155"` + `pushChainId` + `addr` — NOT a registered origin.
     ///      Callers MUST check `isUEA` before trusting `account`.
@@ -151,8 +165,9 @@ contract UEAFactory is Initializable, AccessControlDefaultAdminRulesUpgradeable,
         if (account.owner.length > 0) {
             isUEA = true;
         } else {
-            account =
-                UniversalAccountId({chainNamespace: "eip155", chainId: pushChainId, owner: bytes(abi.encodePacked(addr))});
+            account = UniversalAccountId({
+                chainNamespace: "eip155", chainId: pushChainId, owner: bytes(abi.encodePacked(addr))
+            });
         }
 
         return (account, isUEA);
@@ -247,6 +262,18 @@ contract UEAFactory is Initializable, AccessControlDefaultAdminRulesUpgradeable,
     function updatePushChainId(string memory _pushChainId) external onlyRole(UEA_ADMIN_ROLE) {
         if (bytes(_pushChainId).length == 0) revert UEAErrors.InvalidInputArgs();
         pushChainId = _pushChainId;
+    }
+
+    /// @inheritdoc IUEAFactory
+    function setCEAConfig(bytes32 chainHash, address ceaFactory, address ceaProxyImplementation)
+        external
+        onlyRole(UEA_ADMIN_ROLE)
+    {
+        if (ceaFactory == address(0) || ceaProxyImplementation == address(0)) {
+            revert UEAErrors.InvalidInputArgs();
+        }
+        CEA_CONFIG[chainHash] = CEAConfig(ceaFactory, ceaProxyImplementation);
+        emit CEAConfigSet(chainHash, ceaFactory, ceaProxyImplementation);
     }
 
     /// @inheritdoc IUEAFactory
