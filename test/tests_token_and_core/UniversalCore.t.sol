@@ -70,6 +70,7 @@ contract UniversalCoreTest is Test, UpgradeableContractHelper {
     event SetMaxStalenessByChain(string chainNamespace, uint256 maxStaleness);
     event SetL1GasFeeByChain(string chainNamespace, uint256 l1GasFee);
     event SetTssFundMigrationGasLimitByChain(string chainNamespace, uint256 gasLimit);
+    event SetReadBaseFeeByChain(string chainNamespace, string chainId, uint256 fee);
     event RescueNativePC(address indexed to, uint256 amount);
 
     function setUp() public {
@@ -1715,5 +1716,49 @@ contract UniversalCoreTest is Test, UpgradeableContractHelper {
         vm.prank(UNIVERSAL_EXECUTOR_MODULE);
         universalCore.setTssFundMigrationGasLimitByChain(CHAIN_NAMESPACE, 0);
         assertEq(universalCore.tssFundMigrationGasLimitByChainNamespace(CHAIN_NAMESPACE), 0);
+    }
+
+    // ============================================
+    //    READ BASE FEE (READ STATE)
+    // ============================================
+
+    function test_UpdateReadBaseFeeByChain_HappyPath() public {
+        uint256 fee = 0.01 ether;
+
+        vm.prank(UNIVERSAL_EXECUTOR_MODULE);
+        vm.expectEmit(false, false, false, true);
+        emit SetReadBaseFeeByChain("eip155", "1", fee);
+        universalCore.updateReadBaseFeeByChain("eip155", "1", fee);
+
+        assertEq(universalCore.readBaseFeeByChainNamespace("eip155", "1"), fee);
+    }
+
+    function test_UpdateReadBaseFeeByChain_OnlyUVCoreAdmin() public {
+        vm.expectRevert(
+            abi.encodeWithSelector(
+                IAccessControl.AccessControlUnauthorizedAccount.selector, nonOwner, universalCore.UVCORE_ADMIN_ROLE()
+            )
+        );
+        vm.prank(nonOwner);
+        universalCore.updateReadBaseFeeByChain("eip155", "1", 0.01 ether);
+    }
+
+    function test_UpdateReadBaseFeeByChain_ZeroValueAllowed() public {
+        vm.prank(UNIVERSAL_EXECUTOR_MODULE);
+        universalCore.updateReadBaseFeeByChain("eip155", "1", 0);
+        assertEq(universalCore.readBaseFeeByChainNamespace("eip155", "1"), 0);
+    }
+
+    /// @dev The fee is keyed by (namespace, chainId), so two chains in the same
+    ///      namespace must be priced independently.
+    function test_UpdateReadBaseFeeByChain_IsolatedPerChainId() public {
+        vm.startPrank(UNIVERSAL_EXECUTOR_MODULE);
+        universalCore.updateReadBaseFeeByChain("eip155", "1", 0.01 ether);
+        universalCore.updateReadBaseFeeByChain("eip155", "137", 0.05 ether);
+        vm.stopPrank();
+
+        assertEq(universalCore.readBaseFeeByChainNamespace("eip155", "1"), 0.01 ether);
+        assertEq(universalCore.readBaseFeeByChainNamespace("eip155", "137"), 0.05 ether);
+        assertEq(universalCore.readBaseFeeByChainNamespace("solana", "1"), 0, "unset domain must stay zero");
     }
 }

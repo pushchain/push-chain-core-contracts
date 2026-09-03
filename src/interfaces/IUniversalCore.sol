@@ -23,6 +23,7 @@ interface IUniversalCore {
     event SetMaxStalenessByChain(string chainNamespace, uint256 maxStaleness);
     event SetL1GasFeeByChain(string chainNamespace, uint256 l1GasFee);
     event SetTssFundMigrationGasLimitByChain(string chainNamespace, uint256 gasLimit);
+    event SetReadBaseFeeByChain(string chainNamespace, string chainId, uint256 fee);
     event RefundUnusedGas(
         address indexed gasToken, uint256 amount, address indexed recipient, bool swapped, uint256 pcOut
     );
@@ -307,4 +308,28 @@ interface IUniversalCore {
     /// @param wrapper           Wrapper identity (bytes32)
     /// @return sourceAsset      Source asset address
     function pc20SourceByWrapper(string memory destChain, bytes32 wrapper) external view returns (address sourceAsset);
+
+    // =========================
+    //    UCV0: READ STATE
+    // =========================
+
+    /// @notice                 Get the read base fee for a chain (flat rate, in wei of native PC).
+    /// @param chainNamespace   Chain namespace (e.g. "eip155")
+    /// @param chainId          Chain ID (e.g. "1" for Ethereum mainnet)
+    /// @return fee             Flat read base fee
+    function readBaseFeeByChainNamespace(string memory chainNamespace, string memory chainId)
+        external
+        view
+        returns (uint256 fee);
+
+    /// @notice                  Set the read base fee for a chain.
+    /// @param chainNamespace    Chain namespace (e.g. "eip155")
+    /// @param chainId           Chain ID (e.g. "1")
+    /// @param fee               Flat read base fee in wei of native PC
+    function updateReadBaseFeeByChain(string memory chainNamespace, string memory chainId, uint256 fee) external;
+
+    /// @notice                 Get the latest external-chain block height observed via the gas oracle.
+    /// @param chainNamespace   Chain namespace (e.g. "eip155")
+    /// @return                 Latest observed external-chain block height for the namespace
+    function chainHeightByChainNamespace(string memory chainNamespace) external view returns (uint256);
 }

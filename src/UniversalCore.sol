@@ -147,6 +147,13 @@ contract UniversalCore is
     mapping(string => mapping(bytes32 => address)) public pc20SourceByWrapper;
     mapping(string => bytes32) public pc20FactoryByChain;
 
+    /// @notice Admin-set flat read base fee per chain namespace + chain ID.
+    /// @dev    Read by UniversalCallback when pricing a read request.
+    ///         Appended after every pre-existing variable on purpose: this contract
+    ///         is live behind the deployed testnet proxy, so inserting anywhere earlier
+    ///         would shift the slot of every variable below it and corrupt existing state.
+    mapping(string => mapping(string => uint256)) public readBaseFeeByChainNamespace;
+
     // =========================
     //    UCV0: MODIFIERS
     // =========================
@@ -706,6 +713,18 @@ contract UniversalCore is
     function updatePC20FactoryByChain(string memory chainNamespace, bytes32 factory) external onlyRole(OPERATOR_ROLE) {
         pc20FactoryByChain[chainNamespace] = factory;
         emit SetPC20FactoryByChain(chainNamespace, factory);
+    }
+
+    /// @notice                  Set the read base fee for a chain.
+    /// @param chainNamespace    Chain namespace (e.g. "eip155")
+    /// @param chainId           Chain ID (e.g. "1")
+    /// @param fee               Flat read base fee in wei of native PC
+    function updateReadBaseFeeByChain(string memory chainNamespace, string memory chainId, uint256 fee)
+        external
+        onlyRole(UVCORE_ADMIN_ROLE)
+    {
+        readBaseFeeByChainNamespace[chainNamespace][chainId] = fee;
+        emit SetReadBaseFeeByChain(chainNamespace, chainId, fee);
     }
 
     // =========================
