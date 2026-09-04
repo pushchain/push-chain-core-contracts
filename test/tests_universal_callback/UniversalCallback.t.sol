@@ -346,6 +346,66 @@ contract UniversalCallbackTest is Test {
         );
     }
 
+    function test_RequestExternalRead_Web2_AcceptsZeroBlockNumber() public {
+        vm.deal(user, 10 ether);
+        vm.prank(user);
+        ReadSpec memory spec = defaultSpec;
+        spec.account.chainNamespace = "web2";
+        spec.account.chainId = "twitter.com";
+        spec.blockNumber = 0;
+
+        mockCore.setReadBaseFee("web2", "twitter.com", 0.01 ether);
+
+        uint256 reqId = callback.requestExternalReadSelf{value: 1 ether}(
+            spec, CALLBACK_SEL, 50000
+        );
+        assertEq(uint8(callback.statusOf(reqId)), uint8(RequestStatus.PENDING));
+    }
+
+    function test_RequestExternalRead_Web2_RevertWhen_NonZeroBlockNumber() public {
+        vm.deal(user, 10 ether);
+        vm.prank(user);
+        ReadSpec memory spec = defaultSpec;
+        spec.account.chainNamespace = "web2";
+        spec.account.chainId = "twitter.com";
+        spec.blockNumber = 42;
+
+        mockCore.setReadBaseFee("web2", "twitter.com", 0.01 ether);
+
+        vm.expectRevert(abi.encodeWithSelector(UniversalCallbackErrors.InvalidBlockNumber.selector));
+        callback.requestExternalReadSelf{value: 1 ether}(
+            spec, CALLBACK_SEL, 50000
+        );
+    }
+
+    function test_RequestExternalRead_UnconfiguredDomain_AcceptsZeroBlockNumber() public {
+        vm.deal(user, 10 ether);
+        vm.prank(user);
+        ReadSpec memory spec = defaultSpec;
+        spec.account.chainNamespace = "eip155";
+        spec.account.chainId = "99999";
+        spec.blockNumber = 0;
+
+        uint256 reqId = callback.requestExternalReadSelf{value: 1 ether}(
+            spec, CALLBACK_SEL, 50000
+        );
+        assertEq(uint8(callback.statusOf(reqId)), uint8(RequestStatus.PENDING));
+    }
+
+    function test_RequestExternalRead_RevertWhen_UnconfiguredDomainNonZeroBlockNumber() public {
+        vm.deal(user, 10 ether);
+        vm.prank(user);
+        ReadSpec memory spec = defaultSpec;
+        spec.account.chainNamespace = "eip155";
+        spec.account.chainId = "99999";
+        spec.blockNumber = 5;
+
+        vm.expectRevert(abi.encodeWithSelector(UniversalCallbackErrors.InvalidBlockNumber.selector));
+        callback.requestExternalReadSelf{value: 1 ether}(
+            spec, CALLBACK_SEL, 50000
+        );
+    }
+
     function test_RequestExternalRead_RevertWhen_ExpiryNotInFuture() public {
         vm.deal(user, 10 ether);
         vm.prank(user);

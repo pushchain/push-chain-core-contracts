@@ -111,8 +111,14 @@ contract UniversalCallback is
             revert UniversalCallbackErrors.DomainBlocked(spec.account.chainNamespace, spec.account.chainId);
         }
         string memory chainKey = string.concat(spec.account.chainNamespace, ":", spec.account.chainId);
-        if (spec.blockNumber == 0 || spec.blockNumber > _universalCore.chainHeightByChainNamespace(chainKey)) {
-            revert UniversalCallbackErrors.InvalidBlockNumber();
+        uint256 chainHeight = _universalCore.chainHeightByChainNamespace(chainKey);
+
+        if (chainHeight == 0) {
+            if (spec.blockNumber != 0) revert UniversalCallbackErrors.InvalidBlockNumber();
+        } else {
+            if (spec.blockNumber == 0 || spec.blockNumber > chainHeight) {
+                revert UniversalCallbackErrors.InvalidBlockNumber();
+            }
         }
         if (spec.expiryPushChainHeight <= block.number) {
             revert UniversalCallbackErrors.InvalidExpiryHeight();
