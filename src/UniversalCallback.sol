@@ -73,6 +73,13 @@ contract UniversalCallback is
         _;
     }
 
+    modifier onlyUCallbackModuleOrAdmin() {
+        if (msg.sender != UNIVERSAL_CALLBACK_MODULE && !hasRole(DEFAULT_ADMIN_ROLE, msg.sender)) {
+            revert UniversalCallbackErrors.UnauthorizedCaller();
+        }
+        _;
+    }
+
     modifier onlyUvCallbackAdmin() {
         if (!hasRole(UVCALLBACK_ADMIN_ROLE, msg.sender)) {
             revert UniversalCallbackErrors.CallerIsNotAdmin();
@@ -214,7 +221,7 @@ contract UniversalCallback is
     function reportCallbackGas(uint256 requestId, uint256 gasBurned)
         external
         override
-        onlyUCallbackModule
+        onlyUCallbackModuleOrAdmin
         nonReentrant
         returns (uint256 burned)
     {

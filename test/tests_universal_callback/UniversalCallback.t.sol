@@ -1031,13 +1031,25 @@ contract UniversalCallbackTest is Test {
         callback.expireExternalRead(ghost);
     }
 
-    function test_Report_RevertWhen_NotUCallbackModule() public {
+    function test_Report_RevertWhen_NotModuleOrAdmin() public {
         uint256 requestId = _request();
         vm.prank(ucallbackModule);
         callback.fulfillExternalCallback(requestId, "");
 
-        vm.expectRevert(abi.encodeWithSelector(UniversalCallbackErrors.CallerIsNotUCallbackModule.selector));
+        vm.expectRevert(abi.encodeWithSelector(UniversalCallbackErrors.UnauthorizedCaller.selector));
         callback.reportCallbackGas(requestId, 0);
+    }
+
+    function test_Report_AdminCanSettle() public {
+        uint256 requestId = _request();
+        vm.prank(ucallbackModule);
+        callback.fulfillExternalCallback(requestId, "");
+
+        vm.prank(defaultAdmin);
+        uint256 burned = callback.reportCallbackGas(requestId, 0);
+
+        assertEq(burned, 0);
+        assertEq(uint8(callback.statusOf(requestId)), uint8(RequestStatus.SETTLED));
     }
 
     // =========================
