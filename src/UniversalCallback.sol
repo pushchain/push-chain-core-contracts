@@ -73,8 +73,13 @@ contract UniversalCallback is
         _;
     }
 
+    /// @dev Recovery path for settlement: the module settles normally, but if its
+    ///      call reverts it never retries, which would strand the request in
+    ///      EXECUTED and lock its escrow. UVCALLBACK_ADMIN_ROLE -- the operational
+    ///      admin, not DEFAULT_ADMIN_ROLE -- can then settle it manually.
+    ///      DEFAULT_ADMIN_ROLE stays reserved for `rescueNativePC`.
     modifier onlyUCallbackModuleOrAdmin() {
-        if (msg.sender != UNIVERSAL_CALLBACK_MODULE && !hasRole(DEFAULT_ADMIN_ROLE, msg.sender)) {
+        if (msg.sender != UNIVERSAL_CALLBACK_MODULE && !hasRole(UVCALLBACK_ADMIN_ROLE, msg.sender)) {
             revert UniversalCallbackErrors.UnauthorizedCaller();
         }
         _;
