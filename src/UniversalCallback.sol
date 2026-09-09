@@ -73,6 +73,18 @@ contract UniversalCallback is
         _;
     }
 
+    /// @dev Recovery path for settlement: the module settles normally, but if its
+    ///      call reverts it never retries, which would strand the request in
+    ///      EXECUTED and lock its escrow. UVCALLBACK_ADMIN_ROLE -- the operational
+    ///      admin, not DEFAULT_ADMIN_ROLE -- can then settle it manually.
+    ///      DEFAULT_ADMIN_ROLE stays reserved for `rescueNativePC`.
+    modifier onlyUCallbackModuleOrAdmin() {
+        if (msg.sender != UNIVERSAL_CALLBACK_MODULE && !hasRole(UVCALLBACK_ADMIN_ROLE, msg.sender)) {
+            revert UniversalCallbackErrors.UnauthorizedCaller();
+        }
+        _;
+    }
+
     modifier onlyUvCallbackAdmin() {
         if (!hasRole(UVCALLBACK_ADMIN_ROLE, msg.sender)) {
             revert UniversalCallbackErrors.CallerIsNotAdmin();
@@ -110,11 +122,15 @@ contract UniversalCallback is
         if (blockedDomains[spec.account.chainNamespace][spec.account.chainId]) {
             revert UniversalCallbackErrors.DomainBlocked(spec.account.chainNamespace, spec.account.chainId);
         }
-        if (
-            spec.blockNumber == 0
-                || spec.blockNumber > _universalCore.chainHeightByChainNamespace(spec.account.chainNamespace)
-        ) {
-            revert UniversalCallbackErrors.InvalidBlockNumber();
+        string memory chainKey = string.concat(spec.account.chainNamespace, ":", spec.account.chainId);
+        uint256 chainHeight = _universalCore.chainHeightByChainNamespace(chainKey);
+
+        if (chainHeight == 0) {
+            if (spec.blockNumber != 0) revert UniversalCallbackErrors.InvalidBlockNumber();
+        } else {
+            if (spec.blockNumber == 0 || spec.blockNumber > chainHeight) {
+                revert UniversalCallbackErrors.InvalidBlockNumber();
+            }
         }
         if (spec.expiryPushChainHeight <= block.number) {
             revert UniversalCallbackErrors.InvalidExpiryHeight();
@@ -210,7 +226,7 @@ contract UniversalCallback is
     function reportCallbackGas(uint256 requestId, uint256 gasBurned)
         external
         override
-        onlyUCallbackModule
+        onlyUCallbackModuleOrAdmin
         nonReentrant
         returns (uint256 burned)
     {

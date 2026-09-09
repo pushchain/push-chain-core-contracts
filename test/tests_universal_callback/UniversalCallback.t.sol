@@ -118,7 +118,7 @@ contract UniversalCallbackTest is Test {
         });
 
         mockCore.setReadBaseFee("eip155", "1", 0.01 ether);
-        mockCore.setChainHeight("eip155", 1000);
+        mockCore.setChainHeight("eip155:1", 1000);
     }
 
     function test_Initialize_SetsState() public {
@@ -339,6 +339,66 @@ contract UniversalCallbackTest is Test {
         vm.prank(user);
         ReadSpec memory spec = defaultSpec;
         spec.blockNumber = 1001; // oracle height is 1000
+
+        vm.expectRevert(abi.encodeWithSelector(UniversalCallbackErrors.InvalidBlockNumber.selector));
+        callback.requestExternalReadSelf{value: 1 ether}(
+            spec, CALLBACK_SEL, 50000
+        );
+    }
+
+    function test_RequestExternalRead_Web2_AcceptsZeroBlockNumber() public {
+        vm.deal(user, 10 ether);
+        vm.prank(user);
+        ReadSpec memory spec = defaultSpec;
+        spec.account.chainNamespace = "web2";
+        spec.account.chainId = "twitter.com";
+        spec.blockNumber = 0;
+
+        mockCore.setReadBaseFee("web2", "twitter.com", 0.01 ether);
+
+        uint256 reqId = callback.requestExternalReadSelf{value: 1 ether}(
+            spec, CALLBACK_SEL, 50000
+        );
+        assertEq(uint8(callback.statusOf(reqId)), uint8(RequestStatus.PENDING));
+    }
+
+    function test_RequestExternalRead_Web2_RevertWhen_NonZeroBlockNumber() public {
+        vm.deal(user, 10 ether);
+        vm.prank(user);
+        ReadSpec memory spec = defaultSpec;
+        spec.account.chainNamespace = "web2";
+        spec.account.chainId = "twitter.com";
+        spec.blockNumber = 42;
+
+        mockCore.setReadBaseFee("web2", "twitter.com", 0.01 ether);
+
+        vm.expectRevert(abi.encodeWithSelector(UniversalCallbackErrors.InvalidBlockNumber.selector));
+        callback.requestExternalReadSelf{value: 1 ether}(
+            spec, CALLBACK_SEL, 50000
+        );
+    }
+
+    function test_RequestExternalRead_UnconfiguredDomain_AcceptsZeroBlockNumber() public {
+        vm.deal(user, 10 ether);
+        vm.prank(user);
+        ReadSpec memory spec = defaultSpec;
+        spec.account.chainNamespace = "eip155";
+        spec.account.chainId = "99999";
+        spec.blockNumber = 0;
+
+        uint256 reqId = callback.requestExternalReadSelf{value: 1 ether}(
+            spec, CALLBACK_SEL, 50000
+        );
+        assertEq(uint8(callback.statusOf(reqId)), uint8(RequestStatus.PENDING));
+    }
+
+    function test_RequestExternalRead_RevertWhen_UnconfiguredDomainNonZeroBlockNumber() public {
+        vm.deal(user, 10 ether);
+        vm.prank(user);
+        ReadSpec memory spec = defaultSpec;
+        spec.account.chainNamespace = "eip155";
+        spec.account.chainId = "99999";
+        spec.blockNumber = 5;
 
         vm.expectRevert(abi.encodeWithSelector(UniversalCallbackErrors.InvalidBlockNumber.selector));
         callback.requestExternalReadSelf{value: 1 ether}(
@@ -971,13 +1031,102 @@ contract UniversalCallbackTest is Test {
         callback.expireExternalRead(ghost);
     }
 
-    function test_Report_RevertWhen_NotUCallbackModule() public {
+    function test_Report_RevertWhen_NotModuleOrAdmin() public {
         uint256 requestId = _request();
         vm.prank(ucallbackModule);
         callback.fulfillExternalCallback(requestId, "");
 
-        vm.expectRevert(abi.encodeWithSelector(UniversalCallbackErrors.CallerIsNotUCallbackModule.selector));
+        vm.expectRevert(abi.encodeWithSelector(UniversalCallbackErrors.UnauthorizedCaller.selector));
         callback.reportCallbackGas(requestId, 0);
+    }
+
+    function test_Report_AdminCanSettle() public {
+        uint256 requestId = _request();
+        vm.prank(ucallbackModule);
+        callback.fulfillExternalCallback(requestId, "");
+
+        vm.prank(defaultAdmin);
+        uint256 burned = callback.reportCallbackGas(requestId, 0);
+
+        assertEq(burned, 0);
+        assertEq(uint8(callback.statusOf(requestId)), uint8(RequestStatus.SETTLED));
+    }
+
+    /// @dev The recovery path is gated on UVCALLBACK_ADMIN_ROLE, the operational
+    ///      admin -- not DEFAULT_ADMIN_ROLE, which stays reserved for
+    ///      `rescueNativePC`. `uvAdmin` holds only the former.
+    function test_Report_UvAdminCanSettle() public {
+        uint256 requestId = _request();
+        vm.prank(ucallbackModule);
+        callback.fulfillExternalCallback(requestId, "");
+
+        assertFalse(
+            callback.hasRole(callback.DEFAULT_ADMIN_ROLE(), uvAdmin),
+            "uvAdmin must not hold DEFAULT_ADMIN_ROLE for this test to mean anything"
+        );
+
+        vm.prank(uvAdmin);
+        callback.reportCallbackGas(requestId, 0);
+
+        assertEq(uint8(callback.statusOf(requestId)), uint8(RequestStatus.SETTLED));
+    }
+
+    /// @dev Holding DEFAULT_ADMIN_ROLE alone must NOT open the recovery path --
+    ///      that would put a routine duty on the coldest key in the contract.
+    function test_Report_RevertWhen_OnlyDefaultAdminRole() public {
+        uint256 requestId = _request();
+        vm.prank(ucallbackModule);
+        callback.fulfillExternalCallback(requestId, "");
+
+        // rootAdmin gets the root role but never the operational one.
+        address rootAdmin = address(0xBEEF);
+        vm.prank(defaultAdmin);
+        callback.beginDefaultAdminTransfer(rootAdmin);
+        vm.warp(block.timestamp + 1 days + 1);
+        vm.prank(rootAdmin);
+        callback.acceptDefaultAdminTransfer();
+
+        assertTrue(callback.hasRole(callback.DEFAULT_ADMIN_ROLE(), rootAdmin));
+        assertFalse(callback.hasRole(callback.UVCALLBACK_ADMIN_ROLE(), rootAdmin));
+
+        vm.expectRevert(abi.encodeWithSelector(UniversalCallbackErrors.UnauthorizedCaller.selector));
+        vm.prank(rootAdmin);
+        callback.reportCallbackGas(requestId, 0);
+    }
+
+    /// @dev The scenario the admin path exists for: the module's settlement call
+    ///      reverted and it never retries, leaving the request stuck in EXECUTED.
+    ///      Admin recovery must release the escrow, deliver the refund, and leave
+    ///      no unattributed PC behind for `rescueNativePC` to take.
+    function test_Report_AdminRecoversStrandedRequest() public {
+        uint256 requestId = _request();
+
+        vm.prank(ucallbackModule);
+        callback.fulfillExternalCallback(requestId, "");
+
+        // Module attempts settlement and reverts -- nothing moves, nothing retries.
+        vm.prank(ucallbackModule);
+        vm.expectRevert();
+        callback.reportCallbackGas(type(uint256).max, 0);
+
+        assertEq(uint8(callback.statusOf(requestId)), uint8(RequestStatus.EXECUTED), "stuck in EXECUTED");
+        assertEq(callback.totalEscrowed(), BUDGET, "escrow still locked");
+
+        uint256 recipientBefore = user.balance;
+
+        vm.prank(uvAdmin);
+        uint256 burned = callback.reportCallbackGas(requestId, 0);
+
+        assertEq(uint8(callback.statusOf(requestId)), uint8(RequestStatus.SETTLED));
+        assertEq(callback.totalEscrowed(), 0, "escrow released");
+        assertEq(user.balance - recipientBefore, BUDGET - burned, "refund delivered");
+
+        // Nothing left over: every wei is either refunded or owed to the burn.
+        assertEq(
+            address(callback).balance - callback.totalEscrowed(),
+            burned,
+            "no unattributed slack beyond the pending burn"
+        );
     }
 
     // =========================
