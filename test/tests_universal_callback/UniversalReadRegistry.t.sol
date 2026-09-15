@@ -51,7 +51,12 @@ contract UniversalReadRegistryTest is Test {
         mockCore.setReadBaseFee("eip155", "1", PROTOCOL_FEE);
         mockCore.setChainHeight("eip155:1", 1000);
 
-        registry = new UniversalReadRegistry(address(callback));
+        UniversalReadRegistry registryImpl = new UniversalReadRegistry(address(callback));
+        ERC1967Proxy registryProxy = new ERC1967Proxy(
+            address(registryImpl),
+            abi.encodeWithSelector(UniversalReadRegistry.initialize.selector)
+        );
+        registry = UniversalReadRegistry(payable(address(registryProxy)));
 
         defaultSpec = ReadSpec({
             account: UniversalAccountId({
@@ -71,7 +76,13 @@ contract UniversalReadRegistryTest is Test {
     function _read(address reader) internal returns (uint256 requestId) {
         vm.deal(reader, DEPOSIT);
         vm.prank(reader);
-        requestId = registry.read{value: DEPOSIT}(defaultSpec, 500_000);
+        requestId = registry.read{value: DEPOSIT}(defaultSpec, bytes32(0), 500_000);
+    }
+
+    function _readWithQueryKey(address reader, bytes32 qk) internal returns (uint256 requestId) {
+        vm.deal(reader, DEPOSIT);
+        vm.prank(reader);
+        requestId = registry.read{value: DEPOSIT}(defaultSpec, qk, 500_000);
     }
 
     function test_Read_CreatesRequest() public {
@@ -102,8 +113,20 @@ contract UniversalReadRegistryTest is Test {
         assertEq(registry.requestOrderOf(id2), 2);
     }
 
-    function test_Read_SetsRevertRecipientToReader() public {
+    function test_Read_RespectsUserRevertRecipient() public {
         uint256 requestId = _read(alice);
+
+        address revertRecipient = callback.getPendingRead(requestId).revertRecipient;
+        assertEq(revertRecipient, address(0xdead));
+    }
+
+    function test_Read_DefaultsRevertRecipientToSender() public {
+        ReadSpec memory spec = defaultSpec;
+        spec.revertRecipient = address(0);
+
+        vm.deal(alice, DEPOSIT);
+        vm.prank(alice);
+        uint256 requestId = registry.read{value: DEPOSIT}(spec, bytes32(0), 500_000);
 
         address revertRecipient = callback.getPendingRead(requestId).revertRecipient;
         assertEq(revertRecipient, alice);
@@ -123,7 +146,42 @@ contract UniversalReadRegistryTest is Test {
         vm.prank(alice);
         vm.expectEmit(false, true, true, true);
         emit UniversalReadRegistry.RegistryReadRequested(0, alice, expectedQk);
-        registry.read{value: DEPOSIT}(defaultSpec, 500_000);
+        registry.read{value: DEPOSIT}(defaultSpec, bytes32(0), 500_000);
+    }
+
+    function test_Read_CustomQueryKey() public {
+        bytes32 customQk = keccak256("myLogicalQuery");
+        uint256 requestId = _readWithQueryKey(alice, customQk);
+
+        assertEq(registry.queryKeyOf(requestId), customQk);
+    }
+
+    function test_Read_CustomQueryKey_LatestResultGroupsCorrectly() public {
+        bytes32 logicalQk = keccak256("balanceOf(0xdead)");
+
+        // Two reads with different spec.query but same logical key
+        ReadSpec memory spec1 = defaultSpec;
+        spec1.query = abi.encode("balanceOf", uint256(100));
+        ReadSpec memory spec2 = defaultSpec;
+        spec2.query = abi.encode("balanceOf", uint256(200));
+
+        vm.deal(alice, DEPOSIT);
+        vm.prank(alice);
+        uint256 id1 = registry.read{value: DEPOSIT}(spec1, logicalQk, 500_000);
+
+        vm.deal(alice, DEPOSIT);
+        vm.prank(alice);
+        uint256 id2 = registry.read{value: DEPOSIT}(spec2, logicalQk, 500_000);
+
+        vm.prank(ucallbackModule);
+        callback.fulfillExternalCallback(id1, "result1");
+
+        vm.prank(ucallbackModule);
+        callback.fulfillExternalCallback(id2, "result2");
+
+        UniversalReadRegistry.StoredResult memory r = registry.latestResult(alice, logicalQk);
+        assertEq(r.requestId, id2);
+        assertEq(r.resultData, bytes("result2"));
     }
 
     function test_Callback_StoresResultByRequestId() public {
@@ -234,15 +292,17 @@ contract UniversalReadRegistryTest is Test {
         assertEq(rBob.resultData, bytes("bobData"));
     }
 
-    function test_RefundGoesToReader_NotRegistry() public {
+    function test_RefundGoesToRecipient_NotRegistry() public {
+        address recipient = defaultSpec.revertRecipient;
+        uint256 recipientBefore = recipient.balance;
+
         uint256 requestId = _read(alice);
-        uint256 aliceBefore = alice.balance;
 
         vm.roll(block.number + 1000);
         vm.prank(ucallbackModule);
         callback.expireExternalRead(requestId);
 
-        assertGt(alice.balance, aliceBefore);
+        assertGt(recipient.balance, recipientBefore);
         assertEq(address(registry).balance, 0);
     }
 
@@ -261,7 +321,7 @@ contract UniversalReadRegistryTest is Test {
 
         vm.deal(alice, DEPOSIT);
         vm.prank(alice);
-        uint256 requestId = registry.read{value: DEPOSIT}(defaultSpec, 500_000);
+        uint256 requestId = registry.read{value: DEPOSIT}(defaultSpec, bytes32(0), 500_000);
 
         vm.prank(ucallbackModule);
         callback.fulfillExternalCallback(requestId, payload);
