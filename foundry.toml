@@ -15,10 +15,21 @@ optimizer_runs = 99999
 auto_detect_solc = false
 evm_version = "shanghai"
 via_ir = true
+# UniversalMarketplace only: 99 999 runs inline its card validation into both register and modify and put
+# it over EIP-170 (26,662 B). 1 000 runs: 21,575 B. Every other contract keeps the default.
+additional_compiler_profiles = [{ name = "marketplace-size", optimizer_runs = 1000 }]
+compilation_restrictions = [{ paths = "src/agentic-commerce-8183/UniversalMarketplace.sol", optimizer_runs = 1000 }]
 
 no_match_coverage = "(PRC20V0\\.sol|testnetV0/UniversalCore\\.sol|ReceiverExample\\.sol|src/(libraries|[Ii]nterfaces|mocks)/|test/)"
 
 fs_permissions = [{ access = "read-write", path = "deployments/" }]
+
+# Coverage only: drop the per-file profile above. With it, a contract tested both from the marketplace's
+# compile job and from its own is two artifacts, and coverage keeps the hits of only one. Run coverage with
+# FOUNDRY_PROFILE=coverage; sizes are never measured under coverage.
+[profile.coverage]
+additional_compiler_profiles = []
+compilation_restrictions = []
 
 [fmt]
 ignore = ["src/**"]

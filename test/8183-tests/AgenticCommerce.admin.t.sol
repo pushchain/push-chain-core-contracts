@@ -74,7 +74,9 @@ contract AgenticCommerceAdminTest is KernelBase {
         vm.prank(kernelProxyAdminOwner);
         pa.upgradeAndCall(ITransparentUpgradeableProxy(address(kernel)), address(newImpl), "");
 
-        assertEq(address(uint160(uint256(vm.load(address(kernel), ERC1967Utils.IMPLEMENTATION_SLOT)))), address(newImpl));
+        assertEq(
+            address(uint160(uint256(vm.load(address(kernel), ERC1967Utils.IMPLEMENTATION_SLOT)))), address(newImpl)
+        );
         assertEq(kernel.totalEscrowed(), BUDGET);
         assertEq(uint8(_status(jobId)), uint8(IAgenticCommerce.JobStatus.Funded));
         assertTrue(kernel.hasRole(kernel.ADMIN_ROLE(), admin));
@@ -129,7 +131,8 @@ contract AgenticCommerceAdminTest is KernelBase {
 
     function test_admin_functions_revertForNonAdmin() public {
         bytes32 role = kernel.ADMIN_ROLE();
-        bytes memory err = abi.encodeWithSelector(IAccessControl.AccessControlUnauthorizedAccount.selector, stranger, role);
+        bytes memory err =
+            abi.encodeWithSelector(IAccessControl.AccessControlUnauthorizedAccount.selector, stranger, role);
 
         vm.startPrank(stranger);
         vm.expectRevert(err);
@@ -332,9 +335,7 @@ contract AgenticCommerceAdminTest is KernelBase {
         _pause();
 
         vm.prank(admin);
-        vm.expectRevert(
-            abi.encodeWithSelector(IAgenticCommerce.InsufficientUnattributedBalance.selector, 7e6 + 1, 7e6)
-        );
+        vm.expectRevert(abi.encodeWithSelector(IAgenticCommerce.InsufficientUnattributedBalance.selector, 7e6 + 1, 7e6));
         kernel.emergencyWithdraw(address(token), admin, 7e6 + 1);
 
         vm.expectEmit(address(kernel));

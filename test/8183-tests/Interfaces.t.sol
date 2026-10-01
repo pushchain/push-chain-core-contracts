@@ -30,8 +30,7 @@ contract InterfacesTest is Test {
 
     function test_createJob_keepsFiveArgumentShape() public pure {
         assertEq(
-            IAgenticCommerce.createJob.selector,
-            bytes4(keccak256("createJob(address,address,uint256,string,address)"))
+            IAgenticCommerce.createJob.selector, bytes4(keccak256("createJob(address,address,uint256,string,address)"))
         );
     }
 }
