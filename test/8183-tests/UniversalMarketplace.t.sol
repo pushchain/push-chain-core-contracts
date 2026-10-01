@@ -22,19 +22,20 @@ import {IAgenticCommerce} from "../../src/agentic-commerce-8183/interfaces/IAgen
 import {MandateBindingHook} from "../../src/agentic-commerce-8183/hooks/MandateBindingHook.sol";
 import {UniversalMarketplace} from "../../src/agentic-commerce-8183/UniversalMarketplace.sol";
 import {UniversalMarketplaceTerms} from "../../src/agentic-commerce-8183/UniversalMarketplaceTerms.sol";
-import {UniversalMarketplaceEvaluation} from "../../src/agentic-commerce-8183/UniversalMarketplaceEvaluation.sol";
 import {
     IUniversalMarketplace,
     IUniversalMarketplaceErrors
 } from "../../src/agentic-commerce-8183/interfaces/IUniversalMarketplace.sol";
 import {
+    JobSpecBuilder,
+    Fill,
     ReadTemplate,
     TargetSource,
     CheckTemplate,
     ParamBounds,
     EvaluationTemplate,
     BuildContext
-} from "../../src/agentic-commerce-8183/interfaces/IUniversalMarketplaceEvaluation.sol";
+} from "../../src/agentic-commerce-8183/libraries/JobSpecBuilder.sol";
 import {EvalType, Op, NodeKind, Node, JobSpec} from "../../src/agentic-commerce-8183/libraries/JobSpecTypes.sol";
 import {
     OwnerIntent,
@@ -49,14 +50,32 @@ import {
 } from "../../src/agentic-commerce-8183/interfaces/external/IAGW.sol";
 import {CEAFactory} from "../../src/cea/CEAFactory.sol";
 
+/// @notice TEST ONLY: runs JobSpecBuilder as the marketplace does, with CEAs from the real marketplace, so a test can
+///         compute the description a job must carry.
+contract MarketJobSpecBuilder {
+    IUniversalMarketplace internal immutable MARKET;
+
+    constructor(IUniversalMarketplace market) {
+        MARKET = market;
+    }
+
+    function build(bytes memory evaluation, BuildContext memory ctx) external view returns (bytes memory) {
+        return JobSpecBuilder.build(evaluation, ctx);
+    }
+
+    function expectedCEAOf(address agw, bytes32 chainHash) external view returns (address) {
+        return MARKET.expectedCEAOf(agw, chainHash);
+    }
+}
+
 /// @title MarketplaceFixtures — shared setup and builders for the marketplace unit and invariant suites.
-/// @notice Real kernel, real MandateBindingHook (the interim hook, PRD 09 P8), real Terms and Evaluation helpers,
-///         real CEAFactory. The AGW factory and wallet are mocks that enforce the rules the marketplace relies
+/// @notice Real kernel, real MandateBindingHook (the interim hook, PRD 09 P8), real Terms helper and JobSpecBuilder
+///         library, real CEAFactory. The AGW factory and wallet are mocks that enforce the rules the marketplace relies
 ///         on and verify no signature; the AGW repo's E2E suite runs the real wallet stack.
 abstract contract MarketplaceFixtures is KernelBase, TemplateParts {
     UniversalMarketplace internal mkt;
     UniversalMarketplaceTerms internal terms;
-    UniversalMarketplaceEvaluation internal evaluationBuilder;
+    MarketJobSpecBuilder internal expectedBuilder;
     MandateBindingHook internal hook;
     MockAGWFactory internal factory;
     MockSmartSession internal engine;
@@ -107,7 +126,6 @@ abstract contract MarketplaceFixtures is KernelBase, TemplateParts {
         kernel.setHookWhitelist(address(hook), true);
 
         terms = new UniversalMarketplaceTerms();
-        evaluationBuilder = new UniversalMarketplaceEvaluation();
         mkt = UniversalMarketplace(
             address(
                 new TransparentUpgradeableProxy(
@@ -133,6 +151,7 @@ abstract contract MarketplaceFixtures is KernelBase, TemplateParts {
         );
         vm.prank(admin);
         mkt.setCEADeployment(SEPOLIA_HASH, address(ceaFactory), ceaProxyImpl);
+        expectedBuilder = new MarketJobSpecBuilder(IUniversalMarketplace(address(mkt)));
 
         pUSDC = new MockPRC20Source("pUSDC.sepolia", SEPOLIA, 6);
         pETH = new MockPRC20Source("pETH.sepolia", SEPOLIA, 18);
@@ -148,7 +167,6 @@ abstract contract MarketplaceFixtures is KernelBase, TemplateParts {
             hook: address(hook),
             evaluator: universalEvaluator,
             terms: address(terms),
-            evaluationBuilder: address(evaluationBuilder),
             admin: admin
         });
     }
@@ -354,10 +372,9 @@ abstract contract MarketplaceFixtures is KernelBase, TemplateParts {
         address agw,
         IUniversalMarketplace.JobInputs memory job
     ) internal view returns (bytes memory) {
-        return evaluationBuilder.build(
+        return expectedBuilder.build(
             abi.encode(t),
             BuildContext({
-                market: address(mkt),
                 agw: agw,
                 principal: job.principal,
                 executeBy: job.executeBy,
@@ -566,19 +583,22 @@ contract UniversalMarketplaceTest is MarketplaceFixtures {
         _expectInvalidRules(r, "erc20 approval");
     }
 
-    function test_MR08_evaluationErrorsSurface() public {
+    /// @dev The criteria template is stored as given: registration never judges it. A template that writes a fill
+    ///      outside its args registers, and fails only when a job is built from it.
+    function test_MR08_criteriaNotJudgedAtRegistration() public {
         EvaluationTemplate memory t = _lendingTemplate();
         ReadTemplate[] memory reads = new ReadTemplate[](3);
         reads[0] = t.reads[0];
         reads[1] = t.reads[1];
         reads[2] = _balanceOfCEA(SEPOLIA_ID, weth); // read by no check
         t.reads = reads;
-        bytes memory r = abi.encode(_rules());
-        bytes memory e = abi.encode(t);
-        IUniversalMarketplace.AgentCard memory c = _card();
-        vm.prank(provider);
-        vm.expectRevert(abi.encodeWithSelector(IUniversalMarketplaceErrors.InvalidCard.selector, "eval: unused read"));
-        mkt.registerCard(c, r, e);
+        t.reads[0].fills[0].word = 1; // args are one word long
+        uint256 id = _register(_card(), _rules(), t);
+        assertEq(mkt.getCard(id).evaluation, abi.encode(t), "stored byte-equal");
+
+        IUniversalMarketplace.JobInputs memory job = _inputs(PRINCIPAL);
+        vm.expectRevert(abi.encodeWithSelector(IUniversalMarketplaceErrors.FillOutOfBounds.selector, 0, 0));
+        mkt.buildCreateJobCalldata(id, user, 0, job); // the same build startJob runs at step 9
     }
 
     function test_MR09_assetIndependent() public {
@@ -885,10 +905,6 @@ contract UniversalMarketplaceTest is MarketplaceFixtures {
         IUniversalMarketplace.RulesCardTerms memory r = _rules();
         r.allowedCalls[0].selector = ERC20_APPROVE;
         _expectInvalidModify(id, _card(), abi.encode(r), abi.encode(_lendingTemplate()), "erc20 approval");
-
-        EvaluationTemplate memory t = _lendingTemplate();
-        t.checks[1].read = 0; // reads[1] now unused
-        _expectInvalidModify(id, _card(), abi.encode(_rules()), abi.encode(t), "eval: unused read");
 
         assertEq(mkt.cardVersion(id), 1, "no failed modification bumped the version");
     }
@@ -1771,9 +1787,6 @@ contract UniversalMarketplaceTest is MarketplaceFixtures {
         ip.terms = address(0);
         _expectInitRevert(ip, zero);
         ip = _initParams();
-        ip.evaluationBuilder = address(0);
-        _expectInitRevert(ip, zero);
-        ip = _initParams();
         ip.admin = address(0);
         _expectInitRevert(ip, zero);
         ip = _initParams();
@@ -1791,7 +1804,6 @@ contract UniversalMarketplaceTest is MarketplaceFixtures {
         assertEq(mkt.hook(), address(hook));
         assertEq(mkt.evaluator(), universalEvaluator);
         assertEq(address(mkt.terms()), address(terms));
-        assertEq(address(mkt.evaluationBuilder()), address(evaluationBuilder));
         assertTrue(mkt.hasRole(mkt.ADMIN_ROLE(), admin));
         assertTrue(mkt.hasRole(mkt.DEFAULT_ADMIN_ROLE(), admin));
     }
@@ -1817,34 +1829,33 @@ contract UniversalMarketplaceTest is MarketplaceFixtures {
         assertEq(_word(m, 3), uint256(uint160(universalEvaluator)), "3 evaluator");
         assertEq(vm.load(m, bytes32(uint256(4))), mkt.pushChainHash(), "4 pushChainHash");
         assertEq(_word(m, 5), uint256(uint160(address(terms))), "5 terms");
-        assertEq(_word(m, 6), uint256(uint160(address(evaluationBuilder))), "6 evaluationBuilder");
-        assertEq(_word(m, 7), 2, "7 cardCount");
+        assertEq(_word(m, 6), 2, "6 cardCount");
 
         // mappings: the entry lives at keccak256(key ‖ slot); a long `bytes` stores 2·length + 1
-        assertEq(_entry(m, id, 8), uint256(uint160(provider)), "8 _cards[id].provider");
-        assertEq(_entry(m, id, 9), abi.encode(_rules()).length * 2 + 1, "9 _rulesTerms");
-        assertEq(_entry(m, id, 10), abi.encode(_lendingTemplate()).length * 2 + 1, "10 _evaluations");
-        assertEq(_entry(m, id, 11), 2, "11 cardVersion");
-        assertEq(_entry(m, id2, 11), 1, "11 cardVersion (unmodified)");
-        assertEq(_entry(m, id, 12), 1, "12 cardVerified");
-        assertEq(_entry(m, id2, 13), 1, "13 adminDisabled");
+        assertEq(_entry(m, id, 7), uint256(uint160(provider)), "7 _cards[id].provider");
+        assertEq(_entry(m, id, 8), abi.encode(_rules()).length * 2 + 1, "8 _rulesTerms");
+        assertEq(_entry(m, id, 9), abi.encode(_lendingTemplate()).length * 2 + 1, "9 _evaluations");
+        assertEq(_entry(m, id, 10), 2, "10 cardVersion");
+        assertEq(_entry(m, id2, 10), 1, "10 cardVersion (unmodified)");
+        assertEq(_entry(m, id, 11), 1, "11 cardVerified");
+        assertEq(_entry(m, id2, 12), 1, "12 adminDisabled");
         assertEq(
-            uint256(vm.load(m, keccak256(abi.encode(SEPOLIA_HASH, uint256(14))))),
+            uint256(vm.load(m, keccak256(abi.encode(SEPOLIA_HASH, uint256(13))))),
             uint256(uint160(address(ceaFactory))),
-            "14 ceaDeployment.ceaFactory"
+            "13 ceaDeployment.ceaFactory"
         );
-        assertEq(uint256(vm.load(m, keccak256(abi.encode(SEPOLIA_HASH, uint256(15))))), 1, "15 universalPaused");
-        assertEq(uint256(vm.load(m, keccak256(abi.encode(agw, uint256(16))))), jobId, "16 lastJobOf");
-        assertEq(_entry(m, jobId, 17), id, "17 cardOfJob");
-        assertEq(_entry(m, jobId, 18), uint256(uint160(agw)), "18 agwOfJob");
+        assertEq(uint256(vm.load(m, keccak256(abi.encode(SEPOLIA_HASH, uint256(14))))), 1, "14 universalPaused");
+        assertEq(uint256(vm.load(m, keccak256(abi.encode(agw, uint256(15))))), jobId, "15 lastJobOf");
+        assertEq(_entry(m, jobId, 16), id, "16 cardOfJob");
+        assertEq(_entry(m, jobId, 17), uint256(uint160(agw)), "17 agwOfJob");
         assertEq(
-            vm.load(m, keccak256(abi.encode(jobId, uint256(19)))), MockAGW(payable(agw)).RULES_ID(), "19 rulesOfJob"
+            vm.load(m, keccak256(abi.encode(jobId, uint256(18)))), MockAGW(payable(agw)).RULES_ID(), "18 rulesOfJob"
         );
-        for (uint256 slot = 8; slot <= 19; ++slot) {
+        for (uint256 slot = 7; slot <= 18; ++slot) {
             assertEq(_word(m, slot), 0, "a mapping's base slot is never written");
         }
-        for (uint256 slot = 20; slot <= 50; ++slot) {
-            assertEq(_word(m, slot), 0, "gap or slot 50 written");
+        for (uint256 slot = 19; slot <= 49; ++slot) {
+            assertEq(_word(m, slot), 0, "gap (19-48) or slot 49 written");
         }
     }
 

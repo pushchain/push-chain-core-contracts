@@ -7,7 +7,7 @@ import {
     ReadTemplate,
     TargetSource,
     CheckTemplate
-} from "../../../src/agentic-commerce-8183/interfaces/IUniversalMarketplaceEvaluation.sol";
+} from "../../../src/agentic-commerce-8183/libraries/JobSpecBuilder.sol";
 import {
     EvalType,
     Op,

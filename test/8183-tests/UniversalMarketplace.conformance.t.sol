@@ -1,9 +1,7 @@
 // SPDX-License-Identifier: MIT
 pragma solidity 0.8.26;
 
-import {UniversalMarketplaceEvaluation} from "../../src/agentic-commerce-8183/UniversalMarketplaceEvaluation.sol";
-import {IUniversalMarketplaceErrors} from "../../src/agentic-commerce-8183/interfaces/IUniversalMarketplace.sol";
-import {BuildContext} from "../../src/agentic-commerce-8183/interfaces/IUniversalMarketplaceEvaluation.sol";
+import {BuildContext} from "../../src/agentic-commerce-8183/libraries/JobSpecBuilder.sol";
 import {
     EvalType,
     Op,
@@ -13,39 +11,17 @@ import {
     Check,
     JobSpec,
     T_UINT,
-    T_INT,
-    T_BOOL,
     T_ADDRESS,
-    T_BYTESN,
-    T_BYTES,
-    T_STRING,
-    T_TUPLE,
-    T_ARRAY,
-    T_FIXED_ARRAY
+    T_TUPLE
 } from "../../src/agentic-commerce-8183/libraries/JobSpecTypes.sol";
-import {EvaluationFixtures} from "./UniversalMarketplaceEvaluation.t.sol";
+import {BuilderFixtures} from "./JobSpecBuilder.t.sol";
 import {V2Decoder} from "./helpers/V2Decoder.sol";
 
-/// @notice TEST ONLY: exposes the validator's leaf walk, so it can be held against the reference decoder.
-contract EvaluationLeafHarness is UniversalMarketplaceEvaluation {
-    function leafOf(bytes memory types, uint8[] memory field) external pure returns (uint8) {
-        _validateOutputs(types);
-        return _leafOf(types, field);
-    }
-}
-
-/// @dev `(bool b, bytes d)`: the inner struct of the V2 doc's `f()` example.
-struct BoolAndBytes {
-    bool b;
-    bytes d;
-}
-
 /// @title UniversalMarketplace — conformance with the Universal Evaluator V2 design (PRD 09 §7.5)
-/// @notice What the marketplace builds must be exactly what the V2 doc's examples write by hand, and every value a
-///         template selects must decode in the V2 evaluator to the type the validator assumed.
-contract UniversalMarketplaceConformanceTest is EvaluationFixtures {
+/// @notice What the marketplace builds must be exactly what the V2 doc's examples write by hand, and every read it
+///         builds must decode in the V2 evaluator's decoder.
+contract UniversalMarketplaceConformanceTest is BuilderFixtures {
     V2Decoder internal decoder;
-    EvaluationLeafHarness internal harness;
 
     uint64 internal executeBy;
     uint64 internal failFinalAt;
@@ -53,7 +29,6 @@ contract UniversalMarketplaceConformanceTest is EvaluationFixtures {
     function setUp() public override {
         super.setUp();
         decoder = new V2Decoder();
-        harness = new EvaluationLeafHarness();
         executeBy = uint64(block.timestamp + 1 hours); // the doc's times
         failFinalAt = uint64(block.timestamp + 2 hours);
     }
@@ -62,7 +37,7 @@ contract UniversalMarketplaceConformanceTest is EvaluationFixtures {
 
     function test_MC01_lendingExample_equalsV2Doc() public view {
         JobSpec memory built = _build(_lending(), _docCtx(100e6, _noParams()));
-        address cea = market.ceaFor(AGW, ETH_HASH);
+        address cea = builder.ceaFor(AGW, ETH_HASH);
 
         Read[] memory reads = new Read[](2);
         reads[0] = _docRead("1", 12, AUSDC_ETH, BALANCE_OF, abi.encode(cea), _docUintOutputs(), _f(0));
@@ -81,7 +56,7 @@ contract UniversalMarketplaceConformanceTest is EvaluationFixtures {
 
     function test_MC02_swapExample_equalsV2Doc() public view {
         JobSpec memory built = _build(_swap(), _docCtx(0, _oneParam(0.38e18)));
-        address cea = market.ceaFor(AGW, BASE_HASH);
+        address cea = builder.ceaFor(AGW, BASE_HASH);
 
         Read[] memory reads = new Read[](1);
         reads[0] = _docRead("8453", 3, WETH_BASE, BALANCE_OF, abi.encode(cea), _docUintOutputs(), _f(0));
@@ -94,7 +69,7 @@ contract UniversalMarketplaceConformanceTest is EvaluationFixtures {
     }
 
     function test_MC03_orAndAtLeastExamples() public view {
-        address cea = market.ceaFor(AGW, ETH_HASH);
+        address cea = builder.ceaFor(AGW, ETH_HASH);
 
         // ANY: "Aave or Morpho", spelled out in full in the doc.
         JobSpec memory either = _build(_either(), _docCtx(100e6, _noParams()));
@@ -132,104 +107,15 @@ contract UniversalMarketplaceConformanceTest is EvaluationFixtures {
         _assertNodesEq(twoOfThree.nodes, atLeast);
     }
 
-    // ═════════════════════════════ the reference decoder agrees with the validator ═════════════════════════════
+    // ═════════════════════════════ the reference decoder reads what the builder writes ═════════════════════════════
 
-    /// @dev Every read the marketplace builds decodes in the V2 decoder, to the value the answer holds, at the
-    ///      leaf type the validator judged its checks against.
+    /// @dev Every read the marketplace builds for the doc's examples decodes in the V2 decoder.
     function test_MC04_referenceDecoder_agrees() public view {
         _assertBuiltReadsDecode(_build(_lending(), _docCtx(100e6, _noParams())));
         _assertBuiltReadsDecode(_build(_swap(), _docCtx(0, _oneParam(0.38e18))));
         _assertBuiltReadsDecode(_build(_either(), _docCtx(100e6, _noParams())));
         _assertBuiltReadsDecode(_build(_twoOfThree(), _docCtx(300e6, _noParams())));
         _assertBuiltReadsDecode(_build(_nested(), _docCtx(100e6, _noParams())));
-    }
-
-    /// @dev The doc's "Examples" table, one row per type code, plus INT, BYTESN and both fixed-array shapes.
-    function test_MC04b_docTypeTable_agrees() public view {
-        address owner = address(0x0123456789abcDEF0123456789abCDef01234567);
-        // forge-lint: disable-next-line(unsafe-typecast)
-        _agree(_out2(T_TUPLE, 1, T_ADDRESS), _f(0), abi.encode(owner), T_ADDRESS, int256(uint256(uint160(owner)))); // 160 bits
-
-        bytes memory fOut = abi.encodePacked(T_TUPLE, uint8(2), T_UINT, T_TUPLE, uint8(2), T_BOOL, T_BYTES);
-        bytes memory fRes = abi.encode(uint256(7), BoolAndBytes({b: true, d: hex"abcd"}));
-        _agree(fOut, _f2(1, 0), fRes, T_BOOL, 1);
-        _agree(fOut, _f2(1, 1), fRes, T_BYTES, _hash(hex"abcd"));
-        _agree(fOut, _f(0), fRes, T_UINT, 7);
-
-        _agree(_out2(T_TUPLE, 1, T_STRING), _f(0), abi.encode("WETH"), T_STRING, _hash("WETH"));
-
-        uint256[] memory g = new uint256[](5);
-        g[3] = 42;
-        bytes memory gOut = abi.encodePacked(T_TUPLE, uint8(1), T_ARRAY, T_UINT);
-        _agree(gOut, _f2(0, 3), abi.encode(g), T_UINT, 42);
-        _agree(gOut, _f(0), abi.encode(g), T_ARRAY, 5);
-
-        string[] memory h = new string[](3);
-        h[2] = "USDC";
-        _agree(
-            abi.encodePacked(T_TUPLE, uint8(1), T_ARRAY, T_STRING), _f2(0, 2), abi.encode(h), T_STRING, _hash("USDC")
-        );
-
-        bytes memory ibOut = abi.encodePacked(T_TUPLE, uint8(2), T_INT, T_BYTESN);
-        bytes memory ibRes = abi.encode(int256(-5), bytes32(uint256(0xbeef)));
-        _agree(ibOut, _f(0), ibRes, T_INT, -5);
-        _agree(ibOut, _f(1), ibRes, T_BYTESN, 0xbeef);
-
-        uint256[3] memory fixedUint = [uint256(11), 22, 33];
-        bytes memory faOut = abi.encodePacked(T_TUPLE, uint8(1), T_FIXED_ARRAY, uint8(3), T_UINT);
-        _agree(faOut, _f2(0, 1), abi.encode(fixedUint), T_UINT, 22);
-
-        string[2] memory fixedString = ["a", "USDC"];
-        bytes memory fsOut = abi.encodePacked(T_TUPLE, uint8(1), T_FIXED_ARRAY, uint8(2), T_STRING);
-        _agree(fsOut, _f2(0, 1), abi.encode(fixedString), T_STRING, _hash("USDC"));
-    }
-
-    /// @dev Where the decoder cannot turn the selection into a number (or would return a meaningless raw word for a
-    ///      struct), the validator refuses the card. The validator is never looser than the decoder.
-    function test_MC04c_validatorRefusesUnusableLeaves() public {
-        bytes memory reserveOut = _docReserveOutputs();
-        bytes memory reserveRes = _reserveAnswer(0);
-
-        // A struct leaf: the decoder answers a raw word; the validator refuses.
-        (bool ok, uint8 leaf,) = decoder.locate(reserveOut, _f(0), reserveRes);
-        assertTrue(ok && leaf == T_TUPLE, "decoder: struct leaf");
-        _expectLeafRefused(reserveOut, _f(0));
-
-        // Into a basic value, past a tuple's end, past a fixed array's end: the decoder can't tell.
-        _bothRefuse(_docUintOutputs(), _f2(0, 0), abi.encode(uint256(1)));
-        _bothRefuse(_docUintOutputs(), _f(1), abi.encode(uint256(1)));
-        uint256[3] memory fixedUint = [uint256(1), 2, 3];
-        _bothRefuse(
-            abi.encodePacked(T_TUPLE, uint8(1), T_FIXED_ARRAY, uint8(3), T_UINT), _f2(0, 3), abi.encode(fixedUint)
-        );
-    }
-
-    /// @dev Every field of Aave's ReserveData: same leaf in both, and the decoder returns that field's word.
-    function testFuzz_MC04d_reserveFields(uint8 idx) public view {
-        idx = uint8(bound(idx, 1, 14));
-        bytes memory out = _docReserveOutputs();
-        uint8 leaf = harness.leafOf(out, _f2(0, idx));
-        assertEq(leaf, idx >= 8 && idx <= 11 ? T_ADDRESS : T_UINT, "validator leaf");
-        _agree(out, _f2(0, idx), _reserveAnswer(0), leaf, int256(1000 + uint256(idx)));
-    }
-
-    /// @dev An array index is unknown at registration: the validator accepts any; the decoder answers the element
-    ///      in range and "can't tell" out of range, so a bad index can only make a job INCONCLUSIVE, never wrong.
-    function testFuzz_MC04e_arrayIndex(uint8 len, uint8 idx) public view {
-        len = uint8(bound(len, 0, 20));
-        uint256[] memory g = new uint256[](len);
-        for (uint256 i; i < len; ++i) {
-            g[i] = 500 + i;
-        }
-        bytes memory out = abi.encodePacked(T_TUPLE, uint8(1), T_ARRAY, T_UINT);
-        assertEq(harness.leafOf(out, _f2(0, idx)), T_UINT, "validator accepts any index");
-        (bool ok, int256 v) = decoder.decodeAnswer(out, _f2(0, idx), abi.encode(g));
-        if (idx < len) {
-            assertTrue(ok, "in range: ok");
-            assertEq(v, int256(500 + uint256(idx)), "in range: element");
-        } else {
-            assertFalse(ok, "out of range: can't tell");
-        }
     }
 
     // ═════════════════════════════ the doc's spellings ═════════════════════════════
@@ -307,50 +193,26 @@ contract UniversalMarketplaceConformanceTest is EvaluationFixtures {
         }
     }
 
-    function _out2(uint8 a, uint8 n, uint8 b) internal pure returns (bytes memory) {
-        return abi.encodePacked(a, n, b);
-    }
-
-    function _hash(bytes memory b) internal pure returns (int256) {
-        // forge-lint: disable-next-line(unsafe-typecast)
-        return int256(uint256(keccak256(b))); // the decoder's own cast: a hash compared with EQ / NEQ only
-    }
-
     // ═════════════════════════════ assertions ═════════════════════════════
 
+    /// @dev Every built read decodes in the V2 decoder, at a UINT leaf, to the value its answer holds.
     function _assertBuiltReadsDecode(JobSpec memory spec) internal view {
         for (uint256 i; i < spec.reads.length; ++i) {
             Read memory r = spec.reads[i];
             bool isReserve = keccak256(r.outputs) == keccak256(_docReserveOutputs());
             bytes memory res = isReserve ? _reserveAnswer(0.052e27) : abi.encode(uint256(100e6 + i));
             // forge-lint: disable-next-line(unsafe-typecast)
-            _agree(r.outputs, r.field, res, T_UINT, isReserve ? int256(0.052e27) : int256(100e6 + i)); // i < 16
+            _decodes(r.outputs, r.field, res, isReserve ? int256(0.052e27) : int256(100e6 + i)); // i < 16
         }
     }
 
-    /// @dev Validator leaf == decoder leaf == `leaf`, and the decoder answers (true, `value`).
-    function _agree(bytes memory outputs, uint8[] memory field, bytes memory res, uint8 leaf, int256 value)
-        internal
-        view
-    {
-        assertEq(harness.leafOf(outputs, field), leaf, "validator leaf");
-        (bool located, uint8 decoderLeaf,) = decoder.locate(outputs, field, res);
+    function _decodes(bytes memory outputs, uint8[] memory field, bytes memory res, int256 value) internal view {
+        (bool located, uint8 leaf,) = decoder.locate(outputs, field, res);
         assertTrue(located, "decoder: located");
-        assertEq(decoderLeaf, leaf, "decoder leaf");
+        assertEq(leaf, T_UINT, "decoder: leaf");
         (bool ok, int256 v) = decoder.decodeAnswer(outputs, field, res);
         assertTrue(ok, "decoder: ok");
         assertEq(v, value, "decoder: value");
-    }
-
-    function _bothRefuse(bytes memory outputs, uint8[] memory field, bytes memory res) internal {
-        (bool ok,) = decoder.decodeAnswer(outputs, field, res);
-        assertFalse(ok, "decoder: can't tell");
-        _expectLeafRefused(outputs, field);
-    }
-
-    function _expectLeafRefused(bytes memory outputs, uint8[] memory field) internal {
-        vm.expectRevert(abi.encodeWithSelector(IUniversalMarketplaceErrors.InvalidCard.selector, "eval: field"));
-        harness.leafOf(outputs, field);
     }
 
     function _assertSpecEq(JobSpec memory a, JobSpec memory b) internal pure {

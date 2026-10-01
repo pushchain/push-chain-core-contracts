@@ -2,11 +2,10 @@
 pragma solidity 0.8.26;
 
 import {AllowedCall, OwnerIntent, Session} from "./external/IAGW.sol";
-import {IEvaluationMarket} from "./IUniversalMarketplaceEvaluation.sol";
 
 /// @title IUniversalMarketplaceErrors
-/// @notice Every error the marketplace and its two helpers raise. One declaration, shared, so a helper's
-///         revert bubbles through the marketplace with the selector a caller of the marketplace expects.
+/// @notice Every error the marketplace, its Terms helper and JobSpecBuilder raise. One declaration, shared, so
+///         a helper's revert bubbles through the marketplace with the selector its callers expect.
 interface IUniversalMarketplaceErrors {
     // ───────── config and cards ─────────
 
@@ -35,6 +34,8 @@ interface IUniversalMarketplaceErrors {
     error ParamOutOfRange(uint256 index, int256 value);
     /// @dev A PRINCIPAL_BPS target overflows: `principal × bps` does not fit uint256.
     error TargetOverflow(uint256 check);
+    /// @dev The card's template writes fill `fill` of read `read` outside that read's args.
+    error FillOutOfBounds(uint256 read, uint256 fill);
 
     // ───────── startJob: wallet and intent (same shapes as the AGW's errors of the same name) ─────────
 
@@ -68,9 +69,7 @@ interface IUniversalMarketplaceErrors {
 /// @title IUniversalMarketplace
 /// @notice Agent cards, and `startJob`: one relayed call that deploys the user's AGW (if needed), grants it
 ///         the card's rules, and creates the ERC-8183 job with the AGW as client. Moves no funds.
-/// @dev `pushChainHash`, `ceaDeployment` and `expectedCEAOf` come from IEvaluationMarket: the evaluation helper
-///      reads them back when it validates and builds a card's criteria.
-interface IUniversalMarketplace is IUniversalMarketplaceErrors, IEvaluationMarket {
+interface IUniversalMarketplace is IUniversalMarketplaceErrors {
     // ─────────────────────────────── types ───────────────────────────────
 
     /// @notice One standing offer from one provider: one job type on one EVM execution chain.
@@ -161,7 +160,6 @@ interface IUniversalMarketplace is IUniversalMarketplaceErrors, IEvaluationMarke
         address hook; // must be whitelisted on the kernel
         address evaluator; // the marketplace-wide 8183 evaluator
         address terms; // UniversalMarketplaceTerms
-        address evaluationBuilder; // UniversalMarketplaceEvaluation
         address admin; // receives DEFAULT_ADMIN_ROLE and ADMIN_ROLE
     }
 
@@ -274,6 +272,9 @@ interface IUniversalMarketplace is IUniversalMarketplaceErrors, IEvaluationMarke
 
     /// @notice False while the AGW's last job started here is Funded, Submitted, or Open and unexpired.
     function isAGWFree(address agw) external view returns (bool);
+
+    /// @notice The AGW's CEA on `chainHash`. Reverts `ChainNotSupported` for a chain without a CEA deployment.
+    function expectedCEAOf(address agw, bytes32 chainHash) external view returns (address);
 
     /// @notice The ERC-7579 single execution `startJob` makes the AGW run: `createJob` on the kernel.
     function buildCreateJobCalldata(uint256 cardId, address owner, uint96 index, JobInputs calldata job)
