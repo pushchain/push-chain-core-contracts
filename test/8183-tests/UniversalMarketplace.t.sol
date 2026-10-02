@@ -28,7 +28,6 @@ import {
 } from "../../src/agentic-commerce-8183/interfaces/IUniversalMarketplace.sol";
 import {
     JobSpecBuilder,
-    Fill,
     ReadTemplate,
     TargetSource,
     CheckTemplate,
