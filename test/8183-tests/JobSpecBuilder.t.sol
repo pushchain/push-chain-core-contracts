@@ -4,18 +4,8 @@ pragma solidity 0.8.26;
 import {Test} from "forge-std/Test.sol";
 
 import {TemplateParts} from "./helpers/TemplateParts.sol";
-import {IUniversalMarketplaceErrors} from "../../src/agentic-commerce-8183/interfaces/IUniversalMarketplace.sol";
-import {
-    JobSpecBuilder,
-    Fill,
-    FillSource,
-    ReadTemplate,
-    TargetSource,
-    CheckTemplate,
-    ParamBounds,
-    EvaluationTemplate,
-    BuildContext
-} from "../../src/agentic-commerce-8183/libraries/JobSpecBuilder.sol";
+import {UniversalMarketplaceErrors} from "../../src/agentic-commerce-8183/libraries/Errors.sol";
+import {JobSpecBuilder} from "../../src/agentic-commerce-8183/libraries/JobSpecBuilder.sol";
 import {
     EvalType,
     Op,
@@ -25,6 +15,16 @@ import {
     T_TUPLE,
     T_ADDRESS
 } from "../../src/agentic-commerce-8183/libraries/JobSpecTypes.sol";
+import {
+    FillSource,
+    Fill,
+    ReadTemplate,
+    TargetSource,
+    CheckTemplate,
+    ParamBounds,
+    EvaluationTemplate,
+    BuildContext
+} from "../../src/agentic-commerce-8183/libraries/Types.sol";
 
 /// @notice TEST ONLY: calls JobSpecBuilder the way the marketplace does. Under DELEGATECALL the library asks
 ///         `address(this)` (this harness) for CEAs, so the harness answers `expectedCEAOf` like a marketplace:
@@ -41,7 +41,7 @@ contract JobSpecBuilderHarness {
     }
 
     function expectedCEAOf(address agw, bytes32 chainHash) external view returns (address) {
-        if (!supported[chainHash]) revert IUniversalMarketplaceErrors.ChainNotSupported(chainHash);
+        if (!supported[chainHash]) revert UniversalMarketplaceErrors.ChainNotSupported(chainHash);
         return ceaFor(agw, chainHash);
     }
 
@@ -269,13 +269,13 @@ contract JobSpecBuilderTest is BuilderFixtures {
 
     function test_JB04_params() public {
         bytes memory swap = abi.encode(_swap());
-        vm.expectRevert(abi.encodeWithSelector(IUniversalMarketplaceErrors.ParamCountMismatch.selector, 1, 0));
+        vm.expectRevert(abi.encodeWithSelector(UniversalMarketplaceErrors.ParamCountMismatch.selector, 1, 0));
         builder.build(swap, _ctx(1, _noParams()));
 
-        vm.expectRevert(abi.encodeWithSelector(IUniversalMarketplaceErrors.ParamOutOfRange.selector, 0, int256(0)));
+        vm.expectRevert(abi.encodeWithSelector(UniversalMarketplaceErrors.ParamOutOfRange.selector, 0, int256(0)));
         builder.build(swap, _ctx(1, _oneParam(0)));
         vm.expectRevert(
-            abi.encodeWithSelector(IUniversalMarketplaceErrors.ParamOutOfRange.selector, 0, int256(1e30 + 1))
+            abi.encodeWithSelector(UniversalMarketplaceErrors.ParamOutOfRange.selector, 0, int256(1e30 + 1))
         );
         builder.build(swap, _ctx(1, _oneParam(1e30 + 1)));
         builder.build(swap, _ctx(1, _oneParam(1))); // both bounds are inclusive
@@ -288,7 +288,7 @@ contract JobSpecBuilderTest is BuilderFixtures {
         EvaluationTemplate memory t = _lending();
         t.checks[0].value = 2;
         bytes memory enc = abi.encode(t);
-        vm.expectRevert(abi.encodeWithSelector(IUniversalMarketplaceErrors.TargetOverflow.selector, 0));
+        vm.expectRevert(abi.encodeWithSelector(UniversalMarketplaceErrors.TargetOverflow.selector, 0));
         builder.build(enc, _ctx(2 ** 255, _noParams()));
         // the largest principal whose product fits builds
         uint256 largest = type(uint256).max / 2;
@@ -305,7 +305,7 @@ contract JobSpecBuilderTest is BuilderFixtures {
 
         t.reads[0].fills[0].word = 2;
         bytes memory enc = abi.encode(t);
-        vm.expectRevert(abi.encodeWithSelector(IUniversalMarketplaceErrors.FillOutOfBounds.selector, 0, 0));
+        vm.expectRevert(abi.encodeWithSelector(UniversalMarketplaceErrors.FillOutOfBounds.selector, 0, 0));
         builder.build(enc, _ctx(1, _oneParam(1)));
 
         t = _swap();
@@ -313,7 +313,7 @@ contract JobSpecBuilderTest is BuilderFixtures {
         t.reads[0].fills[0] = Fill({word: 0, source: FillSource.CEA, param: 0});
         t.reads[0].fills[1] = Fill({word: 1, source: FillSource.PARAM, param: 0}); // args are one word long
         enc = abi.encode(t);
-        vm.expectRevert(abi.encodeWithSelector(IUniversalMarketplaceErrors.FillOutOfBounds.selector, 0, 1));
+        vm.expectRevert(abi.encodeWithSelector(UniversalMarketplaceErrors.FillOutOfBounds.selector, 0, 1));
         builder.build(enc, _ctx(1, _oneParam(1)));
     }
 
@@ -322,13 +322,13 @@ contract JobSpecBuilderTest is BuilderFixtures {
         EvaluationTemplate memory t = _swap();
         t.reads[0].chainId = "137"; // a CEA fill on a chain without a CEA deployment
         bytes memory enc = abi.encode(t);
-        vm.expectRevert(abi.encodeWithSelector(IUniversalMarketplaceErrors.ChainNotSupported.selector, polygon));
+        vm.expectRevert(abi.encodeWithSelector(UniversalMarketplaceErrors.ChainNotSupported.selector, polygon));
         builder.build(enc, _ctx(1, _oneParam(1)));
 
         t = _ownerIsCEA();
         t.reads[0].chainId = "137"; // a CEA target on such a chain
         enc = abi.encode(t);
-        vm.expectRevert(abi.encodeWithSelector(IUniversalMarketplaceErrors.ChainNotSupported.selector, polygon));
+        vm.expectRevert(abi.encodeWithSelector(UniversalMarketplaceErrors.ChainNotSupported.selector, polygon));
         builder.build(enc, _ctx(1, _noParams()));
 
         // no CEA anywhere: no chain is asked, so an unsupported chain is fine

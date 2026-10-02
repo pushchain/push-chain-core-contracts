@@ -12,7 +12,7 @@ import {ISmartSession} from "../../src/agentic-commerce-8183/interfaces/external
 ///        so the PRD's pinned block (`23296566`) is unreachable there. The asserted facts are
 ///        permanent once true. The block used is logged.
 ///      - A wrong mirror ABI reverts or decodes garbage, so three passing calls pin it.
-contract MandateBindingHookForkTest is Test {
+contract RulesBindingHookForkTest is Test {
     address internal constant FACTORY = 0x2578041963f692f8b51A137A1c7ddc0c84a8226A;
     address internal constant ENGINE = 0x046B2874Fc9F920ad53A317b3cf9d3d1974466f3;
     address internal constant SMOKE_WALLET = 0x1A02CC8Ed94a160D490D6851401F6F3879c69991;

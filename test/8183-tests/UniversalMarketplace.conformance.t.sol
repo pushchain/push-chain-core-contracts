@@ -1,7 +1,6 @@
 // SPDX-License-Identifier: MIT
 pragma solidity 0.8.26;
 
-import {BuildContext} from "../../src/agentic-commerce-8183/libraries/JobSpecBuilder.sol";
 import {
     EvalType,
     Op,
@@ -16,6 +15,7 @@ import {
 } from "../../src/agentic-commerce-8183/libraries/JobSpecTypes.sol";
 import {BuilderFixtures} from "./JobSpecBuilder.t.sol";
 import {V2Decoder} from "./helpers/V2Decoder.sol";
+import {BuildContext} from "../../src/agentic-commerce-8183/libraries/Types.sol";
 
 /// @title UniversalMarketplace — conformance with the Universal Evaluator V2 design (PRD 09 §7.5)
 /// @notice What the marketplace builds must be exactly what the V2 doc's examples write by hand, and every read it

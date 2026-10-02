@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: MIT
 pragma solidity 0.8.26;
 
+import {RulesBindingHookErrors, ERC8183HookErrors} from "../../src/agentic-commerce-8183/libraries/Errors.sol";
 import {TransparentUpgradeableProxy} from "@openzeppelin/contracts/proxy/transparent/TransparentUpgradeableProxy.sol";
 import {ITransparentUpgradeableProxy} from "@openzeppelin/contracts/proxy/transparent/TransparentUpgradeableProxy.sol";
 import {ProxyAdmin} from "@openzeppelin/contracts/proxy/transparent/ProxyAdmin.sol";
@@ -9,17 +10,16 @@ import {Initializable} from "@openzeppelin/contracts-upgradeable/proxy/utils/Ini
 import {IERC20Errors} from "@openzeppelin/contracts/interfaces/draft-IERC6093.sol";
 
 import {IAgenticCommerce} from "../../src/agentic-commerce-8183/interfaces/IAgenticCommerce.sol";
-import {BaseERC8183Hook} from "../../src/agentic-commerce-8183/hooks/BaseERC8183Hook.sol";
-import {MandateBindingHook} from "../../src/agentic-commerce-8183/hooks/MandateBindingHook.sol";
+import {RulesBindingHook} from "../../src/agentic-commerce-8183/hooks/RulesBindingHook.sol";
 import {KernelBase} from "./KernelBase.t.sol";
 import {MockAGWFactory} from "./mocks/MockAGWFactory.sol";
 import {MockSmartSession} from "./mocks/MockSmartSession.sol";
 import {RecordingHook} from "./mocks/RecordingHook.sol";
 
 /// @notice Phase 5 — mandate binding and one live job per AGW, driven through the real kernel.
-contract MandateBindingHookTest is KernelBase {
-    MandateBindingHook internal hook;
-    MandateBindingHook internal hookImpl;
+contract RulesBindingHookTest is KernelBase {
+    RulesBindingHook internal hook;
+    RulesBindingHook internal hookImpl;
     MockAGWFactory internal factory;
     MockSmartSession internal engine;
     address internal hookProxyAdminOwner = makeAddr("hookProxyAdminOwner");
@@ -34,8 +34,8 @@ contract MandateBindingHookTest is KernelBase {
         agw = client;
         factory = new MockAGWFactory();
         engine = new MockSmartSession();
-        hookImpl = new MandateBindingHook();
-        hook = MandateBindingHook(_deployHook(address(kernel), address(factory), address(engine)));
+        hookImpl = new RulesBindingHook();
+        hook = RulesBindingHook(_deployHook(address(kernel), address(factory), address(engine)));
         vm.prank(admin);
         kernel.setHookWhitelist(address(hook), true);
 
@@ -46,7 +46,7 @@ contract MandateBindingHookTest is KernelBase {
     function _deployHook(address k, address f, address e) internal returns (address) {
         return address(
             new TransparentUpgradeableProxy(
-                address(hookImpl), hookProxyAdminOwner, abi.encodeCall(MandateBindingHook.initialize, (k, f, e))
+                address(hookImpl), hookProxyAdminOwner, abi.encodeCall(RulesBindingHook.initialize, (k, f, e))
             )
         );
     }
@@ -68,20 +68,20 @@ contract MandateBindingHookTest is KernelBase {
     function _assertStillOpenAndUnbound(uint256 jobId, uint256 clientBalBefore) internal view {
         assertEq(uint8(_status(jobId)), uint8(IAgenticCommerce.JobStatus.Open));
         assertEq(token.balanceOf(agw), clientBalBefore);
-        (address a,) = hook.mandateOf(jobId);
+        (address a,) = hook.rulesOf(jobId);
         assertEq(a, address(0));
     }
 
     // ═════════════════════════ happy path ═════════════════════════
 
-    function test_fund_bindsMandate() public {
+    function test_fund_bindsRules() public {
         uint256 jobId = _open(agw, BUDGET);
         vm.expectEmit(address(hook));
-        emit MandateBindingHook.MandateBound(jobId, agw, P);
+        emit RulesBindingHook.RulesBound(jobId, agw, P);
         vm.prank(agw);
         kernel.fund(jobId, BUDGET, abi.encode(P));
 
-        (address a, bytes32 pid) = hook.mandateOf(jobId);
+        (address a, bytes32 pid) = hook.rulesOf(jobId);
         assertEq(a, agw);
         assertEq(pid, P);
         assertEq(hook.liveJobOf(agw), jobId);
@@ -103,7 +103,7 @@ contract MandateBindingHookTest is KernelBase {
             uint256 jobId = _open(agw, BUDGET);
             uint256 bal = token.balanceOf(agw);
             vm.prank(agw);
-            vm.expectRevert(abi.encodeWithSelector(MandateBindingHook.InvalidOptParams.selector, lens[i]));
+            vm.expectRevert(abi.encodeWithSelector(RulesBindingHookErrors.InvalidOptParams.selector, lens[i]));
             kernel.fund(jobId, BUDGET, new bytes(lens[i]));
             _assertStillOpenAndUnbound(jobId, bal);
         }
@@ -116,7 +116,7 @@ contract MandateBindingHookTest is KernelBase {
         engine.setPermission(P, eoa, true);
         uint256 jobId = _open(eoa, BUDGET);
         vm.prank(eoa);
-        vm.expectRevert(abi.encodeWithSelector(MandateBindingHook.NotAnAGW.selector, eoa));
+        vm.expectRevert(abi.encodeWithSelector(RulesBindingHookErrors.CallerIsNotAGW.selector, eoa));
         kernel.fund(jobId, BUDGET, abi.encode(P));
         assertEq(uint8(_status(jobId)), uint8(IAgenticCommerce.JobStatus.Open));
     }
@@ -126,43 +126,43 @@ contract MandateBindingHookTest is KernelBase {
         uint256 jobId = _open(c, BUDGET);
         uint256 bal = token.balanceOf(c);
         vm.prank(c);
-        vm.expectRevert(abi.encodeWithSelector(MandateBindingHook.NotAnAGW.selector, c));
+        vm.expectRevert(abi.encodeWithSelector(RulesBindingHookErrors.CallerIsNotAGW.selector, c));
         kernel.fund(jobId, BUDGET, abi.encode(P));
         assertEq(token.balanceOf(c), bal);
         assertEq(uint8(_status(jobId)), uint8(IAgenticCommerce.JobStatus.Open));
-        (address a,) = hook.mandateOf(jobId);
+        (address a,) = hook.rulesOf(jobId);
         assertEq(a, address(0));
     }
 
     // ═════════════════════════ check 3 · mandate live ═════════════════════════
 
-    function test_mandateNotLive_neverGranted() public {
+    function test_rulesNotLive_neverGranted() public {
         uint256 jobId = _open(agw, BUDGET);
         uint256 bal = token.balanceOf(agw);
         vm.prank(agw);
-        vm.expectRevert(abi.encodeWithSelector(MandateBindingHook.MandateNotLive.selector, agw, P2));
+        vm.expectRevert(abi.encodeWithSelector(RulesBindingHookErrors.RulesNotLive.selector, agw, P2));
         kernel.fund(jobId, BUDGET, abi.encode(P2));
         _assertStillOpenAndUnbound(jobId, bal);
     }
 
-    function test_mandateNotLive_revoked() public {
+    function test_rulesNotLive_revoked() public {
         engine.setPermission(P, agw, false);
         uint256 jobId = _open(agw, BUDGET);
         uint256 bal = token.balanceOf(agw);
         vm.prank(agw);
-        vm.expectRevert(abi.encodeWithSelector(MandateBindingHook.MandateNotLive.selector, agw, P));
+        vm.expectRevert(abi.encodeWithSelector(RulesBindingHookErrors.RulesNotLive.selector, agw, P));
         kernel.fund(jobId, BUDGET, abi.encode(P));
         _assertStillOpenAndUnbound(jobId, bal);
     }
 
-    function test_mandateOfAnotherWallet_notLiveHere() public {
+    function test_rulesOfAnotherWallet_notLiveHere() public {
         address other = makeAddr("otherAGW");
         factory.setWallet(other, true);
         engine.setPermission(P2, other, true); // P2 live on `other`, not on `agw`
         uint256 jobId = _open(agw, BUDGET);
         uint256 bal = token.balanceOf(agw);
         vm.prank(agw);
-        vm.expectRevert(abi.encodeWithSelector(MandateBindingHook.MandateNotLive.selector, agw, P2));
+        vm.expectRevert(abi.encodeWithSelector(RulesBindingHookErrors.RulesNotLive.selector, agw, P2));
         kernel.fund(jobId, BUDGET, abi.encode(P2));
         _assertStillOpenAndUnbound(jobId, bal);
     }
@@ -174,7 +174,7 @@ contract MandateBindingHookTest is KernelBase {
         uint256 second = _open(agw, BUDGET);
         uint256 bal = token.balanceOf(agw);
         vm.prank(agw);
-        vm.expectRevert(abi.encodeWithSelector(MandateBindingHook.AGWHasLiveJob.selector, agw, first));
+        vm.expectRevert(abi.encodeWithSelector(RulesBindingHookErrors.AGWHasLiveJob.selector, agw, first));
         kernel.fund(second, BUDGET, abi.encode(P));
         _assertStillOpenAndUnbound(second, bal);
     }
@@ -187,7 +187,7 @@ contract MandateBindingHookTest is KernelBase {
         uint256 second = _open(agw, BUDGET);
         uint256 bal = token.balanceOf(agw);
         vm.prank(agw);
-        vm.expectRevert(abi.encodeWithSelector(MandateBindingHook.AGWHasLiveJob.selector, agw, first));
+        vm.expectRevert(abi.encodeWithSelector(RulesBindingHookErrors.AGWHasLiveJob.selector, agw, first));
         kernel.fund(second, BUDGET, abi.encode(P));
         _assertStillOpenAndUnbound(second, bal);
     }
@@ -261,20 +261,20 @@ contract MandateBindingHookTest is KernelBase {
 
         uint256 a = _bind(agw, P, BUDGET);
         uint256 b = _bind(agw2, P, BUDGET);
-        (address wa, bytes32 pa) = hook.mandateOf(a);
-        (address wb, bytes32 pb) = hook.mandateOf(b);
+        (address wa, bytes32 pa) = hook.rulesOf(a);
+        (address wb, bytes32 pb) = hook.rulesOf(b);
         assertEq(wa, agw);
         assertEq(wb, agw2);
         assertEq(pa, P);
         assertEq(pb, P);
     }
 
-    function test_sameMandate_sequentialJobs_allowed() public {
+    function test_sameRules_sequentialJobs_allowed() public {
         uint256 first = _bind(agw, P, BUDGET);
         vm.prank(evaluator);
         kernel.reject(first, bytes32(0), "");
         uint256 second = _bind(agw, P, BUDGET);
-        (, bytes32 pid) = hook.mandateOf(second);
+        (, bytes32 pid) = hook.rulesOf(second);
         assertEq(pid, P);
     }
 
@@ -282,13 +282,13 @@ contract MandateBindingHookTest is KernelBase {
 
     function test_beforeAction_directCall_reverts() public {
         vm.prank(stranger);
-        vm.expectRevert(abi.encodeWithSelector(BaseERC8183Hook.OnlyKernel.selector, stranger));
+        vm.expectRevert(abi.encodeWithSelector(ERC8183HookErrors.CallerIsNotKernel.selector, stranger));
         hook.beforeAction(1, IAgenticCommerce.fund.selector, abi.encode(agw, abi.encode(P)));
     }
 
     function test_afterAction_directCall_reverts() public {
         vm.prank(stranger);
-        vm.expectRevert(abi.encodeWithSelector(BaseERC8183Hook.OnlyKernel.selector, stranger));
+        vm.expectRevert(abi.encodeWithSelector(ERC8183HookErrors.CallerIsNotKernel.selector, stranger));
         hook.afterAction(1, IAgenticCommerce.fund.selector, "");
     }
 
@@ -309,7 +309,7 @@ contract MandateBindingHookTest is KernelBase {
         );
         kernel.fund(jobId, BUDGET, abi.encode(P));
 
-        (address a,) = hook.mandateOf(jobId);
+        (address a,) = hook.rulesOf(jobId);
         assertEq(a, address(0));
         assertEq(hook.liveJobOf(agw3), 0);
         assertFalse(hook.isAGWBusy(agw3));
@@ -319,23 +319,23 @@ contract MandateBindingHookTest is KernelBase {
     // ═════════════════════════ initialisation ═════════════════════════
 
     function test_initialize_setsState() public view {
-        assertEq(hook.kernel(), address(kernel));
-        assertEq(hook.agwFactory(), address(factory));
-        assertEq(hook.sessionEngine(), address(engine));
+        assertEq(hook.KERNEL(), address(kernel));
+        assertEq(hook.AGW_FACTORY(), address(factory));
+        assertEq(hook.SESSION_ENGINE(), address(engine));
     }
 
     function test_initialize_zeroKernel_reverts() public {
-        vm.expectRevert(BaseERC8183Hook.ZeroAddress.selector);
+        vm.expectRevert(ERC8183HookErrors.ZeroAddress.selector);
         _deployHook(address(0), address(factory), address(engine));
     }
 
     function test_initialize_zeroFactory_reverts() public {
-        vm.expectRevert(BaseERC8183Hook.ZeroAddress.selector);
+        vm.expectRevert(ERC8183HookErrors.ZeroAddress.selector);
         _deployHook(address(kernel), address(0), address(engine));
     }
 
     function test_initialize_zeroEngine_reverts() public {
-        vm.expectRevert(BaseERC8183Hook.ZeroAddress.selector);
+        vm.expectRevert(ERC8183HookErrors.ZeroAddress.selector);
         _deployHook(address(kernel), address(factory), address(0));
     }
 
@@ -369,7 +369,7 @@ contract MandateBindingHookTest is KernelBase {
         vm.prank(agw);
         kernel.fund(jobId, BUDGET, abi.encode(P));
         assertEq(hook.liveJobOf(agw), 0);
-        (address a,) = hook.mandateOf(jobId);
+        (address a,) = hook.rulesOf(jobId);
         assertEq(a, address(0));
     }
 
@@ -379,24 +379,24 @@ contract MandateBindingHookTest is KernelBase {
         uint256 first = _bind(agw, P, BUDGET);
         ProxyAdmin pa = ProxyAdmin(_proxyAdmin(address(hook)));
         assertEq(pa.owner(), hookProxyAdminOwner);
-        address newImpl = address(new MandateBindingHook());
+        address newImpl = address(new RulesBindingHook());
         vm.prank(hookProxyAdminOwner);
         pa.upgradeAndCall(ITransparentUpgradeableProxy(address(hook)), newImpl, "");
 
-        (address a, bytes32 pid) = hook.mandateOf(first);
+        (address a, bytes32 pid) = hook.rulesOf(first);
         assertEq(a, agw);
         assertEq(pid, P);
         assertEq(hook.liveJobOf(agw), first);
 
         uint256 second = _open(agw, BUDGET);
         vm.prank(agw);
-        vm.expectRevert(abi.encodeWithSelector(MandateBindingHook.AGWHasLiveJob.selector, agw, first));
+        vm.expectRevert(abi.encodeWithSelector(RulesBindingHookErrors.AGWHasLiveJob.selector, agw, first));
         kernel.fund(second, BUDGET, abi.encode(P));
     }
 
     function test_upgrade_byNonOwner_reverts() public {
         ProxyAdmin pa = ProxyAdmin(_proxyAdmin(address(hook)));
-        address impl = address(new MandateBindingHook());
+        address impl = address(new RulesBindingHook());
         vm.prank(admin);
         vm.expectRevert(abi.encodeWithSelector(Ownable.OwnableUnauthorizedAccount.selector, admin));
         pa.upgradeAndCall(ITransparentUpgradeableProxy(address(hook)), impl, "");

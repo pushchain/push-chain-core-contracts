@@ -4,11 +4,7 @@ pragma solidity 0.8.26;
 import {Test} from "forge-std/Test.sol";
 
 import {UniversalMarketplaceTerms} from "../../src/agentic-commerce-8183/UniversalMarketplaceTerms.sol";
-import {
-    IUniversalMarketplace,
-    IUniversalMarketplaceErrors
-} from "../../src/agentic-commerce-8183/interfaces/IUniversalMarketplace.sol";
-import {SessionContext} from "../../src/agentic-commerce-8183/interfaces/IUniversalMarketplaceTerms.sol";
+import {UniversalMarketplaceErrors} from "../../src/agentic-commerce-8183/libraries/Errors.sol";
 import {
     Session,
     ActionData,
@@ -18,6 +14,7 @@ import {
     AllowedCall,
     UniversalTerms
 } from "../../src/agentic-commerce-8183/interfaces/external/IAGW.sol";
+import {Approval, RulesCardTerms, SessionContext} from "../../src/agentic-commerce-8183/libraries/Types.sol";
 
 /// @title UniversalMarketplaceTerms — unit suite (PRD 09 §7.3). Direct calls; the marketplace suite covers the
 ///        same rules through `registerCard` and `startJob`.
@@ -57,17 +54,17 @@ contract UniversalMarketplaceTermsTest is Test {
         });
     }
 
-    function _rules() internal view returns (IUniversalMarketplace.RulesCardTerms memory r) {
+    function _rules() internal view returns (RulesCardTerms memory r) {
         r.asset = asset;
         r.maxPCPerCall = 1 ether;
         r.allowedCalls = new AllowedCall[](1);
         r.allowedCalls[0] = _call(pool, SUPPLY, 68, true);
-        r.approvals = new IUniversalMarketplace.Approval[](1);
-        r.approvals[0] = IUniversalMarketplace.Approval({token: usdc, spender: pool, capIsPrincipal: true, cap: 0});
+        r.approvals = new Approval[](1);
+        r.approvals[0] = Approval({token: usdc, spender: pool, capIsPrincipal: true, cap: 0});
     }
 
     function _terms() internal view returns (UniversalTerms memory t) {
-        IUniversalMarketplace.RulesCardTerms memory r = _rules();
+        RulesCardTerms memory r = _rules();
         t.validUntil = EXPIRY;
         t.expectedCEA = cea;
         t.asset = r.asset;
@@ -98,17 +95,13 @@ contract UniversalMarketplaceTermsTest is Test {
         });
     }
 
-    function _expectInvalid(IUniversalMarketplace.RulesCardTerms memory r, string memory reason) internal {
+    function _expectInvalid(RulesCardTerms memory r, string memory reason) internal {
         bytes memory enc = abi.encode(r);
-        vm.expectRevert(abi.encodeWithSelector(IUniversalMarketplaceErrors.InvalidCard.selector, reason));
+        vm.expectRevert(abi.encodeWithSelector(UniversalMarketplaceErrors.InvalidCard.selector, reason));
         terms.validateRulesTerms(enc);
     }
 
-    function _withCalls(AllowedCall[] memory calls)
-        internal
-        view
-        returns (IUniversalMarketplace.RulesCardTerms memory r)
-    {
+    function _withCalls(AllowedCall[] memory calls) internal view returns (RulesCardTerms memory r) {
         r = _rules();
         r.allowedCalls = calls;
     }
@@ -122,13 +115,13 @@ contract UniversalMarketplaceTermsTest is Test {
 
     function test_MT01_validateRulesTerms_returnsAsset() public view {
         assertEq(terms.validateRulesTerms(abi.encode(_rules())), asset);
-        IUniversalMarketplace.RulesCardTerms memory r = _rules();
-        r.approvals = new IUniversalMarketplace.Approval[](0); // approvals are optional
+        RulesCardTerms memory r = _rules();
+        r.approvals = new Approval[](0); // approvals are optional
         assertEq(terms.validateRulesTerms(abi.encode(r)), asset);
     }
 
     function test_MT02_allowList() public {
-        IUniversalMarketplace.RulesCardTerms memory r = _rules();
+        RulesCardTerms memory r = _rules();
         r.asset = address(0);
         _expectInvalid(r, "asset zero");
 
@@ -164,19 +157,15 @@ contract UniversalMarketplaceTermsTest is Test {
         terms.validateRulesTerms(abi.encode(_withCalls(erc20)));
     }
 
-    function _withApprovals(IUniversalMarketplace.Approval[] memory a)
-        internal
-        view
-        returns (IUniversalMarketplace.RulesCardTerms memory r)
-    {
+    function _withApprovals(Approval[] memory a) internal view returns (RulesCardTerms memory r) {
         r = _rules();
         r.approvals = a;
     }
 
-    function _approvals(uint256 n) internal pure returns (IUniversalMarketplace.Approval[] memory a) {
-        a = new IUniversalMarketplace.Approval[](n);
+    function _approvals(uint256 n) internal pure returns (Approval[] memory a) {
+        a = new Approval[](n);
         for (uint256 i; i < n; ++i) {
-            a[i] = IUniversalMarketplace.Approval({
+            a[i] = Approval({
                 // forge-lint: disable-next-line(unsafe-typecast)
                 token: address(uint160(0x2000 + i)), // i < 9: a small distinct address
                 spender: address(0xB0B),
@@ -189,7 +178,7 @@ contract UniversalMarketplaceTermsTest is Test {
     function test_MT03_approvals() public {
         _expectInvalid(_withApprovals(_approvals(9)), "approval count");
 
-        IUniversalMarketplace.Approval[] memory a = _approvals(1);
+        Approval[] memory a = _approvals(1);
         a[0].token = address(0);
         _expectInvalid(_withApprovals(a), "approval token");
         a = _approvals(1);
@@ -228,50 +217,50 @@ contract UniversalMarketplaceTermsTest is Test {
     function test_MT05_verifySession_eachError() public {
         Session memory s = _sessionFor(_terms());
         s.sessionValidatorInitData = abi.encode(makeAddr("other"));
-        _expectSession(s, abi.encodeWithSelector(IUniversalMarketplaceErrors.AgentMismatch.selector));
+        _expectSession(s, abi.encodeWithSelector(UniversalMarketplaceErrors.AgentMismatch.selector));
         s.sessionValidatorInitData = abi.encodePacked(agent); // 20 bytes: not the 32-byte agent config
-        _expectSession(s, abi.encodeWithSelector(IUniversalMarketplaceErrors.AgentMismatch.selector));
+        _expectSession(s, abi.encodeWithSelector(UniversalMarketplaceErrors.AgentMismatch.selector));
 
         s = _sessionFor(_terms());
         s.actions = new ActionData[](0);
-        _expectSession(s, abi.encodeWithSelector(IUniversalMarketplaceErrors.ActionCount.selector));
+        _expectSession(s, abi.encodeWithSelector(UniversalMarketplaceErrors.ActionCount.selector));
         s = _sessionFor(_terms());
         ActionData[] memory two = new ActionData[](2);
         (two[0], two[1]) = (s.actions[0], s.actions[0]);
         s.actions = two;
-        _expectSession(s, abi.encodeWithSelector(IUniversalMarketplaceErrors.ActionCount.selector));
+        _expectSession(s, abi.encodeWithSelector(UniversalMarketplaceErrors.ActionCount.selector));
 
         s = _sessionFor(_terms());
         s.actions[0].actionPolicies = new PolicyData[](0);
-        _expectSession(s, abi.encodeWithSelector(IUniversalMarketplaceErrors.PolicyShape.selector, 0));
+        _expectSession(s, abi.encodeWithSelector(UniversalMarketplaceErrors.PolicyShape.selector, 0));
         _expectSession(
             _session(abi.encode("eip155:1", abi.encode(_terms()))),
-            abi.encodeWithSelector(IUniversalMarketplaceErrors.ChainMismatch.selector, 0)
+            abi.encodeWithSelector(UniversalMarketplaceErrors.ChainMismatch.selector, 0)
         );
 
         UniversalTerms memory t = _terms();
         t.asset = usdc;
-        _expectSession(_sessionFor(t), abi.encodeWithSelector(IUniversalMarketplaceErrors.AssetMismatch.selector));
+        _expectSession(_sessionFor(t), abi.encodeWithSelector(UniversalMarketplaceErrors.AssetMismatch.selector));
         t = _terms();
         t.maxPCPerCall = 0;
-        _expectSession(_sessionFor(t), abi.encodeWithSelector(IUniversalMarketplaceErrors.PCCapMismatch.selector));
+        _expectSession(_sessionFor(t), abi.encodeWithSelector(UniversalMarketplaceErrors.PCCapMismatch.selector));
         t = _terms();
         t.allowedCalls[0].beneficiaryOffset = 36;
-        _expectSession(_sessionFor(t), abi.encodeWithSelector(IUniversalMarketplaceErrors.ActionsMismatch.selector));
+        _expectSession(_sessionFor(t), abi.encodeWithSelector(UniversalMarketplaceErrors.ActionsMismatch.selector));
         t = _terms();
         t.maxAmountTotal = PRINCIPAL + 1;
-        _expectSession(_sessionFor(t), abi.encodeWithSelector(IUniversalMarketplaceErrors.CapMismatch.selector));
+        _expectSession(_sessionFor(t), abi.encodeWithSelector(UniversalMarketplaceErrors.CapMismatch.selector));
         t = _terms();
         t.maxAmountPerCall = PRINCIPAL + 1;
-        _expectSession(_sessionFor(t), abi.encodeWithSelector(IUniversalMarketplaceErrors.CapMismatch.selector));
+        _expectSession(_sessionFor(t), abi.encodeWithSelector(UniversalMarketplaceErrors.CapMismatch.selector));
         t = _terms();
         t.validUntil = EXPIRY - 1;
-        _expectSession(_sessionFor(t), abi.encodeWithSelector(IUniversalMarketplaceErrors.ExpiryMismatch.selector));
+        _expectSession(_sessionFor(t), abi.encodeWithSelector(UniversalMarketplaceErrors.ExpiryMismatch.selector));
         t = _terms();
         t.expectedCEA = address(0xBAD);
         _expectSession(
             _sessionFor(t),
-            abi.encodeWithSelector(IUniversalMarketplaceErrors.ExpectedCEAMismatch.selector, cea, address(0xBAD))
+            abi.encodeWithSelector(UniversalMarketplaceErrors.ExpectedCEAMismatch.selector, cea, address(0xBAD))
         );
     }
 
@@ -306,7 +295,7 @@ contract UniversalMarketplaceTermsTest is Test {
         if (perCall <= PRINCIPAL && total == PRINCIPAL) {
             terms.verifySession(r, s, _ctx());
         } else {
-            vm.expectRevert(IUniversalMarketplaceErrors.CapMismatch.selector);
+            vm.expectRevert(UniversalMarketplaceErrors.CapMismatch.selector);
             terms.verifySession(r, s, _ctx());
         }
     }

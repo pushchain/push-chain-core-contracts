@@ -19,22 +19,12 @@ import {MockAGW} from "./mocks/MockAGW.sol";
 import {MockSmartSession} from "./mocks/MockSmartSession.sol";
 import {MockPRC20Source} from "./mocks/MockPRC20Source.sol";
 import {IAgenticCommerce} from "../../src/agentic-commerce-8183/interfaces/IAgenticCommerce.sol";
-import {MandateBindingHook} from "../../src/agentic-commerce-8183/hooks/MandateBindingHook.sol";
+import {RulesBindingHook} from "../../src/agentic-commerce-8183/hooks/RulesBindingHook.sol";
 import {UniversalMarketplace} from "../../src/agentic-commerce-8183/UniversalMarketplace.sol";
 import {UniversalMarketplaceTerms} from "../../src/agentic-commerce-8183/UniversalMarketplaceTerms.sol";
-import {
-    IUniversalMarketplace,
-    IUniversalMarketplaceErrors
-} from "../../src/agentic-commerce-8183/interfaces/IUniversalMarketplace.sol";
-import {
-    JobSpecBuilder,
-    ReadTemplate,
-    TargetSource,
-    CheckTemplate,
-    ParamBounds,
-    EvaluationTemplate,
-    BuildContext
-} from "../../src/agentic-commerce-8183/libraries/JobSpecBuilder.sol";
+import {IUniversalMarketplace} from "../../src/agentic-commerce-8183/interfaces/IUniversalMarketplace.sol";
+import {UniversalMarketplaceErrors} from "../../src/agentic-commerce-8183/libraries/Errors.sol";
+import {JobSpecBuilder} from "../../src/agentic-commerce-8183/libraries/JobSpecBuilder.sol";
 import {EvalType, Op, NodeKind, Node, JobSpec} from "../../src/agentic-commerce-8183/libraries/JobSpecTypes.sol";
 import {
     OwnerIntent,
@@ -48,6 +38,22 @@ import {
     UniversalTerms
 } from "../../src/agentic-commerce-8183/interfaces/external/IAGW.sol";
 import {CEAFactory} from "../../src/cea/CEAFactory.sol";
+import {
+    AgentCard,
+    Approval,
+    RulesCardTerms,
+    CardView,
+    JobInputs,
+    StartJobParams,
+    IntentRequest,
+    InitParams,
+    ReadTemplate,
+    TargetSource,
+    CheckTemplate,
+    ParamBounds,
+    EvaluationTemplate,
+    BuildContext
+} from "../../src/agentic-commerce-8183/libraries/Types.sol";
 
 /// @notice TEST ONLY: runs JobSpecBuilder as the marketplace does, with CEAs from the real marketplace, so a test can
 ///         compute the description a job must carry.
@@ -68,14 +74,14 @@ contract MarketJobSpecBuilder {
 }
 
 /// @title MarketplaceFixtures — shared setup and builders for the marketplace unit and invariant suites.
-/// @notice Real kernel, real MandateBindingHook (the interim hook, PRD 09 P8), real Terms helper and JobSpecBuilder
+/// @notice Real kernel, real RulesBindingHook (the interim hook, PRD 09 P8), real Terms helper and JobSpecBuilder
 ///         library, real CEAFactory. The AGW factory and wallet are mocks that enforce the rules the marketplace relies
 ///         on and verify no signature; the AGW repo's E2E suite runs the real wallet stack.
 abstract contract MarketplaceFixtures is KernelBase, TemplateParts {
     UniversalMarketplace internal mkt;
     UniversalMarketplaceTerms internal terms;
     MarketJobSpecBuilder internal expectedBuilder;
-    MandateBindingHook internal hook;
+    RulesBindingHook internal hook;
     MockAGWFactory internal factory;
     MockSmartSession internal engine;
     CEAFactory internal ceaFactory;
@@ -111,13 +117,13 @@ abstract contract MarketplaceFixtures is KernelBase, TemplateParts {
         super.setUp();
         factory = new MockAGWFactory();
         engine = new MockSmartSession();
-        MandateBindingHook hookImpl = new MandateBindingHook();
-        hook = MandateBindingHook(
+        RulesBindingHook hookImpl = new RulesBindingHook();
+        hook = RulesBindingHook(
             address(
                 new TransparentUpgradeableProxy(
                     address(hookImpl),
                     makeAddr("hookAdmin"),
-                    abi.encodeCall(MandateBindingHook.initialize, (address(kernel), address(factory), address(engine)))
+                    abi.encodeCall(RulesBindingHook.initialize, (address(kernel), address(factory), address(engine)))
                 )
             )
         );
@@ -159,8 +165,8 @@ abstract contract MarketplaceFixtures is KernelBase, TemplateParts {
         vm.deal(user, 100 ether);
     }
 
-    function _initParams() internal view returns (IUniversalMarketplace.InitParams memory) {
-        return IUniversalMarketplace.InitParams({
+    function _initParams() internal view returns (InitParams memory) {
+        return InitParams({
             agwFactory: address(factory),
             kernel: address(kernel),
             hook: address(hook),
@@ -174,7 +180,7 @@ abstract contract MarketplaceFixtures is KernelBase, TemplateParts {
 
     /// @dev The lending card of PRD 09 Appendix C, on Sepolia. `minDuration` is 3 h so that a job at the shortest
     ///      expiry still fits `minExecuteWindow + settleWindow` (10 min + 2 h).
-    function _card() internal pure returns (IUniversalMarketplace.AgentCard memory c) {
+    function _card() internal pure returns (AgentCard memory c) {
         c.jobType = keccak256("LENDING_DEPOSIT");
         c.metadataURI = "ipfs://card";
         c.metadataHash = keccak256("card.json");
@@ -189,14 +195,14 @@ abstract contract MarketplaceFixtures is KernelBase, TemplateParts {
     }
 
     /// @dev One `supply` call with the beneficiary (onBehalfOf) at 68, one owner approval USDC → Pool for principal.
-    function _rules() internal view returns (IUniversalMarketplace.RulesCardTerms memory r) {
+    function _rules() internal view returns (RulesCardTerms memory r) {
         r.asset = address(pUSDC);
         r.maxPCPerCall = 1 ether;
         r.allowedCalls = new AllowedCall[](1);
         r.allowedCalls[0] =
             AllowedCall({target: pool, selector: SUPPLY, beneficiaryOffset: 68, hasBeneficiary: true, maxValue: 0});
-        r.approvals = new IUniversalMarketplace.Approval[](1);
-        r.approvals[0] = IUniversalMarketplace.Approval({token: usdc, spender: pool, capIsPrincipal: true, cap: 0});
+        r.approvals = new Approval[](1);
+        r.approvals[0] = Approval({token: usdc, spender: pool, capIsPrincipal: true, cap: 0});
     }
 
     /// @dev The V2 doc's lending criteria on Sepolia: aUSDC.balanceOf(CEA) ≥ 99.99% of principal AND rate ≥ 4%.
@@ -228,11 +234,10 @@ abstract contract MarketplaceFixtures is KernelBase, TemplateParts {
         t.params[0] = ParamBounds({min: 1, max: 1e30});
     }
 
-    function _register(
-        IUniversalMarketplace.AgentCard memory c,
-        IUniversalMarketplace.RulesCardTerms memory r,
-        EvaluationTemplate memory t
-    ) internal returns (uint256 id) {
+    function _register(AgentCard memory c, RulesCardTerms memory r, EvaluationTemplate memory t)
+        internal
+        returns (uint256 id)
+    {
         bytes memory rules = abi.encode(r);
         bytes memory evaluation = abi.encode(t);
         vm.prank(provider);
@@ -244,7 +249,7 @@ abstract contract MarketplaceFixtures is KernelBase, TemplateParts {
     }
 
     function _registerSwap() internal returns (uint256) {
-        IUniversalMarketplace.AgentCard memory c = _card();
+        AgentCard memory c = _card();
         c.jobType = keccak256("SWAP");
         return _register(c, _rules(), _swapTemplate());
     }
@@ -252,25 +257,25 @@ abstract contract MarketplaceFixtures is KernelBase, TemplateParts {
     // ═════════════════════════════ jobs ═════════════════════════════
 
     /// @dev Expires in 7 days; execute within 1 hour; no params.
-    function _inputs(uint256 principal) internal view returns (IUniversalMarketplace.JobInputs memory j) {
+    function _inputs(uint256 principal) internal view returns (JobInputs memory j) {
         j.principal = principal;
         j.expiredAt = uint48(block.timestamp + 7 days);
         j.executeBy = uint48(block.timestamp + 1 hours);
         j.params = new int256[](0);
     }
 
-    function _swapInputs(int256 minOut) internal view returns (IUniversalMarketplace.JobInputs memory j) {
+    function _swapInputs(int256 minOut) internal view returns (JobInputs memory j) {
         j = _inputs(PRINCIPAL);
         j.params = new int256[](1);
         j.params[0] = minOut;
     }
 
     /// @dev The UNIVERSAL rules an honest SDK signs for `r` and this job.
-    function _termsFor(
-        IUniversalMarketplace.RulesCardTerms memory r,
-        address agw,
-        IUniversalMarketplace.JobInputs memory job
-    ) internal view returns (UniversalTerms memory t) {
+    function _termsFor(RulesCardTerms memory r, address agw, JobInputs memory job)
+        internal
+        view
+        returns (UniversalTerms memory t)
+    {
         t.validUntil = job.expiredAt;
         t.expectedCEA = ceaFactory.computeCEA(agw);
         t.asset = r.asset;
@@ -296,17 +301,17 @@ abstract contract MarketplaceFixtures is KernelBase, TemplateParts {
         return ActionData({actionTargetSelector: SEND_OUTBOUND, actionTarget: gateway, actionPolicies: p});
     }
 
-    function _params(uint256 cardId, uint96 index, IUniversalMarketplace.JobInputs memory job, Session memory s)
+    function _params(uint256 cardId, uint96 index, JobInputs memory job, Session memory s)
         internal
         view
-        returns (IUniversalMarketplace.StartJobParams memory p)
+        returns (StartJobParams memory p)
     {
         p.cardId = cardId;
         p.cardVersion = mkt.cardVersion(cardId);
         p.job = job;
         p.session = s;
         p.intent = mkt.previewIntent(
-            IUniversalMarketplace.IntentRequest({
+            IntentRequest({
                 cardId: cardId,
                 owner: user,
                 index: index,
@@ -321,27 +326,26 @@ abstract contract MarketplaceFixtures is KernelBase, TemplateParts {
     }
 
     /// @dev An honest, signed startJob for wallet `index` of the user.
-    function _readyAt(
-        uint256 cardId,
-        uint96 index,
-        IUniversalMarketplace.RulesCardTerms memory r,
-        IUniversalMarketplace.JobInputs memory job
-    ) internal view returns (IUniversalMarketplace.StartJobParams memory) {
+    function _readyAt(uint256 cardId, uint96 index, RulesCardTerms memory r, JobInputs memory job)
+        internal
+        view
+        returns (StartJobParams memory)
+    {
         (address agw,) = factory.predictWallet(user, index);
         return _params(cardId, index, job, _session(_termsFor(r, agw, job)));
     }
 
     /// @dev An honest, signed startJob on the user's next (fresh) wallet.
-    function _ready(uint256 cardId) internal view returns (IUniversalMarketplace.StartJobParams memory) {
+    function _ready(uint256 cardId) internal view returns (StartJobParams memory) {
         return _readyAt(cardId, uint96(factory.walletCount(user)), _rules(), _inputs(PRINCIPAL));
     }
 
-    function _start(IUniversalMarketplace.StartJobParams memory p) internal returns (uint256 jobId, address agw) {
+    function _start(StartJobParams memory p) internal returns (uint256 jobId, address agw) {
         vm.prank(relayer);
         (jobId, agw,) = mkt.startJob(p);
     }
 
-    function _expectStart(IUniversalMarketplace.StartJobParams memory p, bytes memory err) internal {
+    function _expectStart(StartJobParams memory p, bytes memory err) internal {
         vm.prank(relayer);
         vm.expectRevert(err);
         mkt.startJob(p);
@@ -369,7 +373,7 @@ abstract contract MarketplaceFixtures is KernelBase, TemplateParts {
         uint256 cardId,
         uint256 version,
         address agw,
-        IUniversalMarketplace.JobInputs memory job
+        JobInputs memory job
     ) internal view returns (bytes memory) {
         return expectedBuilder.build(
             abi.encode(t),
@@ -384,11 +388,7 @@ abstract contract MarketplaceFixtures is KernelBase, TemplateParts {
         );
     }
 
-    function _calldataHash(uint256 cardId, uint96 index, IUniversalMarketplace.JobInputs memory job)
-        internal
-        view
-        returns (bytes32)
-    {
+    function _calldataHash(uint256 cardId, uint96 index, JobInputs memory job) internal view returns (bytes32) {
         (, bytes memory cd) = mkt.buildCreateJobCalldata(cardId, user, index, job);
         return keccak256(cd);
     }
@@ -407,7 +407,7 @@ contract UniversalMarketplaceTest is MarketplaceFixtures {
     // ═════════════════════════════ MR · registration ═════════════════════════════
 
     function test_MR01_registerCard_storesEverythingAndEmits() public {
-        IUniversalMarketplace.AgentCard memory c = _card();
+        AgentCard memory c = _card();
         bytes memory r = abi.encode(_rules());
         bytes memory e = abi.encode(_lendingTemplate());
         vm.expectEmit(address(mkt));
@@ -419,7 +419,7 @@ contract UniversalMarketplaceTest is MarketplaceFixtures {
 
         assertEq(id, 1);
         assertEq(mkt.cardCount(), 1);
-        IUniversalMarketplace.CardView memory v = mkt.getCard(id);
+        CardView memory v = mkt.getCard(id);
         assertEq(v.card.provider, provider);
         assertEq(v.card.jobType, c.jobType);
         assertEq(v.card.metadataURI, c.metadataURI);
@@ -442,7 +442,7 @@ contract UniversalMarketplaceTest is MarketplaceFixtures {
     }
 
     function test_MR02_providerAndActiveAreContractWritten() public {
-        IUniversalMarketplace.AgentCard memory c = _card();
+        AgentCard memory c = _card();
         c.provider = stranger;
         c.active = false;
         uint256 id = _register(c, _rules(), _lendingTemplate());
@@ -450,16 +450,16 @@ contract UniversalMarketplaceTest is MarketplaceFixtures {
         assertTrue(mkt.getCard(id).card.active);
     }
 
-    function _expectInvalidCard(IUniversalMarketplace.AgentCard memory c, string memory reason) internal {
+    function _expectInvalidCard(AgentCard memory c, string memory reason) internal {
         bytes memory r = abi.encode(_rules());
         bytes memory e = abi.encode(_lendingTemplate());
         vm.prank(provider);
-        vm.expectRevert(abi.encodeWithSelector(IUniversalMarketplaceErrors.InvalidCard.selector, reason));
+        vm.expectRevert(abi.encodeWithSelector(UniversalMarketplaceErrors.InvalidCard.selector, reason));
         mkt.registerCard(c, r, e);
     }
 
     function test_MR03_eachInvalidCardField_reverts() public {
-        IUniversalMarketplace.AgentCard memory c = _card();
+        AgentCard memory c = _card();
         c.jobType = bytes32(0);
         _expectInvalidCard(c, "job type zero");
         c = _card();
@@ -523,38 +523,38 @@ contract UniversalMarketplaceTest is MarketplaceFixtures {
         assertEq(mkt.pushChainHash(), pushHash);
         vm.prank(admin);
         mkt.setCEADeployment(pushHash, address(ceaFactory), ceaProxyImpl); // refused even with a deployment
-        IUniversalMarketplace.AgentCard memory c = _card();
+        AgentCard memory c = _card();
         c.chainNamespace = push;
         bytes memory r = abi.encode(_rules());
         bytes memory e = abi.encode(_lendingTemplate());
         vm.prank(provider);
-        vm.expectRevert(abi.encodeWithSelector(IUniversalMarketplaceErrors.ChainNotSupported.selector, pushHash));
+        vm.expectRevert(abi.encodeWithSelector(UniversalMarketplaceErrors.ChainNotSupported.selector, pushHash));
         mkt.registerCard(c, r, e);
     }
 
     function test_MR05_unsupportedEvmChain_refused() public {
-        IUniversalMarketplace.AgentCard memory c = _card();
+        AgentCard memory c = _card();
         c.chainNamespace = "eip155:137";
         bytes memory r = abi.encode(_rules());
         bytes memory e = abi.encode(_lendingTemplate());
         vm.prank(provider);
         vm.expectRevert(
-            abi.encodeWithSelector(IUniversalMarketplaceErrors.ChainNotSupported.selector, keccak256("eip155:137"))
+            abi.encodeWithSelector(UniversalMarketplaceErrors.ChainNotSupported.selector, keccak256("eip155:137"))
         );
         mkt.registerCard(c, r, e);
     }
 
-    function _expectInvalidRules(IUniversalMarketplace.RulesCardTerms memory r, string memory reason) internal {
+    function _expectInvalidRules(RulesCardTerms memory r, string memory reason) internal {
         bytes memory rules = abi.encode(r);
         bytes memory e = abi.encode(_lendingTemplate());
-        IUniversalMarketplace.AgentCard memory c = _card();
+        AgentCard memory c = _card();
         vm.prank(provider);
-        vm.expectRevert(abi.encodeWithSelector(IUniversalMarketplaceErrors.InvalidCard.selector, reason));
+        vm.expectRevert(abi.encodeWithSelector(UniversalMarketplaceErrors.InvalidCard.selector, reason));
         mkt.registerCard(c, rules, e);
     }
 
     function test_MR06_assetTeeth() public {
-        IUniversalMarketplace.RulesCardTerms memory r = _rules();
+        RulesCardTerms memory r = _rules();
         r.asset = makeAddr("codelessAsset");
         _expectInvalidRules(r, "asset");
 
@@ -577,7 +577,7 @@ contract UniversalMarketplaceTest is MarketplaceFixtures {
     }
 
     function test_MR07_rulesTermsErrorsSurface() public {
-        IUniversalMarketplace.RulesCardTerms memory r = _rules();
+        RulesCardTerms memory r = _rules();
         r.allowedCalls[0].selector = ERC20_APPROVE;
         _expectInvalidRules(r, "erc20 approval");
     }
@@ -595,20 +595,20 @@ contract UniversalMarketplaceTest is MarketplaceFixtures {
         uint256 id = _register(_card(), _rules(), t);
         assertEq(mkt.getCard(id).evaluation, abi.encode(t), "stored byte-equal");
 
-        IUniversalMarketplace.JobInputs memory job = _inputs(PRINCIPAL);
-        vm.expectRevert(abi.encodeWithSelector(IUniversalMarketplaceErrors.FillOutOfBounds.selector, 0, 0));
+        JobInputs memory job = _inputs(PRINCIPAL);
+        vm.expectRevert(abi.encodeWithSelector(UniversalMarketplaceErrors.FillOutOfBounds.selector, 0, 0));
         mkt.buildCreateJobCalldata(id, user, 0, job); // the same build startJob runs at step 9
     }
 
     function test_MR09_assetIndependent() public {
         assertTrue(address(pETH) != address(kernel.paymentToken()), "pETH is not the kernel's payment token");
-        IUniversalMarketplace.RulesCardTerms memory r = _rules();
+        RulesCardTerms memory r = _rules();
         r.asset = address(pETH);
         uint256 id = _register(_card(), r, _lendingTemplate());
-        IUniversalMarketplace.StartJobParams memory p = _readyAt(id, 0, r, _inputs(PRINCIPAL));
+        StartJobParams memory p = _readyAt(id, 0, r, _inputs(PRINCIPAL));
         (uint256 jobId, address agw) = _start(p);
         assertEq(kernel.getJob(jobId).client, agw);
-        assertEq(abi.decode(mkt.getCard(id).rulesTerms, (IUniversalMarketplace.RulesCardTerms)).asset, address(pETH));
+        assertEq(abi.decode(mkt.getCard(id).rulesTerms, (RulesCardTerms)).asset, address(pETH));
     }
 
     function test_MR10_paused() public {
@@ -616,7 +616,7 @@ contract UniversalMarketplaceTest is MarketplaceFixtures {
         mkt.pause();
         bytes memory r = abi.encode(_rules());
         bytes memory e = abi.encode(_lendingTemplate());
-        IUniversalMarketplace.AgentCard memory c = _card();
+        AgentCard memory c = _card();
         vm.prank(provider);
         vm.expectRevert(PausableUpgradeable.EnforcedPause.selector);
         mkt.registerCard(c, r, e);
@@ -627,10 +627,10 @@ contract UniversalMarketplaceTest is MarketplaceFixtures {
     function test_ML01_setCardActive() public {
         uint256 id = _registerLending();
         vm.prank(stranger);
-        vm.expectRevert(IUniversalMarketplaceErrors.NotProvider.selector);
+        vm.expectRevert(UniversalMarketplaceErrors.CallerIsNotProvider.selector);
         mkt.setCardActive(id, false);
         vm.prank(provider);
-        vm.expectRevert(IUniversalMarketplaceErrors.NotProvider.selector);
+        vm.expectRevert(UniversalMarketplaceErrors.CallerIsNotProvider.selector);
         mkt.setCardActive(999, false);
 
         vm.expectEmit(address(mkt));
@@ -645,7 +645,7 @@ contract UniversalMarketplaceTest is MarketplaceFixtures {
         vm.prank(admin);
         mkt.adminDisableCard(id);
         vm.prank(provider);
-        vm.expectRevert(abi.encodeWithSelector(IUniversalMarketplaceErrors.CardAdminDisabled.selector, id));
+        vm.expectRevert(abi.encodeWithSelector(UniversalMarketplaceErrors.CardAdminDisabled.selector, id));
         mkt.setCardActive(id, true);
         vm.prank(provider);
         mkt.setCardActive(id, false); // switching off stays allowed
@@ -653,7 +653,7 @@ contract UniversalMarketplaceTest is MarketplaceFixtures {
 
     function test_ML02_adminDisableCard() public {
         uint256 id = _registerLending();
-        IUniversalMarketplace.StartJobParams memory p = _ready(id);
+        StartJobParams memory p = _ready(id);
         vm.prank(admin);
         mkt.verifyAgentCard(id, 1);
 
@@ -668,14 +668,14 @@ contract UniversalMarketplaceTest is MarketplaceFixtures {
         vm.prank(admin);
         mkt.adminDisableCard(id);
 
-        IUniversalMarketplace.CardView memory v = mkt.getCard(id);
+        CardView memory v = mkt.getCard(id);
         assertTrue(v.adminDisabled);
         assertFalse(v.card.active);
         assertFalse(v.verified);
-        _expectStart(p, abi.encodeWithSelector(IUniversalMarketplaceErrors.CardInactive.selector));
+        _expectStart(p, abi.encodeWithSelector(UniversalMarketplaceErrors.CardInactive.selector));
 
         vm.prank(admin);
-        vm.expectRevert(IUniversalMarketplaceErrors.CardInactive.selector);
+        vm.expectRevert(UniversalMarketplaceErrors.CardInactive.selector);
         mkt.adminDisableCard(999);
     }
 
@@ -685,10 +685,10 @@ contract UniversalMarketplaceTest is MarketplaceFixtures {
         vm.expectRevert(_adminRevert(stranger));
         mkt.verifyAgentCard(id, 1);
         vm.prank(admin);
-        vm.expectRevert(abi.encodeWithSelector(IUniversalMarketplaceErrors.CardVersionMismatch.selector, 2, 1));
+        vm.expectRevert(abi.encodeWithSelector(UniversalMarketplaceErrors.CardVersionMismatch.selector, 2, 1));
         mkt.verifyAgentCard(id, 2);
         vm.prank(admin);
-        vm.expectRevert(IUniversalMarketplaceErrors.CardInactive.selector);
+        vm.expectRevert(UniversalMarketplaceErrors.CardInactive.selector);
         mkt.verifyAgentCard(999, 1);
 
         vm.prank(provider);
@@ -697,13 +697,13 @@ contract UniversalMarketplaceTest is MarketplaceFixtures {
         emit IUniversalMarketplace.CardVerified(id, 1);
         vm.prank(admin);
         mkt.verifyAgentCard(id, 1);
-        assertTrue(mkt.cardVerified(id));
+        assertTrue(mkt.isCardVerified(id));
         assertTrue(mkt.getCard(id).verified);
 
         uint256 disabled = _registerLending();
         vm.startPrank(admin);
         mkt.adminDisableCard(disabled);
-        vm.expectRevert(abi.encodeWithSelector(IUniversalMarketplaceErrors.CardAdminDisabled.selector, disabled));
+        vm.expectRevert(abi.encodeWithSelector(UniversalMarketplaceErrors.CardAdminDisabled.selector, disabled));
         mkt.verifyAgentCard(disabled, 1);
         vm.stopPrank();
     }
@@ -712,11 +712,11 @@ contract UniversalMarketplaceTest is MarketplaceFixtures {
         uint256 id = _registerLending();
         _modify(id, _card(), _rules(), _lendingTemplate());
         vm.prank(admin);
-        vm.expectRevert(abi.encodeWithSelector(IUniversalMarketplaceErrors.CardVersionMismatch.selector, 1, 2));
+        vm.expectRevert(abi.encodeWithSelector(UniversalMarketplaceErrors.CardVersionMismatch.selector, 1, 2));
         mkt.verifyAgentCard(id, 1);
         vm.prank(admin);
         mkt.verifyAgentCard(id, 2);
-        assertTrue(mkt.cardVerified(id));
+        assertTrue(mkt.isCardVerified(id));
     }
 
     function test_ML05_revokeVerification() public {
@@ -731,7 +731,7 @@ contract UniversalMarketplaceTest is MarketplaceFixtures {
         emit IUniversalMarketplace.CardVerificationRevoked(id);
         vm.prank(admin);
         mkt.revokeAgentCardVerification(id);
-        assertFalse(mkt.cardVerified(id));
+        assertFalse(mkt.isCardVerified(id));
 
         vm.recordLogs();
         vm.prank(admin);
@@ -739,16 +739,11 @@ contract UniversalMarketplaceTest is MarketplaceFixtures {
         assertEq(vm.getRecordedLogs().length, 0, "revoking an unverified card logs nothing");
 
         vm.prank(admin);
-        vm.expectRevert(IUniversalMarketplaceErrors.CardInactive.selector);
+        vm.expectRevert(UniversalMarketplaceErrors.CardInactive.selector);
         mkt.revokeAgentCardVerification(999);
     }
 
-    function _modify(
-        uint256 id,
-        IUniversalMarketplace.AgentCard memory c,
-        IUniversalMarketplace.RulesCardTerms memory r,
-        EvaluationTemplate memory t
-    ) internal {
+    function _modify(uint256 id, AgentCard memory c, RulesCardTerms memory r, EvaluationTemplate memory t) internal {
         bytes memory rules = abi.encode(r);
         bytes memory evaluation = abi.encode(t);
         vm.prank(provider);
@@ -759,11 +754,7 @@ contract UniversalMarketplaceTest is MarketplaceFixtures {
     function _modified()
         internal
         view
-        returns (
-            IUniversalMarketplace.AgentCard memory c,
-            IUniversalMarketplace.RulesCardTerms memory r,
-            EvaluationTemplate memory t
-        )
+        returns (AgentCard memory c, RulesCardTerms memory r, EvaluationTemplate memory t)
     {
         c = _card();
         c.jobType = keccak256("SWAP");
@@ -783,9 +774,9 @@ contract UniversalMarketplaceTest is MarketplaceFixtures {
         calls[1] =
             AllowedCall({target: pool, selector: WITHDRAW, beneficiaryOffset: 68, hasBeneficiary: true, maxValue: 0});
         r.allowedCalls = calls;
-        IUniversalMarketplace.Approval[] memory approvals = new IUniversalMarketplace.Approval[](2);
+        Approval[] memory approvals = new Approval[](2);
         approvals[0] = r.approvals[0];
-        approvals[1] = IUniversalMarketplace.Approval({token: aUSDC, spender: pool, capIsPrincipal: false, cap: 1e12});
+        approvals[1] = Approval({token: aUSDC, spender: pool, capIsPrincipal: false, cap: 1e12});
         r.approvals = approvals;
         t = _swapTemplate();
     }
@@ -794,11 +785,7 @@ contract UniversalMarketplaceTest is MarketplaceFixtures {
         uint256 id = _registerLending();
         vm.prank(provider);
         mkt.setCardActive(id, false);
-        (
-            IUniversalMarketplace.AgentCard memory c,
-            IUniversalMarketplace.RulesCardTerms memory r,
-            EvaluationTemplate memory t
-        ) = _modified();
+        (AgentCard memory c, RulesCardTerms memory r, EvaluationTemplate memory t) = _modified();
         c.provider = stranger; // ignored
         c.active = true; // ignored: the provider's switch stays off
         bytes memory rules = abi.encode(r);
@@ -809,7 +796,7 @@ contract UniversalMarketplaceTest is MarketplaceFixtures {
         vm.prank(provider);
         mkt.modifyAgentCard(id, c, rules, evaluation);
 
-        IUniversalMarketplace.CardView memory v = mkt.getCard(id);
+        CardView memory v = mkt.getCard(id);
         assertEq(v.card.provider, provider, "provider kept");
         assertEq(v.card.chainNamespace, SEPOLIA, "chain kept");
         assertFalse(v.card.active, "active kept");
@@ -841,7 +828,7 @@ contract UniversalMarketplaceTest is MarketplaceFixtures {
         uint256 id = _registerLending();
         vm.prank(admin);
         mkt.verifyAgentCard(id, 1);
-        IUniversalMarketplace.AgentCard memory c = _card();
+        AgentCard memory c = _card();
         bytes memory r = abi.encode(_rules());
         bytes memory e = abi.encode(_lendingTemplate());
         vm.expectEmit(address(mkt));
@@ -850,20 +837,20 @@ contract UniversalMarketplaceTest is MarketplaceFixtures {
         emit IUniversalMarketplace.CardModified(id, 2, keccak256(r), keccak256(e), c.metadataHash, c.fee);
         vm.prank(provider);
         mkt.modifyAgentCard(id, c, r, e);
-        assertFalse(mkt.cardVerified(id));
+        assertFalse(mkt.isCardVerified(id));
     }
 
     function test_ML08_modify_access() public {
         uint256 id = _registerLending();
-        IUniversalMarketplace.AgentCard memory c = _card();
+        AgentCard memory c = _card();
         bytes memory r = abi.encode(_rules());
         bytes memory e = abi.encode(_lendingTemplate());
 
         vm.prank(stranger);
-        vm.expectRevert(IUniversalMarketplaceErrors.NotProvider.selector);
+        vm.expectRevert(UniversalMarketplaceErrors.CallerIsNotProvider.selector);
         mkt.modifyAgentCard(id, c, r, e);
         vm.prank(provider);
-        vm.expectRevert(IUniversalMarketplaceErrors.NotProvider.selector);
+        vm.expectRevert(UniversalMarketplaceErrors.CallerIsNotProvider.selector);
         mkt.modifyAgentCard(999, c, r, e);
 
         vm.prank(admin);
@@ -877,7 +864,7 @@ contract UniversalMarketplaceTest is MarketplaceFixtures {
         vm.prank(admin);
         mkt.adminDisableCard(id);
         vm.prank(provider);
-        vm.expectRevert(abi.encodeWithSelector(IUniversalMarketplaceErrors.CardAdminDisabled.selector, id));
+        vm.expectRevert(abi.encodeWithSelector(UniversalMarketplaceErrors.CardAdminDisabled.selector, id));
         mkt.modifyAgentCard(id, c, r, e);
     }
 
@@ -886,50 +873,46 @@ contract UniversalMarketplaceTest is MarketplaceFixtures {
         bytes32 baseSepolia = keccak256("eip155:84532");
         vm.prank(admin);
         mkt.setCEADeployment(baseSepolia, address(ceaFactory), ceaProxyImpl);
-        IUniversalMarketplace.AgentCard memory c = _card();
+        AgentCard memory c = _card();
         c.chainNamespace = "eip155:84532";
         bytes memory r = abi.encode(_rules());
         bytes memory e = abi.encode(_lendingTemplate());
         vm.prank(provider);
-        vm.expectRevert(IUniversalMarketplaceErrors.CardIdentityImmutable.selector);
+        vm.expectRevert(UniversalMarketplaceErrors.CardIdentityImmutable.selector);
         mkt.modifyAgentCard(id, c, r, e);
     }
 
     function test_ML10_modify_validatesLikeRegistration() public {
         uint256 id = _registerLending();
-        IUniversalMarketplace.AgentCard memory c = _card();
+        AgentCard memory c = _card();
         c.settleWindow = 0;
         _expectInvalidModify(id, c, abi.encode(_rules()), abi.encode(_lendingTemplate()), "settle window");
 
-        IUniversalMarketplace.RulesCardTerms memory r = _rules();
+        RulesCardTerms memory r = _rules();
         r.allowedCalls[0].selector = ERC20_APPROVE;
         _expectInvalidModify(id, _card(), abi.encode(r), abi.encode(_lendingTemplate()), "erc20 approval");
 
         assertEq(mkt.cardVersion(id), 1, "no failed modification bumped the version");
     }
 
-    function _expectInvalidModify(
-        uint256 id,
-        IUniversalMarketplace.AgentCard memory c,
-        bytes memory r,
-        bytes memory e,
-        string memory reason
-    ) internal {
+    function _expectInvalidModify(uint256 id, AgentCard memory c, bytes memory r, bytes memory e, string memory reason)
+        internal
+    {
         vm.prank(provider);
-        vm.expectRevert(abi.encodeWithSelector(IUniversalMarketplaceErrors.InvalidCard.selector, reason));
+        vm.expectRevert(abi.encodeWithSelector(UniversalMarketplaceErrors.InvalidCard.selector, reason));
         mkt.modifyAgentCard(id, c, r, e);
     }
 
     function test_ML11_modify_invalidatesOldIntents() public {
         uint256 id = _registerLending();
-        IUniversalMarketplace.StartJobParams memory p = _ready(id);
+        StartJobParams memory p = _ready(id);
         _modify(id, _card(), _rules(), _lendingTemplate()); // same content, version 2
 
-        _expectStart(p, abi.encodeWithSelector(IUniversalMarketplaceErrors.CardVersionMismatch.selector, 1, 2));
+        _expectStart(p, abi.encodeWithSelector(UniversalMarketplaceErrors.CardVersionMismatch.selector, 1, 2));
         p.cardVersion = 2;
         _expectStart(
             p,
-            abi.encodeWithSelector(IUniversalMarketplaceErrors.IntentExecMismatch.selector, _calldataHash(id, 0, p.job))
+            abi.encodeWithSelector(UniversalMarketplaceErrors.IntentExecMismatch.selector, _calldataHash(id, 0, p.job))
         );
         assertEq(factory.walletCount(user), 0, "nothing deployed");
     }
@@ -939,11 +922,7 @@ contract UniversalMarketplaceTest is MarketplaceFixtures {
         (uint256 jobId, address agw) = _start(_ready(id));
         IAgenticCommerce.Job memory before = kernel.getJob(jobId);
 
-        (
-            IUniversalMarketplace.AgentCard memory c,
-            IUniversalMarketplace.RulesCardTerms memory r,
-            EvaluationTemplate memory t
-        ) = _modified();
+        (AgentCard memory c, RulesCardTerms memory r, EvaluationTemplate memory t) = _modified();
         _modify(id, c, r, t);
 
         IAgenticCommerce.Job memory afterJob = kernel.getJob(jobId);
@@ -961,11 +940,11 @@ contract UniversalMarketplaceTest is MarketplaceFixtures {
         uint256 id = _registerLending();
         EvaluationTemplate memory t = _lendingTemplate();
         t.checks[1].value = 0.05e27;
-        IUniversalMarketplace.RulesCardTerms memory r = _rules();
+        RulesCardTerms memory r = _rules();
         r.maxPCPerCall = 2 ether;
         _modify(id, _card(), r, t);
 
-        IUniversalMarketplace.StartJobParams memory p = _readyAt(id, 0, r, _inputs(PRINCIPAL));
+        StartJobParams memory p = _readyAt(id, 0, r, _inputs(PRINCIPAL));
         (uint256 jobId, address agw) = _start(p);
         bytes memory description = bytes(kernel.getJob(jobId).description);
         assertEq(description, _expectedDescription(t, id, 2, agw, p.job));
@@ -978,7 +957,7 @@ contract UniversalMarketplaceTest is MarketplaceFixtures {
 
     function test_MS01_freshWallet_happyPath() public {
         uint256 id = _registerLending();
-        IUniversalMarketplace.StartJobParams memory p = _ready(id);
+        StartJobParams memory p = _ready(id);
         address agw = p.intent.wallet;
         uint256 expectedJobId = kernel.jobCounter() + 1;
 
@@ -1016,7 +995,7 @@ contract UniversalMarketplaceTest is MarketplaceFixtures {
 
     function test_MS02_movesNoFunds() public {
         uint256 id = _registerLending();
-        IUniversalMarketplace.StartJobParams memory p = _ready(id);
+        StartJobParams memory p = _ready(id);
         address agw = p.intent.wallet;
         address[3] memory who = [user, agw, address(mkt)];
         uint256[3] memory tokenBefore;
@@ -1048,7 +1027,7 @@ contract UniversalMarketplaceTest is MarketplaceFixtures {
         vm.prank(provider);
         kernel.reject(job1, bytes32(0), "");
 
-        IUniversalMarketplace.StartJobParams memory p = _readyAt(id, 0, _rules(), _inputs(PRINCIPAL));
+        StartJobParams memory p = _readyAt(id, 0, _rules(), _inputs(PRINCIPAL));
         assertEq(p.intent.grantNonce, 1, "preview reads the live grant nonce");
         assertEq(p.intent.nonceSeq, 1, "preview reads the live lane");
         (uint256 job2, address again) = _start(p);
@@ -1064,44 +1043,42 @@ contract UniversalMarketplaceTest is MarketplaceFixtures {
         (uint256 job1, address agw) = _start(_ready(id));
         vm.prank(provider);
         kernel.reject(job1, bytes32(0), "");
-        IUniversalMarketplace.StartJobParams memory p = _readyAt(id, 0, _rules(), _inputs(PRINCIPAL));
+        StartJobParams memory p = _readyAt(id, 0, _rules(), _inputs(PRINCIPAL));
         // the factory's registry disagrees with the derivation (MockAGWFactory.ownerOf is slot 2)
         vm.store(address(factory), keccak256(abi.encode(agw, uint256(2))), bytes32(uint256(uint160(stranger))));
-        _expectStart(
-            p, abi.encodeWithSelector(IUniversalMarketplaceErrors.WalletOwnerMismatch.selector, user, stranger)
-        );
+        _expectStart(p, abi.encodeWithSelector(UniversalMarketplaceErrors.WalletOwnerMismatch.selector, user, stranger));
     }
 
     function test_MS04b_factoryDeploysElsewhere_agwMismatch() public {
         uint256 id = _registerLending();
-        IUniversalMarketplace.StartJobParams memory p = _ready(id);
+        StartJobParams memory p = _ready(id);
         factory.setMisdeploy(true);
         bytes32 salt = keccak256(abi.encode(keccak256(abi.encode(user, uint96(0)))));
         address elsewhere = vm.computeCreate2Address(
             salt, keccak256(abi.encodePacked(type(MockAGW).creationCode, abi.encode(user))), address(factory)
         );
         _expectStart(
-            p, abi.encodeWithSelector(IUniversalMarketplaceErrors.AGWMismatch.selector, p.intent.wallet, elsewhere)
+            p, abi.encodeWithSelector(UniversalMarketplaceErrors.AGWMismatch.selector, p.intent.wallet, elsewhere)
         );
     }
 
     function test_MS05_cardInactive_unknown_chainPaused() public {
         uint256 id = _registerLending();
-        IUniversalMarketplace.StartJobParams memory p = _ready(id);
+        StartJobParams memory p = _ready(id);
 
         vm.prank(provider);
         mkt.setCardActive(id, false);
-        _expectStart(p, abi.encodeWithSelector(IUniversalMarketplaceErrors.CardInactive.selector));
+        _expectStart(p, abi.encodeWithSelector(UniversalMarketplaceErrors.CardInactive.selector));
         vm.prank(provider);
         mkt.setCardActive(id, true);
 
         p.cardId = 999;
-        _expectStart(p, abi.encodeWithSelector(IUniversalMarketplaceErrors.CardInactive.selector));
+        _expectStart(p, abi.encodeWithSelector(UniversalMarketplaceErrors.CardInactive.selector));
         p.cardId = id;
 
         vm.prank(admin);
         mkt.setUniversalPaused(SEPOLIA_HASH, true);
-        _expectStart(p, abi.encodeWithSelector(IUniversalMarketplaceErrors.ChainPaused.selector, SEPOLIA_HASH));
+        _expectStart(p, abi.encodeWithSelector(UniversalMarketplaceErrors.ChainPaused.selector, SEPOLIA_HASH));
         vm.prank(admin);
         mkt.setUniversalPaused(SEPOLIA_HASH, false);
         _start(p);
@@ -1109,30 +1086,25 @@ contract UniversalMarketplaceTest is MarketplaceFixtures {
 
     function test_MS06_cardVersionMismatch() public {
         uint256 id = _registerLending();
-        IUniversalMarketplace.StartJobParams memory p = _ready(id);
+        StartJobParams memory p = _ready(id);
         p.cardVersion = 2;
-        _expectStart(p, abi.encodeWithSelector(IUniversalMarketplaceErrors.CardVersionMismatch.selector, 2, 1));
+        _expectStart(p, abi.encodeWithSelector(UniversalMarketplaceErrors.CardVersionMismatch.selector, 2, 1));
         p.cardVersion = 0;
-        _expectStart(p, abi.encodeWithSelector(IUniversalMarketplaceErrors.CardVersionMismatch.selector, 0, 1));
+        _expectStart(p, abi.encodeWithSelector(UniversalMarketplaceErrors.CardVersionMismatch.selector, 0, 1));
     }
 
     function test_MS07_principalOutOfRange() public {
         uint256 id = _registerLending();
         uint256[2] memory bad = [uint256(100e6 - 1), 1_000e6 + 1];
         for (uint256 i; i < 2; ++i) {
-            IUniversalMarketplace.StartJobParams memory p =
-                _readyAt(id, uint96(factory.walletCount(user)), _rules(), _inputs(bad[i]));
-            _expectStart(p, abi.encodeWithSelector(IUniversalMarketplaceErrors.PrincipalOutOfRange.selector));
+            StartJobParams memory p = _readyAt(id, uint96(factory.walletCount(user)), _rules(), _inputs(bad[i]));
+            _expectStart(p, abi.encodeWithSelector(UniversalMarketplaceErrors.PrincipalOutOfRange.selector));
         }
         _start(_readyAt(id, 0, _rules(), _inputs(100e6)));
         _start(_readyAt(id, 1, _rules(), _inputs(1_000e6)));
     }
 
-    function _withTimes(uint256 expiredAt, uint256 executeBy)
-        internal
-        view
-        returns (IUniversalMarketplace.JobInputs memory j)
-    {
+    function _withTimes(uint256 expiredAt, uint256 executeBy) internal view returns (JobInputs memory j) {
         j = _inputs(PRINCIPAL);
         // forge-lint: disable-next-line(unsafe-typecast)
         j.expiredAt = uint48(expiredAt); // a timestamp within 31 days of now
@@ -1143,15 +1115,15 @@ contract UniversalMarketplaceTest is MarketplaceFixtures {
     function test_MS08_expiryOutOfRange() public {
         uint256 id = _registerLending();
         uint256 t = block.timestamp;
-        IUniversalMarketplace.JobInputs memory tooSoon = _withTimes(t + 3 hours - 1, t + 10 minutes);
-        IUniversalMarketplace.JobInputs memory tooLate = _withTimes(t + 30 days + 1, t + 10 minutes);
+        JobInputs memory tooSoon = _withTimes(t + 3 hours - 1, t + 10 minutes);
+        JobInputs memory tooLate = _withTimes(t + 30 days + 1, t + 10 minutes);
         _expectStart(
             _readyAt(id, 0, _rules(), tooSoon),
-            abi.encodeWithSelector(IUniversalMarketplaceErrors.ExpiryOutOfRange.selector)
+            abi.encodeWithSelector(UniversalMarketplaceErrors.ExpiryOutOfRange.selector)
         );
         _expectStart(
             _readyAt(id, 0, _rules(), tooLate),
-            abi.encodeWithSelector(IUniversalMarketplaceErrors.ExpiryOutOfRange.selector)
+            abi.encodeWithSelector(UniversalMarketplaceErrors.ExpiryOutOfRange.selector)
         );
         _start(_readyAt(id, 0, _rules(), _withTimes(t + 3 hours, t + 10 minutes)));
         _start(_readyAt(id, 1, _rules(), _withTimes(t + 30 days, t + 10 minutes)));
@@ -1163,11 +1135,11 @@ contract UniversalMarketplaceTest is MarketplaceFixtures {
         uint256 expiry = t + 7 days;
         _expectStart(
             _readyAt(id, 0, _rules(), _withTimes(expiry, t + 10 minutes - 1)),
-            abi.encodeWithSelector(IUniversalMarketplaceErrors.ExecuteByOutOfRange.selector)
+            abi.encodeWithSelector(UniversalMarketplaceErrors.ExecuteByOutOfRange.selector)
         );
         _expectStart(
             _readyAt(id, 0, _rules(), _withTimes(expiry, expiry - 2 hours + 1)),
-            abi.encodeWithSelector(IUniversalMarketplaceErrors.ExecuteByOutOfRange.selector)
+            abi.encodeWithSelector(UniversalMarketplaceErrors.ExecuteByOutOfRange.selector)
         );
         _start(_readyAt(id, 0, _rules(), _withTimes(expiry, t + 10 minutes)));
         _start(_readyAt(id, 1, _rules(), _withTimes(expiry, expiry - 2 hours)));
@@ -1176,20 +1148,20 @@ contract UniversalMarketplaceTest is MarketplaceFixtures {
     function test_MS10_params() public {
         uint256 id = _registerSwap();
 
-        IUniversalMarketplace.StartJobParams memory p = _readyAt(id, 0, _rules(), _swapInputs(0.5e18));
+        StartJobParams memory p = _readyAt(id, 0, _rules(), _swapInputs(0.5e18));
         p.job.params = new int256[](0);
-        _expectStart(p, abi.encodeWithSelector(IUniversalMarketplaceErrors.ParamCountMismatch.selector, 1, 0));
+        _expectStart(p, abi.encodeWithSelector(UniversalMarketplaceErrors.ParamCountMismatch.selector, 1, 0));
         p = _readyAt(id, 0, _rules(), _swapInputs(0.5e18));
         p.job.params = new int256[](2);
-        _expectStart(p, abi.encodeWithSelector(IUniversalMarketplaceErrors.ParamCountMismatch.selector, 1, 2));
+        _expectStart(p, abi.encodeWithSelector(UniversalMarketplaceErrors.ParamCountMismatch.selector, 1, 2));
 
         p = _readyAt(id, 0, _rules(), _swapInputs(0.5e18));
         p.job.params[0] = 0;
-        _expectStart(p, abi.encodeWithSelector(IUniversalMarketplaceErrors.ParamOutOfRange.selector, 0, int256(0)));
+        _expectStart(p, abi.encodeWithSelector(UniversalMarketplaceErrors.ParamOutOfRange.selector, 0, int256(0)));
         p = _readyAt(id, 0, _rules(), _swapInputs(0.5e18));
         p.job.params[0] = 1e30 + 1;
         _expectStart(
-            p, abi.encodeWithSelector(IUniversalMarketplaceErrors.ParamOutOfRange.selector, 0, int256(1e30 + 1))
+            p, abi.encodeWithSelector(UniversalMarketplaceErrors.ParamOutOfRange.selector, 0, int256(1e30 + 1))
         );
 
         (uint256 jobA,) = _start(_readyAt(id, 0, _rules(), _swapInputs(1)));
@@ -1200,33 +1172,31 @@ contract UniversalMarketplaceTest is MarketplaceFixtures {
 
     function test_MS11_intentWalletAndExecutor() public {
         uint256 id = _registerLending();
-        IUniversalMarketplace.StartJobParams memory p = _ready(id);
+        StartJobParams memory p = _ready(id);
         address agw = p.intent.wallet;
         p.intent.wallet = stranger;
-        _expectStart(
-            p, abi.encodeWithSelector(IUniversalMarketplaceErrors.IntentWalletMismatch.selector, agw, stranger)
-        );
+        _expectStart(p, abi.encodeWithSelector(UniversalMarketplaceErrors.IntentWalletMismatch.selector, agw, stranger));
         p = _ready(id);
         p.intent.executor = stranger;
         _expectStart(
-            p, abi.encodeWithSelector(IUniversalMarketplaceErrors.ExecutorMismatch.selector, stranger, address(mkt))
+            p, abi.encodeWithSelector(UniversalMarketplaceErrors.ExecutorMismatch.selector, stranger, address(mkt))
         );
     }
 
-    function _expectExecMismatch(IUniversalMarketplace.StartJobParams memory p, uint96 index) internal {
+    function _expectExecMismatch(StartJobParams memory p, uint96 index) internal {
         _expectStart(
             p,
             abi.encodeWithSelector(
-                IUniversalMarketplaceErrors.IntentExecMismatch.selector, _calldataHash(p.cardId, index, p.job)
+                UniversalMarketplaceErrors.IntentExecMismatch.selector, _calldataHash(p.cardId, index, p.job)
             )
         );
     }
 
     function test_MS12_intentExecMismatch_everyBoundInput() public {
         uint256 id = _registerSwap();
-        IUniversalMarketplace.JobInputs memory job = _swapInputs(0.5e18);
+        JobInputs memory job = _swapInputs(0.5e18);
 
-        IUniversalMarketplace.StartJobParams memory p = _readyAt(id, 0, _rules(), job);
+        StartJobParams memory p = _readyAt(id, 0, _rules(), job);
         p.job.principal = PRINCIPAL + 1;
         _expectExecMismatch(p, 0);
 
@@ -1263,13 +1233,13 @@ contract UniversalMarketplaceTest is MarketplaceFixtures {
 
     function test_MS13_intentSessionMismatch_noStateOnFailure() public {
         uint256 id = _registerLending();
-        IUniversalMarketplace.StartJobParams memory p = _ready(id);
+        StartJobParams memory p = _ready(id);
         p.session.salt = bytes32(uint256(1));
         uint256 jobsBefore = kernel.jobCounter();
         _expectStart(
             p,
             abi.encodeWithSelector(
-                IUniversalMarketplaceErrors.IntentSessionMismatch.selector, keccak256(abi.encode(p.session))
+                UniversalMarketplaceErrors.IntentSessionMismatch.selector, keccak256(abi.encode(p.session))
             )
         );
         assertEq(factory.walletCount(user), 0, "no wallet");
@@ -1281,7 +1251,7 @@ contract UniversalMarketplaceTest is MarketplaceFixtures {
         assertFalse(mkt.isAGWFree(agw));
         _expectStart(
             _readyAt(id, 0, _rules(), _inputs(PRINCIPAL)),
-            abi.encodeWithSelector(IUniversalMarketplaceErrors.AGWBusy.selector, agw, jobId)
+            abi.encodeWithSelector(UniversalMarketplaceErrors.AGWBusy.selector, agw, jobId)
         );
     }
 
@@ -1316,26 +1286,26 @@ contract UniversalMarketplaceTest is MarketplaceFixtures {
 
     function test_MS15_jobVerification() public {
         uint256 id = _registerLending();
-        IUniversalMarketplace.StartJobParams memory p = _ready(id);
+        StartJobParams memory p = _ready(id);
         vm.prank(user);
         factory.deployWalletWithSig(p.intent, "", "");
         MockAGW(payable(p.intent.wallet)).setMode(MockAGW.Mode.TwoJobs);
         uint256 n = kernel.jobCounter();
-        _expectStart(p, abi.encodeWithSelector(IUniversalMarketplaceErrors.UnexpectedJobCount.selector, n, n + 2));
+        _expectStart(p, abi.encodeWithSelector(UniversalMarketplaceErrors.UnexpectedJobCount.selector, n, n + 2));
 
         MockAGW(payable(p.intent.wallet)).setMode(MockAGW.Mode.ForeignClient);
-        _expectStart(p, abi.encodeWithSelector(IUniversalMarketplaceErrors.JobMismatch.selector));
+        _expectStart(p, abi.encodeWithSelector(UniversalMarketplaceErrors.JobMismatch.selector));
 
         MockAGW(payable(p.intent.wallet)).setMode(MockAGW.Mode.OtherEvaluator);
-        _expectStart(p, abi.encodeWithSelector(IUniversalMarketplaceErrors.JobMismatch.selector));
+        _expectStart(p, abi.encodeWithSelector(UniversalMarketplaceErrors.JobMismatch.selector));
     }
 
     function test_MS16_providerIsEvaluator_afterSetEvaluator() public {
         uint256 id = _registerLending();
-        IUniversalMarketplace.StartJobParams memory p = _ready(id);
+        StartJobParams memory p = _ready(id);
         vm.prank(admin);
         mkt.setEvaluator(provider);
-        _expectStart(p, abi.encodeWithSelector(IUniversalMarketplaceErrors.ProviderIsEvaluator.selector));
+        _expectStart(p, abi.encodeWithSelector(UniversalMarketplaceErrors.ProviderIsEvaluator.selector));
     }
 
     function test_MS17_8183Continuation_feeEnforcedAtFund() public {
@@ -1369,7 +1339,7 @@ contract UniversalMarketplaceTest is MarketplaceFixtures {
     uint256 internal constant START_EXISTING_GAS_CEILING = 2_090_000;
 
     function test_MS18_gasCeilings() public {
-        IUniversalMarketplace.AgentCard memory c = _card();
+        AgentCard memory c = _card();
         bytes memory r = abi.encode(_rules());
         bytes memory e = abi.encode(_lendingTemplate());
         vm.prank(provider);
@@ -1377,7 +1347,7 @@ contract UniversalMarketplaceTest is MarketplaceFixtures {
         uint256 id = mkt.registerCard(c, r, e);
         assertLe(g - gasleft(), REGISTER_GAS_CEILING, "registerCard (lending card)");
 
-        IUniversalMarketplace.StartJobParams memory p = _ready(id);
+        StartJobParams memory p = _ready(id);
         vm.prank(relayer);
         g = gasleft();
         (uint256 jobId,,) = mkt.startJob(p);
@@ -1396,7 +1366,7 @@ contract UniversalMarketplaceTest is MarketplaceFixtures {
 
     function _sessionCase(function(Session memory) internal view mutate, bytes memory err) internal {
         uint256 id = _registerLending();
-        IUniversalMarketplace.JobInputs memory job = _inputs(PRINCIPAL);
+        JobInputs memory job = _inputs(PRINCIPAL);
         (address agw,) = factory.predictWallet(user, 0);
         Session memory s = _session(_termsFor(_rules(), agw, job));
         mutate(s);
@@ -1405,7 +1375,7 @@ contract UniversalMarketplaceTest is MarketplaceFixtures {
 
     function _termsCase(function(UniversalTerms memory) internal view mutate, bytes memory err) internal {
         uint256 id = _registerLending();
-        IUniversalMarketplace.JobInputs memory job = _inputs(PRINCIPAL);
+        JobInputs memory job = _inputs(PRINCIPAL);
         (address agw,) = factory.predictWallet(user, 0);
         UniversalTerms memory t = _termsFor(_rules(), agw, job);
         mutate(t);
@@ -1444,15 +1414,15 @@ contract UniversalMarketplaceTest is MarketplaceFixtures {
     }
 
     function test_MB01_agentMismatch() public {
-        _sessionCase(_otherAgent, abi.encodeWithSelector(IUniversalMarketplaceErrors.AgentMismatch.selector));
-        _sessionCase(_wideInitData, abi.encodeWithSelector(IUniversalMarketplaceErrors.AgentMismatch.selector));
+        _sessionCase(_otherAgent, abi.encodeWithSelector(UniversalMarketplaceErrors.AgentMismatch.selector));
+        _sessionCase(_wideInitData, abi.encodeWithSelector(UniversalMarketplaceErrors.AgentMismatch.selector));
     }
 
     function test_MB02_shape() public {
-        _sessionCase(_noActions, abi.encodeWithSelector(IUniversalMarketplaceErrors.ActionCount.selector));
-        _sessionCase(_twoActions, abi.encodeWithSelector(IUniversalMarketplaceErrors.ActionCount.selector));
-        _sessionCase(_twoPolicies, abi.encodeWithSelector(IUniversalMarketplaceErrors.PolicyShape.selector, 0));
-        _sessionCase(_otherChain, abi.encodeWithSelector(IUniversalMarketplaceErrors.ChainMismatch.selector, 0));
+        _sessionCase(_noActions, abi.encodeWithSelector(UniversalMarketplaceErrors.ActionCount.selector));
+        _sessionCase(_twoActions, abi.encodeWithSelector(UniversalMarketplaceErrors.ActionCount.selector));
+        _sessionCase(_twoPolicies, abi.encodeWithSelector(UniversalMarketplaceErrors.PolicyShape.selector, 0));
+        _sessionCase(_otherChain, abi.encodeWithSelector(UniversalMarketplaceErrors.ChainMismatch.selector, 0));
     }
 
     function _otherAsset(UniversalTerms memory t) internal view {
@@ -1496,37 +1466,37 @@ contract UniversalMarketplaceTest is MarketplaceFixtures {
     }
 
     function test_MB03_terms() public {
-        _termsCase(_otherAsset, abi.encodeWithSelector(IUniversalMarketplaceErrors.AssetMismatch.selector));
-        _termsCase(_pcCapUp, abi.encodeWithSelector(IUniversalMarketplaceErrors.PCCapMismatch.selector));
-        _termsCase(_extraCall, abi.encodeWithSelector(IUniversalMarketplaceErrors.ActionsMismatch.selector));
-        _termsCase(_missingCall, abi.encodeWithSelector(IUniversalMarketplaceErrors.ActionsMismatch.selector));
-        _termsCase(_valueChanged, abi.encodeWithSelector(IUniversalMarketplaceErrors.ActionsMismatch.selector));
-        _termsCase(_totalNotPrincipal, abi.encodeWithSelector(IUniversalMarketplaceErrors.CapMismatch.selector));
-        _termsCase(_perCallOverPrincipal, abi.encodeWithSelector(IUniversalMarketplaceErrors.CapMismatch.selector));
-        _termsCase(_validUntilMoved, abi.encodeWithSelector(IUniversalMarketplaceErrors.ExpiryMismatch.selector));
+        _termsCase(_otherAsset, abi.encodeWithSelector(UniversalMarketplaceErrors.AssetMismatch.selector));
+        _termsCase(_pcCapUp, abi.encodeWithSelector(UniversalMarketplaceErrors.PCCapMismatch.selector));
+        _termsCase(_extraCall, abi.encodeWithSelector(UniversalMarketplaceErrors.ActionsMismatch.selector));
+        _termsCase(_missingCall, abi.encodeWithSelector(UniversalMarketplaceErrors.ActionsMismatch.selector));
+        _termsCase(_valueChanged, abi.encodeWithSelector(UniversalMarketplaceErrors.ActionsMismatch.selector));
+        _termsCase(_totalNotPrincipal, abi.encodeWithSelector(UniversalMarketplaceErrors.CapMismatch.selector));
+        _termsCase(_perCallOverPrincipal, abi.encodeWithSelector(UniversalMarketplaceErrors.CapMismatch.selector));
+        _termsCase(_validUntilMoved, abi.encodeWithSelector(UniversalMarketplaceErrors.ExpiryMismatch.selector));
         (address agw,) = factory.predictWallet(user, 0);
         _termsCase(
             _attackerCEA,
             abi.encodeWithSelector(
-                IUniversalMarketplaceErrors.ExpectedCEAMismatch.selector, ceaFactory.computeCEA(agw), address(0xBAD)
+                UniversalMarketplaceErrors.ExpectedCEAMismatch.selector, ceaFactory.computeCEA(agw), address(0xBAD)
             )
         );
 
         // reordered: a two-call card, the session lists the calls the other way round
-        (, IUniversalMarketplace.RulesCardTerms memory two,) = _modified();
+        (, RulesCardTerms memory two,) = _modified();
         uint256 id = _register(_card(), two, _lendingTemplate());
-        IUniversalMarketplace.JobInputs memory job = _inputs(PRINCIPAL);
+        JobInputs memory job = _inputs(PRINCIPAL);
         UniversalTerms memory t = _termsFor(two, agw, job);
         (t.allowedCalls[0], t.allowedCalls[1]) = (t.allowedCalls[1], t.allowedCalls[0]);
         _expectStart(
             _params(id, 0, job, _session(t)),
-            abi.encodeWithSelector(IUniversalMarketplaceErrors.ActionsMismatch.selector)
+            abi.encodeWithSelector(UniversalMarketplaceErrors.ActionsMismatch.selector)
         );
     }
 
     function test_MB04_perCallBelowPrincipal_passes() public {
         uint256 id = _registerLending();
-        IUniversalMarketplace.JobInputs memory job = _inputs(PRINCIPAL);
+        JobInputs memory job = _inputs(PRINCIPAL);
         (address agw,) = factory.predictWallet(user, 0);
         UniversalTerms memory t = _termsFor(_rules(), agw, job);
         t.maxAmountPerCall = PRINCIPAL / 4;
@@ -1535,7 +1505,7 @@ contract UniversalMarketplaceTest is MarketplaceFixtures {
 
     function test_MB05_approvalsNotInSession() public {
         uint256 id = _registerLending();
-        IUniversalMarketplace.JobInputs memory job = _inputs(PRINCIPAL);
+        JobInputs memory job = _inputs(PRINCIPAL);
         (address agw,) = factory.predictWallet(user, 0);
         UniversalTerms memory t = _termsFor(_rules(), agw, job);
         AllowedCall[] memory calls = new AllowedCall[](2);
@@ -1546,7 +1516,7 @@ contract UniversalMarketplaceTest is MarketplaceFixtures {
         t.allowedCalls = calls;
         _expectStart(
             _params(id, 0, job, _session(t)),
-            abi.encodeWithSelector(IUniversalMarketplaceErrors.ActionsMismatch.selector)
+            abi.encodeWithSelector(UniversalMarketplaceErrors.ActionsMismatch.selector)
         );
     }
 
@@ -1556,8 +1526,8 @@ contract UniversalMarketplaceTest is MarketplaceFixtures {
         uint256 id = _registerLending();
         vm.prank(admin);
         mkt.verifyAgentCard(id, 1);
-        IUniversalMarketplace.CardView memory v = mkt.getCard(id);
-        IUniversalMarketplace.AgentCard memory expected = _card();
+        CardView memory v = mkt.getCard(id);
+        AgentCard memory expected = _card();
         expected.provider = provider;
         expected.active = true;
         assertEq(abi.encode(v.card), abi.encode(expected), "card");
@@ -1567,8 +1537,8 @@ contract UniversalMarketplaceTest is MarketplaceFixtures {
         assertTrue(v.verified);
         assertFalse(v.adminDisabled);
 
-        IUniversalMarketplace.CardView memory none = mkt.getCard(999);
-        IUniversalMarketplace.CardView memory zero;
+        CardView memory none = mkt.getCard(999);
+        CardView memory zero;
         assertEq(abi.encode(none), abi.encode(zero), "an unknown card reads all zero");
     }
 
@@ -1578,7 +1548,7 @@ contract UniversalMarketplaceTest is MarketplaceFixtures {
         (address cea,) = ceaFactory.getCEAForPushAccount(agw);
         assertEq(mkt.expectedCEAOf(agw, SEPOLIA_HASH), cea);
         vm.expectRevert(
-            abi.encodeWithSelector(IUniversalMarketplaceErrors.ChainNotSupported.selector, bytes32(uint256(1)))
+            abi.encodeWithSelector(UniversalMarketplaceErrors.ChainNotSupported.selector, bytes32(uint256(1)))
         );
         mkt.expectedCEAOf(agw, bytes32(uint256(1)));
     }
@@ -1589,12 +1559,12 @@ contract UniversalMarketplaceTest is MarketplaceFixtures {
         address newImpl = makeAddr("ceaProxyImplV2");
         vm.prank(admin);
         ceaFactory.setCEAProxyImplementation(newImpl);
-        IUniversalMarketplace.StartJobParams memory p = _ready(id); // an honest SDK signs the NEW CEA
+        StartJobParams memory p = _ready(id); // an honest SDK signs the NEW CEA
         address agw = p.intent.wallet;
         _expectStart(
             p,
             abi.encodeWithSelector(
-                IUniversalMarketplaceErrors.ExpectedCEAMismatch.selector,
+                UniversalMarketplaceErrors.ExpectedCEAMismatch.selector,
                 mkt.expectedCEAOf(agw, SEPOLIA_HASH),
                 ceaFactory.computeCEA(agw)
             )
@@ -1606,7 +1576,7 @@ contract UniversalMarketplaceTest is MarketplaceFixtures {
 
     function test_MV04_buildCreateJobCalldata() public {
         uint256 id = _registerSwap();
-        IUniversalMarketplace.JobInputs memory job = _swapInputs(0.5e18);
+        JobInputs memory job = _swapInputs(0.5e18);
         (bytes32 mode, bytes memory cd) = mkt.buildCreateJobCalldata(id, user, 0, job);
         (address agw,) = factory.predictWallet(user, 0);
         assertEq(mode, bytes32(0));
@@ -1623,7 +1593,7 @@ contract UniversalMarketplaceTest is MarketplaceFixtures {
         assertEq(cd, abi.encodePacked(address(kernel), uint256(0), call));
 
         bytes32 base = keccak256(cd);
-        IUniversalMarketplace.JobInputs memory j = _swapInputs(0.5e18);
+        JobInputs memory j = _swapInputs(0.5e18);
         j.principal += 1;
         assertTrue(_calldataHash(id, 0, j) != base, "principal");
         j = _swapInputs(0.5e18);
@@ -1640,17 +1610,17 @@ contract UniversalMarketplaceTest is MarketplaceFixtures {
         assertTrue(_calldataHash(id, 0, job) != base, "card version");
 
         // what startJob executes is exactly this view's answer
-        IUniversalMarketplace.StartJobParams memory p = _readyAt(id, 0, _rules(), job);
+        StartJobParams memory p = _readyAt(id, 0, _rules(), job);
         (, address started) = _start(p);
         assertEq(MockAGW(payable(started)).lastExecCalldataHash(), _calldataHash(id, 0, job));
 
-        vm.expectRevert(IUniversalMarketplaceErrors.CardInactive.selector);
+        vm.expectRevert(UniversalMarketplaceErrors.CardInactive.selector);
         mkt.buildCreateJobCalldata(999, user, 0, job);
     }
 
     function test_MV05_previewIntent_roundTrips() public {
         uint256 id = _registerLending();
-        IUniversalMarketplace.StartJobParams memory p = _ready(id);
+        StartJobParams memory p = _ready(id);
         OwnerIntent memory i = p.intent;
         (address agw,) = factory.predictWallet(user, 0);
         assertEq(i.owner, user);
@@ -1674,11 +1644,9 @@ contract UniversalMarketplaceTest is MarketplaceFixtures {
         assertEq(again.grantNonce, 1, "deployed: the live grant nonce");
 
         Session memory s;
-        vm.expectRevert(IUniversalMarketplaceErrors.CardInactive.selector);
+        vm.expectRevert(UniversalMarketplaceErrors.CardInactive.selector);
         mkt.previewIntent(
-            IUniversalMarketplace.IntentRequest({
-                cardId: 999, owner: user, index: 0, job: _inputs(PRINCIPAL), deadline: 0, signerChainId: 1
-            }),
+            IntentRequest({cardId: 999, owner: user, index: 0, job: _inputs(PRINCIPAL), deadline: 0, signerChainId: 1}),
             s
         );
     }
@@ -1688,10 +1656,10 @@ contract UniversalMarketplaceTest is MarketplaceFixtures {
         vm.expectRevert(_adminRevert(stranger));
         mkt.setHook(address(hook));
         vm.prank(admin);
-        vm.expectRevert(IUniversalMarketplaceErrors.ZeroAddress.selector);
+        vm.expectRevert(UniversalMarketplaceErrors.ZeroAddress.selector);
         mkt.setHook(address(0));
         vm.prank(admin);
-        vm.expectRevert(IUniversalMarketplaceErrors.HookNotWhitelisted.selector);
+        vm.expectRevert(UniversalMarketplaceErrors.HookNotWhitelisted.selector);
         mkt.setHook(stranger);
         vm.expectEmit(address(mkt));
         emit IUniversalMarketplace.HookUpdated(address(hook));
@@ -1702,7 +1670,7 @@ contract UniversalMarketplaceTest is MarketplaceFixtures {
         vm.expectRevert(_adminRevert(stranger));
         mkt.setEvaluator(stranger);
         vm.prank(admin);
-        vm.expectRevert(IUniversalMarketplaceErrors.ZeroAddress.selector);
+        vm.expectRevert(UniversalMarketplaceErrors.ZeroAddress.selector);
         mkt.setEvaluator(address(0));
         address next = makeAddr("evaluatorV2");
         vm.expectEmit(address(mkt));
@@ -1715,9 +1683,9 @@ contract UniversalMarketplaceTest is MarketplaceFixtures {
         vm.expectRevert(_adminRevert(stranger));
         mkt.setCEADeployment(SEPOLIA_HASH, address(ceaFactory), ceaProxyImpl);
         vm.startPrank(admin);
-        vm.expectRevert(IUniversalMarketplaceErrors.ZeroAddress.selector);
+        vm.expectRevert(UniversalMarketplaceErrors.ZeroAddress.selector);
         mkt.setCEADeployment(SEPOLIA_HASH, address(0), ceaProxyImpl);
-        vm.expectRevert(IUniversalMarketplaceErrors.ZeroAddress.selector);
+        vm.expectRevert(UniversalMarketplaceErrors.ZeroAddress.selector);
         mkt.setCEADeployment(SEPOLIA_HASH, address(ceaFactory), address(0));
         vm.expectEmit(address(mkt));
         emit IUniversalMarketplace.CEADeploymentSet(SEPOLIA_HASH, address(ceaFactory), ceaProxyImpl);
@@ -1731,12 +1699,12 @@ contract UniversalMarketplaceTest is MarketplaceFixtures {
         emit IUniversalMarketplace.UniversalChainPaused(SEPOLIA_HASH, true);
         vm.prank(admin);
         mkt.setUniversalPaused(SEPOLIA_HASH, true);
-        assertTrue(mkt.universalPaused(SEPOLIA_HASH));
+        assertTrue(mkt.isUniversalPaused(SEPOLIA_HASH));
     }
 
     function test_MV07_pause() public {
         uint256 id = _registerLending();
-        IUniversalMarketplace.StartJobParams memory p = _ready(id);
+        StartJobParams memory p = _ready(id);
         vm.prank(stranger);
         vm.expectRevert(_adminRevert(stranger));
         mkt.pause();
@@ -1744,7 +1712,7 @@ contract UniversalMarketplaceTest is MarketplaceFixtures {
         mkt.pause();
 
         _expectStart(p, abi.encodeWithSelector(PausableUpgradeable.EnforcedPause.selector));
-        IUniversalMarketplace.AgentCard memory c = _card();
+        AgentCard memory c = _card();
         bytes memory r = abi.encode(_rules());
         bytes memory e = abi.encode(_lendingTemplate());
         vm.prank(provider);
@@ -1762,15 +1730,15 @@ contract UniversalMarketplaceTest is MarketplaceFixtures {
         _start(p);
     }
 
-    function _expectInitRevert(IUniversalMarketplace.InitParams memory ip, bytes4 err) internal {
+    function _expectInitRevert(InitParams memory ip, bytes4 err) internal {
         address impl = address(new UniversalMarketplace());
         vm.expectRevert(err);
         new TransparentUpgradeableProxy(impl, mktAdmin, abi.encodeCall(UniversalMarketplace.initialize, (ip)));
     }
 
     function test_MV08_initialize() public {
-        bytes4 zero = IUniversalMarketplaceErrors.ZeroAddress.selector;
-        IUniversalMarketplace.InitParams memory ip = _initParams();
+        bytes4 zero = UniversalMarketplaceErrors.ZeroAddress.selector;
+        InitParams memory ip = _initParams();
         ip.agwFactory = address(0);
         _expectInitRevert(ip, zero);
         ip = _initParams();
@@ -1790,7 +1758,7 @@ contract UniversalMarketplaceTest is MarketplaceFixtures {
         _expectInitRevert(ip, zero);
         ip = _initParams();
         ip.hook = stranger;
-        _expectInitRevert(ip, IUniversalMarketplaceErrors.HookNotWhitelisted.selector);
+        _expectInitRevert(ip, UniversalMarketplaceErrors.HookNotWhitelisted.selector);
 
         vm.expectRevert(Initializable.InvalidInitialization.selector);
         mkt.initialize(_initParams());
@@ -1798,11 +1766,11 @@ contract UniversalMarketplaceTest is MarketplaceFixtures {
         vm.expectRevert(Initializable.InvalidInitialization.selector);
         impl.initialize(_initParams());
 
-        assertEq(address(mkt.agwFactory()), address(factory));
-        assertEq(address(mkt.kernel()), address(kernel));
+        assertEq(address(mkt.AGW_FACTORY()), address(factory));
+        assertEq(address(mkt.KERNEL()), address(kernel));
         assertEq(mkt.hook(), address(hook));
         assertEq(mkt.evaluator(), universalEvaluator);
-        assertEq(address(mkt.terms()), address(terms));
+        assertEq(address(mkt.TERMS()), address(terms));
         assertTrue(mkt.hasRole(mkt.ADMIN_ROLE(), admin));
         assertTrue(mkt.hasRole(mkt.DEFAULT_ADMIN_ROLE(), admin));
     }
@@ -1822,12 +1790,12 @@ contract UniversalMarketplaceTest is MarketplaceFixtures {
         vm.stopPrank();
 
         address m = address(mkt);
-        assertEq(_word(m, 0), uint256(uint160(address(factory))), "0 agwFactory");
-        assertEq(_word(m, 1), uint256(uint160(address(kernel))), "1 kernel");
+        assertEq(_word(m, 0), uint256(uint160(address(factory))), "0 AGW_FACTORY");
+        assertEq(_word(m, 1), uint256(uint160(address(kernel))), "1 KERNEL");
         assertEq(_word(m, 2), uint256(uint160(address(hook))), "2 hook");
         assertEq(_word(m, 3), uint256(uint160(universalEvaluator)), "3 evaluator");
         assertEq(vm.load(m, bytes32(uint256(4))), mkt.pushChainHash(), "4 pushChainHash");
-        assertEq(_word(m, 5), uint256(uint160(address(terms))), "5 terms");
+        assertEq(_word(m, 5), uint256(uint160(address(terms))), "5 TERMS");
         assertEq(_word(m, 6), 2, "6 cardCount");
 
         // mappings: the entry lives at keccak256(key ‖ slot); a long `bytes` stores 2·length + 1
@@ -1836,14 +1804,14 @@ contract UniversalMarketplaceTest is MarketplaceFixtures {
         assertEq(_entry(m, id, 9), abi.encode(_lendingTemplate()).length * 2 + 1, "9 _evaluations");
         assertEq(_entry(m, id, 10), 2, "10 cardVersion");
         assertEq(_entry(m, id2, 10), 1, "10 cardVersion (unmodified)");
-        assertEq(_entry(m, id, 11), 1, "11 cardVerified");
-        assertEq(_entry(m, id2, 12), 1, "12 adminDisabled");
+        assertEq(_entry(m, id, 11), 1, "11 isCardVerified");
+        assertEq(_entry(m, id2, 12), 1, "12 isCardAdminDisabled");
         assertEq(
             uint256(vm.load(m, keccak256(abi.encode(SEPOLIA_HASH, uint256(13))))),
             uint256(uint160(address(ceaFactory))),
             "13 ceaDeployment.ceaFactory"
         );
-        assertEq(uint256(vm.load(m, keccak256(abi.encode(SEPOLIA_HASH, uint256(14))))), 1, "14 universalPaused");
+        assertEq(uint256(vm.load(m, keccak256(abi.encode(SEPOLIA_HASH, uint256(14))))), 1, "14 isUniversalPaused");
         assertEq(uint256(vm.load(m, keccak256(abi.encode(agw, uint256(15))))), jobId, "15 lastJobOf");
         assertEq(_entry(m, jobId, 16), id, "16 cardOfJob");
         assertEq(_entry(m, jobId, 17), uint256(uint160(agw)), "17 agwOfJob");

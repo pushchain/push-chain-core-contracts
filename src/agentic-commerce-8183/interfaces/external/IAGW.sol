@@ -5,7 +5,7 @@ pragma solidity 0.8.26;
 /// @dev - Source: the AGW after its naming change (`push-agentic-wallet`, branch `nomenclature-changes`,
 ///        `docs-internal/sdk-first-changes/N-nomenclature_prd.md` §2.3 and Appendix B):
 ///        `src/libraries/Types.sol` (OwnerIntent, OWNER_LANE_FLAG),
-///        `src/interfaces/IUniversalRulesPolicy.sol` (the UNIVERSAL terms),
+///        `src/libraries/Types.sol` (`UniversalTerms`, `AllowedCall` — file-level since the AGW nomenclature change),
 ///        `lib/smartsessions/contracts/DataTypes.sol` (Session and its parts),
 ///        `src/AGW.sol` (the owner-intent doors and two views).
 ///      - `rulesId` is the AGW's name for the engine's `permissionId`; the two are the same value.
@@ -75,7 +75,7 @@ struct Session {
 
 // ─────────────────────────────── rules wire types (UniversalRulesPolicy) ───────────────────────────────
 
-/// @dev Mirror of `IUniversalRulesPolicy.AllowedCall`.
+/// @dev Mirror of the AGW's file-level `AllowedCall` (src/libraries/Types.sol).
 struct AllowedCall {
     address target;
     bytes4 selector;
@@ -84,7 +84,7 @@ struct AllowedCall {
     uint256 maxValue;
 }
 
-/// @dev Mirror of `IUniversalRulesPolicy.UniversalTerms` — a UNIVERSAL envelope's body.
+/// @dev Mirror of the AGW's file-level `UniversalTerms` (src/libraries/Types.sol) — a UNIVERSAL envelope's body.
 struct UniversalTerms {
     uint48 validUntil;
     address expectedCEA;

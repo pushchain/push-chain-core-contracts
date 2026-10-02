@@ -7,7 +7,7 @@ import {OwnerIntent} from "./IAGW.sol";
 /// @notice Mirror of the Push Agentic Wallet factory — the functions this repo calls.
 /// @dev - Source: the AGW factory after its naming change (`push-agentic-wallet`, branch
 ///        `nomenclature-changes`, `N-nomenclature_prd.md` §2.5): `src/AGWFactory.sol` / `src/interfaces/IAGWFactory.sol`.
-///      - `isWallet` is what MandateBindingHook reads; the rest is what UniversalMarketplace reads.
+///      - `isWallet` is what RulesBindingHook reads; the rest is what UniversalMarketplace reads.
 ///      - Donut v3 proxy: `0x2578041963f692f8b51A137A1c7ddc0c84a8226A`; the marketplace uses the v4
 ///        proxy that carries the owner-intent deploy (deploy-time input, never a constant).
 interface IAGWFactory {

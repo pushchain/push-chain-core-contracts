@@ -5,13 +5,11 @@ import {Test} from "forge-std/Test.sol";
 
 import {MarketplaceFixtures} from "./UniversalMarketplace.t.sol";
 import {MockAGW} from "./mocks/MockAGW.sol";
-import {
-    IUniversalMarketplace,
-    IUniversalMarketplaceErrors
-} from "../../src/agentic-commerce-8183/interfaces/IUniversalMarketplace.sol";
+import {UniversalMarketplaceErrors} from "../../src/agentic-commerce-8183/libraries/Errors.sol";
 import {IAgenticCommerce} from "../../src/agentic-commerce-8183/interfaces/IAgenticCommerce.sol";
 import {UniversalMarketplace} from "../../src/agentic-commerce-8183/UniversalMarketplace.sol";
 import {JobSpec} from "../../src/agentic-commerce-8183/libraries/JobSpecTypes.sol";
+import {AgentCard, JobInputs, StartJobParams} from "../../src/agentic-commerce-8183/libraries/Types.sol";
 
 /// @notice Drives startJob through honest and misbehaving wallets on a swap card (one param), and the card's
 ///         modification, cancels and time. Records what every started job must look like.
@@ -66,10 +64,10 @@ contract MarketplaceHandler is MarketplaceFixtures {
     function start(uint256 principalSeed, uint256 executeSeed, uint256 paramSeed, uint8 misbehave) external {
         uint8 mode = misbehave % 3;
         (uint96 index, address agw, bool deployed) = _freeWallet();
-        IUniversalMarketplace.JobInputs memory j = _swapInputs(int256(bound(paramSeed, 1, 1e30)));
+        JobInputs memory j = _swapInputs(int256(bound(paramSeed, 1, 1e30)));
         j.principal = bound(principalSeed, 100e6, 1_000e6);
         j.executeBy = uint48(bound(executeSeed, block.timestamp + 10 minutes, j.expiredAt - 2 hours));
-        IUniversalMarketplace.StartJobParams memory p = _readyAt(cardId, index, _rules(), j);
+        StartJobParams memory p = _readyAt(cardId, index, _rules(), j);
 
         if (mode != 0 && !deployed) {
             vm.prank(user);
@@ -93,10 +91,8 @@ contract MarketplaceHandler is MarketplaceFixtures {
             } else {
                 refused++;
                 bytes memory expected = mode == 1
-                    ? abi.encodeWithSelector(
-                        IUniversalMarketplaceErrors.UnexpectedJobCount.selector, before, before + 2
-                    )
-                    : abi.encodeWithSelector(IUniversalMarketplaceErrors.JobMismatch.selector);
+                    ? abi.encodeWithSelector(UniversalMarketplaceErrors.UnexpectedJobCount.selector, before, before + 2)
+                    : abi.encodeWithSelector(UniversalMarketplaceErrors.JobMismatch.selector);
                 if (keccak256(err) != keccak256(expected)) wrongRefusal++;
             }
         }
@@ -105,7 +101,7 @@ contract MarketplaceHandler is MarketplaceFixtures {
 
     /// @notice The provider re-publishes the card: same content, next version.
     function modify() external {
-        IUniversalMarketplace.AgentCard memory c = _card();
+        AgentCard memory c = _card();
         c.jobType = keccak256("SWAP");
         bytes memory r = abi.encode(_rules());
         bytes memory e = abi.encode(_swapTemplate());

@@ -8,8 +8,8 @@ pragma solidity 0.8.26;
 ///      - The id comes FIRST here, unlike the engine's other views.
 ///      - Donut engine: `0x046B2874Fc9F920ad53A317b3cf9d3d1974466f3` (deploy-time input).
 interface ISmartSession {
-    /// @notice Whether a mandate is live on an account.
-    /// @param permissionId The mandate id.
+    /// @notice Whether a rules set is live on an account.
+    /// @param permissionId The rules set's id (the AGW's `rulesId`; the engine names it `permissionId`).
     /// @param account The wallet.
     /// @return Whether the permission is enabled.
     function isPermissionEnabled(bytes32 permissionId, address account) external view returns (bool);

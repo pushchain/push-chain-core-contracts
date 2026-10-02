@@ -7,26 +7,22 @@ import {IERC165} from "@openzeppelin/contracts/utils/introspection/IERC165.sol";
 
 import {IERC8183Hook} from "../interfaces/IERC8183Hook.sol";
 import {IAgenticCommerce} from "../interfaces/IAgenticCommerce.sol";
+import {ERC8183HookErrors} from "../libraries/Errors.sol";
 
 /// @title BaseERC8183Hook
 /// @notice Abstract helper every hook in this repo inherits. Not part of the ERC.
 /// @dev - Only the kernel may call (H-01); no router trust path.
 ///      - Selectors come from `IAgenticCommerce` (H-02), so a signature change fails to compile.
 ///      - Unknown selectors are ignored (H-03).
-///      - Owns storage slots 0–49: `kernel` at slot 0, then a 49-slot gap.
+///      - Owns storage slots 0–49: `KERNEL` at slot 0, then a 49-slot gap.
 abstract contract BaseERC8183Hook is Initializable, ERC165Upgradeable, IERC8183Hook {
-    /// @notice Caller is not the kernel.
-    error OnlyKernel(address caller);
-    /// @notice A required address is zero.
-    error ZeroAddress();
-
-    /// @notice The only address allowed to call this hook.
-    address public kernel;
+    /// @notice The only address allowed to call this hook. Set once, at initialization.
+    address public KERNEL;
     uint256[49] private __gap;
 
-    /// @dev - Reverts `OnlyKernel` for any other caller.
+    /// @dev - Reverts `CallerIsNotKernel` for any other caller.
     modifier onlyKernel() {
-        if (msg.sender != kernel) revert OnlyKernel(msg.sender);
+        if (msg.sender != KERNEL) revert ERC8183HookErrors.CallerIsNotKernel(msg.sender);
         _;
     }
 
@@ -34,8 +30,8 @@ abstract contract BaseERC8183Hook is Initializable, ERC165Upgradeable, IERC8183H
     /// @param kernel_ The kernel proxy address.
     function __BaseERC8183Hook_init(address kernel_) internal onlyInitializing {
         __ERC165_init();
-        if (kernel_ == address(0)) revert ZeroAddress();
-        kernel = kernel_;
+        if (kernel_ == address(0)) revert ERC8183HookErrors.ZeroAddress();
+        KERNEL = kernel_;
     }
 
     /// @inheritdoc IERC8183Hook

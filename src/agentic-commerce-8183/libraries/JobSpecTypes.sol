@@ -37,7 +37,9 @@ enum NodeKind {
 
 /// @notice One contract call on one chain, and which value in its answer to use.
 struct Read {
-    string chainNamespace; // e.g. "eip155"
+    // namespace only ("eip155"), with chainId separate — the Read State split (AGW doc D6);
+    // AgentCard.chainNamespace is the full CAIP-2 string
+    string chainNamespace;
     string chainId; // e.g. "8453"
     uint16 minConfirmations; // confirmations this chain needs before the answer counts
     address target; // the contract to call

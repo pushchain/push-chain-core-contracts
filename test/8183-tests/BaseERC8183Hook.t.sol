@@ -1,12 +1,12 @@
 // SPDX-License-Identifier: MIT
 pragma solidity 0.8.26;
 
+import {ERC8183HookErrors} from "../../src/agentic-commerce-8183/libraries/Errors.sol";
 import {TransparentUpgradeableProxy} from "@openzeppelin/contracts/proxy/transparent/TransparentUpgradeableProxy.sol";
 import {Initializable} from "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol";
 import {IERC165} from "@openzeppelin/contracts/utils/introspection/IERC165.sol";
 
 import {IERC8183Hook} from "../../src/agentic-commerce-8183/interfaces/IERC8183Hook.sol";
-import {BaseERC8183Hook} from "../../src/agentic-commerce-8183/hooks/BaseERC8183Hook.sol";
 import {KernelBase} from "./KernelBase.t.sol";
 import {RoutingProbeHook} from "./mocks/RoutingProbeHook.sol";
 import {BareHook} from "./mocks/BareHook.sol";
@@ -99,13 +99,13 @@ contract BaseERC8183HookTest is KernelBase {
 
     function test_beforeAction_fromNonKernel_reverts() public {
         vm.prank(stranger);
-        vm.expectRevert(abi.encodeWithSelector(BaseERC8183Hook.OnlyKernel.selector, stranger));
+        vm.expectRevert(abi.encodeWithSelector(ERC8183HookErrors.CallerIsNotKernel.selector, stranger));
         probe.beforeAction(1, bytes4(0), "");
     }
 
     function test_afterAction_fromNonKernel_reverts() public {
         vm.prank(stranger);
-        vm.expectRevert(abi.encodeWithSelector(BaseERC8183Hook.OnlyKernel.selector, stranger));
+        vm.expectRevert(abi.encodeWithSelector(ERC8183HookErrors.CallerIsNotKernel.selector, stranger));
         probe.afterAction(1, bytes4(0), "");
     }
 
@@ -129,12 +129,12 @@ contract BaseERC8183HookTest is KernelBase {
     // ───────────── initialisation ─────────────
 
     function test_kernel_isSetAndAtSlot0() public view {
-        assertEq(probe.kernel(), address(kernel));
+        assertEq(probe.KERNEL(), address(kernel));
         assertEq(address(uint160(uint256(vm.load(address(probe), bytes32(uint256(0)))))), address(kernel));
     }
 
     function test_init_zeroKernel_reverts() public {
-        vm.expectRevert(BaseERC8183Hook.ZeroAddress.selector);
+        vm.expectRevert(ERC8183HookErrors.ZeroAddress.selector);
         _deployProbe(address(0));
     }
 

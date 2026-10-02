@@ -2,13 +2,6 @@
 pragma solidity 0.8.26;
 
 import {
-    Fill,
-    FillSource,
-    ReadTemplate,
-    TargetSource,
-    CheckTemplate
-} from "../../../src/agentic-commerce-8183/libraries/JobSpecBuilder.sol";
-import {
     EvalType,
     Op,
     NodeKind,
@@ -17,6 +10,13 @@ import {
     T_ADDRESS,
     T_TUPLE
 } from "../../../src/agentic-commerce-8183/libraries/JobSpecTypes.sol";
+import {
+    FillSource,
+    Fill,
+    ReadTemplate,
+    TargetSource,
+    CheckTemplate
+} from "../../../src/agentic-commerce-8183/libraries/Types.sol";
 
 /// @title TemplateParts — TEST ONLY: chain-agnostic builders for evaluation templates
 /// @notice Shared by the evaluation, conformance and marketplace suites. Every builder is pure.

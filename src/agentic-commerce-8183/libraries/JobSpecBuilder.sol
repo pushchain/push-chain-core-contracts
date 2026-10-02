@@ -1,81 +1,19 @@
 // SPDX-License-Identifier: MIT
 pragma solidity 0.8.26;
 
-import {IUniversalMarketplace, IUniversalMarketplaceErrors} from "../interfaces/IUniversalMarketplace.sol";
-import {EvalType, Op, Node, Read, Check, JobSpec} from "./JobSpecTypes.sol";
-
-// ─────────────────────────────── a card's criteria template ───────────────────────────────
-//
-// The V2 JobSpec with holes. The card fixes everything that is the same for every job; `JobSpecBuilder.build`
-// fills in the per-job values (the AGW's CEA, the principal, the user's params, the times).
-
-/// @notice Where a fill's 32-byte word comes from. CEA = the AGW's CEA on the READ's chain.
-enum FillSource {
-    CEA,
-    PARAM
-}
-
-/// @notice Overwrites `args[32·word : 32·word + 32]` per job. `param` is used by PARAM only.
-struct Fill {
-    uint8 word;
-    FillSource source;
-    uint8 param;
-}
-
-/// @notice A `Read` with fills. Copied into the JobSpec, then filled.
-struct ReadTemplate {
-    string chainNamespace; // e.g. "eip155"
-    string chainId; // e.g. "1"
-    uint16 minConfirmations;
-    address target;
-    bytes4 selector;
-    bytes args;
-    Fill[] fills;
-    bytes outputs;
-    uint8[] field;
-}
-
-/// @notice Where a check's target comes from.
-enum TargetSource {
-    FIXED,
-    PRINCIPAL_BPS,
-    PARAM,
-    CEA
-}
-
-/// @notice A `Check` whose target is a source. `value`: FIXED the target · PRINCIPAL_BPS bps of principal ·
-///         PARAM a param index · CEA unused (the CEA of the check's read chain).
-struct CheckTemplate {
-    uint8 read;
-    EvalType evalType;
-    Op op;
-    TargetSource source;
-    int256 value;
-}
-
-/// @notice Inclusive bounds on one per-job number the user supplies.
-struct ParamBounds {
-    int256 min;
-    int256 max;
-}
-
-/// @notice The whole template, stored on the card as `abi.encode(EvaluationTemplate)`. `nodes` is copied verbatim.
-struct EvaluationTemplate {
-    ReadTemplate[] reads;
-    CheckTemplate[] checks;
-    Node[] nodes;
-    ParamBounds[] params;
-}
-
-/// @notice The per-job values `build` fills in.
-struct BuildContext {
-    address agw;
-    uint256 principal;
-    uint48 executeBy;
-    uint32 settleWindow;
-    int256[] params;
-    bytes32 origin;
-}
+import {IUniversalMarketplace} from "../interfaces/IUniversalMarketplace.sol";
+import {UniversalMarketplaceErrors} from "./Errors.sol";
+import {Read, Check, JobSpec} from "./JobSpecTypes.sol";
+import {
+    FillSource,
+    Fill,
+    ReadTemplate,
+    TargetSource,
+    CheckTemplate,
+    ParamBounds,
+    EvaluationTemplate,
+    BuildContext
+} from "./Types.sol";
 
 /// @title JobSpecBuilder
 /// @notice Turns a card's criteria template into one job's `JobSpec` (the `createJob` description).
@@ -117,11 +55,11 @@ library JobSpecBuilder {
     /// @dev One per template param, each inside its inclusive bounds.
     function _checkParams(ParamBounds[] memory bounds, int256[] memory params) private pure {
         if (params.length != bounds.length) {
-            revert IUniversalMarketplaceErrors.ParamCountMismatch(bounds.length, params.length);
+            revert UniversalMarketplaceErrors.ParamCountMismatch(bounds.length, params.length);
         }
         for (uint256 i; i < params.length; ++i) {
             if (params[i] < bounds[i].min || params[i] > bounds[i].max) {
-                revert IUniversalMarketplaceErrors.ParamOutOfRange(i, params[i]);
+                revert UniversalMarketplaceErrors.ParamOutOfRange(i, params[i]);
             }
         }
     }
@@ -157,7 +95,7 @@ library JobSpecBuilder {
         for (uint256 f; f < r.fills.length; ++f) {
             Fill memory fill = r.fills[f];
             uint256 at = 32 * uint256(fill.word);
-            if (at + 32 > args.length) revert IUniversalMarketplaceErrors.FillOutOfBounds(i, f);
+            if (at + 32 > args.length) revert UniversalMarketplaceErrors.FillOutOfBounds(i, f);
             bytes32 word = fill.source == FillSource.CEA
                 ? bytes32(uint256(uint160(cea)))
                 : bytes32(uint256(params[fill.param]));
@@ -187,7 +125,7 @@ library JobSpecBuilder {
         int256 target = c.value;
         if (c.source == TargetSource.PRINCIPAL_BPS) {
             uint256 bps = uint256(c.value);
-            if (ctx.principal > type(uint256).max / bps) revert IUniversalMarketplaceErrors.TargetOverflow(j);
+            if (ctx.principal > type(uint256).max / bps) revert UniversalMarketplaceErrors.TargetOverflow(j);
             // forge-lint: disable-next-line(unsafe-typecast)
             target = int256((ctx.principal * bps) / BPS); // ≤ uint256.max / 10_000 < int256.max: cannot truncate
         } else if (c.source == TargetSource.PARAM) {

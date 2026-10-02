@@ -22,7 +22,7 @@ compilation_restrictions = [{ paths = "src/agentic-commerce-8183/UniversalMarket
 
 no_match_coverage = "(PRC20V0\\.sol|testnetV0/UniversalCore\\.sol|ReceiverExample\\.sol|src/(libraries|[Ii]nterfaces|mocks)/|test/)"
 
-fs_permissions = [{ access = "read-write", path = "deployments/" }]
+fs_permissions = [{ access = "read-write", path = "deployments/" }, { access = "read", path = "out/" }]
 
 # Coverage only: drop the per-file profile above. With it, a contract tested both from the marketplace's
 # compile job and from its own is two artifacts, and coverage keeps the hits of only one. Run coverage with
