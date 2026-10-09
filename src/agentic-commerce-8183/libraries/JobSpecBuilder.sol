@@ -3,7 +3,7 @@ pragma solidity 0.8.26;
 
 import {IUniversalMarketplace} from "../interfaces/IUniversalMarketplace.sol";
 import {UniversalMarketplaceErrors} from "./Errors.sol";
-import {Read, Check, JobSpec} from "./JobSpecTypes.sol";
+import {Read, Check, JobSpec, Mutability} from "./JobSpecTypes.sol";
 import {
     FillSource,
     Fill,
@@ -40,6 +40,7 @@ library JobSpecBuilder {
         spec.executeBy = uint64(ctx.executeBy);
         spec.failFinalAt = uint64(ctx.executeBy) + ctx.settleWindow;
         spec.origin = ctx.origin;
+        spec.mutability = Mutability.NONE; // the criteria are exactly the card's; neither side may replace them
         spec.nodes = t.nodes;
         spec.reads = new Read[](t.reads.length);
         for (uint256 i; i < t.reads.length; ++i) {

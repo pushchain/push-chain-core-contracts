@@ -35,6 +35,16 @@ enum NodeKind {
     AT_LEAST
 }
 
+/// @notice Who may replace a job's criteria before it is funded: the provider in `setBudget`, the client in `fund`.
+/// @dev - The flag is always the one in the `createJob` description; a replacement must carry the same flag.
+///      - `NONE` is the zero value, so a spec that never sets the flag can't be replaced by anyone.
+enum Mutability {
+    NONE,
+    BOTH,
+    CLIENT_ONLY,
+    PROVIDER_ONLY
+}
+
 /// @notice One contract call on one chain, and which value in its answer to use.
 struct Read {
     // namespace only ("eip155"), with chainId separate — the Read State split (AGW doc D6);
@@ -73,6 +83,7 @@ struct JobSpec {
     Check[] checks;
     Node[] nodes;
     bytes32 origin; // keccak256(abi.encode(marketplace, cardId, cardVersion, principal)); opaque to hook and evaluator
+    Mutability mutability; // who may replace these criteria before `fund`; marketplace jobs are NONE
 }
 
 // ─────────────────────────────── return-type codes (`Read.outputs`) ───────────────────────────────

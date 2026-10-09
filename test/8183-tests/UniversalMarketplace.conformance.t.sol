@@ -9,6 +9,7 @@ import {
     Read,
     Check,
     JobSpec,
+    Mutability,
     T_UINT,
     T_ADDRESS,
     T_TUPLE
@@ -140,7 +141,8 @@ contract UniversalMarketplaceConformanceTest is BuilderFixtures {
             reads: reads,
             checks: checks,
             nodes: nodes,
-            origin: keccak256("origin")
+            origin: keccak256("origin"),
+            mutability: Mutability.NONE
         });
     }
 
