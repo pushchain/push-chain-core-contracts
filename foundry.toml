@@ -17,8 +17,15 @@ evm_version = "shanghai"
 via_ir = true
 # UniversalMarketplace only: at 99 999 runs the inliner puts it over EIP-170 (26,257 B); at 1 000 runs it is
 # 21,284 B. Every other contract keeps the default.
-additional_compiler_profiles = [{ name = "marketplace-size", optimizer_runs = 1000 }]
-compilation_restrictions = [{ paths = "src/agentic-commerce-8183/UniversalMarketplace.sol", optimizer_runs = 1000 }]
+additional_compiler_profiles = [
+    { name = "marketplace-size", optimizer_runs = 1000 },
+    { name = "evaluator-size", optimizer_runs = 200 },
+]
+# UniversalEvaluator likewise: at 99 999 runs it is over EIP-170; at 200 runs it fits.
+compilation_restrictions = [
+    { paths = "src/agentic-commerce-8183/UniversalMarketplace.sol", optimizer_runs = 1000 },
+    { paths = "src/agentic-commerce-8183/evaluator/UniversalEvaluator.sol", optimizer_runs = 200 },
+]
 
 no_match_coverage = "(PRC20V0\\.sol|testnetV0/UniversalCore\\.sol|ReceiverExample\\.sol|src/(libraries|[Ii]nterfaces|mocks)/|test/)"
 
