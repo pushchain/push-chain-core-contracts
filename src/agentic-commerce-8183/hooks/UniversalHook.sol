@@ -7,7 +7,7 @@ import {IAgenticCommerce} from "../interfaces/IAgenticCommerce.sol";
 import {IAGWFactory} from "../interfaces/external/IAGWFactory.sol";
 import {ISmartSession} from "../interfaces/external/ISmartSession.sol";
 import {IUniversalEvaluator} from "../interfaces/IUniversalEvaluator.sol";
-import {JobSpec, Mutability} from "../evaluator/Types.sol";   // enum Mutability { NONE, BOTH, CLIENT_ONLY, PROVIDER_ONLY }
+import {JobSpec, Mutability} from "../libraries/JobSpecTypes.sol";   // enum Mutability { NONE, BOTH, CLIENT_ONLY, PROVIDER_ONLY }
 import {RulesBindingHookErrors, ERC8183HookErrors, UniversalHookErrors} from "../libraries/Errors.sol";
 
 /// @title UniversalHook

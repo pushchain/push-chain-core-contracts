@@ -4,7 +4,6 @@ pragma solidity 0.8.26;
 import {Script, console} from "forge-std/Script.sol";
 import {UniversalEvaluatorDeploy} from "./UniversalEvaluatorDeploy.sol";
 import {UniversalEvaluator} from "../../src/agentic-commerce-8183/evaluator/UniversalEvaluator.sol";
-import {UniversalEvaluatorLogic} from "../../src/agentic-commerce-8183/evaluator/UniversalEvaluatorLogic.sol";
 import {UniversalHook} from "../../src/agentic-commerce-8183/hooks/UniversalHook.sol";
 import {ReadConfig} from "../../src/agentic-commerce-8183/evaluator/EvaluationTypes.sol";
 
@@ -29,7 +28,7 @@ import {ReadConfig} from "../../src/agentic-commerce-8183/evaluator/EvaluationTy
  *      Prints the evaluator and hook implementation addresses, and the step-2 call for a multisig.
  *
  *      Step 2, the hook's ProxyAdmin owner (skip if the multisig sends the printed call instead):
- *        EVALUATOR=0x.. LOGIC=0x.. HOOK_IMPL=0x.. forge script ... --sig "upgrade()" --rpc-url $RPC_URL --broadcast
+ *        EVALUATOR=0x.. HOOK_IMPL=0x.. forge script ... --sig "upgrade()" --rpc-url $RPC_URL --broadcast
  *
  *      Step 3, the marketplace admin: `UniversalMarketplace.setEvaluator(EVALUATOR)`, only once the marketplace builds
  *      the final JobSpec and the SDK sends the new `fund` params. Before that, every marketplace `fund` would revert.
@@ -43,7 +42,6 @@ contract DeployUniversalEvaluatorScript is Script {
 
         (address target, bytes memory data) = UniversalEvaluatorDeploy.upgradeCall(p, d);
         console.log("=== UniversalEvaluator deployed (step 1) ===");
-        console.log("Logic:", address(d.logic));
         console.log("Evaluator:", address(d.evaluator));
         console.log("UniversalHook implementation:", address(d.hookImpl));
         console.log("Step 2: the ProxyAdmin owner sends this call to", target);
@@ -57,7 +55,6 @@ contract DeployUniversalEvaluatorScript is Script {
     function upgrade() external {
         UniversalEvaluatorDeploy.Params memory p = _params();
         UniversalEvaluatorDeploy.Deployed memory d = UniversalEvaluatorDeploy.Deployed({
-            logic: UniversalEvaluatorLogic(vm.envAddress("LOGIC")),
             evaluator: UniversalEvaluator(vm.envAddress("EVALUATOR")),
             hookImpl: UniversalHook(vm.envAddress("HOOK_IMPL"))
         });

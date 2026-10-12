@@ -9,7 +9,6 @@ import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {KernelBase} from "./KernelBase.t.sol";
 import {UniversalHook} from "../../src/agentic-commerce-8183/hooks/UniversalHook.sol";
 import {UniversalEvaluator} from "../../src/agentic-commerce-8183/evaluator/UniversalEvaluator.sol";
-import {UniversalEvaluatorLogic} from "../../src/agentic-commerce-8183/evaluator/UniversalEvaluatorLogic.sol";
 import {UniversalCallback} from "../../src/UniversalCallback.sol";
 import {PendingRead, RequestStatus, ReadSpec} from "../../src/libraries/ReadTypes.sol";
 import {IUniversalCallback} from "../../src/interfaces/IUniversalCallback.sol";
@@ -48,7 +47,6 @@ abstract contract UniversalEvalBase is KernelBase {
     MockSmartSession internal engine;
     UniversalHook internal hook;
     UniversalEvaluator internal ue;
-    UniversalEvaluatorLogic internal logic;
     MockCheckpointAGW internal agw;
 
     address internal owner = makeAddr("owner");
@@ -130,7 +128,6 @@ abstract contract UniversalEvalBase is KernelBase {
     ///      address is predicted from this contract's nonce, the hook proxy is initialised with it in its own
     ///      constructor, and the evaluator is then deployed at that address.
     function _deployPair() internal virtual {
-        logic = new UniversalEvaluatorLogic();
         UniversalHook hookImpl = new UniversalHook();
         address predictedEvaluator = vm.computeCreateAddress(address(this), vm.getNonce(address(this)) + 1);
 
@@ -140,7 +137,7 @@ abstract contract UniversalEvalBase is KernelBase {
         hook = UniversalHook(address(new TransparentUpgradeableProxy(address(hookImpl), proxyAdminOwner, hookInit)));
 
         ue = new UniversalEvaluator(
-            address(kernel), address(hook), address(readState), address(core), address(logic), feeRecipient, _config()
+            address(kernel), address(hook), address(readState), address(core), feeRecipient, _config()
         );
         require(address(ue) == predictedEvaluator, "evaluator address prediction");
     }

@@ -128,9 +128,9 @@ library JobSpecErrors {
     error ReadUnused(uint256 read);
 }
 
-/// @title ReadRequestErrors
+/// @title EvmReadErrors
 /// @notice Why a Read State request could not be sent.
-library ReadRequestErrors {
+library EvmReadErrors {
     /// @notice Push tracks no height for this chain.
     error ChainNotTracked(string chainKey);
     /// @notice Push's tracked height for this chain was last updated longer ago than allowed.
@@ -167,12 +167,10 @@ library UniversalEvaluatorErrors {
     error SpecFrozen(uint256 jobId);
     /// @notice The job's PC does not cover a read.
     error PrepaidTooLow(uint256 needed, uint256 available);
-    /// @notice The job's "after" reads were already sent.
-    error AlreadyStarted(uint256 jobId);
     /// @notice The job's "before" snapshot is not complete yet.
     error SnapshotNotReady(uint256 jobId);
-    /// @notice No read can be sent again: all answered or still in flight, or the job is decided.
-    error NothingToRetry(uint256 jobId);
+    /// @notice No read to send: every one is answered or still in flight, or the job is decided.
+    error NothingToSend(uint256 jobId);
     /// @notice No PASS or FAIL verdict waiting for the kernel.
     error NothingToSettle(uint256 jobId);
     /// @notice The job is still live, so its PC is still needed.
@@ -193,7 +191,7 @@ library UniversalEvaluatorErrors {
     error ReadDomainBlocked(uint256 read);
     /// @notice The read's tracked height has not moved past the one recorded at `fund`.
     error EndHeightNotAfterFund(uint256 jobId, uint256 read, uint64 fundHeight, uint64 endHeight);
-    /// @notice The end blocks were not fixed at `submit`. Only possible if the kernel admin detached the job's hook
-    ///         before `submit` (`batchDetachHook`), so the hook never called the evaluator.
+    /// @notice The end blocks were not fixed at `submit`: the hook never called the evaluator, because the kernel
+    ///         admin detached the job's hook before `submit` (`batchDetachHook`), or the hook had no evaluator set.
     error EndBlocksNotFixed(uint256 jobId);
 }

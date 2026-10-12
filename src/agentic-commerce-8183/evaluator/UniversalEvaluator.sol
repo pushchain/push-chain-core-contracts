@@ -7,7 +7,6 @@ import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol
 
 import {IAgenticCommerce} from "../interfaces/IAgenticCommerce.sol";
 import {IUniversalEvaluator} from "../interfaces/IUniversalEvaluator.sol";
-import {IAGWCheckpoints, IUniversalCoreHeights, IReadStateDomains} from "./ExternalInterfaces.sol";
 import {IUniversalCallback} from "../../interfaces/IUniversalCallback.sol";
 import {RequestStatus, MAX_CALLBACK_GAS_LIMIT} from "../../libraries/ReadTypes.sol";
 import {JobSpec, Read, Check, EvalType} from "../libraries/JobSpecTypes.sol";
@@ -18,12 +17,13 @@ import {
     ReadPlan,
     ReadConfig,
     MAX_RESULT_LENGTH,
-    MAX_DESCRIPTION_LENGTH
+    MAX_DESCRIPTION_LENGTH,
+    IAGWCheckpoints,
+    IUniversalCoreHeights,
+    IReadStateDomains
 } from "./EvaluationTypes.sol";
-import {JobSpecRules} from "./JobSpecRules.sol";
-import {UniversalEvaluatorLogic} from "./UniversalEvaluatorLogic.sol";
-import {JobSpecJudge} from "./JobSpecJudge.sol";
-import {ReadRequest, FireParams} from "./ReadRequest.sol";
+import {JobSpecLib} from "./JobSpecLib.sol";
+import {EvmReadLib, FireParams} from "./EvmReadLib.sol";
 import {UniversalEvaluatorErrors, JobSpecErrors} from "../libraries/Errors.sol";
 
 /// @title UniversalEvaluator
@@ -41,7 +41,8 @@ import {UniversalEvaluatorErrors, JobSpecErrors} from "../libraries/Errors.sol";
 ///      - The end blocks are fixed only inside `submit`: the hook calls `verifyFromSubmit` without try/catch, so if
 ///        they can't be fixed (a stale or unmoved height, too little gas) `submit` reverts and is sent again later.
 ///      - Retries re-read the same blocks; there is no attempt limit. Only the provider spends PC on reads after
-///        `submit`, and only while the job is Submitted; snapshot retries are the client's or the provider's.
+///        `submit` (`sendReads`), and only while the job is Submitted and undecided; snapshot retries
+///        (`retrySnapshot`) are the client's or the provider's.
 ///      - A job with no verdict ends through the kernel: after `expiredAt + EVALUATOR_GRACE_PERIOD` anyone may call
 ///        `claimRefund`, which refunds the client and frees the wallet.
 ///      - Answers longer than `MAX_RESULT_LENGTH` are unreadable. Read State itself does not cap answers yet.
@@ -50,6 +51,8 @@ import {UniversalEvaluatorErrors, JobSpecErrors} from "../libraries/Errors.sol";
 ///      - The kernel `reason` commits to the spec and to every read in index order (block, request, raw answer hash,
 ///        value; zero for a read not answered when the root was decided), so it can be re-derived from events.
 ///      - `JobSpec.executeBy` and `JobSpec.failFinalAt` are not used: a FAIL at fixed blocks is final.
+///      - One contract: `JobSpecLib` and `EvmReadLib` are internal libraries compiled into it, so deploying it deploys
+///        nothing else and it calls no code of its own elsewhere.
 ///      - Not upgradeable, with no admin: how this evaluator judges a frozen spec can't change. A rule change is a new
 ///        evaluator for new jobs; every job settles through the evaluator recorded in it at `createJob`. The kernel
 ///        and the hook stay trust points: both are upgradeable, and the kernel admin can detach a job's hook.
@@ -61,7 +64,6 @@ contract UniversalEvaluator is IUniversalEvaluator, ReentrancyGuard {
         address client;
         uint8 nodes; // node count of the packed tree
         bool frozen;
-        bool specIsDescription; // the frozen spec is the createJob description, not a replacement
         bool checkpointOk; // the wallet's counter could be read at `fund`
         uint64 checkpointAtFund;
         bytes32 specHash; // keccak256 of the exact frozen spec bytes
@@ -84,7 +86,7 @@ contract UniversalEvaluator is IUniversalEvaluator, ReentrancyGuard {
         Verdict verdict;
         bool applied; // the kernel accepted the verdict
         OwnerCheck ownerCheck; // recorded only
-        uint32 checkRes; // each check's result, 2 bits per check (JobSpecJudge)
+        uint32 checkRes; // each check's result, 2 bits per check (JobSpecLib)
         uint16 answered; // bit i: read i answered since it was last sent
     }
 
@@ -98,7 +100,6 @@ contract UniversalEvaluator is IUniversalEvaluator, ReentrancyGuard {
     // ───────── events ─────────
 
     event Prefunded(uint256 indexed jobId, address indexed from, uint256 amount);
-    event SpecStored(uint256 indexed jobId, bytes32 specHash);
     event SpecFrozenHere(uint256 indexed jobId, bytes32 specHash, OwnerCheck checkpointRead, uint64 checkpointAtFund);
     event SnapshotRequested(uint256 indexed jobId, uint8 indexed read, uint256 requestId, uint64 height);
     event SnapshotAnswered(uint256 indexed jobId, uint8 indexed read, uint256 requestId, bool ok, int256 value);
@@ -110,9 +111,7 @@ contract UniversalEvaluator is IUniversalEvaluator, ReentrancyGuard {
         uint256 indexed jobId, uint8 indexed read, uint256 requestId, uint64 height, bool ok, int256 value
     );
     event Verified(uint256 indexed jobId, Verdict verdict, OwnerCheck ownerCheck, bytes32 reason);
-    event Settled(uint256 indexed jobId, Verdict verdict);
     event SettleFailed(uint256 indexed jobId, bytes reason);
-    event ReadsRetried(uint256 indexed jobId, uint256 reads, uint256 paid);
     event PrepaidRefunded(uint256 indexed jobId, address indexed to, uint256 amount);
     event FeesSwept(address indexed to, uint256 amount);
 
@@ -132,8 +131,6 @@ contract UniversalEvaluator is IUniversalEvaluator, ReentrancyGuard {
     IUniversalCoreHeights public UNIVERSAL_CORE;
     /// @notice Receives the evaluator's share of job fees, if the kernel admin sets one.
     address public FEE_RECIPIENT;
-    /// @notice The stateless helper that checks specs and decodes answers.
-    UniversalEvaluatorLogic public LOGIC;
     /// @notice See `ReadConfig`.
     uint64 public READ_TTL;
     uint64 public CALLBACK_GAS_LIMIT;
@@ -146,11 +143,13 @@ contract UniversalEvaluator is IUniversalEvaluator, ReentrancyGuard {
 
     /// @notice Unspent PC prepaid for a job's reads (snapshot and evaluation).
     mapping(uint256 => uint256) public prepaidOf;
-    mapping(uint256 => bytes) internal _replacement; // the replacement spec, or the frozen one if not the description
+    /// @dev The job's spec, when it is not the createJob description: a replacement before `fund`, the frozen spec
+    ///      after. Empty means the description (the hook never stores an empty one; freezing the description clears it).
+    mapping(uint256 => bytes) internal _replacement;
     mapping(uint256 => JobCache) internal _cache;
     mapping(uint256 => ReadPlan[]) internal _plans;
     mapping(uint256 => Check[]) internal _checks;
-    mapping(uint256 => uint256[]) internal _packedNodes; // JobSpecJudge.packNodes
+    mapping(uint256 => uint256[]) internal _packedNodes; // JobSpecLib.packNodes
     mapping(uint256 => Snapshot) internal _snapshots;
     mapping(uint256 => mapping(uint256 => Answer)) internal _before; // jobId => read => snapshot answer
     mapping(uint256 => mapping(uint256 => uint256)) internal _snapshotRequest;
@@ -173,13 +172,12 @@ contract UniversalEvaluator is IUniversalEvaluator, ReentrancyGuard {
         address hook_,
         address readState_,
         address universalCore_,
-        address logic_,
         address feeRecipient_,
         ReadConfig memory config_
     ) {
         if (
             kernel_ == address(0) || hook_ == address(0) || readState_ == address(0) || universalCore_ == address(0)
-                || logic_ == address(0) || feeRecipient_ == address(0)
+                || feeRecipient_ == address(0)
         ) revert UniversalEvaluatorErrors.ZeroValue();
         if (
             config_.readTtl == 0 || config_.callbackGasLimit == 0 || config_.callbackGasLimit > MAX_CALLBACK_GAS_LIMIT
@@ -190,7 +188,6 @@ contract UniversalEvaluator is IUniversalEvaluator, ReentrancyGuard {
         HOOK = hook_;
         READ_STATE = IUniversalCallback(readState_);
         UNIVERSAL_CORE = IUniversalCoreHeights(universalCore_);
-        LOGIC = UniversalEvaluatorLogic(logic_);
         FEE_RECIPIENT = feeRecipient_;
         READ_TTL = config_.readTtl;
         CALLBACK_GAS_LIMIT = config_.callbackGasLimit;
@@ -216,13 +213,12 @@ contract UniversalEvaluator is IUniversalEvaluator, ReentrancyGuard {
     function setSpec(uint256 jobId, bytes calldata spec) external onlyHook {
         if (_cache[jobId].frozen) revert UniversalEvaluatorErrors.SpecFrozen(jobId);
         if (spec.length > MAX_DESCRIPTION_LENGTH) revert JobSpecErrors.SpecTooLong(spec.length);
-        _replacement[jobId] = spec;
-        emit SpecStored(jobId, keccak256(spec));
+        _replacement[jobId] = spec; // the hook emits SpecReplaced
     }
 
     /// @inheritdoc IUniversalEvaluator
     function currentSpec(uint256 jobId) external view returns (bytes memory) {
-        return _cache[jobId].frozen && _cache[jobId].specIsDescription ? bytes("") : _replacement[jobId];
+        return _replacement[jobId];
     }
 
     /// @inheritdoc IUniversalEvaluator
@@ -237,25 +233,23 @@ contract UniversalEvaluator is IUniversalEvaluator, ReentrancyGuard {
         if (c.frozen) revert UniversalEvaluatorErrors.SpecFrozen(jobId);
         if (spec.length > MAX_DESCRIPTION_LENGTH) revert JobSpecErrors.SpecTooLong(spec.length);
 
-        LOGIC.validateSpec(spec, MAX_CONFIRMATIONS); // reverts with the JobSpecErrors reason
-        JobSpec memory s = _decodeSpec(spec);
+        JobSpec memory s = _decodeSpec(spec); // reverts if `spec` is not an encoded JobSpec
+        JobSpecLib.validate(s, MAX_CONFIRMATIONS); // reverts with the JobSpecErrors reason
 
         bytes32 specHash = keccak256(spec);
-        bool isDescription = specHash == keccak256(bytes(job.description));
-        if (isDescription) delete _replacement[jobId];
+        if (specHash == keccak256(bytes(job.description))) delete _replacement[jobId];
         else _replacement[jobId] = spec; // the frozen bytes, whoever replaced them
 
         (bool cpOk, uint64 cp) = _readCheckpoint(job.client);
         c.client = job.client;
         c.frozen = true;
-        c.specIsDescription = isDescription;
         c.checkpointOk = cpOk;
         c.checkpointAtFund = cp;
         c.specHash = specHash;
         _cacheSpec(jobId, s);
         emit SpecFrozenHere(jobId, specHash, cpOk ? OwnerCheck.CLEAN : OwnerCheck.UNKNOWN, cp);
 
-        (bool[] memory need, uint256 count) = JobSpecRules.snapshotReads(s);
+        (bool[] memory need, uint256 count) = JobSpecLib.snapshotReads(s);
         // forge-lint: disable-next-line(unsafe-typecast)
         _snapshots[jobId].needed = uint8(count); // safe: count <= reads <= MAX_READS (16)
         for (uint256 i; i < need.length; ++i) {
@@ -264,7 +258,7 @@ contract UniversalEvaluator is IUniversalEvaluator, ReentrancyGuard {
             if (IReadStateDomains(address(READ_STATE)).isDomainBlocked(r.chainNamespace, r.chainId)) {
                 revert UniversalEvaluatorErrors.ReadDomainBlocked(i);
             }
-            uint64 h = ReadRequest.latestHeight(UNIVERSAL_CORE, r, MAX_HEIGHT_AGE);
+            uint64 h = EvmReadLib.latestHeight(UNIVERSAL_CORE, r, MAX_HEIGHT_AGE);
             _setHeight(_fundHeights[jobId], i, h); // every end block must be above this
             if (need[i]) _fireSnapshot(jobId, i, r, h);
         }
@@ -291,7 +285,7 @@ contract UniversalEvaluator is IUniversalEvaluator, ReentrancyGuard {
     function sendFromSubmit(uint256 jobId) external {
         if (msg.sender != address(this)) revert UniversalEvaluatorErrors.CallerIsNotSelf(msg.sender);
         IAgenticCommerce.Job memory job = KERNEL.getJob(jobId);
-        _send(jobId, _frozenSpec(jobId, job.description));
+        _start(jobId, _frozenSpec(jobId, job.description));
     }
 
     // ═════════════════════════════════ PC ═════════════════════════════════
@@ -300,30 +294,22 @@ contract UniversalEvaluator is IUniversalEvaluator, ReentrancyGuard {
     /// @dev Anyone may add PC; whatever is unspent goes back to the job's client through `claimPrepaid`.
     function prefund(uint256 jobId) external payable {
         if (jobId == 0 || jobId > KERNEL.jobCounter()) revert UniversalEvaluatorErrors.UnknownJob(jobId);
-        prepaidOf[jobId] += msg.value;
-        emit Prefunded(jobId, msg.sender, msg.value);
+        _addPrepaid(jobId);
     }
 
     /// @notice What the job's reads cost at current fees, for the spec as it stands (replacement or description).
     ///         Prepay at least the sum, with headroom: fees and the base fee can move, and retries cost again.
     function prefundCost(uint256 jobId) external view returns (uint256 snapshot, uint256 evaluation) {
-        JobCache storage c = _cache[jobId];
-        bytes memory spec = c.frozen && !c.specIsDescription ? _replacement[jobId] : bytes("");
-        if (!c.frozen) spec = _replacement[jobId];
+        bytes memory spec = _replacement[jobId];
         if (spec.length == 0) spec = bytes(KERNEL.getJob(jobId).description);
-        return LOGIC.readsCost(READ_STATE, readConfig(), spec);
-    }
-
-    /// @notice How this evaluator sends Read State requests.
-    function readConfig() public view returns (ReadConfig memory) {
-        return ReadConfig({
-            readTtl: READ_TTL,
-            callbackGasLimit: CALLBACK_GAS_LIMIT,
-            snapshotCallbackGasLimit: SNAPSHOT_CALLBACK_GAS_LIMIT,
-            budgetMultiplier: BUDGET_MULTIPLIER,
-            maxHeightAge: MAX_HEIGHT_AGE,
-            maxConfirmations: MAX_CONFIRMATIONS
-        });
+        JobSpec memory s = _decodeSpec(spec);
+        (bool[] memory need,) = JobSpecLib.snapshotReads(s);
+        for (uint256 i; i < s.reads.length; ++i) {
+            evaluation += EvmReadLib.price(READ_STATE, s.reads[i], CALLBACK_GAS_LIMIT, BUDGET_MULTIPLIER);
+            if (need[i]) {
+                snapshot += EvmReadLib.price(READ_STATE, s.reads[i], SNAPSHOT_CALLBACK_GAS_LIMIT, BUDGET_MULTIPLIER);
+            }
+        }
     }
 
     /// @notice Sends the job's unspent PC to its client once the job is over (Completed, Rejected, Expired), or
@@ -346,50 +332,23 @@ contract UniversalEvaluator is IUniversalEvaluator, ReentrancyGuard {
 
     // ═════════════════════════════════ provider / client recovery ═════════════════════════════════
 
-    /// @notice Sends the job's reads if they did not go out inside `submit`, e.g. PC was short or the snapshot was not
-    ///         ready yet. Provider only; `msg.value` is added to the job's PC. The blocks are those fixed at `submit`;
-    ///         this never fixes them, so the provider can't choose when the job is measured.
+    /// @notice Sends the job's "after" reads, at the blocks fixed at `submit`. Provider only, and only while the job
+    ///         is Submitted: once it has ended, its PC is the client's to claim. `msg.value` is added to the job's PC.
+    ///         - If they did not go out inside `submit` (PC short, snapshot not ready, Read State paused): all of them.
+    ///         - Once sent: every read with no usable answer that is not in flight (an error answer, an undecodable
+    ///           or oversized one, an expired request, a failed callback). There is no attempt limit.
+    /// @dev Never fixes the blocks, so the provider can't choose when the job is measured.
     function sendReads(uint256 jobId) external payable nonReentrant {
-        IAgenticCommerce.Job memory job = KERNEL.getJob(jobId);
-        if (msg.sender != job.provider) revert UniversalEvaluatorErrors.CallerIsNotProvider(msg.sender);
-        if (job.status != IAgenticCommerce.JobStatus.Submitted || !_cache[jobId].frozen) {
-            revert UniversalEvaluatorErrors.WrongStatus(jobId);
-        }
-        if (!_evals[jobId].endFixed) revert UniversalEvaluatorErrors.EndBlocksNotFixed(jobId);
-        _addPrepaid(jobId);
-        _send(jobId, _frozenSpec(jobId, job.description));
-    }
-
-    /// @notice Sends again, at the same blocks, every "after" read with no usable answer that is not in flight: an
-    ///         error answer, an undecodable or oversized one, an expired request, or a failed callback. Provider only,
-    ///         and only while the job is Submitted: once it has ended, its PC is the client's to claim.
-    function retryReads(uint256 jobId) external payable nonReentrant {
         IAgenticCommerce.Job memory job = KERNEL.getJob(jobId);
         if (msg.sender != job.provider) revert UniversalEvaluatorErrors.CallerIsNotProvider(msg.sender);
         if (job.status != IAgenticCommerce.JobStatus.Submitted) revert UniversalEvaluatorErrors.WrongStatus(jobId);
         Evaluation storage e = _evals[jobId];
-        if (!e.started || e.applied || (e.done && e.verdict != Verdict.INCONCLUSIVE)) {
-            revert UniversalEvaluatorErrors.NothingToRetry(jobId);
-        }
+        if (!e.endFixed) revert UniversalEvaluatorErrors.EndBlocksNotFixed(jobId);
+        if (e.done && e.verdict != Verdict.INCONCLUSIVE) revert UniversalEvaluatorErrors.NothingToSend(jobId);
         _addPrepaid(jobId);
         JobSpec memory s = _frozenSpec(jobId, job.description);
-        uint256 sent;
-        uint256 paid;
-        for (uint256 i; i < e.reads; ++i) {
-            if (_answers[jobId][i].ok && (e.answered >> i) & 1 == 1) continue;
-            if (READ_STATE.statusOf(_request[jobId][i]) == RequestStatus.PENDING) continue;
-            if ((e.answered >> i) & 1 == 1) {
-                // forge-lint: disable-next-line(unsafe-typecast)
-                e.answered = uint16(uint256(e.answered) & ~(uint256(1) << i)); // safe: clears one bit of a uint16
-                ++e.pending; // it had been counted as answered
-            }
-            paid += _fireRead(jobId, i, s.reads[i]);
-            ++sent;
-        }
-        if (sent == 0) revert UniversalEvaluatorErrors.NothingToRetry(jobId);
-        e.done = false;
-        e.verdict = Verdict.NONE;
-        emit ReadsRetried(jobId, sent, paid);
+        if (e.started) _sendMissing(jobId, s);
+        else _start(jobId, s);
     }
 
     /// @notice Sends again, at the same blocks, every snapshot read with no usable value that is not in flight.
@@ -400,13 +359,13 @@ contract UniversalEvaluator is IUniversalEvaluator, ReentrancyGuard {
             revert UniversalEvaluatorErrors.CallerIsNotClientOrProvider(msg.sender);
         }
         Snapshot storage sn = _snapshots[jobId];
-        if (!_cache[jobId].frozen || sn.okCount == sn.needed) revert UniversalEvaluatorErrors.NothingToRetry(jobId);
+        if (!_cache[jobId].frozen || sn.okCount == sn.needed) revert UniversalEvaluatorErrors.NothingToSend(jobId);
         if (job.status != IAgenticCommerce.JobStatus.Funded && job.status != IAgenticCommerce.JobStatus.Submitted) {
             revert UniversalEvaluatorErrors.WrongStatus(jobId);
         }
         _addPrepaid(jobId);
         JobSpec memory s = _frozenSpec(jobId, job.description);
-        (bool[] memory need,) = JobSpecRules.snapshotReads(s);
+        (bool[] memory need,) = JobSpecLib.snapshotReads(s);
         uint256 sent;
         for (uint256 i; i < need.length; ++i) {
             if (!need[i] || _before[jobId][i].ok) continue;
@@ -414,7 +373,7 @@ contract UniversalEvaluator is IUniversalEvaluator, ReentrancyGuard {
             _fireSnapshot(jobId, i, s.reads[i], _height(_fundHeights[jobId], i));
             ++sent;
         }
-        if (sent == 0) revert UniversalEvaluatorErrors.NothingToRetry(jobId);
+        if (sent == 0) revert UniversalEvaluatorErrors.NothingToSend(jobId);
     }
 
     /// @notice Applies a PASS or FAIL verdict the kernel refused inside the callback, e.g. while it was paused.
@@ -423,11 +382,12 @@ contract UniversalEvaluator is IUniversalEvaluator, ReentrancyGuard {
         if (!e.done || e.applied || (e.verdict != Verdict.PASS && e.verdict != Verdict.FAIL)) {
             revert UniversalEvaluatorErrors.NothingToSettle(jobId);
         }
-        e.applied = true;
-        bytes32 reason = _reason(jobId, e.verdict, e.ownerCheck);
-        if (e.verdict == Verdict.PASS) KERNEL.complete(jobId, reason, "");
-        else KERNEL.reject(jobId, reason, "");
-        emit Settled(jobId, e.verdict);
+        (bool ok, bytes memory err) = _apply(jobId, e.verdict, _reason(jobId, e.verdict, e.ownerCheck));
+        if (!ok) {
+            assembly ("memory-safe") {
+                revert(add(err, 32), mload(err)) // the kernel's own revert
+            }
+        }
     }
 
     /// @notice Sends the evaluator's share of job fees (paid by the kernel on `complete`) to `FEE_RECIPIENT`.
@@ -484,19 +444,29 @@ contract UniversalEvaluator is IUniversalEvaluator, ReentrancyGuard {
         // The logic is monotone: once the root is PASS or FAIL no later answer can change it, so apply it now.
         // An unreadable answer changes no check, so only a usable one can decide the root.
         if (ok || e.pending == 0) {
-            Verdict v = JobSpecJudge.verdictPacked(_packedNodes[jobId], _cache[jobId].nodes, e.checkRes);
+            Verdict v = JobSpecLib.verdictPacked(_packedNodes[jobId], _cache[jobId].nodes, e.checkRes);
             if (v != Verdict.INCONCLUSIVE || e.pending == 0) _finish(jobId, v);
         }
     }
 
     // ═════════════════════════════════ views ═════════════════════════════════
 
+    /// @notice The number to compare, from one answer. Pure; the evaluator calls it on itself with a gas cap.
+    function decodeAnswer(bytes calldata outputs, uint8[] calldata field, bytes calldata res)
+        external
+        pure
+        returns (bool, int256)
+    {
+        return EvmReadLib.decode(outputs, field, res);
+    }
+
     function evaluationOf(uint256 jobId) external view returns (Evaluation memory) {
         return _evals[jobId];
     }
 
-    function cacheOf(uint256 jobId) external view returns (JobCache memory) {
-        return _cache[jobId];
+    /// @notice keccak256 of the frozen spec; zero until `fund` freezes it.
+    function specHashOf(uint256 jobId) external view returns (bytes32) {
+        return _cache[jobId].specHash;
     }
 
     /// @notice True once the spec is frozen and every snapshot read has a usable value.
@@ -539,15 +509,15 @@ contract UniversalEvaluator is IUniversalEvaluator, ReentrancyGuard {
 
     // ═════════════════════════════════ internal ═════════════════════════════════
 
-    /// @dev Specs are checked by `LOGIC.validateSpec` when frozen, so decoding a frozen spec never fails.
+    /// @dev Specs are checked by `JobSpecLib.validate` when frozen, so decoding a frozen spec never fails.
     function _decodeSpec(bytes memory spec) internal pure returns (JobSpec memory) {
         return abi.decode(spec, (JobSpec));
     }
 
-    /// @dev The frozen spec: the createJob description, or the stored replacement.
+    /// @dev The frozen spec: the stored replacement, or the createJob description.
     function _frozenSpec(uint256 jobId, string memory description) internal view returns (JobSpec memory) {
-        // the stored replacement, or the createJob description
-        return _decodeSpec(_cache[jobId].specIsDescription ? bytes(description) : _replacement[jobId]);
+        bytes memory spec = _replacement[jobId];
+        return _decodeSpec(spec.length == 0 ? bytes(description) : spec);
     }
 
     /// @dev Decode plans, checks, which checks each read feeds, and the packed tree, so callbacks never decode.
@@ -566,10 +536,10 @@ contract UniversalEvaluator is IUniversalEvaluator, ReentrancyGuard {
             checks.push(chk);
             readChecks |= uint256(1) << (16 * uint256(chk.read) + i);
         }
-        _packedNodes[jobId] = JobSpecJudge.packNodes(s.nodes);
+        _packedNodes[jobId] = JobSpecLib.packNodes(s.nodes);
         JobCache storage c = _cache[jobId];
         // forge-lint: disable-next-line(unsafe-typecast)
-        c.nodes = uint8(s.nodes.length); // safe: JobSpecRules caps nodes at MAX_NODES (32)
+        c.nodes = uint8(s.nodes.length); // safe: JobSpecLib caps nodes at MAX_NODES (32)
         c.readChecks = readChecks;
     }
 
@@ -585,7 +555,7 @@ contract UniversalEvaluator is IUniversalEvaluator, ReentrancyGuard {
         uint256[4] storage heights = _endHeights[jobId];
         uint256[4] storage atFund = _fundHeights[jobId];
         for (uint256 i; i < s.reads.length; ++i) {
-            uint64 h = ReadRequest.latestHeight(UNIVERSAL_CORE, s.reads[i], MAX_HEIGHT_AGE);
+            uint64 h = EvmReadLib.latestHeight(UNIVERSAL_CORE, s.reads[i], MAX_HEIGHT_AGE);
             uint64 f = _height(atFund, i);
             if (h <= f) revert UniversalEvaluatorErrors.EndHeightNotAfterFund(jobId, i, f, h);
             _setHeight(heights, i, h);
@@ -594,26 +564,45 @@ contract UniversalEvaluator is IUniversalEvaluator, ReentrancyGuard {
         emit EndBlocksFixed(jobId);
     }
 
-    /// @dev Sends every "after" read at its fixed block. Needs the snapshot complete.
-    function _send(uint256 jobId, JobSpec memory s) internal {
-        Evaluation storage e = _evals[jobId];
-        if (e.started) revert UniversalEvaluatorErrors.AlreadyStarted(jobId);
+    /// @dev Starts the evaluation: every "after" read goes out at its fixed block. Needs the snapshot complete.
+    function _start(uint256 jobId, JobSpec memory s) internal {
         if (!ready(jobId)) revert UniversalEvaluatorErrors.SnapshotNotReady(jobId);
-        uint256 n = s.reads.length;
+        Evaluation storage e = _evals[jobId];
         e.started = true;
         // forge-lint: disable-next-line(unsafe-typecast)
-        e.reads = uint8(n); // safe: JobSpecRules caps reads at MAX_READS (16)
+        e.reads = uint8(s.reads.length); // safe: JobSpecLib caps reads at MAX_READS (16)
         // forge-lint: disable-next-line(unsafe-typecast)
-        e.pending = uint8(n); // safe: as above
+        e.pending = uint8(s.reads.length); // safe: as above
+        _sendMissing(jobId, s);
+    }
+
+    /// @dev Sends, at its fixed block, every "after" read with no usable answer that is not in flight, and reopens the
+    ///      verdict. On the first send that is every read: none has an answer or a request yet.
+    function _sendMissing(uint256 jobId, JobSpec memory s) internal {
+        Evaluation storage e = _evals[jobId];
+        uint256 sent;
         uint256 paid;
-        for (uint256 i; i < n; ++i) {
+        for (uint256 i; i < e.reads; ++i) {
+            bool answered = (e.answered >> i) & 1 == 1;
+            if (answered && _answers[jobId][i].ok) continue;
+            uint256 req = _request[jobId][i];
+            if (req != 0 && READ_STATE.statusOf(req) == RequestStatus.PENDING) continue;
+            if (answered) {
+                // forge-lint: disable-next-line(unsafe-typecast)
+                e.answered = uint16(uint256(e.answered) & ~(uint256(1) << i)); // safe: clears one bit of a uint16
+                ++e.pending; // it had been counted as answered
+            }
             paid += _fireRead(jobId, i, s.reads[i]);
+            ++sent;
         }
-        emit ReadsSent(jobId, n, paid);
+        if (sent == 0) revert UniversalEvaluatorErrors.NothingToSend(jobId);
+        e.done = false;
+        e.verdict = Verdict.NONE;
+        emit ReadsSent(jobId, sent, paid);
     }
 
     function _fireRead(uint256 jobId, uint256 read, Read memory r) internal returns (uint256 value) {
-        value = _spend(jobId, ReadRequest.price(READ_STATE, r, CALLBACK_GAS_LIMIT, BUDGET_MULTIPLIER));
+        value = _spend(jobId, EvmReadLib.price(READ_STATE, r, CALLBACK_GAS_LIMIT, BUDGET_MULTIPLIER));
         uint256 requestId = _fire(r, _height(_endHeights[jobId], read), value, CALLBACK_GAS_LIMIT, READ_TTL, jobId);
         _request[jobId][read] = requestId;
         // forge-lint: disable-next-line(unsafe-typecast)
@@ -621,7 +610,7 @@ contract UniversalEvaluator is IUniversalEvaluator, ReentrancyGuard {
     }
 
     function _fireSnapshot(uint256 jobId, uint256 read, Read memory r, uint64 height) internal {
-        uint256 value = _spend(jobId, ReadRequest.price(READ_STATE, r, SNAPSHOT_CALLBACK_GAS_LIMIT, BUDGET_MULTIPLIER));
+        uint256 value = _spend(jobId, EvmReadLib.price(READ_STATE, r, SNAPSHOT_CALLBACK_GAS_LIMIT, BUDGET_MULTIPLIER));
         uint256 requestId = _fire(r, height, value, SNAPSHOT_CALLBACK_GAS_LIMIT, READ_TTL, jobId);
         _snapshotRequest[jobId][read] = requestId;
         // forge-lint: disable-next-line(unsafe-typecast)
@@ -635,7 +624,7 @@ contract UniversalEvaluator is IUniversalEvaluator, ReentrancyGuard {
         returns (uint256)
     {
         address client = _cache[jobId].client;
-        return ReadRequest.fire(
+        return EvmReadLib.fire(
             READ_STATE,
             r,
             FireParams({
@@ -672,7 +661,7 @@ contract UniversalEvaluator is IUniversalEvaluator, ReentrancyGuard {
         if (result.length > MAX_RESULT_LENGTH) return (false, 0, bytes32(0));
         resultHash = keccak256(result);
         ReadPlan storage plan = _plans[jobId][read];
-        try LOGIC.decodeAnswer{gas: DECODE_GAS}(plan.outputs, plan.field, result) returns (bool k, int256 v) {
+        try this.decodeAnswer{gas: DECODE_GAS}(plan.outputs, plan.field, result) returns (bool k, int256 v) {
             (ok, value) = (k, v);
         } catch {}
     }
@@ -687,7 +676,7 @@ contract UniversalEvaluator is IUniversalEvaluator, ReentrancyGuard {
                 Answer memory before;
                 if (needsBefore) before = _before[jobId][read];
                 checkRes =
-                    JobSpecJudge.setCheck(checkRes, i, JobSpecJudge.checkResult(chk, Answer({ok: true, value: value}), before));
+                    JobSpecLib.setCheck(checkRes, i, JobSpecLib.checkResult(chk, Answer({ok: true, value: value}), before));
             }
             mask >>= 1;
         }
@@ -706,21 +695,15 @@ contract UniversalEvaluator is IUniversalEvaluator, ReentrancyGuard {
         emit Verified(jobId, v, oc, reason);
 
         if (v == Verdict.INCONCLUSIVE) return; // the provider retries; otherwise the job ends through the kernel
-        if (v == Verdict.PASS) {
-            try KERNEL.complete(jobId, reason, "") {
-                e.applied = true;
-                emit Settled(jobId, v);
-            } catch (bytes memory err) {
-                emit SettleFailed(jobId, err);
-            }
-        } else {
-            try KERNEL.reject(jobId, reason, "") {
-                e.applied = true;
-                emit Settled(jobId, v);
-            } catch (bytes memory err) {
-                emit SettleFailed(jobId, err);
-            }
-        }
+        (bool ok, bytes memory err) = _apply(jobId, v, reason);
+        if (!ok) emit SettleFailed(jobId, err); // anyone can `settle` later
+    }
+
+    /// @dev PASS completes the job, FAIL rejects it. Returns the kernel's revert data if it refused.
+    function _apply(uint256 jobId, Verdict v, bytes32 reason) internal returns (bool ok, bytes memory err) {
+        bytes4 action = v == Verdict.PASS ? IAgenticCommerce.complete.selector : IAgenticCommerce.reject.selector;
+        (ok, err) = address(KERNEL).call(abi.encodeWithSelector(action, jobId, reason, bytes("")));
+        if (ok) _evals[jobId].applied = true; // the kernel emits JobCompleted / JobRejected
     }
 
     /// @dev Recorded, not acted on. UNKNOWN when either read of the wallet's counter failed.

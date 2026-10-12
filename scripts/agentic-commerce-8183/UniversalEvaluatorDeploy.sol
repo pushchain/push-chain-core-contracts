@@ -7,17 +7,18 @@ import {ITransparentUpgradeableProxy} from "@openzeppelin/contracts/proxy/transp
 import {ERC1967Utils} from "@openzeppelin/contracts/proxy/ERC1967/ERC1967Utils.sol";
 
 import {UniversalEvaluator} from "../../src/agentic-commerce-8183/evaluator/UniversalEvaluator.sol";
-import {UniversalEvaluatorLogic} from "../../src/agentic-commerce-8183/evaluator/UniversalEvaluatorLogic.sol";
 import {UniversalHook} from "../../src/agentic-commerce-8183/hooks/UniversalHook.sol";
 import {IAgenticCommerce} from "../../src/agentic-commerce-8183/interfaces/IAgenticCommerce.sol";
-import {IReadStateDomains} from "../../src/agentic-commerce-8183/evaluator/ExternalInterfaces.sol";
-import {IUniversalCoreHeights} from "../../src/agentic-commerce-8183/evaluator/ExternalInterfaces.sol";
 import {IUniversalCallback} from "../../src/interfaces/IUniversalCallback.sol";
-import {ReadConfig} from "../../src/agentic-commerce-8183/evaluator/EvaluationTypes.sol";
+import {
+    ReadConfig,
+    IReadStateDomains,
+    IUniversalCoreHeights
+} from "../../src/agentic-commerce-8183/evaluator/EvaluationTypes.sol";
 
 /// @title UniversalEvaluatorDeploy — the in-place route, shared by the deploy script and its test
 /// @notice The hook proxy already exists (it runs RulesBindingHook), so nothing has to be predicted:
-///         1. anyone deploys the Logic, the evaluator pointing at the existing hook proxy, and the new hook code;
+///         1. anyone deploys the evaluator pointing at the existing hook proxy, and the new hook code;
 ///         2. the ProxyAdmin owner upgrades the proxy and sets its evaluator in one call
 ///            (`upgradeAndCall` → `UniversalHook.initializeV2`);
 ///         3. the marketplace admin points new jobs at the evaluator (`UniversalMarketplace.setEvaluator`), but only
@@ -45,19 +46,16 @@ library UniversalEvaluatorDeploy {
     }
 
     struct Deployed {
-        UniversalEvaluatorLogic logic;
         UniversalEvaluator evaluator;
         UniversalHook hookImpl;
     }
 
-    /// @notice Step 1. Deploys the Logic, the evaluator and the new hook implementation, and checks them.
+    /// @notice Step 1. Deploys the evaluator and the new hook implementation, and checks them.
     function deploy(Params memory p) internal returns (Deployed memory d) {
         _requireHookProxy(p);
         _requireDependencies(p);
-        d.logic = new UniversalEvaluatorLogic();
-        d.evaluator = new UniversalEvaluator(
-            p.kernel, p.hookProxy, p.readState, p.universalCore, address(d.logic), p.feeRecipient, p.config
-        );
+        d.evaluator =
+            new UniversalEvaluator(p.kernel, p.hookProxy, p.readState, p.universalCore, p.feeRecipient, p.config);
         d.hookImpl = new UniversalHook();
         checkEvaluator(p, d);
     }
@@ -69,14 +67,13 @@ library UniversalEvaluatorDeploy {
         require(e.HOOK() == p.hookProxy, "evaluator: hook");
         require(address(e.READ_STATE()) == p.readState, "evaluator: read state");
         require(address(e.UNIVERSAL_CORE()) == p.universalCore, "evaluator: universal core");
-        require(address(e.LOGIC()) == address(d.logic), "evaluator: logic");
         require(e.FEE_RECIPIENT() == p.feeRecipient, "evaluator: fee recipient");
-        ReadConfig memory c = e.readConfig();
+        ReadConfig memory c = p.config;
         require(
-            c.readTtl == p.config.readTtl && c.callbackGasLimit == p.config.callbackGasLimit
-                && c.snapshotCallbackGasLimit == p.config.snapshotCallbackGasLimit
-                && c.budgetMultiplier == p.config.budgetMultiplier && c.maxHeightAge == p.config.maxHeightAge
-                && c.maxConfirmations == p.config.maxConfirmations,
+            e.READ_TTL() == c.readTtl && e.CALLBACK_GAS_LIMIT() == c.callbackGasLimit
+                && e.SNAPSHOT_CALLBACK_GAS_LIMIT() == c.snapshotCallbackGasLimit
+                && e.BUDGET_MULTIPLIER() == c.budgetMultiplier && e.MAX_HEIGHT_AGE() == c.maxHeightAge
+                && e.MAX_CONFIRMATIONS() == c.maxConfirmations,
             "evaluator: config"
         );
     }

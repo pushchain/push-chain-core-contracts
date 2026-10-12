@@ -1,7 +1,11 @@
 // SPDX-License-Identifier: MIT
 pragma solidity 0.8.26;
 
+import {IUniversalCallback} from "../../interfaces/IUniversalCallback.sol";
+import {ReadSpec} from "../../libraries/ReadTypes.sol";
+import {UniversalAccountId} from "../../libraries/Types.sol";
 import {
+    Read,
     T_UINT,
     T_INT,
     T_BOOL,
@@ -12,33 +16,127 @@ import {
     T_ARRAY,
     T_FIXED_ARRAY
 } from "../libraries/JobSpecTypes.sol";
-import {MAX_RESULT_LENGTH} from "./EvaluationTypes.sol";
+import {IUniversalCoreHeights, MAX_RESULT_LENGTH} from "./EvaluationTypes.sol";
+import {EvmReadErrors} from "../libraries/Errors.sol";
 
-/// @title AnswerDecoder — turns one Read State answer into the number a check compares
-/// @notice The V2 design's decoder, plus a shape check run when a job is funded.
-/// @dev - `decode` follows the V2 design line by line (test copy: `test/8183-tests/helpers/V2Decoder.sol`), with
+/// @notice Mirror of the node's `EvmBlockRef`. `refType` 0 (AT_NUMBER) is the only value.
+struct EvmBlockRef {
+    uint8 refType;
+    uint64 blockNumber;
+}
+
+/// @notice Mirror of the node's `EvmQueryEnvelope` (`universalClient/externalchains/evm/read_envelope.go`).
+struct EvmQueryEnvelope {
+    uint8 queryType;
+    EvmBlockRef blockRef;
+    bytes payload;
+}
+
+/// @notice Everything about one request that is not in the `Read`.
+struct FireParams {
+    address owner; // goes into `account.owner`; validators ignore it for EVM reads, it only has to be non-empty
+    uint64 height; // the destination block the call runs at
+    uint256 value; // protocol fee + callback budget, from `price`
+    uint64 ttl; // Push blocks until the request may be expired
+    address revertRecipient; // receives the unspent callback budget
+    bytes4 callbackSelector;
+    uint64 callbackGasLimit;
+}
+
+/// @title EvmReadLib — one EVM contract call through Read State: its block, its price, the request, the answer
+/// @notice Internal functions, compiled into the UniversalEvaluator.
+/// @dev Request:
+///      - The query is `abi.encode(EvmQueryEnvelope)`: one dynamic tuple, as the node unpacks it. Payload for a
+///        contract call is `abi.encode(target, callData)`, with `callData = selector ‖ args`.
+///      - The callback must be prepaid. The node delivers an answer only when
+///        `callbackBudget >= callbackGasLimit × base fee` (`x/ucallback/keeper/evm.go`, `CanAffordCallback`);
+///        otherwise the read waits until it expires. `price` adds that budget, times a safety multiplier for a
+///        base fee that rises before delivery. The unspent part is refunded to `revertRecipient`.
+///      Answer:
+///      - `decode` follows the V2 design line by line (test copy: `test/8183-tests/helpers/V2Decoder.sol`), with
 ///        two changes:
 ///          · a `field` that stops on a struct or a fixed array is not a value, so it returns not-ok instead of the
 ///            raw first word (`isValidShape` already refuses such a path);
 ///          · an array's length only counts if the heads of that many elements are present in the answer, so a
 ///            forged length word can't produce a value (the V2 decoder returned any length, even one that wraps
 ///            negative as an int256).
-///      - `isValidShape` bounds `outputs` and `field`, so `decode` does bounded work on any answer.
+///      - `isValidShape`, run when the spec is frozen, bounds `outputs` and `field`, so `decode` does bounded work
+///        on any answer.
 ///      - Bounded extraction, not full ABI validation: it follows offsets inside the answer and checks the value
 ///        fits its type code (uint ≤ int256 max, bool 0/1, address 160 bits), but it does not require canonical
 ///        offsets and does not know narrower widths (`uint8`, `bytes4`): the type codes don't carry them.
-///      - Callers run `decode` through a gas-capped external self-call inside `try`, so even a decoder bug
+///      - The evaluator runs `decode` through a gas-capped external self-call inside `try`, so even a decoder bug
 ///        becomes "can't tell" instead of a reverted callback.
-// forge-lint: disable-start(unsafe-typecast)
-library AnswerDecoder {
+library EvmReadLib {
+    uint8 internal constant QUERY_CONTRACT_CALL = 1;
+    uint8 internal constant BLOCK_AT_NUMBER = 0;
+    /// @notice The CAIP-2 namespace whose queries `fire` encodes (`EvmQueryEnvelope`): EVM chains.
+    bytes32 internal constant EVM_NAMESPACE_HASH = keccak256("eip155");
+
+    /// @notice The CAIP-2 key UniversalCore and Read State use for a read's chain.
+    function chainKey(Read memory r) internal pure returns (string memory) {
+        return string.concat(r.chainNamespace, ":", r.chainId);
+    }
+
+    /// @notice Push's tracked height for the read's chain.
+    /// @dev Reverts if the chain is untracked, or, when `maxAge != 0`, if the height is older than `maxAge` seconds.
+    function latestHeight(IUniversalCoreHeights core, Read memory r, uint256 maxAge)
+        internal
+        view
+        returns (uint64)
+    {
+        string memory key = chainKey(r);
+        uint256 h = core.chainHeightByChainNamespace(key);
+        if (h == 0 || h > type(uint64).max) revert EvmReadErrors.ChainNotTracked(key);
+        if (maxAge != 0) {
+            uint256 seen = core.timestampObservedAtByChainNamespace(key);
+            if (block.timestamp > seen + maxAge) revert EvmReadErrors.HeightStale(key, seen);
+        }
+        // forge-lint: disable-next-line(unsafe-typecast)
+        return uint64(h); // safe: `h > type(uint64).max` reverts above
+    }
+
+    /// @notice What one request costs: the protocol fee plus a callback budget the node will accept.
+    function price(IUniversalCallback cb, Read memory r, uint64 callbackGasLimit, uint256 budgetMultiplier)
+        internal
+        view
+        returns (uint256)
+    {
+        return cb.estimateFee(r.chainNamespace, r.chainId) + uint256(callbackGasLimit) * block.basefee * budgetMultiplier;
+    }
+
+    /// @notice Sends one request and returns its id.
+    function fire(IUniversalCallback cb, Read memory r, FireParams memory p) internal returns (uint256) {
+        bytes memory payload = abi.encode(r.target, abi.encodePacked(r.selector, r.args));
+        EvmQueryEnvelope memory env = EvmQueryEnvelope({
+            queryType: QUERY_CONTRACT_CALL,
+            blockRef: EvmBlockRef({refType: BLOCK_AT_NUMBER, blockNumber: p.height}),
+            payload: payload
+        });
+        ReadSpec memory spec = ReadSpec({
+            account: UniversalAccountId({
+                chainNamespace: r.chainNamespace,
+                chainId: r.chainId,
+                owner: abi.encode(p.owner)
+            }),
+            query: abi.encode(env),
+            minConfirmations: r.minConfirmations,
+            blockNumber: p.height,
+            expiryPushChainHeight: uint64(block.number) + p.ttl,
+            maxFee: p.value,
+            revertRecipient: p.revertRecipient
+        });
+        return cb.requestExternalReadSelf{value: p.value}(spec, p.callbackSelector, p.callbackGasLimit);
+    }
+
+    // ───────────────────────────── the answer ─────────────────────────────
+    // forge-lint: disable-start(unsafe-typecast)
     /// @notice Longest `outputs` accepted.
     uint256 internal constant MAX_OUTPUTS_LENGTH = 128;
     /// @notice Most levels `field` may descend.
     uint256 internal constant MAX_FIELD_DEPTH = 8;
     /// @notice Deepest nesting `outputs` may describe.
     uint256 internal constant MAX_TYPE_DEPTH = 8;
-
-    // ───────────────────────────── decode ─────────────────────────────
 
     /// @notice The number to compare, from answer `res`.
     /// @return ok    Whether a value was found and it fits its type.
@@ -267,5 +365,5 @@ library AnswerDecoder {
         if (at > b.length || b.length - at < 32) return (false, 0);
         return (true, uint256(bytes32(b[at:at + 32])));
     }
+    // forge-lint: disable-end(unsafe-typecast)
 }
-// forge-lint: disable-end(unsafe-typecast)

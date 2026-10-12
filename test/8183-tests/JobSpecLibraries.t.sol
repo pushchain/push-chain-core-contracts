@@ -3,9 +3,9 @@ pragma solidity 0.8.26;
 
 import {Test} from "forge-std/Test.sol";
 
-import {AnswerDecoder} from "../../src/agentic-commerce-8183/evaluator/AnswerDecoder.sol";
-import {JobSpecRules} from "../../src/agentic-commerce-8183/evaluator/JobSpecRules.sol";
-import {JobSpecJudge} from "../../src/agentic-commerce-8183/evaluator/JobSpecJudge.sol";
+import {EvmReadLib} from "../../src/agentic-commerce-8183/evaluator/EvmReadLib.sol";
+import {JobSpecLib} from "../../src/agentic-commerce-8183/evaluator/JobSpecLib.sol";
+import {ReferenceJudge} from "./helpers/ReferenceJudge.sol";
 import {Answer, Verdict} from "../../src/agentic-commerce-8183/evaluator/EvaluationTypes.sol";
 import {JobSpecErrors} from "../../src/agentic-commerce-8183/libraries/Errors.sol";
 import {
@@ -36,22 +36,22 @@ contract LibHarness {
         pure
         returns (bool, int256)
     {
-        return AnswerDecoder.decode(outputs, field, res);
+        return EvmReadLib.decode(outputs, field, res);
     }
 
     function isValidShape(bytes memory outputs, uint8[] memory field) external pure returns (bool) {
-        return AnswerDecoder.isValidShape(outputs, field);
+        return EvmReadLib.isValidShape(outputs, field);
     }
 
     /// @dev A test ceiling; the evaluator takes it from its deployment config.
     uint256 internal constant MAX_CONFIRMATIONS = 64;
 
     function validate(JobSpec memory s) external pure {
-        JobSpecRules.validate(s, MAX_CONFIRMATIONS);
+        JobSpecLib.validate(s, MAX_CONFIRMATIONS);
     }
 
     function snapshotReads(JobSpec memory s) external pure returns (bool[] memory, uint256) {
-        return JobSpecRules.snapshotReads(s);
+        return JobSpecLib.snapshotReads(s);
     }
 
     function verdict(Check[] memory checks, Node[] memory nodes, Answer[] memory afters, Answer[] memory befores)
@@ -59,7 +59,7 @@ contract LibHarness {
         pure
         returns (Verdict)
     {
-        return JobSpecJudge.verdict(checks, nodes, afters, befores);
+        return ReferenceJudge.verdict(checks, nodes, afters, befores);
     }
 
     /// @notice The evaluator's path: each check judged alone, then the packed tree.
@@ -71,9 +71,9 @@ contract LibHarness {
         uint32 res;
         for (uint256 i; i < checks.length; ++i) {
             Check memory c = checks[i];
-            res = JobSpecJudge.setCheck(res, i, JobSpecJudge.checkResult(c, afters[c.read], befores[c.read]));
+            res = JobSpecLib.setCheck(res, i, JobSpecLib.checkResult(c, afters[c.read], befores[c.read]));
         }
-        return JobSpecJudge.verdictPacked(JobSpecJudge.packNodes(nodes), nodes.length, res);
+        return JobSpecLib.verdictPacked(JobSpecLib.packNodes(nodes), nodes.length, res);
     }
 }
 

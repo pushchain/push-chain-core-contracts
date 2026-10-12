@@ -6,7 +6,6 @@ import {TransparentUpgradeableProxy} from "@openzeppelin/contracts/proxy/transpa
 import {UniversalEvalBase} from "./UniversalEvalBase.t.sol";
 import {UniversalHook} from "../../src/agentic-commerce-8183/hooks/UniversalHook.sol";
 import {UniversalEvaluator} from "../../src/agentic-commerce-8183/evaluator/UniversalEvaluator.sol";
-import {UniversalEvaluatorLogic} from "../../src/agentic-commerce-8183/evaluator/UniversalEvaluatorLogic.sol";
 import {IAgenticCommerce} from "../../src/agentic-commerce-8183/interfaces/IAgenticCommerce.sol";
 import {IUniversalEvaluator} from "../../src/agentic-commerce-8183/interfaces/IUniversalEvaluator.sol";
 
@@ -32,7 +31,6 @@ contract UniversalHookDesignProofsTest is UniversalEvalBase {
 
     /// @dev The fixture's pair, with the hook running the design's `_postSubmit`.
     function _deployPair() internal override {
-        logic = new UniversalEvaluatorLogic();
         DesignSubmitHook hookImpl = new DesignSubmitHook();
         address predictedEvaluator = vm.computeCreateAddress(address(this), vm.getNonce(address(this)) + 1);
         bytes memory hookInit = abi.encodeCall(
@@ -40,7 +38,7 @@ contract UniversalHookDesignProofsTest is UniversalEvalBase {
         );
         hook = UniversalHook(address(new TransparentUpgradeableProxy(address(hookImpl), proxyAdminOwner, hookInit)));
         ue = new UniversalEvaluator(
-            address(kernel), address(hook), address(readState), address(core), address(logic), feeRecipient, _config()
+            address(kernel), address(hook), address(readState), address(core), feeRecipient, _config()
         );
         require(address(ue) == predictedEvaluator, "evaluator address prediction");
     }

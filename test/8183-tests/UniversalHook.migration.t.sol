@@ -51,7 +51,6 @@ contract UniversalHookMigrationTest is UniversalEvalBase {
         });
         deployed = UniversalEvaluatorDeploy.deploy(params); // step 1
         ue = deployed.evaluator;
-        logic = deployed.logic;
     }
 
     /// @notice A job under the interim setup: the interim evaluator, RulesBindingHook's 32-byte fund params.
@@ -166,14 +165,14 @@ contract UniversalHookMigrationTest is UniversalEvalBase {
         bytes memory fp = _fundParams(jobId);
         _fundWith(jobId, fp);
         assertEq(uint8(_status(jobId)), uint8(IAgenticCommerce.JobStatus.Funded), "funded");
-        assertFalse(ue.cacheOf(jobId).frozen, "but the spec never reached the evaluator");
+        assertEq(ue.specHashOf(jobId), bytes32(0), "but the spec never reached the evaluator");
         assertFalse(ue.ready(jobId));
 
         _advance();
         _submit(jobId);
         assertFalse(ue.evaluationOf(jobId).endFixed, "and neither did submit");
         vm.prank(provider);
-        vm.expectRevert(abi.encodeWithSelector(UniversalEvaluatorErrors.WrongStatus.selector, jobId));
+        vm.expectRevert(abi.encodeWithSelector(UniversalEvaluatorErrors.EndBlocksNotFixed.selector, jobId));
         ue.sendReads(jobId);
     }
 }

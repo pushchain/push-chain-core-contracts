@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: MIT
 pragma solidity 0.8.26;
 
+import {Vm} from "forge-std/Vm.sol";
 import {ProxyAdmin} from "@openzeppelin/contracts/proxy/transparent/ProxyAdmin.sol";
 import {ITransparentUpgradeableProxy} from "@openzeppelin/contracts/proxy/transparent/TransparentUpgradeableProxy.sol";
 import {ERC1967Utils} from "@openzeppelin/contracts/proxy/ERC1967/ERC1967Utils.sol";
@@ -9,33 +10,49 @@ import {UniversalEvalBase} from "./UniversalEvalBase.t.sol";
 import {UniversalEvaluator} from "../../src/agentic-commerce-8183/evaluator/UniversalEvaluator.sol";
 import {UniversalHook} from "../../src/agentic-commerce-8183/hooks/UniversalHook.sol";
 import {JobSpec, Mutability} from "../../src/agentic-commerce-8183/libraries/JobSpecTypes.sol";
-import {EvmQueryEnvelope} from "../../src/agentic-commerce-8183/evaluator/ReadRequest.sol";
+import {EvmQueryEnvelope} from "../../src/agentic-commerce-8183/evaluator/EvmReadLib.sol";
+import {OwnerCheck} from "../../src/agentic-commerce-8183/evaluator/EvaluationTypes.sol";
 import {
     RulesBindingHookErrors,
     UniversalHookErrors,
     UniversalEvaluatorErrors,
     JobSpecErrors,
-    ReadRequestErrors
+    EvmReadErrors
 } from "../../src/agentic-commerce-8183/libraries/Errors.sol";
 import {ReadSpec, PendingRead, RequestStatus} from "../../src/libraries/ReadTypes.sol";
 
 /// @notice The UniversalHook (rules binding, spec replacement and freezing) and the snapshot the evaluator takes
 ///         inside `fund`.
 contract UniversalHookTest is UniversalEvalBase {
+    /// @dev The evaluator's `SpecFrozenHere` for `jobId`, from the logs recorded since `vm.recordLogs()`.
+    function _specFrozen(uint256 jobId) internal returns (bytes32 specHash, OwnerCheck checkpointRead, uint64 atFund) {
+        Vm.Log[] memory logs = vm.getRecordedLogs();
+        for (uint256 i; i < logs.length; ++i) {
+            if (
+                logs[i].emitter == address(ue) && logs[i].topics[0] == UniversalEvaluator.SpecFrozenHere.selector
+                    && uint256(logs[i].topics[1]) == jobId
+            ) return abi.decode(logs[i].data, (bytes32, OwnerCheck, uint64));
+        }
+        revert("no SpecFrozenHere");
+    }
+
     // ───────────── binding (RulesBindingHook's rules, kept) ─────────────
 
     function test_UH01_fund_bindsRules_freezesSpec_recordsCheckpoint() public {
         uint256 jobId = _createSpec(_swapSpec());
+        vm.recordLogs();
         _fund(jobId);
         (address boundAgw, bytes32 rulesId) = hook.rulesOf(jobId);
         assertEq(boundAgw, address(agw));
         assertEq(rulesId, RULES);
         assertEq(hook.liveJobOf(address(agw)), jobId);
 
-        UniversalEvaluator.JobCache memory c = ue.cacheOf(jobId);
-        assertTrue(c.frozen && c.specIsDescription && c.checkpointOk);
-        assertEq(c.specHash, keccak256(bytes(kernel.getJob(jobId).description)));
-        assertEq(c.checkpointAtFund, agw.checkpointCount(), "includes the funding call's own tick");
+        assertEq(ue.specHashOf(jobId), keccak256(bytes(kernel.getJob(jobId).description)), "frozen: the description");
+        assertEq(ue.currentSpec(jobId).length, 0, "no replacement stored");
+        (bytes32 specHash, OwnerCheck checkpointRead, uint64 atFund) = _specFrozen(jobId);
+        assertEq(specHash, ue.specHashOf(jobId));
+        assertEq(uint8(checkpointRead), uint8(OwnerCheck.CLEAN), "the wallet's counter was read");
+        assertEq(atFund, agw.checkpointCount(), "includes the funding call's own tick");
     }
 
     function test_UH02_fund_refusals() public {
@@ -92,7 +109,7 @@ contract UniversalHookTest is UniversalEvalBase {
         _fundWith(jobId, abi.encode(RULES));
         (address boundAgw,) = hook.rulesOf(jobId);
         assertEq(boundAgw, address(agw));
-        assertFalse(ue.cacheOf(jobId).frozen);
+        assertEq(ue.specHashOf(jobId), bytes32(0), "not frozen");
     }
 
     // ───────────── spec replacement (mutability) ─────────────
@@ -115,9 +132,8 @@ contract UniversalHookTest is UniversalEvalBase {
         (uint256 snap, uint256 eval_) = ue.prefundCost(jobId);
         _prefund(jobId, snap + eval_);
         _fundWith(jobId, abi.encode(RULES, keccak256(replacement), bytes("")));
-        UniversalEvaluator.JobCache memory c = ue.cacheOf(jobId);
-        assertEq(c.specHash, keccak256(replacement));
-        assertFalse(c.specIsDescription);
+        assertEq(ue.specHashOf(jobId), keccak256(replacement));
+        assertEq(ue.currentSpec(jobId), replacement, "the frozen spec is the provider's replacement");
 
         _answerSnapshot(jobId, 0, 0);
         _advance();
@@ -174,7 +190,7 @@ contract UniversalHookTest is UniversalEvalBase {
         );
 
         _fundWith(jobId, abi.encode(RULES, keccak256(replacement), replacement));
-        assertEq(ue.cacheOf(jobId).specHash, keccak256(replacement));
+        assertEq(ue.specHashOf(jobId), keccak256(replacement));
     }
 
     function test_UH09_specFrozenAtFund() public {
@@ -215,7 +231,7 @@ contract UniversalHookTest is UniversalEvalBase {
         _prefund(jobId, 1 ether);
         bytes memory fp = _fundParams(jobId);
         vm.prank(owner);
-        vm.expectRevert(abi.encodeWithSelector(ReadRequestErrors.ChainNotTracked.selector, "eip155:999999"));
+        vm.expectRevert(abi.encodeWithSelector(EvmReadErrors.ChainNotTracked.selector, "eip155:999999"));
         agw.execute(address(kernel), 0, abi.encodeCall(kernel.fund, (jobId, BUDGET, fp)));
     }
 
@@ -286,7 +302,7 @@ contract UniversalHookTest is UniversalEvalBase {
         uint256 first = ue.snapshotRequestOf(jobId, 0);
 
         vm.prank(provider);
-        vm.expectRevert(abi.encodeWithSelector(UniversalEvaluatorErrors.NothingToRetry.selector, jobId));
+        vm.expectRevert(abi.encodeWithSelector(UniversalEvaluatorErrors.NothingToSend.selector, jobId));
         ue.retrySnapshot{value: SNAPSHOT_COST}(jobId); // still in flight
 
         assertTrue(_deliver(first, ""));

@@ -3,6 +3,7 @@ pragma solidity 0.8.26;
 
 import {Vm} from "forge-std/Vm.sol";
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
+import {PausableUpgradeable} from "@openzeppelin/contracts-upgradeable/utils/PausableUpgradeable.sol";
 
 import {UniversalEvalBase} from "./UniversalEvalBase.t.sol";
 import {UniversalEvaluator} from "../../src/agentic-commerce-8183/evaluator/UniversalEvaluator.sol";
@@ -10,7 +11,7 @@ import {IAgenticCommerce} from "../../src/agentic-commerce-8183/interfaces/IAgen
 import {Verdict, OwnerCheck, ReadConfig} from "../../src/agentic-commerce-8183/evaluator/EvaluationTypes.sol";
 import {
     UniversalEvaluatorErrors,
-    ReadRequestErrors,
+    EvmReadErrors,
     JobSpecErrors
 } from "../../src/agentic-commerce-8183/libraries/Errors.sol";
 import {RequestStatus, MAX_CALLBACK_GAS_LIMIT} from "../../src/libraries/ReadTypes.sol";
@@ -95,13 +96,13 @@ contract UniversalEvaluatorTest is UniversalEvalBase {
 
         vm.prank(stranger);
         vm.expectRevert(abi.encodeWithSelector(UniversalEvaluatorErrors.CallerIsNotProvider.selector, stranger));
-        ue.retryReads{value: READ_COST}(jobId);
+        ue.sendReads{value: READ_COST}(jobId);
 
         core.setChainHeight(BASE_KEY, START_HEIGHT + 5000); // the chain moves on; the retry must not follow
         for (uint256 i; i < 5; ++i) {
             vm.recordLogs();
             vm.prank(provider);
-            ue.retryReads{value: READ_COST}(jobId);
+            ue.sendReads{value: READ_COST}(jobId);
             assertEq(_readSpecFromLogs(ue.requestOf(jobId, 0)).blockNumber, fixedBlock);
             if (i < 4) _answer(jobId, 0, "");
         }
@@ -114,14 +115,14 @@ contract UniversalEvaluatorTest is UniversalEvalBase {
         uint256 first = ue.requestOf(jobId, 0);
 
         vm.prank(provider);
-        vm.expectRevert(abi.encodeWithSelector(UniversalEvaluatorErrors.NothingToRetry.selector, jobId));
-        ue.retryReads(jobId); // still in flight
+        vm.expectRevert(abi.encodeWithSelector(UniversalEvaluatorErrors.NothingToSend.selector, jobId));
+        ue.sendReads(jobId); // still in flight
 
         vm.roll(block.number + 301);
         vm.prank(READ_MODULE);
         readState.expireExternalRead(first);
         vm.prank(provider);
-        ue.retryReads{value: READ_COST}(jobId);
+        ue.sendReads{value: READ_COST}(jobId);
         assertTrue(ue.requestOf(jobId, 0) != first);
         _answer(jobId, 0, abi.encode(uint256(0.4e18)));
         assertEq(uint8(_status(jobId)), uint8(IAgenticCommerce.JobStatus.Completed));
@@ -205,8 +206,8 @@ contract UniversalEvaluatorTest is UniversalEvalBase {
         assertTrue(ue.evaluationOf(jobId).started);
 
         vm.prank(provider);
-        vm.expectRevert(abi.encodeWithSelector(UniversalEvaluatorErrors.AlreadyStarted.selector, jobId));
-        ue.sendReads(jobId);
+        vm.expectRevert(abi.encodeWithSelector(UniversalEvaluatorErrors.NothingToSend.selector, jobId));
+        ue.sendReads(jobId); // every read is in flight
     }
 
     /// @dev Submitted before the snapshot was in: the end blocks are fixed at submit anyway; once the snapshot lands
@@ -325,7 +326,7 @@ contract UniversalEvaluatorTest is UniversalEvalBase {
 
         uint256[] memory three = new uint256[](3);
         vm.prank(provider);
-        ue.retryReads{value: READ_COST}(jobId);
+        ue.sendReads{value: READ_COST}(jobId);
         _answer(jobId, 0, abi.encode(three));
         (bool ok2, int256 v) = ue.answerOf(jobId, 0);
         assertTrue(ok2);
@@ -360,8 +361,8 @@ contract UniversalEvaluatorTest is UniversalEvalBase {
         afters[1] = leaf1;
         bytes32[] memory befores = new bytes32[](2);
         bytes32 expected =
-            keccak256(abi.encode(jobId, ue.cacheOf(jobId).specHash, befores, afters, Verdict.PASS, OwnerCheck.CLEAN));
-        assertEq(ue.cacheOf(jobId).specHash, keccak256(bytes(kernel.getJob(jobId).description)));
+            keccak256(abi.encode(jobId, ue.specHashOf(jobId), befores, afters, Verdict.PASS, OwnerCheck.CLEAN));
+        assertEq(ue.specHashOf(jobId), keccak256(bytes(kernel.getJob(jobId).description)));
         assertEq(_reasonFromLogs(), expected);
     }
 
@@ -443,42 +444,36 @@ contract UniversalEvaluatorTest is UniversalEvalBase {
 
     /// @dev Not upgradeable: every dependency and setting is fixed in the constructor, which refuses bad values.
     function test_UE22_constructor_fixesConfig_refusesBadValues() public {
-        ReadConfig memory c = ue.readConfig();
         ReadConfig memory want = _config();
-        assertEq(c.readTtl, want.readTtl);
-        assertEq(c.callbackGasLimit, want.callbackGasLimit);
-        assertEq(c.snapshotCallbackGasLimit, want.snapshotCallbackGasLimit);
-        assertEq(c.budgetMultiplier, want.budgetMultiplier);
-        assertEq(c.maxHeightAge, want.maxHeightAge);
+        assertEq(ue.READ_TTL(), want.readTtl);
+        assertEq(ue.CALLBACK_GAS_LIMIT(), want.callbackGasLimit);
+        assertEq(ue.SNAPSHOT_CALLBACK_GAS_LIMIT(), want.snapshotCallbackGasLimit);
+        assertEq(ue.BUDGET_MULTIPLIER(), want.budgetMultiplier);
+        assertEq(ue.MAX_HEIGHT_AGE(), want.maxHeightAge);
+        assertEq(ue.MAX_CONFIRMATIONS(), want.maxConfirmations);
         assertEq(address(ue.KERNEL()), address(kernel));
         assertEq(ue.HOOK(), address(hook));
-        assertEq(address(ue.LOGIC()), address(logic));
+        assertEq(address(ue.READ_STATE()), address(readState));
+        assertEq(address(ue.UNIVERSAL_CORE()), address(core));
+        assertEq(ue.FEE_RECIPIENT(), feeRecipient);
 
         vm.expectRevert(UniversalEvaluatorErrors.ZeroValue.selector);
-        new UniversalEvaluator(
-            address(0), address(hook), address(readState), address(core), address(logic), feeRecipient, want
-        );
+        new UniversalEvaluator(address(0), address(hook), address(readState), address(core), feeRecipient, want);
 
         ReadConfig memory bad = _config();
         bad.callbackGasLimit = MAX_CALLBACK_GAS_LIMIT + 1;
         vm.expectRevert(UniversalEvaluatorErrors.ZeroValue.selector);
-        new UniversalEvaluator(
-            address(kernel), address(hook), address(readState), address(core), address(logic), feeRecipient, bad
-        );
+        new UniversalEvaluator(address(kernel), address(hook), address(readState), address(core), feeRecipient, bad);
 
         bad = _config();
         bad.budgetMultiplier = 0;
         vm.expectRevert(UniversalEvaluatorErrors.ZeroValue.selector);
-        new UniversalEvaluator(
-            address(kernel), address(hook), address(readState), address(core), address(logic), feeRecipient, bad
-        );
+        new UniversalEvaluator(address(kernel), address(hook), address(readState), address(core), feeRecipient, bad);
 
         bad = _config();
         bad.maxHeightAge = 0; // freshness can't be switched off
         vm.expectRevert(UniversalEvaluatorErrors.ZeroValue.selector);
-        new UniversalEvaluator(
-            address(kernel), address(hook), address(readState), address(core), address(logic), feeRecipient, bad
-        );
+        new UniversalEvaluator(address(kernel), address(hook), address(readState), address(core), feeRecipient, bad);
     }
 
     // ───────────── retries, heights, domains ─────────────
@@ -495,7 +490,7 @@ contract UniversalEvaluatorTest is UniversalEvalBase {
         uint256 left = ue.prepaidOf(jobId);
         vm.prank(provider);
         vm.expectRevert(abi.encodeWithSelector(UniversalEvaluatorErrors.WrongStatus.selector, jobId));
-        ue.retryReads(jobId);
+        ue.sendReads(jobId);
         assertEq(ue.prepaidOf(jobId), left, "client PC untouched");
     }
 
@@ -507,7 +502,7 @@ contract UniversalEvaluatorTest is UniversalEvalBase {
         uint256 seen = core.timestampObservedAtByChainNamespace(BASE_KEY);
         vm.warp(seen + _config().maxHeightAge + 1);
         bytes memory fp = _fundParams(jobId);
-        vm.expectRevert(abi.encodeWithSelector(ReadRequestErrors.HeightStale.selector, BASE_KEY, seen));
+        vm.expectRevert(abi.encodeWithSelector(EvmReadErrors.HeightStale.selector, BASE_KEY, seen));
         _fundWith(jobId, fp);
     }
 
@@ -543,7 +538,7 @@ contract UniversalEvaluatorTest is UniversalEvalBase {
         uint256 seen = core.timestampObservedAtByChainNamespace(BASE_KEY);
         vm.warp(seen + _config().maxHeightAge + 1); // and not observed since
         vm.prank(provider);
-        vm.expectRevert(abi.encodeWithSelector(ReadRequestErrors.HeightStale.selector, BASE_KEY, seen));
+        vm.expectRevert(abi.encodeWithSelector(EvmReadErrors.HeightStale.selector, BASE_KEY, seen));
         kernel.submit(jobId, keccak256("done"), "");
         assertEq(uint8(_status(jobId)), uint8(IAgenticCommerce.JobStatus.Funded), "submit undone");
 
@@ -655,5 +650,39 @@ contract UniversalEvaluatorTest is UniversalEvalBase {
         bytes memory fp = _fundParams(jobId);
         vm.expectRevert(abi.encodeWithSelector(JobSpecErrors.ReadConfirmations.selector, 1));
         _fundWith(jobId, fp);
+    }
+
+    /// @dev A FAIL the kernel can't apply yet (paused) is final, even with a read still unanswered: the provider can't
+    ///      send that read again to reopen the verdict, and `settle` passes the kernel's own revert through until the
+    ///      kernel can apply it.
+    function test_UE33_decidedVerdict_noResend_settlePassesKernelRevert() public {
+        JobSpec memory s = _anySpec();
+        s.nodes[0].kind = NodeKind.ALL;
+        uint256 jobId = _createSpec(s);
+        _fund(jobId);
+        _advance();
+        _submit(jobId);
+        _pause();
+        _answer(jobId, 1, abi.encode(uint256(1e6))); // below 99.99: ALL fails, read 0 still out
+        _answer(jobId, 0, abi.encode(uint256(100e6))); // late: ignored, so read 0 has no answer
+        UniversalEvaluator.Evaluation memory e = ue.evaluationOf(jobId);
+        assertEq(uint8(e.verdict), uint8(Verdict.FAIL));
+        assertFalse(e.applied);
+        (bool ok,) = ue.answerOf(jobId, 0);
+        assertFalse(ok, "read 0 unanswered and not in flight: only the decided verdict stops a resend");
+
+        vm.prank(provider);
+        vm.expectRevert(abi.encodeWithSelector(UniversalEvaluatorErrors.NothingToSend.selector, jobId));
+        ue.sendReads{value: READ_COST}(jobId);
+
+        vm.expectRevert(PausableUpgradeable.EnforcedPause.selector);
+        ue.settle(jobId);
+        assertFalse(ue.evaluationOf(jobId).applied);
+
+        vm.prank(admin);
+        kernel.unpause();
+        ue.settle(jobId);
+        assertTrue(ue.evaluationOf(jobId).applied);
+        assertEq(uint8(_status(jobId)), uint8(IAgenticCommerce.JobStatus.Rejected));
     }
 }
