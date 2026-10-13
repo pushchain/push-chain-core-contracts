@@ -23,7 +23,8 @@ import {
     CriteriaMutability,
     ReadAt,
     T_TUPLE,
-    T_UINT
+    T_UINT,
+    T_ADDRESS
 } from "../../src/agentic-commerce-8183/libraries/JobSpecTypes.sol";
 import {ReadConfig} from "../../src/agentic-commerce-8183/evaluator/EvaluationTypes.sol";
 import {MockAGWFactory} from "./mocks/MockAGWFactory.sol";
@@ -182,6 +183,45 @@ abstract contract UniversalEvalBase is KernelBase {
         x[0] = r;
     }
 
+    /// @dev Moves a read to another chain, in place.
+    function _on(Read memory r, string memory chainId) internal pure returns (Read memory) {
+        r.chainId = chainId;
+        return r;
+    }
+
+    /// @dev Aave v3 `getReserveData`-shaped return: one struct of 15 static fields.
+    function _reserveOutputs() internal pure returns (bytes memory) {
+        return abi.encodePacked(
+            T_TUPLE,
+            uint8(1),
+            T_TUPLE,
+            uint8(15),
+            T_TUPLE,
+            uint8(1),
+            T_UINT,
+            T_UINT,
+            T_UINT,
+            T_UINT,
+            T_UINT,
+            T_UINT,
+            T_UINT,
+            T_UINT,
+            T_ADDRESS,
+            T_ADDRESS,
+            T_ADDRESS,
+            T_ADDRESS,
+            T_UINT,
+            T_UINT,
+            T_UINT
+        );
+    }
+
+    function _reserveAnswer(uint256 rate) internal pure returns (bytes memory) {
+        uint256[15] memory w;
+        w[2] = rate;
+        return abi.encode(w);
+    }
+
     function _checkNode(uint8 check) internal pure returns (Logic memory) {
         return Logic({kind: LogicKind.CHECK, check: check, children: new uint8[](0), k: 0});
     }
@@ -289,6 +329,18 @@ abstract contract UniversalEvalBase is KernelBase {
         _answerSnapshot(jobId, SWAP_PRE, before);
         _advance();
         _submit(jobId);
+    }
+
+    /// @notice Tracks `chainId` next to Base: same start height and read fee.
+    function _track(string memory chainId) internal {
+        core.setReadBaseFee(NS, chainId, READ_FEE);
+        core.setChainHeight(string.concat(NS, ":", chainId), START_HEIGHT);
+    }
+
+    /// @notice Moves `chainId`'s tracked height on by 120 blocks, observed now.
+    function _move(string memory chainId) internal {
+        string memory key = string.concat(NS, ":", chainId);
+        core.setChainHeight(key, core.chainHeightByChainNamespace(key) + 120);
     }
 
     /// @notice The chain moves on by 120 blocks, observed now: the provider's work lands after `fund`. Every real

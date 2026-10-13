@@ -18,9 +18,6 @@ import {
     LogicKind,
     CriteriaMutability,
     ReadAt,
-    T_TUPLE,
-    T_UINT,
-    T_ADDRESS,
     MAX_READS,
     MAX_CHECKS,
     MAX_NODES
@@ -33,39 +30,6 @@ import {Verdict} from "../../src/agentic-commerce-8183/evaluator/EvaluationTypes
 ///      A callback that runs out of gas is never retried, so this is a hard ceiling, not an optimisation.
 contract UniversalEvaluatorGasTest is UniversalEvalBase {
     uint256 internal constant HALF = MAX_READS / 2;
-
-    /// @dev Aave v3 `getReserveData`-shaped return: one struct of 15 static fields.
-    function _reserveOutputs() internal pure returns (bytes memory) {
-        return abi.encodePacked(
-            T_TUPLE,
-            uint8(1),
-            T_TUPLE,
-            uint8(15),
-            T_TUPLE,
-            uint8(1),
-            T_UINT,
-            T_UINT,
-            T_UINT,
-            T_UINT,
-            T_UINT,
-            T_UINT,
-            T_UINT,
-            T_UINT,
-            T_ADDRESS,
-            T_ADDRESS,
-            T_ADDRESS,
-            T_ADDRESS,
-            T_UINT,
-            T_UINT,
-            T_UINT
-        );
-    }
-
-    function _reserveAnswer(uint256 rate) internal pure returns (bytes memory) {
-        uint256[15] memory w;
-        w[2] = rate;
-        return abi.encode(w);
-    }
 
     function _maxSpec() internal view returns (JobSpec memory s) {
         s.executeBy = uint64(block.timestamp + 1 hours);

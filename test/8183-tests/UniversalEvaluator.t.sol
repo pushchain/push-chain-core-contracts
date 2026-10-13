@@ -754,20 +754,4 @@ contract UniversalEvaluatorTest is UniversalEvalBase {
         s.checks[1] = Check({left: 0, right: 1, evalType: EvalType.NUM, op: Op.GT, target: 0});
         s.logic[0].kind = LogicKind.ALL;
     }
-
-    /// @dev Tracks `chainId` next to Base: same start height and read fee.
-    function _track(string memory chainId) internal {
-        core.setReadBaseFee(NS, chainId, READ_FEE);
-        core.setChainHeight(string.concat(NS, ":", chainId), START_HEIGHT);
-    }
-
-    function _move(string memory chainId) internal {
-        string memory key = string.concat(NS, ":", chainId);
-        core.setChainHeight(key, core.chainHeightByChainNamespace(key) + 120);
-    }
-
-    function _on(Read memory r, string memory chainId) internal pure returns (Read memory) {
-        r.chainId = chainId;
-        return r;
-    }
 }

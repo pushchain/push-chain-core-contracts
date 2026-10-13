@@ -627,4 +627,89 @@ contract JobSpecLibrariesTest is Test {
         }
         assertEq(uint8(lib.verdict(checks, nodes, values)), uint8(lib.verdictPacked(checks, nodes, values)));
     }
+
+    /// @dev Every operator, with the value below, at and above the target: on CMP (the value), NUM (a difference)
+    ///      and PCT (a change in bps from a base of 10,000).
+    function test_JDG05_everyOperator() public view {
+        bool[3][6] memory want = [
+            [false, true, false], // EQ
+            [true, false, true], // NEQ
+            [false, false, true], // GT
+            [false, true, true], // GTE
+            [true, false, false], // LT
+            [true, true, false] // LTE
+        ];
+        int256[3] memory values = [int256(99), 100, 101];
+        for (uint256 op; op < 6; ++op) {
+            for (uint256 j; j < 3; ++j) {
+                uint8 expected = uint8(want[op][j] ? Verdict.PASS : Verdict.FAIL);
+                int256 v = values[j];
+                Check memory c = Check({left: 0, right: 0, evalType: EvalType.CMP, op: Op(op), target: 100});
+                assertEq(uint8(_one(c, Answer(true, v), Answer(false, 0))), expected, "CMP");
+                c = Check({left: 0, right: 1, evalType: EvalType.NUM, op: Op(op), target: 100});
+                assertEq(uint8(_one(c, Answer(true, v - 50), Answer(true, -50))), expected, "NUM");
+                c = Check({left: 0, right: 1, evalType: EvalType.PCT, op: Op(op), target: 100});
+                assertEq(uint8(_one(c, Answer(true, 10_000 + v), Answer(true, 10_000))), expected, "PCT");
+            }
+        }
+    }
+
+    /// @dev BOOL is `left == target`, the target 0 or 1.
+    function test_JDG06_bool() public view {
+        for (int256 t; t < 2; ++t) {
+            for (int256 v; v < 2; ++v) {
+                Check memory c = Check({left: 0, right: 0, evalType: EvalType.BOOL, op: Op.EQ, target: t});
+                assertEq(uint8(_one(c, Answer(true, v), Answer(false, 0))), uint8(v == t ? Verdict.PASS : Verdict.FAIL));
+            }
+        }
+    }
+
+    /// @dev A value that could not be read leaves every check using it UNKNOWN: `left` for all four types, `right`
+    ///      for NUM and PCT.
+    function test_JDG07_unreadableValues() public view {
+        Answer memory none = Answer(false, 0);
+        Answer memory one = Answer(true, 1);
+        for (uint256 e; e < 4; ++e) {
+            bool pair = e >= uint256(EvalType.NUM);
+            Check memory c = Check({
+                left: 0, right: pair ? 1 : 0, evalType: EvalType(e), op: Op.EQ, target: pair ? int256(0) : int256(1)
+            });
+            assertEq(uint8(_one(c, one, one)), uint8(Verdict.PASS), "both readable");
+            assertEq(uint8(_one(c, none, one)), uint8(Verdict.INCONCLUSIVE), "left unreadable");
+            if (pair) assertEq(uint8(_one(c, one, none)), uint8(Verdict.INCONCLUSIVE), "right unreadable");
+        }
+    }
+
+    /// @dev ALL, ANY and AT_LEAST over checks that PASS, FAIL or are UNKNOWN: decided once no UNKNOWN can change them.
+    function test_JDG08_logicOverUnknowns() public view {
+        (uint8 p, uint8 f, uint8 u) = (JobSpecLib.PASS, JobSpecLib.FAIL, JobSpecLib.UNKNOWN);
+        _logic(LogicKind.ALL, 0, [p, p, p], Verdict.PASS);
+        _logic(LogicKind.ALL, 0, [p, p, u], Verdict.INCONCLUSIVE);
+        _logic(LogicKind.ALL, 0, [p, f, u], Verdict.FAIL);
+        _logic(LogicKind.ANY, 0, [f, f, f], Verdict.FAIL);
+        _logic(LogicKind.ANY, 0, [f, f, u], Verdict.INCONCLUSIVE);
+        _logic(LogicKind.ANY, 0, [u, p, f], Verdict.PASS);
+        _logic(LogicKind.AT_LEAST, 2, [p, p, u], Verdict.PASS);
+        _logic(LogicKind.AT_LEAST, 2, [p, f, u], Verdict.INCONCLUSIVE);
+        _logic(LogicKind.AT_LEAST, 2, [f, f, u], Verdict.FAIL);
+        _logic(LogicKind.AT_LEAST, 3, [p, p, u], Verdict.INCONCLUSIVE);
+        _logic(LogicKind.AT_LEAST, 1, [f, f, p], Verdict.PASS);
+    }
+
+    /// @dev Three CMP checks under one `kind` root, each forced to PASS, FAIL or UNKNOWN; both judges must agree.
+    function _logic(LogicKind kind, uint8 k, uint8[3] memory results, Verdict want) internal view {
+        Check[] memory checks = new Check[](3);
+        Answer[] memory values = new Answer[](3);
+        Logic[] memory nodes = new Logic[](4);
+        uint8[] memory kids = new uint8[](3);
+        for (uint8 i; i < 3; ++i) {
+            checks[i] = Check({left: i, right: 0, evalType: EvalType.CMP, op: Op.EQ, target: 1});
+            values[i] = Answer(results[i] != JobSpecLib.UNKNOWN, results[i] == JobSpecLib.PASS ? int256(1) : int256(0));
+            nodes[1 + i] = Logic({kind: LogicKind.CHECK, check: i, children: new uint8[](0), k: 0});
+            kids[i] = 1 + i;
+        }
+        nodes[0] = Logic({kind: kind, check: 0, children: kids, k: k});
+        assertEq(uint8(lib.verdict(checks, nodes, values)), uint8(want), "reference");
+        assertEq(uint8(lib.verdictPacked(checks, nodes, values)), uint8(want), "packed");
+    }
 }
