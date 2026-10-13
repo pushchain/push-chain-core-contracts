@@ -32,7 +32,7 @@ contract UniversalHookTest is UniversalEvalBase {
         revert("no SpecFrozenHere");
     }
 
-    // ───────────── binding (RulesBindingHook's rules, kept) ─────────────
+    // ───────────── binding ─────────────
 
     function test_UH01_fund_bindsRules_freezesSpec_recordsCheckpoint() public {
         uint256 jobId = _createSpec(_swapSpec());

@@ -10,19 +10,21 @@ import {Initializable} from "@openzeppelin/contracts-upgradeable/proxy/utils/Ini
 import {IERC20Errors} from "@openzeppelin/contracts/interfaces/draft-IERC6093.sol";
 
 import {IAgenticCommerce} from "../../src/agentic-commerce-8183/interfaces/IAgenticCommerce.sol";
-import {RulesBindingHook} from "../../src/agentic-commerce-8183/hooks/RulesBindingHook.sol";
+import {UniversalHook} from "../../src/agentic-commerce-8183/hooks/UniversalHook.sol";
 import {KernelBase} from "./KernelBase.t.sol";
 import {MockAGWFactory} from "./mocks/MockAGWFactory.sol";
 import {MockSmartSession} from "./mocks/MockSmartSession.sol";
 import {RecordingHook} from "./mocks/RecordingHook.sol";
 
-/// @notice Phase 5 — mandate binding and one live job per AGW, driven through the real kernel.
-contract RulesBindingHookTest is KernelBase {
-    RulesBindingHook internal hook;
-    RulesBindingHook internal hookImpl;
+/// @notice The UniversalHook's rules binding and one live job per AGW, driven through the real kernel. The jobs here
+///         name another evaluator than the hook's, so the hook only binds rules for them.
+contract UniversalHookBindingTest is KernelBase {
+    UniversalHook internal hook;
+    UniversalHook internal hookImpl;
     MockAGWFactory internal factory;
     MockSmartSession internal engine;
     address internal hookProxyAdminOwner = makeAddr("hookProxyAdminOwner");
+    address internal universalEvaluator = makeAddr("universalEvaluator"); // not the jobs' `evaluator`
 
     /// @dev `client` from KernelBase acts as the AGW.
     address internal agw;
@@ -34,8 +36,8 @@ contract RulesBindingHookTest is KernelBase {
         agw = client;
         factory = new MockAGWFactory();
         engine = new MockSmartSession();
-        hookImpl = new RulesBindingHook();
-        hook = RulesBindingHook(_deployHook(address(kernel), address(factory), address(engine)));
+        hookImpl = new UniversalHook();
+        hook = UniversalHook(_deployHook(address(kernel), address(factory), address(engine), universalEvaluator));
         vm.prank(admin);
         kernel.setHookWhitelist(address(hook), true);
 
@@ -43,10 +45,10 @@ contract RulesBindingHookTest is KernelBase {
         engine.setPermission(P, agw, true);
     }
 
-    function _deployHook(address k, address f, address e) internal returns (address) {
+    function _deployHook(address k, address f, address e, address ev) internal returns (address) {
         return address(
             new TransparentUpgradeableProxy(
-                address(hookImpl), hookProxyAdminOwner, abi.encodeCall(RulesBindingHook.initialize, (k, f, e))
+                address(hookImpl), hookProxyAdminOwner, abi.encodeCall(UniversalHook.initialize, (k, f, e, ev))
             )
         );
     }
@@ -77,7 +79,7 @@ contract RulesBindingHookTest is KernelBase {
     function test_fund_bindsRules() public {
         uint256 jobId = _open(agw, BUDGET);
         vm.expectEmit(address(hook));
-        emit RulesBindingHook.RulesBound(jobId, agw, P);
+        emit UniversalHook.RulesBound(jobId, agw, P);
         vm.prank(agw);
         kernel.fund(jobId, BUDGET, abi.encode(P));
 
@@ -322,26 +324,32 @@ contract RulesBindingHookTest is KernelBase {
         assertEq(hook.KERNEL(), address(kernel));
         assertEq(hook.AGW_FACTORY(), address(factory));
         assertEq(hook.SESSION_ENGINE(), address(engine));
+        assertEq(hook.EVALUATOR(), universalEvaluator);
     }
 
     function test_initialize_zeroKernel_reverts() public {
         vm.expectRevert(ERC8183HookErrors.ZeroAddress.selector);
-        _deployHook(address(0), address(factory), address(engine));
+        _deployHook(address(0), address(factory), address(engine), universalEvaluator);
     }
 
     function test_initialize_zeroFactory_reverts() public {
         vm.expectRevert(ERC8183HookErrors.ZeroAddress.selector);
-        _deployHook(address(kernel), address(0), address(engine));
+        _deployHook(address(kernel), address(0), address(engine), universalEvaluator);
     }
 
     function test_initialize_zeroEngine_reverts() public {
         vm.expectRevert(ERC8183HookErrors.ZeroAddress.selector);
-        _deployHook(address(kernel), address(factory), address(0));
+        _deployHook(address(kernel), address(factory), address(0), universalEvaluator);
+    }
+
+    function test_initialize_zeroEvaluator_reverts() public {
+        vm.expectRevert(ERC8183HookErrors.ZeroAddress.selector);
+        _deployHook(address(kernel), address(factory), address(engine), address(0));
     }
 
     function test_initialize_twice_reverts() public {
         vm.expectRevert(Initializable.InvalidInitialization.selector);
-        hook.initialize(address(kernel), address(factory), address(engine));
+        hook.initialize(address(kernel), address(factory), address(engine), universalEvaluator);
     }
 
     // ═════════════════════════ views ═════════════════════════
@@ -379,7 +387,7 @@ contract RulesBindingHookTest is KernelBase {
         uint256 first = _bind(agw, P, BUDGET);
         ProxyAdmin pa = ProxyAdmin(_proxyAdmin(address(hook)));
         assertEq(pa.owner(), hookProxyAdminOwner);
-        address newImpl = address(new RulesBindingHook());
+        address newImpl = address(new UniversalHook());
         vm.prank(hookProxyAdminOwner);
         pa.upgradeAndCall(ITransparentUpgradeableProxy(address(hook)), newImpl, "");
 
@@ -396,7 +404,7 @@ contract RulesBindingHookTest is KernelBase {
 
     function test_upgrade_byNonOwner_reverts() public {
         ProxyAdmin pa = ProxyAdmin(_proxyAdmin(address(hook)));
-        address impl = address(new RulesBindingHook());
+        address impl = address(new UniversalHook());
         vm.prank(admin);
         vm.expectRevert(abi.encodeWithSelector(Ownable.OwnableUnauthorizedAccount.selector, admin));
         pa.upgradeAndCall(ITransparentUpgradeableProxy(address(hook)), impl, "");
@@ -419,7 +427,8 @@ contract RulesBindingHookTest is KernelBase {
         bytes32 l = keccak256(abi.encode(agw, uint256(53)));
         assertEq(uint256(vm.load(h, l)), jobId);
 
-        for (uint256 i = 54; i <= 103; i++) {
+        assertEq(address(uint160(uint256(vm.load(h, bytes32(uint256(54)))))), universalEvaluator);
+        for (uint256 i = 55; i <= 103; i++) {
             assertEq(vm.load(h, bytes32(i)), bytes32(0), "hook gap");
         }
     }

@@ -4,7 +4,7 @@ pragma solidity 0.8.26;
 import {Test} from "forge-std/Test.sol";
 import {TransparentUpgradeableProxy} from "@openzeppelin/contracts/proxy/transparent/TransparentUpgradeableProxy.sol";
 
-import {RulesBindingHook} from "../../src/agentic-commerce-8183/hooks/RulesBindingHook.sol";
+import {UniversalHook} from "../../src/agentic-commerce-8183/hooks/UniversalHook.sol";
 import {UniversalMarketplaceTerms} from "../../src/agentic-commerce-8183/UniversalMarketplaceTerms.sol";
 import {IUniversalMarketplace} from "../../src/agentic-commerce-8183/interfaces/IUniversalMarketplace.sol";
 import {
@@ -24,7 +24,7 @@ contract TermsSelectorsHarness is UniversalMarketplaceTerms {
 /// @notice A rename that drifts from the standard, or a move that changed a selector, fails here.
 contract NamingTest is Test {
     function test_naming_hookTopicsAndErrors() public pure {
-        assertEq(RulesBindingHook.RulesBound.selector, keccak256("RulesBound(uint256,address,bytes32)"));
+        assertEq(UniversalHook.RulesBound.selector, keccak256("RulesBound(uint256,address,bytes32)"));
         assertEq(RulesBindingHookErrors.RulesNotLive.selector, bytes4(keccak256("RulesNotLive(address,bytes32)")));
         assertEq(RulesBindingHookErrors.CallerIsNotAGW.selector, bytes4(keccak256("CallerIsNotAGW(address)")));
         assertEq(ERC8183HookErrors.CallerIsNotKernel.selector, bytes4(keccak256("CallerIsNotKernel(address)")));
@@ -54,12 +54,12 @@ contract NamingTest is Test {
         address kernel = makeAddr("kernel");
         address factory = makeAddr("factory");
         address engine = makeAddr("engine");
-        RulesBindingHook hook = RulesBindingHook(
+        UniversalHook hook = UniversalHook(
             address(
                 new TransparentUpgradeableProxy(
-                    address(new RulesBindingHook()),
+                    address(new UniversalHook()),
                     makeAddr("hookAdmin"),
-                    abi.encodeCall(RulesBindingHook.initialize, (kernel, factory, engine))
+                    abi.encodeCall(UniversalHook.initialize, (kernel, factory, engine, makeAddr("evaluator")))
                 )
             )
         );
@@ -88,7 +88,7 @@ contract NamingTest is Test {
         string[3] memory artifacts = [
             "out/UniversalMarketplace.sol/UniversalMarketplace.json",
             "out/UniversalMarketplaceTerms.sol/UniversalMarketplaceTerms.json",
-            "out/RulesBindingHook.sol/RulesBindingHook.json"
+            "out/UniversalHook.sol/UniversalHook.json"
         ];
         for (uint256 i; i < artifacts.length; ++i) {
             string memory abiSection = vm.split(vm.readFile(artifacts[i]), '"bytecode"')[0];

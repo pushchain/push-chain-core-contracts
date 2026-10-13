@@ -12,7 +12,7 @@ import {RulesBindingHookErrors, ERC8183HookErrors, UniversalHookErrors} from "..
 /// @title UniversalHook
 /// @notice The one hook for evaluated jobs: binds the job to the funding AGW's rules set, controls who may
 ///         replace the job's spec, and hands the spec to the UniversalEvaluator.
-/// @dev - Rules binding (as RulesBindingHook): `beforeAction(fund)`; any revert leaves the job Open, nothing escrowed.
+/// @dev - Rules binding: `beforeAction(fund)`, for every job; any revert leaves the job Open, nothing escrowed.
 ///      - Spec: the provider may replace it in `setBudget`, the client in `fund`, as the `mutability` flag in the
 ///        createJob description allows. Frozen in `afterAction(fund)`.
 ///      - Stateless for evaluation: the evaluator holds the spec, prepaid PC, snapshot answers and rounds.
@@ -153,7 +153,7 @@ contract UniversalHook is BaseERC8183Hook {
     // ───────── helpers ─────────
 
     /// @dev fund's optParams:
-    ///      - 32 bytes: just the rulesId (RulesBindingHook's format). Only for jobs not evaluated by us:
+    ///      - 32 bytes: just the rulesId, for binding only. Only for jobs not evaluated by us:
     ///        for ours, the zero expectedSpecHash can never match, so fund reverts.
     ///      - otherwise: abi.encode(bytes32 rulesId, bytes32 expectedSpecHash, bytes newSpec); empty newSpec = keep the spec.
     function _parseFundParams(bytes memory p)

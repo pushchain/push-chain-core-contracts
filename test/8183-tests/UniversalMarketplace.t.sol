@@ -19,7 +19,7 @@ import {MockAGW} from "./mocks/MockAGW.sol";
 import {MockSmartSession} from "./mocks/MockSmartSession.sol";
 import {MockPRC20Source} from "./mocks/MockPRC20Source.sol";
 import {IAgenticCommerce} from "../../src/agentic-commerce-8183/interfaces/IAgenticCommerce.sol";
-import {RulesBindingHook} from "../../src/agentic-commerce-8183/hooks/RulesBindingHook.sol";
+import {UniversalHook} from "../../src/agentic-commerce-8183/hooks/UniversalHook.sol";
 import {UniversalMarketplace} from "../../src/agentic-commerce-8183/UniversalMarketplace.sol";
 import {UniversalMarketplaceTerms} from "../../src/agentic-commerce-8183/UniversalMarketplaceTerms.sol";
 import {IUniversalMarketplace} from "../../src/agentic-commerce-8183/interfaces/IUniversalMarketplace.sol";
@@ -74,14 +74,14 @@ contract MarketJobSpecBuilder {
 }
 
 /// @title MarketplaceFixtures — shared setup and builders for the marketplace unit and invariant suites.
-/// @notice Real kernel, real RulesBindingHook (the interim hook, PRD 09 P8), real Terms helper and JobSpecBuilder
-///         library, real CEAFactory. The AGW factory and wallet are mocks that enforce the rules the marketplace relies
-///         on and verify no signature; the AGW repo's E2E suite runs the real wallet stack.
+/// @notice Real kernel, real UniversalHook (binding rules only: its evaluator isn't the jobs'), real Terms helper and
+///         JobSpecBuilder library, real CEAFactory. The AGW factory and wallet are mocks that enforce the rules the
+///         marketplace relies on and verify no signature; the AGW repo's E2E suite runs the real wallet stack.
 abstract contract MarketplaceFixtures is KernelBase, TemplateParts {
     UniversalMarketplace internal mkt;
     UniversalMarketplaceTerms internal terms;
     MarketJobSpecBuilder internal expectedBuilder;
-    RulesBindingHook internal hook;
+    UniversalHook internal hook;
     MockAGWFactory internal factory;
     MockSmartSession internal engine;
     CEAFactory internal ceaFactory;
@@ -117,13 +117,16 @@ abstract contract MarketplaceFixtures is KernelBase, TemplateParts {
         super.setUp();
         factory = new MockAGWFactory();
         engine = new MockSmartSession();
-        RulesBindingHook hookImpl = new RulesBindingHook();
-        hook = RulesBindingHook(
+        UniversalHook hookImpl = new UniversalHook();
+        hook = UniversalHook(
             address(
                 new TransparentUpgradeableProxy(
                     address(hookImpl),
                     makeAddr("hookAdmin"),
-                    abi.encodeCall(RulesBindingHook.initialize, (address(kernel), address(factory), address(engine)))
+                    abi.encodeCall(
+                        UniversalHook.initialize,
+                        (address(kernel), address(factory), address(engine), makeAddr("hookEvaluator"))
+                    )
                 )
             )
         );
