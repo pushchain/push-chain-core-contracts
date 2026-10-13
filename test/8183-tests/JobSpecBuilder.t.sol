@@ -9,8 +9,8 @@ import {JobSpecBuilder} from "../../src/agentic-commerce-8183/libraries/JobSpecB
 import {
     EvalType,
     Op,
-    NodeKind,
-    Node,
+    LogicKind,
+    Logic,
     JobSpec,
     T_TUPLE,
     T_ADDRESS
@@ -82,10 +82,10 @@ abstract contract BuilderFixtures is Test, TemplateParts {
         t.checks = new CheckTemplate[](2);
         t.checks[0] = _chk(0, EvalType.CMP, Op.GTE, TargetSource.PRINCIPAL_BPS, 9999);
         t.checks[1] = _chk(1, EvalType.CMP, Op.GTE, TargetSource.FIXED, 0.04e27);
-        t.nodes = new Node[](3);
-        t.nodes[0] = _parent(NodeKind.ALL, _kids(1, 2), 0);
-        t.nodes[1] = _checkNode(0);
-        t.nodes[2] = _checkNode(1);
+        t.logic = new Logic[](3);
+        t.logic[0] = _parent(LogicKind.ALL, _kids(1, 2), 0);
+        t.logic[1] = _checkNode(0);
+        t.logic[2] = _checkNode(1);
         t.params = new ParamBounds[](0);
     }
 
@@ -96,8 +96,8 @@ abstract contract BuilderFixtures is Test, TemplateParts {
         t.reads[0].minConfirmations = 3;
         t.checks = new CheckTemplate[](1);
         t.checks[0] = _chk(0, EvalType.NUM, Op.GTE, TargetSource.PARAM, 0);
-        t.nodes = new Node[](1);
-        t.nodes[0] = _checkNode(0);
+        t.logic = new Logic[](1);
+        t.logic[0] = _checkNode(0);
         t.params = new ParamBounds[](1);
         t.params[0] = ParamBounds({min: 1, max: 1e30});
     }
@@ -110,10 +110,10 @@ abstract contract BuilderFixtures is Test, TemplateParts {
         t.checks = new CheckTemplate[](2);
         t.checks[0] = _chk(0, EvalType.CMP, Op.GTE, TargetSource.PRINCIPAL_BPS, 9999);
         t.checks[1] = _chk(1, EvalType.CMP, Op.GTE, TargetSource.PRINCIPAL_BPS, 9999);
-        t.nodes = new Node[](3);
-        t.nodes[0] = _parent(NodeKind.ANY, _kids(1, 2), 0);
-        t.nodes[1] = _checkNode(0);
-        t.nodes[2] = _checkNode(1);
+        t.logic = new Logic[](3);
+        t.logic[0] = _parent(LogicKind.ANY, _kids(1, 2), 0);
+        t.logic[1] = _checkNode(0);
+        t.logic[2] = _checkNode(1);
         t.params = new ParamBounds[](0);
     }
 
@@ -127,11 +127,11 @@ abstract contract BuilderFixtures is Test, TemplateParts {
         for (uint8 i; i < 3; ++i) {
             t.checks[i] = _chk(i, EvalType.CMP, Op.GTE, TargetSource.FIXED, 99.99e6);
         }
-        t.nodes = new Node[](4);
-        t.nodes[0] = _parent(NodeKind.AT_LEAST, _kids3(1, 2, 3), 2);
-        t.nodes[1] = _checkNode(0);
-        t.nodes[2] = _checkNode(1);
-        t.nodes[3] = _checkNode(2);
+        t.logic = new Logic[](4);
+        t.logic[0] = _parent(LogicKind.AT_LEAST, _kids3(1, 2, 3), 2);
+        t.logic[1] = _checkNode(0);
+        t.logic[2] = _checkNode(1);
+        t.logic[3] = _checkNode(2);
         t.params = new ParamBounds[](0);
     }
 
@@ -148,14 +148,14 @@ abstract contract BuilderFixtures is Test, TemplateParts {
         t.checks[1] = _chk(1, EvalType.CMP, Op.GTE, TargetSource.FIXED, 0.04e27);
         t.checks[2] = _chk(2, EvalType.CMP, Op.GTE, TargetSource.FIXED, 99.99e6);
         t.checks[3] = _chk(3, EvalType.CMP, Op.GTE, TargetSource.FIXED, 0.04e18);
-        t.nodes = new Node[](7);
-        t.nodes[0] = _parent(NodeKind.ANY, _kids(1, 2), 0);
-        t.nodes[1] = _parent(NodeKind.ALL, _kids(3, 4), 0);
-        t.nodes[2] = _parent(NodeKind.ALL, _kids(5, 6), 0);
-        t.nodes[3] = _checkNode(0);
-        t.nodes[4] = _checkNode(1);
-        t.nodes[5] = _checkNode(2);
-        t.nodes[6] = _checkNode(3);
+        t.logic = new Logic[](7);
+        t.logic[0] = _parent(LogicKind.ANY, _kids(1, 2), 0);
+        t.logic[1] = _parent(LogicKind.ALL, _kids(3, 4), 0);
+        t.logic[2] = _parent(LogicKind.ALL, _kids(5, 6), 0);
+        t.logic[3] = _checkNode(0);
+        t.logic[4] = _checkNode(1);
+        t.logic[5] = _checkNode(2);
+        t.logic[6] = _checkNode(3);
         t.params = new ParamBounds[](0);
     }
 
@@ -202,8 +202,8 @@ contract JobSpecBuilderTest is BuilderFixtures {
         );
         t.checks = new CheckTemplate[](1);
         t.checks[0] = _chk(0, EvalType.CMP, Op.EQ, TargetSource.CEA, 0);
-        t.nodes = new Node[](1);
-        t.nodes[0] = _checkNode(0);
+        t.logic = new Logic[](1);
+        t.logic[0] = _checkNode(0);
         t.params = new ParamBounds[](0);
     }
 
@@ -250,7 +250,7 @@ contract JobSpecBuilderTest is BuilderFixtures {
         assertEq(s.executeBy, 1_800_000_000);
         assertEq(s.failFinalAt, 1_800_000_000 + 2 hours);
         assertEq(s.origin, keccak256("origin"));
-        assertEq(keccak256(abi.encode(s.nodes)), keccak256(abi.encode(t.nodes)), "nodes verbatim");
+        assertEq(keccak256(abi.encode(s.logic)), keccak256(abi.encode(t.logic)), "nodes verbatim");
         for (uint256 i; i < t.reads.length; ++i) {
             assertEq(s.reads[i].chainNamespace, t.reads[i].chainNamespace);
             assertEq(s.reads[i].chainId, t.reads[i].chainId);
@@ -346,14 +346,14 @@ contract JobSpecBuilderTest is BuilderFixtures {
         (reads[0], reads[1]) = (t.reads[0], t.reads[1]);
         reads[2] = _read("1", SPARK, BALANCE_OF, "", _noFills(), hex"ff00", new uint8[](0));
         t.reads = reads;
-        Node[] memory nodes = new Node[](4);
-        (nodes[0], nodes[1], nodes[2]) = (t.nodes[0], t.nodes[1], t.nodes[2]);
+        Logic[] memory nodes = new Logic[](4);
+        (nodes[0], nodes[1], nodes[2]) = (t.logic[0], t.logic[1], t.logic[2]);
         nodes[3] = _checkNode(1); // reached by nobody
-        t.nodes = nodes;
+        t.logic = nodes;
         JobSpec memory s = _build(t, _ctx(100e6, _noParams()));
         assertEq(s.reads.length, 3);
         assertEq(s.reads[2].outputs, hex"ff00");
-        assertEq(s.nodes.length, 4);
+        assertEq(s.logic.length, 4);
     }
 
     function test_JB09_malformedTemplate_reverts() public {
@@ -391,10 +391,10 @@ contract JobSpecBuilderTest is BuilderFixtures {
         for (uint256 i; i < s.checks.length; ++i) {
             assertLt(s.checks[i].read, s.reads.length);
         }
-        for (uint256 i; i < s.nodes.length; ++i) {
-            for (uint256 j; j < s.nodes[i].children.length; ++j) {
-                assertGt(s.nodes[i].children[j], i);
-                assertLt(s.nodes[i].children[j], s.nodes.length);
+        for (uint256 i; i < s.logic.length; ++i) {
+            for (uint256 j; j < s.logic[i].children.length; ++j) {
+                assertGt(s.logic[i].children[j], i);
+                assertLt(s.logic[i].children[j], s.logic.length);
             }
         }
     }

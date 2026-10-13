@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 pragma solidity 0.8.26;
 
-import {Mutability} from "./JobSpecTypes.sol";
+import {CriteriaMutability} from "./JobSpecTypes.sol";
 
 /// @title UniversalMarketplaceErrors
 /// @notice Every error the marketplace, its Terms helper and JobSpecBuilder raise.
@@ -141,9 +141,9 @@ library EvmReadErrors {
 /// @notice The UniversalHook's spec errors. Its binding errors are `RulesBindingHookErrors`.
 library UniversalHookErrors {
     /// @notice The job's mutability flag does not let this party replace the spec.
-    error SpecChangeNotAllowed(Mutability flag);
+    error SpecChangeNotAllowed(CriteriaMutability flag);
     /// @notice A replacement spec tried to change the mutability flag.
-    error FlagChanged(Mutability expected, Mutability got);
+    error FlagChanged(CriteriaMutability expected, CriteriaMutability got);
     /// @notice The spec being frozen is not the one the client agreed to.
     error SpecHashMismatch(bytes32 expected, bytes32 actual);
     /// @notice Only the proxy's admin (through `ProxyAdmin.upgradeAndCall`) may run this upgrade step.

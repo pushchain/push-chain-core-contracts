@@ -9,7 +9,7 @@ import {ERC1967Utils} from "@openzeppelin/contracts/proxy/ERC1967/ERC1967Utils.s
 import {UniversalEvalBase} from "./UniversalEvalBase.t.sol";
 import {UniversalEvaluator} from "../../src/agentic-commerce-8183/evaluator/UniversalEvaluator.sol";
 import {UniversalHook} from "../../src/agentic-commerce-8183/hooks/UniversalHook.sol";
-import {JobSpec, Mutability} from "../../src/agentic-commerce-8183/libraries/JobSpecTypes.sol";
+import {JobSpec, CriteriaMutability} from "../../src/agentic-commerce-8183/libraries/JobSpecTypes.sol";
 import {EvmQueryEnvelope} from "../../src/agentic-commerce-8183/evaluator/EvmReadLib.sol";
 import {OwnerCheck} from "../../src/agentic-commerce-8183/evaluator/EvaluationTypes.sol";
 import {
@@ -118,11 +118,11 @@ contract UniversalHookTest is UniversalEvalBase {
     ///      hash, and that is what gets frozen and judged.
     function test_UH05_providerReplacesSpec_inSetBudget() public {
         JobSpec memory s = _swapSpec();
-        s.mutability = Mutability.PROVIDER_ONLY;
+        s.mutability = CriteriaMutability.PROVIDER_ONLY;
         uint256 jobId = _createSpec(s);
 
         JobSpec memory counter = _swapSpec();
-        counter.mutability = Mutability.PROVIDER_ONLY;
+        counter.mutability = CriteriaMutability.PROVIDER_ONLY;
         counter.checks[0].target = 0.37e18; // "I can do 0.37, not 0.38"
         bytes memory replacement = abi.encode(counter);
         vm.prank(provider);
@@ -149,19 +149,19 @@ contract UniversalHookTest is UniversalEvalBase {
         uint256 jobId = _createSpec(_swapSpec()); // NONE
         JobSpec memory counter = _swapSpec();
         vm.prank(provider);
-        vm.expectRevert(abi.encodeWithSelector(UniversalHookErrors.SpecChangeNotAllowed.selector, Mutability.NONE));
+        vm.expectRevert(abi.encodeWithSelector(UniversalHookErrors.SpecChangeNotAllowed.selector, CriteriaMutability.NONE));
         kernel.setBudget(jobId, BUDGET, abi.encode(counter));
     }
 
     function test_UH07_replacementMayNotChangeFlag() public {
         JobSpec memory s = _swapSpec();
-        s.mutability = Mutability.BOTH;
+        s.mutability = CriteriaMutability.BOTH;
         uint256 jobId = _createSpec(s);
         JobSpec memory counter = _swapSpec();
-        counter.mutability = Mutability.CLIENT_ONLY;
+        counter.mutability = CriteriaMutability.CLIENT_ONLY;
         vm.prank(provider);
         vm.expectRevert(
-            abi.encodeWithSelector(UniversalHookErrors.FlagChanged.selector, Mutability.BOTH, Mutability.CLIENT_ONLY)
+            abi.encodeWithSelector(UniversalHookErrors.FlagChanged.selector, CriteriaMutability.BOTH, CriteriaMutability.CLIENT_ONLY)
         );
         kernel.setBudget(jobId, BUDGET, abi.encode(counter));
     }
@@ -169,10 +169,10 @@ contract UniversalHookTest is UniversalEvalBase {
     /// @dev CLIENT_ONLY: the client sends its replacement with `fund`; the hash must be the replacement's.
     function test_UH08_clientReplacesSpec_inFund() public {
         JobSpec memory s = _anySpec();
-        s.mutability = Mutability.CLIENT_ONLY;
+        s.mutability = CriteriaMutability.CLIENT_ONLY;
         uint256 jobId = _createSpec(s);
         JobSpec memory mine = _anySpec();
-        mine.mutability = Mutability.CLIENT_ONLY;
+        mine.mutability = CriteriaMutability.CLIENT_ONLY;
         mine.checks[0].target = 150e6;
         bytes memory replacement = abi.encode(mine);
         _prefund(jobId, 1 ether);
@@ -195,7 +195,7 @@ contract UniversalHookTest is UniversalEvalBase {
 
     function test_UH09_specFrozenAtFund() public {
         JobSpec memory s = _swapSpec();
-        s.mutability = Mutability.PROVIDER_ONLY;
+        s.mutability = CriteriaMutability.PROVIDER_ONLY;
         uint256 jobId = _createSpec(s);
         _fund(jobId);
         vm.prank(address(hook));
@@ -349,27 +349,27 @@ contract UniversalHookTest is UniversalEvalBase {
         assertEq(hook.EVALUATOR(), address(ue));
     }
 
-    /// @dev `NONE` is the zero value, so a spec whose encoder never sets `mutability` can't be replaced: not by the
-    ///      provider in `setBudget`, not by the client in `fund`. In the hook design's order the zero value was
-    ///      `BOTH`, which let both sides replace such a spec.
-    function test_UH20_unsetMutability_isNone_refusesReplacement() public {
-        assertEq(uint8(Mutability.NONE), 0, "NONE is the zero value");
+    /// @dev `BOTH` is the zero value, so a spec whose encoder never sets `mutability` can be replaced by the
+    ///      provider in `setBudget` and then by the client in `fund`.
+    function test_UH20_unsetMutability_isBoth_allowsReplacement() public {
+        assertEq(uint8(CriteriaMutability.BOTH), 0, "BOTH is the zero value");
         JobSpec memory s = _swapSpec();
         delete s.mutability; // as an encoder that never sets the field would leave it
-        assertEq(uint8(s.mutability), uint8(Mutability.NONE));
+        assertEq(uint8(s.mutability), uint8(CriteriaMutability.BOTH));
         uint256 jobId = _createSpec(s);
 
         JobSpec memory r = _swapSpec();
         delete r.mutability;
         r.checks[0].target = 0.37e18;
-        bytes memory replacement = abi.encode(r);
-
+        bytes memory byProvider = abi.encode(r);
         vm.prank(provider);
-        vm.expectRevert(abi.encodeWithSelector(UniversalHookErrors.SpecChangeNotAllowed.selector, Mutability.NONE));
-        kernel.setBudget(jobId, BUDGET, replacement);
+        kernel.setBudget(jobId, BUDGET, byProvider);
+        assertEq(ue.currentSpec(jobId), byProvider);
 
-        bytes memory fp = abi.encode(RULES, keccak256(replacement), replacement);
-        vm.expectRevert(abi.encodeWithSelector(UniversalHookErrors.SpecChangeNotAllowed.selector, Mutability.NONE));
-        _fundWith(jobId, fp);
+        r.checks[0].target = 0.36e18;
+        bytes memory byClient = abi.encode(r);
+        _prefund(jobId, 1 ether);
+        _fundWith(jobId, abi.encode(RULES, keccak256(byClient), byClient));
+        assertEq(ue.specHashOf(jobId), keccak256(byClient), "the client's replacement is frozen");
     }
 }

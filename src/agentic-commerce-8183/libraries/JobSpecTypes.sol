@@ -28,7 +28,7 @@ enum Op {
 }
 
 /// @notice One step of the pass logic. CHECK: one check · ALL / ANY / AT_LEAST: combine children.
-enum NodeKind {
+enum LogicKind {
     CHECK,
     ALL,
     ANY,
@@ -37,10 +37,10 @@ enum NodeKind {
 
 /// @notice Who may replace a job's criteria before it is funded: the provider in `setBudget`, the client in `fund`.
 /// @dev - The flag is always the one in the `createJob` description; a replacement must carry the same flag.
-///      - `NONE` is the zero value, so a spec that never sets the flag can't be replaced by anyone.
-enum Mutability {
-    NONE,
+///      - `BOTH` is the zero value, so a spec that never sets the flag can be replaced by either side.
+enum CriteriaMutability {
     BOTH,
+    NONE,
     CLIENT_ONLY,
     PROVIDER_ONLY
 }
@@ -68,22 +68,22 @@ struct Check {
 }
 
 /// @notice One step of the pass logic. Children always have a higher index than their parent.
-struct Node {
-    NodeKind kind;
+struct Logic {
+    LogicKind kind;
     uint8 check; // CHECK only: index into checks
-    uint8[] children; // ALL / ANY / AT_LEAST: indexes into nodes, each greater than this node's own
+    uint8[] children; // ALL / ANY / AT_LEAST: indexes into logic, each greater than this entry's own
     uint8 k; // AT_LEAST only: how many children must pass
 }
 
-/// @notice A job's criteria. `nodes[0]` is the root: the job passes if it passes.
+/// @notice A job's criteria. `logic[0]` is the root: the job passes if it passes.
 struct JobSpec {
     uint64 executeBy; // the provider must execute before this
     uint64 failFinalAt; // a FAIL only counts from a verify started after this
     Read[] reads;
     Check[] checks;
-    Node[] nodes;
+    Logic[] logic;
+    CriteriaMutability mutability; // who may replace these criteria before `fund`; marketplace jobs are NONE
     bytes32 origin; // keccak256(abi.encode(marketplace, cardId, cardVersion, principal)); opaque to hook and evaluator
-    Mutability mutability; // who may replace these criteria before `fund`; marketplace jobs are NONE
 }
 
 // ─────────────────────────────── return-type codes (`Read.outputs`) ───────────────────────────────

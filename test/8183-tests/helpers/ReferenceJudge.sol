@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 pragma solidity 0.8.26;
 
-import {Check, Node, NodeKind} from "../../../src/agentic-commerce-8183/libraries/JobSpecTypes.sol";
+import {Check, Logic, LogicKind} from "../../../src/agentic-commerce-8183/libraries/JobSpecTypes.sol";
 import {Answer, Verdict} from "../../../src/agentic-commerce-8183/evaluator/EvaluationTypes.sol";
 import {JobSpecLib} from "../../../src/agentic-commerce-8183/evaluator/JobSpecLib.sol";
 
@@ -13,7 +13,7 @@ library ReferenceJudge {
     /// @param nodes   The job's pass logic; `nodes[0]` is the root.
     /// @param afters  The round's answer for each read.
     /// @param befores The snapshot answer for each read (only read for NUM / PCT checks).
-    function verdict(Check[] memory checks, Node[] memory nodes, Answer[] memory afters, Answer[] memory befores)
+    function verdict(Check[] memory checks, Logic[] memory nodes, Answer[] memory afters, Answer[] memory befores)
         internal
         pure
         returns (Verdict)
@@ -36,8 +36,8 @@ library ReferenceJudge {
     }
 
     /// @dev One node from its already-decided children.
-    function _node(Node memory n, uint8[] memory nodeRes, uint8[] memory checkRes) private pure returns (uint8) {
-        if (n.kind == NodeKind.CHECK) return checkRes[n.check];
+    function _node(Logic memory n, uint8[] memory nodeRes, uint8[] memory checkRes) private pure returns (uint8) {
+        if (n.kind == LogicKind.CHECK) return checkRes[n.check];
 
         uint256 total = n.children.length;
         uint256 pass;
@@ -47,7 +47,7 @@ library ReferenceJudge {
             if (r == JobSpecLib.PASS) ++pass;
             else if (r == JobSpecLib.FAIL) ++fail;
         }
-        uint256 need = n.kind == NodeKind.ALL ? total : n.kind == NodeKind.ANY ? 1 : n.k;
+        uint256 need = n.kind == LogicKind.ALL ? total : n.kind == LogicKind.ANY ? 1 : n.k;
         if (pass >= need) return JobSpecLib.PASS; // enough passed
         if (total - fail < need) return JobSpecLib.FAIL; // not enough left that could pass
         return JobSpecLib.UNKNOWN;

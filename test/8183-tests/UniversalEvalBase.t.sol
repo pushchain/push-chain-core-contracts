@@ -16,11 +16,11 @@ import {
     JobSpec,
     Read,
     Check,
-    Node,
+    Logic,
     EvalType,
     Op,
-    NodeKind,
-    Mutability,
+    LogicKind,
+    CriteriaMutability,
     T_TUPLE,
     T_UINT
 } from "../../src/agentic-commerce-8183/libraries/JobSpecTypes.sol";
@@ -168,8 +168,8 @@ abstract contract UniversalEvalBase is KernelBase {
         });
     }
 
-    function _checkNode(uint8 check) internal pure returns (Node memory) {
-        return Node({kind: NodeKind.CHECK, check: check, children: new uint8[](0), k: 0});
+    function _checkNode(uint8 check) internal pure returns (Logic memory) {
+        return Logic({kind: LogicKind.CHECK, check: check, children: new uint8[](0), k: 0});
     }
 
     /// @notice "The CEA receives at least 0.38 WETH": one read, one NUM check. Not replaceable.
@@ -180,9 +180,9 @@ abstract contract UniversalEvalBase is KernelBase {
         s.reads[0] = _balanceRead(weth, cea);
         s.checks = new Check[](1);
         s.checks[0] = Check({read: 0, evalType: EvalType.NUM, op: Op.GTE, target: 0.38e18});
-        s.nodes = new Node[](1);
-        s.nodes[0] = _checkNode(0);
-        s.mutability = Mutability.NONE;
+        s.logic = new Logic[](1);
+        s.logic[0] = _checkNode(0);
+        s.mutability = CriteriaMutability.NONE;
     }
 
     /// @notice "Deposited into Aave OR Morpho": two CMP reads under ANY. No snapshot.
@@ -195,11 +195,11 @@ abstract contract UniversalEvalBase is KernelBase {
         s.checks = new Check[](2);
         s.checks[0] = Check({read: 0, evalType: EvalType.CMP, op: Op.GTE, target: 99.99e6});
         s.checks[1] = Check({read: 1, evalType: EvalType.CMP, op: Op.GTE, target: 99.99e6});
-        s.nodes = new Node[](3);
-        s.nodes[0] = Node({kind: NodeKind.ANY, check: 0, children: _u8(1, 2), k: 0});
-        s.nodes[1] = _checkNode(0);
-        s.nodes[2] = _checkNode(1);
-        s.mutability = Mutability.NONE;
+        s.logic = new Logic[](3);
+        s.logic[0] = Logic({kind: LogicKind.ANY, check: 0, children: _u8(1, 2), k: 0});
+        s.logic[1] = _checkNode(0);
+        s.logic[2] = _checkNode(1);
+        s.mutability = CriteriaMutability.NONE;
     }
 
     // ───────────── lifecycle helpers ─────────────

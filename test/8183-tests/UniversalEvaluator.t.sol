@@ -21,7 +21,7 @@ import {
     Check,
     EvalType,
     Op,
-    NodeKind,
+    LogicKind,
     T_TUPLE,
     T_BYTES,
     T_ARRAY,
@@ -631,7 +631,7 @@ contract UniversalEvaluatorTest is UniversalEvalBase {
     /// @dev "All of these": the first FAIL decides, and the job is rejected at once.
     function test_UE30_allFailsOnFirstFail() public {
         JobSpec memory s = _anySpec();
-        s.nodes[0].kind = NodeKind.ALL;
+        s.logic[0].kind = LogicKind.ALL;
         uint256 jobId = _createSpec(s);
         _fund(jobId);
         _advance();
@@ -657,7 +657,7 @@ contract UniversalEvaluatorTest is UniversalEvalBase {
     ///      kernel can apply it.
     function test_UE33_decidedVerdict_noResend_settlePassesKernelRevert() public {
         JobSpec memory s = _anySpec();
-        s.nodes[0].kind = NodeKind.ALL;
+        s.logic[0].kind = LogicKind.ALL;
         uint256 jobId = _createSpec(s);
         _fund(jobId);
         _advance();

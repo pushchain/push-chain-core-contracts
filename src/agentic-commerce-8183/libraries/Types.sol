@@ -2,7 +2,7 @@
 pragma solidity 0.8.26;
 
 import {AllowedCall, OwnerIntent, Session} from "../interfaces/external/IAGW.sol";
-import {EvalType, Op, Node} from "./JobSpecTypes.sol";
+import {EvalType, Op, Logic} from "./JobSpecTypes.sol";
 
 /// @title Types — the UniversalMarketplace package's structs and enums, file-level.
 /// @dev - Cards, jobs and init: the marketplace (UniversalMarketplace, IUniversalMarketplace).
@@ -171,11 +171,11 @@ struct ParamBounds {
     int256 max;
 }
 
-/// @notice The whole template, stored on the card as `abi.encode(EvaluationTemplate)`. `nodes` is copied verbatim.
+/// @notice The whole template, stored on the card as `abi.encode(EvaluationTemplate)`. `logic` is copied verbatim.
 struct EvaluationTemplate {
     ReadTemplate[] reads;
     CheckTemplate[] checks;
-    Node[] nodes;
+    Logic[] logic;
     ParamBounds[] params;
 }
 

@@ -12,11 +12,11 @@ import {
     JobSpec,
     Read,
     Check,
-    Node,
+    Logic,
     EvalType,
     Op,
-    NodeKind,
-    Mutability,
+    LogicKind,
+    CriteriaMutability,
     T_TUPLE,
     T_UINT,
     T_ADDRESS,
@@ -68,7 +68,7 @@ contract UniversalEvaluatorGasTest is UniversalEvalBase {
         s.failFinalAt = uint64(block.timestamp + 2 hours);
         s.reads = new Read[](MAX_READS);
         s.checks = new Check[](MAX_CHECKS);
-        s.nodes = new Node[](MAX_NODES);
+        s.logic = new Logic[](MAX_NODES);
         for (uint256 i; i < MAX_READS; ++i) {
             s.reads[i] = Read({
                 chainNamespace: NS,
@@ -89,12 +89,12 @@ contract UniversalEvaluatorGasTest is UniversalEvalBase {
             // forge-lint: disable-next-line(unsafe-typecast)
             children[i] = uint8(i + 1);
         }
-        s.nodes[0] = Node({kind: NodeKind.ALL, check: 0, children: children, k: 0});
+        s.logic[0] = Logic({kind: LogicKind.ALL, check: 0, children: children, k: 0});
         for (uint256 i = 1; i < MAX_NODES; ++i) {
             // forge-lint: disable-next-line(unsafe-typecast)
-            s.nodes[i] = _checkNode(uint8((i - 1) % MAX_CHECKS));
+            s.logic[i] = _checkNode(uint8((i - 1) % MAX_CHECKS));
         }
-        s.mutability = Mutability.NONE;
+        s.mutability = CriteriaMutability.NONE;
     }
 
     function test_GAS01_maxSpec_callbacksFit() public {

@@ -536,10 +536,10 @@ contract UniversalEvaluator is IUniversalEvaluator, ReentrancyGuard {
             checks.push(chk);
             readChecks |= uint256(1) << (16 * uint256(chk.read) + i);
         }
-        _packedNodes[jobId] = JobSpecLib.packNodes(s.nodes);
+        _packedNodes[jobId] = JobSpecLib.packNodes(s.logic);
         JobCache storage c = _cache[jobId];
         // forge-lint: disable-next-line(unsafe-typecast)
-        c.nodes = uint8(s.nodes.length); // safe: JobSpecLib caps nodes at MAX_NODES (32)
+        c.nodes = uint8(s.logic.length); // safe: JobSpecLib caps nodes at MAX_NODES (32)
         c.readChecks = readChecks;
     }
 

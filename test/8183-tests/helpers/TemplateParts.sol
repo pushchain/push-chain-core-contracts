@@ -4,8 +4,8 @@ pragma solidity 0.8.26;
 import {
     EvalType,
     Op,
-    NodeKind,
-    Node,
+    LogicKind,
+    Logic,
     T_UINT,
     T_ADDRESS,
     T_TUPLE
@@ -97,12 +97,12 @@ abstract contract TemplateParts {
         return CheckTemplate({read: read, evalType: e, op: op, source: src, value: value});
     }
 
-    function _checkNode(uint8 check) internal pure returns (Node memory) {
-        return Node({kind: NodeKind.CHECK, check: check, children: new uint8[](0), k: 0});
+    function _checkNode(uint8 check) internal pure returns (Logic memory) {
+        return Logic({kind: LogicKind.CHECK, check: check, children: new uint8[](0), k: 0});
     }
 
-    function _parent(NodeKind kind, uint8[] memory children, uint8 k) internal pure returns (Node memory) {
-        return Node({kind: kind, check: 0, children: children, k: k});
+    function _parent(LogicKind kind, uint8[] memory children, uint8 k) internal pure returns (Logic memory) {
+        return Logic({kind: kind, check: 0, children: children, k: k});
     }
 
     function _kids(uint8 a, uint8 b) internal pure returns (uint8[] memory c) {

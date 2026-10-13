@@ -7,7 +7,7 @@ import {IAgenticCommerce} from "../interfaces/IAgenticCommerce.sol";
 import {IAGWFactory} from "../interfaces/external/IAGWFactory.sol";
 import {ISmartSession} from "../interfaces/external/ISmartSession.sol";
 import {IUniversalEvaluator} from "../interfaces/IUniversalEvaluator.sol";
-import {JobSpec, Mutability} from "../libraries/JobSpecTypes.sol";   // enum Mutability { NONE, BOTH, CLIENT_ONLY, PROVIDER_ONLY }
+import {JobSpec, CriteriaMutability} from "../libraries/JobSpecTypes.sol";   // enum CriteriaMutability { BOTH, NONE, CLIENT_ONLY, PROVIDER_ONLY }
 import {RulesBindingHookErrors, ERC8183HookErrors, UniversalHookErrors} from "../libraries/Errors.sol";
 
 /// @title UniversalHook
@@ -96,8 +96,8 @@ contract UniversalHook is BaseERC8183Hook {
         IAgenticCommerce.Job memory job = IAgenticCommerce(KERNEL).getJob(jobId);
         if (job.evaluator != EVALUATOR) return;                                   // not evaluated by us
 
-        Mutability flag = _flag(bytes(job.description));
-        if (flag != Mutability.BOTH && flag != Mutability.PROVIDER_ONLY) revert UniversalHookErrors.SpecChangeNotAllowed(flag);
+        CriteriaMutability flag = _flag(bytes(job.description));
+        if (flag != CriteriaMutability.BOTH && flag != CriteriaMutability.PROVIDER_ONLY) revert UniversalHookErrors.SpecChangeNotAllowed(flag);
         _requireSameFlag(newSpec, flag);
 
         IUniversalEvaluator(EVALUATOR).setSpec(jobId, newSpec);
@@ -132,11 +132,11 @@ contract UniversalHook is BaseERC8183Hook {
         if (job.evaluator != EVALUATOR) return;                                   // not evaluated by us: rules binding only
 
         (, bytes32 expectedSpecHash, bytes memory newSpec) = _parseFundParams(optParams);
-        Mutability flag = _flag(bytes(job.description));
+        CriteriaMutability flag = _flag(bytes(job.description));
 
         bytes memory spec;
         if (newSpec.length > 0) {                                                 // the client replaces it
-            if (flag != Mutability.BOTH && flag != Mutability.CLIENT_ONLY) revert UniversalHookErrors.SpecChangeNotAllowed(flag);
+            if (flag != CriteriaMutability.BOTH && flag != CriteriaMutability.CLIENT_ONLY) revert UniversalHookErrors.SpecChangeNotAllowed(flag);
             _requireSameFlag(newSpec, flag);
             spec = newSpec;
             emit SpecReplaced(jobId, false, keccak256(newSpec));
@@ -181,13 +181,13 @@ contract UniversalHook is BaseERC8183Hook {
     }
 
     /// @dev The governing flag: always the one in the createJob description.
-    function _flag(bytes memory description) internal pure returns (Mutability) {
+    function _flag(bytes memory description) internal pure returns (CriteriaMutability) {
         return abi.decode(description, (JobSpec)).mutability;
     }
 
     /// @dev A replacement must keep the same flag, so neither side can lock the other out by switching it.
-    function _requireSameFlag(bytes memory newSpec, Mutability flag) internal pure {
-        Mutability got = abi.decode(newSpec, (JobSpec)).mutability;              // not a JobSpec → reverts
+    function _requireSameFlag(bytes memory newSpec, CriteriaMutability flag) internal pure {
+        CriteriaMutability got = abi.decode(newSpec, (JobSpec)).mutability;              // not a JobSpec → reverts
         if (got != flag) revert UniversalHookErrors.FlagChanged(flag, got);
     }
 }

@@ -12,10 +12,10 @@ import {
     JobSpec,
     Read,
     Check,
-    Node,
+    Logic,
     EvalType,
     Op,
-    NodeKind,
+    LogicKind,
     T_UINT,
     T_INT,
     T_BOOL,
@@ -54,7 +54,7 @@ contract LibHarness {
         return JobSpecLib.snapshotReads(s);
     }
 
-    function verdict(Check[] memory checks, Node[] memory nodes, Answer[] memory afters, Answer[] memory befores)
+    function verdict(Check[] memory checks, Logic[] memory nodes, Answer[] memory afters, Answer[] memory befores)
         external
         pure
         returns (Verdict)
@@ -63,7 +63,7 @@ contract LibHarness {
     }
 
     /// @notice The evaluator's path: each check judged alone, then the packed tree.
-    function verdictPacked(Check[] memory checks, Node[] memory nodes, Answer[] memory afters, Answer[] memory befores)
+    function verdictPacked(Check[] memory checks, Logic[] memory nodes, Answer[] memory afters, Answer[] memory befores)
         external
         pure
         returns (Verdict)
@@ -287,8 +287,8 @@ contract JobSpecLibrariesTest is Test {
         s.reads[0] = _read();
         s.checks = new Check[](1);
         s.checks[0] = Check({read: 0, evalType: EvalType.NUM, op: Op.GTE, target: 1});
-        s.nodes = new Node[](1);
-        s.nodes[0] = Node({kind: NodeKind.CHECK, check: 0, children: new uint8[](0), k: 0});
+        s.logic = new Logic[](1);
+        s.logic[0] = Logic({kind: LogicKind.CHECK, check: 0, children: new uint8[](0), k: 0});
     }
 
     /// @dev A valid spec passes, and the snapshot covers exactly the reads a NUM or PCT check compares against.
@@ -365,23 +365,23 @@ contract JobSpecLibrariesTest is Test {
 
     function test_RUL03_nodeRefusals() public {
         JobSpec memory s = _twoVenue();
-        s.nodes[0].children = _f(2, 1); // out of order
+        s.logic[0].children = _f(2, 1); // out of order
         vm.expectRevert(abi.encodeWithSelector(JobSpecErrors.NodeShape.selector, 0));
         lib.validate(s);
 
         s = _twoVenue();
-        s.nodes[0].children = _f(1, 1); // duplicate child: would count one venue twice
+        s.logic[0].children = _f(1, 1); // duplicate child: would count one venue twice
         vm.expectRevert(abi.encodeWithSelector(JobSpecErrors.NodeShape.selector, 0));
         lib.validate(s);
 
         s = _twoVenue();
-        s.nodes[0].kind = NodeKind.AT_LEAST;
-        s.nodes[0].k = 3;
+        s.logic[0].kind = LogicKind.AT_LEAST;
+        s.logic[0].k = 3;
         vm.expectRevert(abi.encodeWithSelector(JobSpecErrors.NodeShape.selector, 0));
         lib.validate(s);
 
         s = _twoVenue();
-        s.nodes[1].check = 9;
+        s.logic[1].check = 9;
         vm.expectRevert(abi.encodeWithSelector(JobSpecErrors.NodeShape.selector, 1));
         lib.validate(s);
     }
@@ -406,12 +406,12 @@ contract JobSpecLibrariesTest is Test {
         lib.validate(s);
 
         s = _twoVenue();
-        s.nodes[0] = Node({kind: NodeKind.CHECK, check: 0, children: new uint8[](0), k: 0}); // 1 and 2 cut off
+        s.logic[0] = Logic({kind: LogicKind.CHECK, check: 0, children: new uint8[](0), k: 0}); // 1 and 2 cut off
         vm.expectRevert(abi.encodeWithSelector(JobSpecErrors.NodeUnreachable.selector, 1));
         lib.validate(s);
 
         s = _twoVenue();
-        s.nodes[2].check = 0; // check 1 no longer used
+        s.logic[2].check = 0; // check 1 no longer used
         vm.expectRevert(abi.encodeWithSelector(JobSpecErrors.CheckUnused.selector, 1));
         lib.validate(s);
 
@@ -421,12 +421,12 @@ contract JobSpecLibrariesTest is Test {
         lib.validate(s);
 
         s = _twoVenue();
-        s.nodes = new Node[](5); // a shared child is fine: 0 → {1, 2}, 1 → {3}, 2 → {3, 4}
-        s.nodes[0] = Node({kind: NodeKind.ALL, check: 0, children: _f(1, 2), k: 0});
-        s.nodes[1] = Node({kind: NodeKind.ANY, check: 0, children: _f(3), k: 0});
-        s.nodes[2] = Node({kind: NodeKind.ANY, check: 0, children: _f(3, 4), k: 0});
-        s.nodes[3] = Node({kind: NodeKind.CHECK, check: 0, children: new uint8[](0), k: 0});
-        s.nodes[4] = Node({kind: NodeKind.CHECK, check: 1, children: new uint8[](0), k: 0});
+        s.logic = new Logic[](5); // a shared child is fine: 0 → {1, 2}, 1 → {3}, 2 → {3, 4}
+        s.logic[0] = Logic({kind: LogicKind.ALL, check: 0, children: _f(1, 2), k: 0});
+        s.logic[1] = Logic({kind: LogicKind.ANY, check: 0, children: _f(3), k: 0});
+        s.logic[2] = Logic({kind: LogicKind.ANY, check: 0, children: _f(3, 4), k: 0});
+        s.logic[3] = Logic({kind: LogicKind.CHECK, check: 0, children: new uint8[](0), k: 0});
+        s.logic[4] = Logic({kind: LogicKind.CHECK, check: 1, children: new uint8[](0), k: 0});
         lib.validate(s);
     }
 
@@ -439,18 +439,18 @@ contract JobSpecLibrariesTest is Test {
         s.checks = new Check[](2);
         s.checks[0] = Check({read: 0, evalType: EvalType.CMP, op: Op.GTE, target: 1});
         s.checks[1] = Check({read: 1, evalType: EvalType.CMP, op: Op.GTE, target: 1});
-        s.nodes = new Node[](3);
-        s.nodes[0] = Node({kind: NodeKind.ANY, check: 0, children: _f(1, 2), k: 0});
-        s.nodes[1] = Node({kind: NodeKind.CHECK, check: 0, children: new uint8[](0), k: 0});
-        s.nodes[2] = Node({kind: NodeKind.CHECK, check: 1, children: new uint8[](0), k: 0});
+        s.logic = new Logic[](3);
+        s.logic[0] = Logic({kind: LogicKind.ANY, check: 0, children: _f(1, 2), k: 0});
+        s.logic[1] = Logic({kind: LogicKind.CHECK, check: 0, children: new uint8[](0), k: 0});
+        s.logic[2] = Logic({kind: LogicKind.CHECK, check: 1, children: new uint8[](0), k: 0});
     }
 
     // ───────────── judge ─────────────
 
     function test_JDG01_numPctAndOverflow() public view {
         Check[] memory c = new Check[](1);
-        Node[] memory n = new Node[](1);
-        n[0] = Node({kind: NodeKind.CHECK, check: 0, children: new uint8[](0), k: 0});
+        Logic[] memory n = new Logic[](1);
+        n[0] = Logic({kind: LogicKind.CHECK, check: 0, children: new uint8[](0), k: 0});
         Answer[] memory a = new Answer[](1);
         Answer[] memory b = new Answer[](1);
 
@@ -474,8 +474,8 @@ contract JobSpecLibrariesTest is Test {
     /// @dev PCT is compared exactly (no rounding toward zero), and an overflow on either side is UNKNOWN.
     function test_JDG03_pctExact() public view {
         Check[] memory c = new Check[](1);
-        Node[] memory n = new Node[](1);
-        n[0] = Node({kind: NodeKind.CHECK, check: 0, children: new uint8[](0), k: 0});
+        Logic[] memory n = new Logic[](1);
+        n[0] = Logic({kind: LogicKind.CHECK, check: 0, children: new uint8[](0), k: 0});
         Answer[] memory a = new Answer[](1);
         Answer[] memory b = new Answer[](1);
 
@@ -522,8 +522,8 @@ contract JobSpecLibrariesTest is Test {
         Op op = Op(opSeed % 6);
         Check[] memory c = new Check[](1);
         c[0] = Check({read: 0, evalType: EvalType.PCT, op: op, target: target});
-        Node[] memory n = new Node[](1);
-        n[0] = Node({kind: NodeKind.CHECK, check: 0, children: new uint8[](0), k: 0});
+        Logic[] memory n = new Logic[](1);
+        n[0] = Logic({kind: LogicKind.CHECK, check: 0, children: new uint8[](0), k: 0});
         Answer[] memory a = new Answer[](1);
         a[0] = Answer(true, afterV);
         Answer[] memory b = new Answer[](1);
@@ -554,7 +554,7 @@ contract JobSpecLibrariesTest is Test {
             afters[i] = Answer((r >> 32) % 5 != 0, int256((r >> 40) % 5));
             befores[i] = Answer((r >> 48) % 7 != 0, int256((r >> 56) % 5));
         }
-        Node[] memory nodes = new Node[](nNodes);
+        Logic[] memory nodes = new Logic[](nNodes);
         for (uint256 i; i < nNodes; ++i) {
             uint256 r = uint256(keccak256(abi.encode(seed, "n", i)));
             uint256 kids;
@@ -565,16 +565,16 @@ contract JobSpecLibrariesTest is Test {
             }
             if (kids == 0) {
                 // forge-lint: disable-next-line(unsafe-typecast)
-                nodes[i] = Node({kind: NodeKind.CHECK, check: uint8(r % nChecks), children: new uint8[](0), k: 0});
+                nodes[i] = Logic({kind: LogicKind.CHECK, check: uint8(r % nChecks), children: new uint8[](0), k: 0});
             } else {
                 uint8[] memory ch = new uint8[](kids);
                 for (uint256 j; j < kids; ++j) {
                     ch[j] = tmp[j];
                 }
-                NodeKind kind = NodeKind(1 + ((r >> 40) % 3));
+                LogicKind kind = LogicKind(1 + ((r >> 40) % 3));
                 // forge-lint: disable-next-line(unsafe-typecast)
                 uint8 k = uint8(1 + ((r >> 48) % kids));
-                nodes[i] = Node({kind: kind, check: 0, children: ch, k: k});
+                nodes[i] = Logic({kind: kind, check: 0, children: ch, k: k});
             }
         }
         assertEq(

@@ -5,10 +5,10 @@ import {
     JobSpec,
     Read,
     Check,
-    Node,
+    Logic,
     EvalType,
     Op,
-    NodeKind,
+    LogicKind,
     MAX_READS,
     MAX_CHECKS,
     MAX_NODES
@@ -50,7 +50,7 @@ library JobSpecLib {
     function validate(JobSpec memory s, uint256 maxConfirmations) internal pure {
         uint256 nReads = s.reads.length;
         uint256 nChecks = s.checks.length;
-        uint256 nNodes = s.nodes.length;
+        uint256 nNodes = s.logic.length;
         if (nReads == 0 || nReads > MAX_READS) revert JobSpecErrors.ReadCount(nReads);
         if (nChecks == 0 || nChecks > MAX_CHECKS) revert JobSpecErrors.CheckCount(nChecks);
         if (nNodes == 0 || nNodes > MAX_NODES) revert JobSpecErrors.NodeCount(nNodes);
@@ -84,7 +84,7 @@ library JobSpecLib {
         }
 
         for (uint256 i; i < nNodes; ++i) {
-            if (!_nodeOk(s.nodes[i], i, nNodes, nChecks)) revert JobSpecErrors.NodeShape(i);
+            if (!_nodeOk(s.logic[i], i, nNodes, nChecks)) revert JobSpecErrors.NodeShape(i);
         }
         _requireAllUsed(s);
     }
@@ -96,10 +96,10 @@ library JobSpecLib {
     function _requireAllUsed(JobSpec memory s) private pure {
         uint256 reached = 1; // the root
         uint256 usedChecks;
-        for (uint256 i; i < s.nodes.length; ++i) {
+        for (uint256 i; i < s.logic.length; ++i) {
             if ((reached >> i) & 1 == 0) revert JobSpecErrors.NodeUnreachable(i);
-            Node memory n = s.nodes[i];
-            if (n.kind == NodeKind.CHECK) {
+            Logic memory n = s.logic[i];
+            if (n.kind == LogicKind.CHECK) {
                 usedChecks |= uint256(1) << n.check;
             } else {
                 for (uint256 j; j < n.children.length; ++j) {
@@ -135,8 +135,8 @@ library JobSpecLib {
     ///      - ALL / ANY / AT_LEAST: one or more children, strictly increasing, each after this node and in range,
     ///        so the tree is acyclic and no child is counted twice.
     ///      - AT_LEAST: `1 <= k <= children`.
-    function _nodeOk(Node memory n, uint256 i, uint256 nNodes, uint256 nChecks) private pure returns (bool) {
-        if (n.kind == NodeKind.CHECK) return n.check < nChecks && n.children.length == 0;
+    function _nodeOk(Logic memory n, uint256 i, uint256 nNodes, uint256 nChecks) private pure returns (bool) {
+        if (n.kind == LogicKind.CHECK) return n.check < nChecks && n.children.length == 0;
         uint256 len = n.children.length;
         if (len == 0) return false;
         uint256 prev = i;
@@ -145,7 +145,7 @@ library JobSpecLib {
             if (c <= prev || c >= nNodes) return false;
             prev = c;
         }
-        if (n.kind == NodeKind.AT_LEAST) return n.k >= 1 && n.k <= len;
+        if (n.kind == LogicKind.AT_LEAST) return n.k >= 1 && n.k <= len;
         return true;
     }
 
@@ -178,10 +178,10 @@ library JobSpecLib {
     //   bits 0-7 kind · 8-15 check · 16-23 k · 24-55 children as a bitmask (bit j: node j is a child).
 
     /// @notice Packs `nodes` into words of four. Assumes `validate` passed (at most 32 nodes).
-    function packNodes(Node[] memory nodes) internal pure returns (uint256[] memory words) {
+    function packNodes(Logic[] memory nodes) internal pure returns (uint256[] memory words) {
         words = new uint256[]((nodes.length + 3) / 4);
         for (uint256 i; i < nodes.length; ++i) {
-            Node memory n = nodes[i];
+            Logic memory n = nodes[i];
             uint256 mask;
             for (uint256 j; j < n.children.length; ++j) {
                 mask |= uint256(1) << n.children[j];
@@ -207,7 +207,7 @@ library JobSpecLib {
             // forge-lint: disable-next-line(unsafe-typecast)
             uint8 kind = uint8(packed);
             uint8 r;
-            if (kind == uint8(NodeKind.CHECK)) {
+            if (kind == uint8(LogicKind.CHECK)) {
                 // forge-lint: disable-next-line(unsafe-typecast)
                 r = uint8((uint256(checkRes) >> (2 * uint8(packed >> 8))) & 3);
             } else {
@@ -223,7 +223,7 @@ library JobSpecLib {
                     else if (c == FAIL) ++fail;
                 }
                 // forge-lint: disable-next-line(unsafe-typecast)
-                uint256 need = kind == uint8(NodeKind.ALL) ? total : kind == uint8(NodeKind.ANY) ? 1 : uint8(packed >> 16);
+                uint256 need = kind == uint8(LogicKind.ALL) ? total : kind == uint8(LogicKind.ANY) ? 1 : uint8(packed >> 16);
                 r = pass >= need ? PASS : total - fail < need ? FAIL : UNKNOWN;
             }
             nodeRes |= uint256(r) << (2 * idx);
