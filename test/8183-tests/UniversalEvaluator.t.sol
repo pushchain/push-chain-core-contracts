@@ -286,8 +286,9 @@ contract UniversalEvaluatorTest is UniversalEvalBase {
         JobSpec memory s = _swapSpec();
         s.reads = _single(s.reads[0]);
         s.reads[0].outputs = abi.encodePacked(T_TUPLE, uint8(1), T_BYTES);
-        s.checks[0] =
-            Check({left: 0, right: 0, evalType: EvalType.CMP, op: Op.EQ, target: int256(uint256(keccak256(payload)))});
+        s.checks[0] = Check({
+            left: _u8(0), right: _none(), evalType: EvalType.CMP, op: Op.EQ, target: int256(uint256(keccak256(payload)))
+        });
 
         uint256 over = _createSpec(s);
         _fund(over); // CMP only: nothing to snapshot
@@ -316,7 +317,7 @@ contract UniversalEvaluatorTest is UniversalEvalBase {
         JobSpec memory s = _swapSpec();
         s.reads = _single(s.reads[0]);
         s.reads[0].outputs = abi.encodePacked(T_TUPLE, uint8(1), T_ARRAY, T_UINT);
-        s.checks[0] = Check({left: 0, right: 0, evalType: EvalType.CMP, op: Op.GTE, target: 2});
+        s.checks[0] = Check({left: _u8(0), right: _none(), evalType: EvalType.CMP, op: Op.GTE, target: 2});
         uint256 jobId = _createSpec(s);
         _fund(jobId);
         _advance();
@@ -699,8 +700,8 @@ contract UniversalEvaluatorTest is UniversalEvalBase {
         s.reads[0] = _balanceRead(weth, cea); // b on Base
         s.reads[1] = _on(_balanceRead(weth, cea), "1"); // a on Ethereum
         s.reads[2] = _on(_balanceRead(weth, cea), "42161"); // c on Arbitrum
-        s.checks[0] = Check({left: 0, right: 1, evalType: EvalType.NUM, op: Op.GT, target: 0});
-        s.checks[1] = Check({left: 0, right: 2, evalType: EvalType.NUM, op: Op.GT, target: 0});
+        s.checks[0] = Check({left: _u8(0), right: _u8(1), evalType: EvalType.NUM, op: Op.GT, target: 0});
+        s.checks[1] = Check({left: _u8(0), right: _u8(2), evalType: EvalType.NUM, op: Op.GT, target: 0});
         s.logic[0].kind = LogicKind.ALL;
         uint256 jobId = _createSpec(s);
         _fund(jobId);
@@ -750,8 +751,8 @@ contract UniversalEvaluatorTest is UniversalEvalBase {
         s.reads[1] = _balanceRead(morphoVault, cea);
         s.reads[2] = _pre(_balanceRead(ausdc, cea));
         s.reads[3] = _pre(_balanceRead(morphoVault, cea));
-        s.checks[0] = Check({left: 3, right: 2, evalType: EvalType.NUM, op: Op.GT, target: 0});
-        s.checks[1] = Check({left: 0, right: 1, evalType: EvalType.NUM, op: Op.GT, target: 0});
+        s.checks[0] = Check({left: _u8(3), right: _u8(2), evalType: EvalType.NUM, op: Op.GT, target: 0});
+        s.checks[1] = Check({left: _u8(0), right: _u8(1), evalType: EvalType.NUM, op: Op.GT, target: 0});
         s.logic[0].kind = LogicKind.ALL;
     }
 }

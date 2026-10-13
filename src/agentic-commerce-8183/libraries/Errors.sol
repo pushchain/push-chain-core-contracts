@@ -112,9 +112,14 @@ library JobSpecErrors {
     /// @notice A read's `outputs` / `field` do not name one value of a well-formed return type that fits
     ///         `MAX_RESULT_LENGTH`.
     error ReadShape(uint256 read);
-    /// @notice A check points at a read that does not exist, a NUM / PCT `right` equals `left`, or a BOOL / CMP
-    ///         `right` is not 0.
+    /// @notice A check side names a read that does not exist or is not in increasing order, or both sides name
+    ///         the same read.
     error CheckRead(uint256 check);
+    /// @notice A check's sides don't fit its type: BOOL one `left` read and no `right` · CMP no `right` ·
+    ///         NUM / PCT both sides.
+    error CheckSides(uint256 check);
+    /// @notice The checks' sides name more than `MAX_TERMS` reads in total.
+    error TermCount(uint256 count);
     /// @notice No read is POST_EXECUTION, so the provider's work would never be measured.
     error NoPostExecutionRead();
     /// @notice A BOOL check's target is neither 0 nor 1.

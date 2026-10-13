@@ -9,7 +9,7 @@ pragma solidity 0.8.26;
 /// @dev - Source: `docs-internal/Universal Evaluator V2 Design`, plus `origin` (marketplace PRD decision Z7).
 ///      - Field order is ABI. Never reorder, never insert; a change here changes every description.
 
-/// @notice How a check compares. BOOL / CMP: one read against `target` · NUM / PCT: `left` against `right`.
+/// @notice How a check compares. BOOL / CMP: the `left` side against `target` · NUM / PCT: `left` against `right`.
 enum EvalType {
     BOOL,
     CMP,
@@ -66,11 +66,11 @@ struct Read {
     ReadAt at; // read at the block recorded at `fund` (PRE) or fixed at `submit` (POST)
 }
 
-/// @notice One comparison. BOOL `left == target` · CMP `left op target` · NUM `(left - right) op target` ·
-///         PCT `(left - right) / right op target`, in basis points.
+/// @notice One comparison. Each side is the sum of its reads. BOOL `left == target` · CMP `Σleft op target` ·
+///         NUM `(Σleft - Σright) op target` · PCT `(Σleft - Σright) / Σright op target`, in basis points.
 struct Check {
-    uint8 left; // index into reads
-    uint8 right; // NUM / PCT: index into reads, not `left` · BOOL / CMP: 0
+    uint8[] left; // indexes into reads, increasing · BOOL: exactly one
+    uint8[] right; // indexes into reads, increasing, none in `left` · NUM / PCT: at least one · BOOL / CMP: none
     EvalType evalType;
     Op op;
     int256 target; // in the contract's own units
@@ -113,3 +113,4 @@ uint8 constant T_FIXED_ARRAY = 10;
 uint256 constant MAX_READS = 32;
 uint256 constant MAX_CHECKS = 16;
 uint256 constant MAX_NODES = 32;
+uint256 constant MAX_TERMS = 64; // read indexes across every check's sides; bounds a callback's work

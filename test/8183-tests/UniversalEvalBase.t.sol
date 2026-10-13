@@ -173,6 +173,9 @@ abstract contract UniversalEvalBase is KernelBase {
         });
     }
 
+    /// @dev An empty check side.
+    function _none() internal pure returns (uint8[] memory) {}
+
     function _pre(Read memory r) internal pure returns (Read memory) {
         r.at = ReadAt.PRE_EXECUTION;
         return r;
@@ -234,7 +237,7 @@ abstract contract UniversalEvalBase is KernelBase {
         s.reads[0] = _balanceRead(weth, cea);
         s.reads[SWAP_PRE] = _pre(_balanceRead(weth, cea));
         s.checks = new Check[](1);
-        s.checks[0] = Check({left: 0, right: 1, evalType: EvalType.NUM, op: Op.GTE, target: 0.38e18});
+        s.checks[0] = Check({left: _u8(0), right: _u8(1), evalType: EvalType.NUM, op: Op.GTE, target: 0.38e18});
         s.logic = new Logic[](1);
         s.logic[0] = _checkNode(0);
         s.mutability = CriteriaMutability.NONE;
@@ -248,8 +251,8 @@ abstract contract UniversalEvalBase is KernelBase {
         s.reads[0] = _balanceRead(ausdc, cea);
         s.reads[1] = _balanceRead(morphoVault, cea);
         s.checks = new Check[](2);
-        s.checks[0] = Check({left: 0, right: 0, evalType: EvalType.CMP, op: Op.GTE, target: 99.99e6});
-        s.checks[1] = Check({left: 1, right: 0, evalType: EvalType.CMP, op: Op.GTE, target: 99.99e6});
+        s.checks[0] = Check({left: _u8(0), right: _none(), evalType: EvalType.CMP, op: Op.GTE, target: 99.99e6});
+        s.checks[1] = Check({left: _u8(1), right: _none(), evalType: EvalType.CMP, op: Op.GTE, target: 99.99e6});
         s.logic = new Logic[](3);
         s.logic[0] = Logic({kind: LogicKind.ANY, check: 0, children: _u8(1, 2), k: 0});
         s.logic[1] = _checkNode(0);

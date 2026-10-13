@@ -14,6 +14,7 @@ import {
     Answer,
     Verdict,
     OwnerCheck,
+    PackedCheck,
     ReadPlan,
     ReadConfig,
     MAX_RESULT_LENGTH,
@@ -51,8 +52,8 @@ import {UniversalEvaluatorErrors, JobSpecErrors} from "../libraries/Errors.sol";
 ///      - The kernel `reason` commits to the spec and to every read in index order (block, request, raw answer hash,
 ///        value; zero for a POST read not answered when the root was decided), so it can be re-derived from events.
 ///      - `JobSpec.executeBy` and `JobSpec.failFinalAt` are not used: a FAIL at fixed blocks is final.
-///      - One contract: `JobSpecLib` and `EvmReadLib` are internal libraries compiled into it, so deploying it deploys
-///        nothing else and it calls no code of its own elsewhere.
+///      - `JobSpecLib.validate` runs in a linked library (DELEGATECALL; its address is fixed in this bytecode at
+///        deployment, and it is stateless). Everything else, `EvmReadLib` included, is compiled in.
 ///      - Not upgradeable, with no admin: how this evaluator judges a frozen spec can't change. A rule change is a new
 ///        evaluator for new jobs; every job settles through the evaluator recorded in it at `createJob`. The kernel
 ///        and the hook stay trust points: both are upgradeable, and the kernel admin can detach a job's hook.
@@ -149,7 +150,7 @@ contract UniversalEvaluator is IUniversalEvaluator, ReentrancyGuard {
     mapping(uint256 => bytes) internal _replacement;
     mapping(uint256 => JobCache) internal _cache;
     mapping(uint256 => ReadPlan[]) internal _plans;
-    mapping(uint256 => Check[]) internal _checks;
+    mapping(uint256 => PackedCheck[]) internal _checks;
     mapping(uint256 => uint256[]) internal _packedNodes; // JobSpecLib.packNodes
     mapping(uint256 => Snapshot) internal _snapshots;
     mapping(uint256 => uint256[8]) internal _fundHeights; // every read's tracked height at fund, 4 uint64 per word
@@ -526,12 +527,17 @@ contract UniversalEvaluator is IUniversalEvaluator, ReentrancyGuard {
             p.field = s.reads[i].field;
         }
         JobCache storage c = _cache[jobId];
-        Check[] storage checks = _checks[jobId];
+        PackedCheck[] storage checks = _checks[jobId];
         for (uint256 i; i < s.checks.length; ++i) {
             Check memory chk = s.checks[i];
-            checks.push(chk);
-            _markCheck(c, chk.left, i);
-            if (JobSpecLib.isPair(chk)) _markCheck(c, chk.right, i);
+            uint32 left = JobSpecLib.packSide(chk.left);
+            uint32 right = JobSpecLib.packSide(chk.right);
+            checks.push(PackedCheck({left: left, right: right, evalType: chk.evalType, op: chk.op, target: chk.target}));
+            uint256 reads = left | right;
+            for (uint256 r; reads != 0; ++r) {
+                if (reads & 1 != 0) _markCheck(c, r, i);
+                reads >>= 1;
+            }
         }
         _packedNodes[jobId] = JobSpecLib.packNodes(s.logic);
         // forge-lint: disable-next-line(unsafe-typecast)
@@ -577,7 +583,7 @@ contract UniversalEvaluator is IUniversalEvaluator, ReentrancyGuard {
         e.pending = uint8(s.reads.length - _snapshots[jobId].needed); // the POST reads; safe: as above
         uint32 res;
         for (uint256 i; i < s.checks.length; ++i) {
-            res = _judge(jobId, i, s.checks[i], res); // a check needing a POST value stays UNKNOWN
+            res = _judge(jobId, i, _checks[jobId][i], res); // a check needing a POST value stays UNKNOWN
         }
         e.checkRes = res;
         _sendMissing(jobId, s);
@@ -686,10 +692,26 @@ contract UniversalEvaluator is IUniversalEvaluator, ReentrancyGuard {
     }
 
     /// @dev Sets check `i`'s result from the values in so far; a missing or unreadable one leaves it UNKNOWN.
-    function _judge(uint256 jobId, uint256 i, Check memory chk, uint32 checkRes) internal view returns (uint32) {
+    function _judge(uint256 jobId, uint256 i, PackedCheck memory chk, uint32 checkRes) internal view returns (uint32) {
         Answer memory b;
-        if (JobSpecLib.isPair(chk)) b = _answers[jobId][chk.right];
-        return JobSpecLib.setCheck(checkRes, i, JobSpecLib.checkResult(chk, _answers[jobId][chk.left], b));
+        if (chk.right != 0) b = _sum(jobId, chk.right);
+        return JobSpecLib.setCheck(
+            checkRes, i, JobSpecLib.checkResult(chk.evalType, chk.op, chk.target, _sum(jobId, chk.left), b)
+        );
+    }
+
+    /// @dev The sum of the reads in `mask`: not ok if any is missing or unreadable, or the sum overflows.
+    function _sum(uint256 jobId, uint256 mask) internal view returns (Answer memory total) {
+        total.ok = true;
+        for (uint256 r; mask != 0; ++r) {
+            if (mask & 1 != 0) {
+                Answer storage v = _answers[jobId][r];
+                if (!v.ok) return Answer({ok: false, value: 0});
+                (total.ok, total.value) = JobSpecLib.add(total.value, v.value);
+                if (!total.ok) return total;
+            }
+            mask >>= 1;
+        }
     }
 
     /// @dev Records the verdict `v` (worked out from the per-check results), then tries to apply PASS or FAIL on the

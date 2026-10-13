@@ -72,7 +72,7 @@ library JobSpecBuilder {
             if (_hasCEAFill(t.reads[i])) cea[i] = _ceaOf(agw, t.reads[i]);
         }
         for (uint256 j; j < t.checks.length; ++j) {
-            uint8 r = t.checks[j].left;
+            uint8 r = t.checks[j].left[0];
             if (t.checks[j].source == TargetSource.CEA && cea[r] == address(0)) {
                 cea[r] = _ceaOf(agw, t.reads[r]);
             }
@@ -133,7 +133,7 @@ library JobSpecBuilder {
         } else if (c.source == TargetSource.PARAM) {
             target = ctx.params[uint256(c.value)];
         } else if (c.source == TargetSource.CEA) {
-            target = int256(uint256(uint160(cea[c.left])));
+            target = int256(uint256(uint160(cea[c.left[0]])));
         }
         return Check({left: c.left, right: c.right, evalType: c.evalType, op: c.op, target: target});
     }

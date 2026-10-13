@@ -12,29 +12,31 @@ import {
     ReadAt,
     MAX_READS,
     MAX_CHECKS,
-    MAX_NODES
+    MAX_NODES,
+    MAX_TERMS
 } from "../libraries/JobSpecTypes.sol";
 import {Answer, Verdict, MAX_ARGS_LENGTH, MAX_CHAIN_STRING_LENGTH} from "./EvaluationTypes.sol";
 import {EvmReadLib} from "./EvmReadLib.sol";
 import {JobSpecErrors} from "../libraries/Errors.sol";
 
 /// @title JobSpecLib — what a `JobSpec` must satisfy, and how it is judged
-/// @notice Internal functions, compiled into the UniversalEvaluator.
+/// @notice `validate` is public: the library is deployed once and linked into the UniversalEvaluator, which
+///         DELEGATECALLs it (compiled in, it put the evaluator over EIP-170). The rest is internal, compiled in.
 /// @dev Checking (`validate`, run when the spec is frozen inside `fund`, so a refused spec reverts the funding):
 ///      - Structural checks only. Whether the criteria mean what the client wants is not checkable here.
 ///      - `executeBy` and `failFinalAt` are not checked: the evaluator does not use them (the end blocks are fixed at
 ///        `submit`, and a FAIL there is final).
 ///      - Every rule is one the evaluator relies on, so a funded job can always be judged: indexes are in range,
 ///        nodes form a graph evaluable from last to first, every read is one the evaluator can encode and decodes in
-///        bounded work, every node, check and read counts toward the verdict, and at least one read is
-///        POST_EXECUTION.
+///        bounded work, every node, check and read counts toward the verdict, at least one read is POST_EXECUTION,
+///        and the checks' sides name at most `MAX_TERMS` reads, so a callback's work stays bounded.
 ///      Judging (every check comes out PASS, FAIL or UNKNOWN; nodes combine them; the root is the verdict):
-///      - Rules are the V2 design's:
-///        BOOL `left == target` · CMP `left op target` · NUM `(left - right) op target` ·
-///        PCT: the difference in basis points, `(left - right) * 10_000 / right op target`, and PCT with
-///        `right <= 0` FAILS.
-///      - PCT is compared exactly, as `(left - right) * 10_000 op target * right` (`right > 0` keeps the
-///        direction). Dividing first would round toward zero, so a tiny loss would read as 0 and pass `>= 0`.
+///      - Each side is the sum of its reads; a side with a missing or unreadable read, or a sum that overflows, is
+///        UNKNOWN. With L = Σleft and R = Σright:
+///        BOOL `L == target` · CMP `L op target` · NUM `(L - R) op target` ·
+///        PCT: the difference in basis points, `(L - R) * 10_000 / R op target`, and PCT with `R <= 0` FAILS.
+///      - PCT is compared exactly, as `(L - R) * 10_000 op target * R` (`R > 0` keeps the direction). Dividing
+///        first would round toward zero, so a tiny loss would read as 0 and pass `>= 0`.
 ///      - Never reverts on any answer: an overflow makes the check UNKNOWN.
 ///      - The readable, unpacked reference judge lives in the tests (`helpers/ReferenceJudge.sol`); the suite checks
 ///        `verdictPacked` agrees with it on random inputs.
@@ -49,7 +51,7 @@ library JobSpecLib {
     /// @notice Reverts with a `JobSpecErrors` error unless `s` can be judged.
     /// @param s                The criteria.
     /// @param maxConfirmations The evaluator's ceiling on `Read.minConfirmations`, so every read can be answered.
-    function validate(JobSpec memory s, uint256 maxConfirmations) internal pure {
+    function validate(JobSpec memory s, uint256 maxConfirmations) public pure {
         uint256 nReads = s.reads.length;
         uint256 nChecks = s.checks.length;
         uint256 nNodes = s.logic.length;
@@ -79,20 +81,41 @@ library JobSpecLib {
         }
         if (!anyPost) revert JobSpecErrors.NoPostExecutionRead();
 
+        uint256 terms;
         for (uint256 i; i < nChecks; ++i) {
             Check memory c = s.checks[i];
-            bool badRight = isPair(c) ? c.right >= nReads || c.right == c.left : c.right != 0;
-            if (c.left >= nReads || badRight) revert JobSpecErrors.CheckRead(i);
+            (bool okL, uint256 left) = _side(c.left, nReads);
+            (bool okR, uint256 right) = _side(c.right, nReads);
+            if (!okL || !okR || (left & right) != 0) revert JobSpecErrors.CheckRead(i);
+            uint256 nl = c.left.length;
+            uint256 nr = c.right.length;
+            bool sides = c.evalType == EvalType.BOOL ? nl == 1 && nr == 0 : nl != 0 && (nr != 0) == isPair(c.evalType);
+            if (!sides) revert JobSpecErrors.CheckSides(i);
+            terms += nl + nr;
             if (c.evalType == EvalType.BOOL) {
                 if (c.op != Op.EQ) revert JobSpecErrors.CheckOp(i); // BOOL is `left == target`
                 if (c.target != 0 && c.target != 1) revert JobSpecErrors.CheckTarget(i);
             }
         }
 
+        if (terms > MAX_TERMS) revert JobSpecErrors.TermCount(terms);
+
         for (uint256 i; i < nNodes; ++i) {
             if (!_nodeOk(s.logic[i], i, nNodes, nChecks)) revert JobSpecErrors.NodeShape(i);
         }
         _requireAllUsed(s);
+    }
+
+    /// @dev A side's reads as a bitmask, if every index is below `nReads` and above the one before it.
+    function _side(uint8[] memory side, uint256 nReads) private pure returns (bool, uint256 mask) {
+        uint256 next; // the lowest index allowed next
+        for (uint256 j; j < side.length; ++j) {
+            uint256 r = side[j];
+            if (r < next || r >= nReads) return (false, 0);
+            mask |= uint256(1) << r;
+            next = r + 1;
+        }
+        return (true, mask);
     }
 
     /// @dev Everything counts toward the verdict: every node is reachable from the root, every check is used by a
@@ -117,17 +140,23 @@ library JobSpecLib {
         for (uint256 i; i < s.checks.length; ++i) {
             if ((usedChecks >> i) & 1 == 0) revert JobSpecErrors.CheckUnused(i);
             Check memory c = s.checks[i];
-            usedReads |= uint256(1) << c.left;
-            if (isPair(c)) usedReads |= uint256(1) << c.right;
+            usedReads |= uint256(packSide(c.left) | packSide(c.right));
         }
         for (uint256 i; i < s.reads.length; ++i) {
             if ((usedReads >> i) & 1 == 0) revert JobSpecErrors.ReadUnused(i);
         }
     }
 
-    /// @notice Whether the check compares two reads (NUM / PCT) rather than one read with `target`.
-    function isPair(Check memory c) internal pure returns (bool) {
-        return c.evalType == EvalType.NUM || c.evalType == EvalType.PCT;
+    /// @notice Whether the type compares two sides (NUM / PCT) rather than one side with `target`.
+    function isPair(EvalType e) internal pure returns (bool) {
+        return e == EvalType.NUM || e == EvalType.PCT;
+    }
+
+    /// @notice A side's reads as a bitmask (bit i: read i). Assumes `validate` passed (indexes below 32).
+    function packSide(uint8[] memory side) internal pure returns (uint32 mask) {
+        for (uint256 j; j < side.length; ++j) {
+            mask |= uint32(1) << side[j];
+        }
     }
 
     /// @dev - CHECK: a check in range, no children.
@@ -150,23 +179,36 @@ library JobSpecLib {
 
     // ───────────────────────────── judging ─────────────────────────────
 
-    /// @notice One check: PASS, FAIL or UNKNOWN. `a` is the `left` read's value, `b` the `right` one's.
-    function checkResult(Check memory c, Answer memory a, Answer memory b) internal pure returns (uint8) {
+    /// @notice One check: PASS, FAIL or UNKNOWN. `a` is the `left` side's sum, `b` the `right` side's.
+    function checkResult(EvalType e, Op op, int256 target, Answer memory a, Answer memory b)
+        internal
+        pure
+        returns (uint8)
+    {
         if (!a.ok) return UNKNOWN;
-        if (c.evalType == EvalType.BOOL) return a.value == c.target ? PASS : FAIL;
-        if (c.evalType == EvalType.CMP) return _cmp(a.value, c.op, c.target) ? PASS : FAIL;
+        if (e == EvalType.BOOL) return a.value == target ? PASS : FAIL;
+        if (e == EvalType.CMP) return _cmp(a.value, op, target) ? PASS : FAIL;
 
         if (!b.ok) return UNKNOWN;
         (bool ok, int256 delta) = _sub(a.value, b.value);
         if (!ok) return UNKNOWN;
-        if (c.evalType == EvalType.NUM) return _cmp(delta, c.op, c.target) ? PASS : FAIL;
+        if (e == EvalType.NUM) return _cmp(delta, op, target) ? PASS : FAIL;
 
         // PCT, in basis points, compared without dividing
         if (b.value <= 0) return FAIL;
         (bool okL, int256 lhs) = _mul(delta, 10_000);
-        (bool okR, int256 rhs) = _mul(c.target, b.value);
+        (bool okR, int256 rhs) = _mul(target, b.value);
         if (!okL || !okR) return UNKNOWN;
-        return _cmp(lhs, c.op, rhs) ? PASS : FAIL;
+        return _cmp(lhs, op, rhs) ? PASS : FAIL;
+    }
+
+    /// @notice `a + b`, or not-ok on overflow. Adds up a side.
+    function add(int256 a, int256 b) internal pure returns (bool, int256) {
+        unchecked {
+            int256 c = a + b;
+            if ((b > 0 && c < a) || (b < 0 && c > a)) return (false, 0);
+            return (true, c);
+        }
     }
 
     // ───────────────────────────── packed form ─────────────────────────────

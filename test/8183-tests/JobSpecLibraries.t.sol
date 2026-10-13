@@ -69,9 +69,26 @@ contract LibHarness {
         uint32 res;
         for (uint256 i; i < checks.length; ++i) {
             Check memory c = checks[i];
-            res = JobSpecLib.setCheck(res, i, JobSpecLib.checkResult(c, values[c.left], values[c.right]));
+            uint32 right = JobSpecLib.packSide(c.right);
+            Answer memory b;
+            if (right != 0) b = _sum(right, values);
+            Answer memory a = _sum(JobSpecLib.packSide(c.left), values);
+            res = JobSpecLib.setCheck(res, i, JobSpecLib.checkResult(c.evalType, c.op, c.target, a, b));
         }
         return JobSpecLib.verdictPacked(JobSpecLib.packNodes(nodes), nodes.length, res);
+    }
+
+    /// @dev As the evaluator's `_sum`, over `values` instead of storage.
+    function _sum(uint256 mask, Answer[] memory values) internal pure returns (Answer memory total) {
+        total.ok = true;
+        for (uint256 r; mask != 0; ++r) {
+            if (mask & 1 != 0) {
+                if (!values[r].ok) return Answer(false, 0);
+                (total.ok, total.value) = JobSpecLib.add(total.value, values[r].value);
+                if (!total.ok) return total;
+            }
+            mask >>= 1;
+        }
     }
 }
 
@@ -93,6 +110,22 @@ contract JobSpecLibrariesTest is Test {
         x = new uint8[](2);
         x[0] = a;
         x[1] = b;
+    }
+
+    function _none() internal pure returns (uint8[] memory) {}
+
+    /// @dev A bitmask of reads as an increasing list of indexes.
+    function _toSide(uint256 mask) internal pure returns (uint8[] memory side) {
+        side = new uint8[](32);
+        uint256 n;
+        for (uint256 r; mask != 0; ++r) {
+            // forge-lint: disable-next-line(unsafe-typecast)
+            if (mask & 1 != 0) side[n++] = uint8(r);
+            mask >>= 1;
+        }
+        assembly ("memory-safe") {
+            mstore(side, n)
+        }
     }
 
     // ───────────── decoder ─────────────
@@ -288,7 +321,7 @@ contract JobSpecLibrariesTest is Test {
         s.reads[1] = _read();
         s.reads[1].at = ReadAt.PRE_EXECUTION;
         s.checks = new Check[](1);
-        s.checks[0] = Check({left: 0, right: 1, evalType: EvalType.NUM, op: Op.GTE, target: 1});
+        s.checks[0] = Check({left: _f(0), right: _f(1), evalType: EvalType.NUM, op: Op.GTE, target: 1});
         s.logic = new Logic[](1);
         s.logic[0] = Logic({kind: LogicKind.CHECK, check: 0, children: new uint8[](0), k: 0});
     }
@@ -327,7 +360,7 @@ contract JobSpecLibrariesTest is Test {
 
         s = _spec();
         s.checks[0].evalType = EvalType.BOOL;
-        s.checks[0].right = 0;
+        s.checks[0].right = _none();
         s.checks[0].op = Op.EQ;
         s.checks[0].target = 2;
         vm.expectRevert(abi.encodeWithSelector(JobSpecErrors.CheckTarget.selector, 0));
@@ -387,7 +420,7 @@ contract JobSpecLibrariesTest is Test {
         lib.validate(s);
 
         s = _spec();
-        s.checks[0] = Check({left: 0, right: 0, evalType: EvalType.BOOL, op: Op.NEQ, target: 1}); // BOOL is `== target`
+        s.checks[0] = Check({left: _f(0), right: _none(), evalType: EvalType.BOOL, op: Op.NEQ, target: 1}); // BOOL is `== target`
         vm.expectRevert(abi.encodeWithSelector(JobSpecErrors.CheckOp.selector, 0));
         lib.validate(s);
 
@@ -402,7 +435,7 @@ contract JobSpecLibrariesTest is Test {
         lib.validate(s);
 
         s = _twoVenue();
-        s.checks[1].left = 0; // read 1 no longer read
+        s.checks[1].left = _f(0); // read 1 no longer read
         vm.expectRevert(abi.encodeWithSelector(JobSpecErrors.ReadUnused.selector, 1));
         lib.validate(s);
 
@@ -416,26 +449,55 @@ contract JobSpecLibrariesTest is Test {
         lib.validate(s);
     }
 
-    /// @dev NUM / PCT name two different reads; BOOL / CMP name one and leave `right` at 0.
-    function test_RUL05_checkReadPairs() public {
+    /// @dev Sides name existing reads, in increasing order, none on both sides; their lengths fit the type.
+    function test_RUL05_checkSides() public {
         JobSpec memory s = _spec();
-        s.checks[0].right = 0; // NUM against itself
+        s.checks[0].right = _f(0); // read 0 on both sides
         vm.expectRevert(abi.encodeWithSelector(JobSpecErrors.CheckRead.selector, 0));
         lib.validate(s);
 
         s = _spec();
-        s.checks[0].right = 2; // no such read
+        s.checks[0].right = _f(2); // no such read
         vm.expectRevert(abi.encodeWithSelector(JobSpecErrors.CheckRead.selector, 0));
         lib.validate(s);
 
         s = _twoVenue();
-        s.checks[0].right = 1; // CMP compares with `target`, not a read
+        s.checks[0].left = _f(1, 0); // out of order
         vm.expectRevert(abi.encodeWithSelector(JobSpecErrors.CheckRead.selector, 0));
+        lib.validate(s);
+
+        s = _twoVenue();
+        s.checks[0].left = _f(0, 0); // repeated
+        vm.expectRevert(abi.encodeWithSelector(JobSpecErrors.CheckRead.selector, 0));
+        lib.validate(s);
+
+        s = _twoVenue();
+        s.checks[0].right = _f(1); // CMP compares with `target`, not a side
+        vm.expectRevert(abi.encodeWithSelector(JobSpecErrors.CheckSides.selector, 0));
+        lib.validate(s);
+
+        s = _twoVenue();
+        s.checks[0].left = _none(); // nothing to compare
+        vm.expectRevert(abi.encodeWithSelector(JobSpecErrors.CheckSides.selector, 0));
+        lib.validate(s);
+
+        s = _spec();
+        s.checks[0].right = _none(); // NUM needs a right side
+        vm.expectRevert(abi.encodeWithSelector(JobSpecErrors.CheckSides.selector, 0));
+        lib.validate(s);
+
+        s = _twoVenue();
+        s.checks[0] = Check({left: _f(0, 1), right: _none(), evalType: EvalType.BOOL, op: Op.EQ, target: 1});
+        vm.expectRevert(abi.encodeWithSelector(JobSpecErrors.CheckSides.selector, 0)); // BOOL reads one value
+        lib.validate(s);
+
+        s = _twoVenue(); // a sum on the left: read 0 + read 1
+        s.checks[0].left = _f(0, 1);
         lib.validate(s);
 
         s = _twoVenue(); // two POST reads on different chains: read 1 − read 0
         s.reads[1].chainId = "1";
-        s.checks[0] = Check({left: 1, right: 0, evalType: EvalType.NUM, op: Op.GT, target: 0});
+        s.checks[0] = Check({left: _f(1), right: _f(0), evalType: EvalType.NUM, op: Op.GT, target: 0});
         lib.validate(s);
     }
 
@@ -451,8 +513,9 @@ contract JobSpecLibrariesTest is Test {
             s.reads[i + MAX_READS / 2] = _read();
             s.reads[i + MAX_READS / 2].at = ReadAt.PRE_EXECUTION;
             // forge-lint: disable-next-line(unsafe-typecast)
-            s.checks[i] =
-                Check({left: uint8(i), right: uint8(i + MAX_READS / 2), evalType: EvalType.NUM, op: Op.GTE, target: 0});
+            s.checks[i] = Check({
+                left: _f(uint8(i)), right: _f(uint8(i + MAX_READS / 2)), evalType: EvalType.NUM, op: Op.GTE, target: 0
+            });
             // forge-lint: disable-next-line(unsafe-typecast)
             s.logic[1 + i] = Logic({kind: LogicKind.CHECK, check: uint8(i), children: new uint8[](0), k: 0});
             // forge-lint: disable-next-line(unsafe-typecast)
@@ -471,6 +534,35 @@ contract JobSpecLibrariesTest is Test {
         lib.validate(s);
     }
 
+    /// @dev The checks' sides name at most MAX_TERMS (64) reads in total: 16 checks of 4 pass, 13 of 5 don't.
+    function test_RUL07_maxTerms() public {
+        lib.validate(_sums(16, 4));
+        vm.expectRevert(abi.encodeWithSelector(JobSpecErrors.TermCount.selector, 65));
+        lib.validate(_sums(13, 5));
+    }
+
+    /// @dev `nChecks` CMP checks, each summing reads 0 to `width - 1`, all under one ALL root.
+    function _sums(uint256 nChecks, uint256 width) internal pure returns (JobSpec memory s) {
+        s.reads = new Read[](width);
+        uint8[] memory side = new uint8[](width);
+        for (uint256 j; j < width; ++j) {
+            s.reads[j] = _read();
+            // forge-lint: disable-next-line(unsafe-typecast)
+            side[j] = uint8(j);
+        }
+        s.checks = new Check[](nChecks);
+        s.logic = new Logic[](1 + nChecks);
+        uint8[] memory kids = new uint8[](nChecks);
+        for (uint256 i; i < nChecks; ++i) {
+            s.checks[i] = Check({left: side, right: _none(), evalType: EvalType.CMP, op: Op.GTE, target: 1});
+            // forge-lint: disable-next-line(unsafe-typecast)
+            s.logic[1 + i] = Logic({kind: LogicKind.CHECK, check: uint8(i), children: new uint8[](0), k: 0});
+            // forge-lint: disable-next-line(unsafe-typecast)
+            kids[i] = uint8(1 + i);
+        }
+        s.logic[0] = Logic({kind: LogicKind.ALL, check: 0, children: kids, k: 0});
+    }
+
     function _twoVenue() internal pure returns (JobSpec memory s) {
         s.executeBy = 100;
         s.failFinalAt = 200;
@@ -478,8 +570,8 @@ contract JobSpecLibrariesTest is Test {
         s.reads[0] = _read();
         s.reads[1] = _read();
         s.checks = new Check[](2);
-        s.checks[0] = Check({left: 0, right: 0, evalType: EvalType.CMP, op: Op.GTE, target: 1});
-        s.checks[1] = Check({left: 1, right: 0, evalType: EvalType.CMP, op: Op.GTE, target: 1});
+        s.checks[0] = Check({left: _f(0), right: _none(), evalType: EvalType.CMP, op: Op.GTE, target: 1});
+        s.checks[1] = Check({left: _f(1), right: _none(), evalType: EvalType.CMP, op: Op.GTE, target: 1});
         s.logic = new Logic[](3);
         s.logic[0] = Logic({kind: LogicKind.ANY, check: 0, children: _f(1, 2), k: 0});
         s.logic[1] = Logic({kind: LogicKind.CHECK, check: 0, children: new uint8[](0), k: 0});
@@ -505,7 +597,7 @@ contract JobSpecLibrariesTest is Test {
         Answer[] memory a = new Answer[](1);
         Answer[] memory b = new Answer[](1);
 
-        c[0] = Check({left: 0, right: 1, evalType: EvalType.NUM, op: Op.GTE, target: 0.38e18});
+        c[0] = Check({left: _f(0), right: _f(1), evalType: EvalType.NUM, op: Op.GTE, target: 0.38e18});
         a[0] = Answer(true, 0.39e18);
         b[0] = Answer(true, 0);
         assertEq(uint8(_one(c[0], a[0], b[0])), uint8(Verdict.PASS));
@@ -514,7 +606,7 @@ contract JobSpecLibrariesTest is Test {
         b[0] = Answer(true, type(int256).min);
         assertEq(uint8(_one(c[0], a[0], b[0])), uint8(Verdict.INCONCLUSIVE), "overflow is unknown, never a revert");
 
-        c[0] = Check({left: 0, right: 1, evalType: EvalType.PCT, op: Op.GTE, target: 1});
+        c[0] = Check({left: _f(0), right: _f(1), evalType: EvalType.PCT, op: Op.GTE, target: 1});
         a[0] = Answer(true, 100.012e6);
         b[0] = Answer(true, 100e6);
         assertEq(uint8(_one(c[0], a[0], b[0])), uint8(Verdict.PASS), "1.2 bps >= 1 bps");
@@ -529,7 +621,7 @@ contract JobSpecLibrariesTest is Test {
         Answer[] memory b = new Answer[](1);
 
         // A tiny loss: -1 out of 1e6 is -0.01 bps. Dividing first gave 0 and passed ">= 0".
-        c[0] = Check({left: 0, right: 1, evalType: EvalType.PCT, op: Op.GTE, target: 0});
+        c[0] = Check({left: _f(0), right: _f(1), evalType: EvalType.PCT, op: Op.GTE, target: 0});
         a[0] = Answer(true, 1e6 - 1);
         b[0] = Answer(true, 1e6);
         assertEq(uint8(_one(c[0], a[0], b[0])), uint8(Verdict.FAIL), "a loss is not >= 0%");
@@ -537,7 +629,7 @@ contract JobSpecLibrariesTest is Test {
         assertEq(uint8(_one(c[0], a[0], b[0])), uint8(Verdict.PASS), "a loss is < 0%");
 
         // Negative target: "lost at most 1%" as change >= -100 bps.
-        c[0] = Check({left: 0, right: 1, evalType: EvalType.PCT, op: Op.GTE, target: -100});
+        c[0] = Check({left: _f(0), right: _f(1), evalType: EvalType.PCT, op: Op.GTE, target: -100});
         a[0] = Answer(true, 99e6);
         b[0] = Answer(true, 100e6); // exactly -1%
         assertEq(uint8(_one(c[0], a[0], b[0])), uint8(Verdict.PASS));
@@ -545,13 +637,13 @@ contract JobSpecLibrariesTest is Test {
         assertEq(uint8(_one(c[0], a[0], b[0])), uint8(Verdict.FAIL));
 
         // EQ is exact: 1.2 bps is not 1 bp (dividing first said it was).
-        c[0] = Check({left: 0, right: 1, evalType: EvalType.PCT, op: Op.EQ, target: 1});
+        c[0] = Check({left: _f(0), right: _f(1), evalType: EvalType.PCT, op: Op.EQ, target: 1});
         a[0] = Answer(true, 100.012e6);
         b[0] = Answer(true, 100e6);
         assertEq(uint8(_one(c[0], a[0], b[0])), uint8(Verdict.FAIL));
 
         // Overflow on either side is UNKNOWN, never a revert.
-        c[0] = Check({left: 0, right: 1, evalType: EvalType.PCT, op: Op.GTE, target: type(int256).max});
+        c[0] = Check({left: _f(0), right: _f(1), evalType: EvalType.PCT, op: Op.GTE, target: type(int256).max});
         a[0] = Answer(true, 3);
         b[0] = Answer(true, 2); // target * before overflows
         assertEq(uint8(_one(c[0], a[0], b[0])), uint8(Verdict.INCONCLUSIVE));
@@ -569,7 +661,7 @@ contract JobSpecLibrariesTest is Test {
     {
         vm.assume(beforeV > 0);
         Op op = Op(opSeed % 6);
-        Check memory c = Check({left: 0, right: 1, evalType: EvalType.PCT, op: op, target: target});
+        Check memory c = Check({left: _f(0), right: _f(1), evalType: EvalType.PCT, op: op, target: target});
 
         int256 lhs = (int256(afterV) - int256(beforeV)) * 10_000; // fits: |delta| < 2^121, times 2^14
         int256 rhs = int256(target) * int256(beforeV); // fits: under 2^240
@@ -595,11 +687,21 @@ contract JobSpecLibrariesTest is Test {
         for (uint256 i; i < nChecks; ++i) {
             uint256 r = uint256(keccak256(abi.encode(seed, i)));
             EvalType e = EvalType(r % 4);
-            uint256 left = (r >> 24) % nReads;
-            uint256 right = e == EvalType.NUM || e == EvalType.PCT ? (left + 1 + (r >> 32) % (nReads - 1)) % nReads : 0;
-            // forge-lint: disable-next-line(unsafe-typecast)
+            // Valid sides: left from reads [0, p), right from [p, nReads), each non-empty where the type needs it.
+            uint256 p = 1 + (r >> 24) % (nReads - 1);
+            uint256 left = (r >> 32) & ((uint256(1) << p) - 1);
+            if (left == 0 || e == EvalType.BOOL) left = uint256(1) << ((r >> 32) % p);
+            uint256 right;
+            if (e == EvalType.NUM || e == EvalType.PCT) {
+                right = ((r >> 96) << p) & ((uint256(1) << nReads) - 1);
+                if (right == 0) right = uint256(1) << p;
+            }
             checks[i] = Check({
-                left: uint8(left), right: uint8(right), evalType: e, op: Op((r >> 8) % 6), target: int256((r >> 16) % 5)
+                left: _toSide(left),
+                right: _toSide(right),
+                evalType: e,
+                op: Op((r >> 8) % 6),
+                target: int256((r >> 16) % 5)
             });
         }
         Logic[] memory nodes = new Logic[](nNodes);
@@ -644,11 +746,11 @@ contract JobSpecLibrariesTest is Test {
             for (uint256 j; j < 3; ++j) {
                 uint8 expected = uint8(want[op][j] ? Verdict.PASS : Verdict.FAIL);
                 int256 v = values[j];
-                Check memory c = Check({left: 0, right: 0, evalType: EvalType.CMP, op: Op(op), target: 100});
+                Check memory c = Check({left: _f(0), right: _none(), evalType: EvalType.CMP, op: Op(op), target: 100});
                 assertEq(uint8(_one(c, Answer(true, v), Answer(false, 0))), expected, "CMP");
-                c = Check({left: 0, right: 1, evalType: EvalType.NUM, op: Op(op), target: 100});
+                c = Check({left: _f(0), right: _f(1), evalType: EvalType.NUM, op: Op(op), target: 100});
                 assertEq(uint8(_one(c, Answer(true, v - 50), Answer(true, -50))), expected, "NUM");
-                c = Check({left: 0, right: 1, evalType: EvalType.PCT, op: Op(op), target: 100});
+                c = Check({left: _f(0), right: _f(1), evalType: EvalType.PCT, op: Op(op), target: 100});
                 assertEq(uint8(_one(c, Answer(true, 10_000 + v), Answer(true, 10_000))), expected, "PCT");
             }
         }
@@ -658,7 +760,7 @@ contract JobSpecLibrariesTest is Test {
     function test_JDG06_bool() public view {
         for (int256 t; t < 2; ++t) {
             for (int256 v; v < 2; ++v) {
-                Check memory c = Check({left: 0, right: 0, evalType: EvalType.BOOL, op: Op.EQ, target: t});
+                Check memory c = Check({left: _f(0), right: _none(), evalType: EvalType.BOOL, op: Op.EQ, target: t});
                 assertEq(uint8(_one(c, Answer(true, v), Answer(false, 0))), uint8(v == t ? Verdict.PASS : Verdict.FAIL));
             }
         }
@@ -672,7 +774,11 @@ contract JobSpecLibrariesTest is Test {
         for (uint256 e; e < 4; ++e) {
             bool pair = e >= uint256(EvalType.NUM);
             Check memory c = Check({
-                left: 0, right: pair ? 1 : 0, evalType: EvalType(e), op: Op.EQ, target: pair ? int256(0) : int256(1)
+                left: _f(0),
+                right: pair ? _f(1) : _none(),
+                evalType: EvalType(e),
+                op: Op.EQ,
+                target: pair ? int256(0) : int256(1)
             });
             assertEq(uint8(_one(c, one, one)), uint8(Verdict.PASS), "both readable");
             assertEq(uint8(_one(c, none, one)), uint8(Verdict.INCONCLUSIVE), "left unreadable");
@@ -703,7 +809,7 @@ contract JobSpecLibrariesTest is Test {
         Logic[] memory nodes = new Logic[](4);
         uint8[] memory kids = new uint8[](3);
         for (uint8 i; i < 3; ++i) {
-            checks[i] = Check({left: i, right: 0, evalType: EvalType.CMP, op: Op.EQ, target: 1});
+            checks[i] = Check({left: _f(i), right: _none(), evalType: EvalType.CMP, op: Op.EQ, target: 1});
             values[i] = Answer(results[i] != JobSpecLib.UNKNOWN, results[i] == JobSpecLib.PASS ? int256(1) : int256(0));
             nodes[1 + i] = Logic({kind: LogicKind.CHECK, check: i, children: new uint8[](0), k: 0});
             kids[i] = 1 + i;
@@ -711,5 +817,47 @@ contract JobSpecLibrariesTest is Test {
         nodes[0] = Logic({kind: kind, check: 0, children: kids, k: k});
         assertEq(uint8(lib.verdict(checks, nodes, values)), uint8(want), "reference");
         assertEq(uint8(lib.verdictPacked(checks, nodes, values)), uint8(want), "packed");
+    }
+
+    /// @dev Each side is the sum of its reads; one unreadable read, or a sum that overflows, leaves the check UNKNOWN.
+    function test_JDG09_sides() public view {
+        Answer[] memory v = new Answer[](5);
+        v[0] = Answer(true, 3);
+        v[1] = Answer(true, 4);
+        v[2] = Answer(true, 5);
+        v[3] = Answer(false, 0); // unreadable
+        v[4] = Answer(true, type(int256).max);
+
+        _judged(Check({left: _f(0, 1), right: _none(), evalType: EvalType.CMP, op: Op.GTE, target: 7}), v, Verdict.PASS);
+        _judged(Check({left: _f(0, 1), right: _none(), evalType: EvalType.CMP, op: Op.GTE, target: 8}), v, Verdict.FAIL);
+        _judged(Check({left: _f(0, 1), right: _f(2), evalType: EvalType.NUM, op: Op.EQ, target: 2}), v, Verdict.PASS); // 7 - 5
+        _judged(Check({left: _f(2), right: _f(0, 1), evalType: EvalType.NUM, op: Op.LT, target: 0}), v, Verdict.PASS); // 5 - 7
+        // (7 - 5) / 5 = +40%
+        _judged(Check({left: _f(0, 1), right: _f(2), evalType: EvalType.PCT, op: Op.EQ, target: 4000}), v, Verdict.PASS);
+        _judged(
+            Check({left: _f(0, 3), right: _none(), evalType: EvalType.CMP, op: Op.GTE, target: 0}),
+            v,
+            Verdict.INCONCLUSIVE
+        );
+        _judged(
+            Check({left: _f(2), right: _f(1, 3), evalType: EvalType.NUM, op: Op.GTE, target: 0}),
+            v,
+            Verdict.INCONCLUSIVE
+        );
+        _judged(
+            Check({left: _f(1, 4), right: _none(), evalType: EvalType.CMP, op: Op.GTE, target: 0}),
+            v,
+            Verdict.INCONCLUSIVE
+        );
+    }
+
+    /// @dev One check under a CHECK root over `values`, through both judges.
+    function _judged(Check memory c, Answer[] memory values, Verdict want) internal view {
+        Check[] memory cs = new Check[](1);
+        cs[0] = c;
+        Logic[] memory n = new Logic[](1);
+        n[0] = Logic({kind: LogicKind.CHECK, check: 0, children: new uint8[](0), k: 0});
+        assertEq(uint8(lib.verdict(cs, n, values)), uint8(want), "reference");
+        assertEq(uint8(lib.verdictPacked(cs, n, values)), uint8(want), "packed");
     }
 }

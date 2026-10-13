@@ -20,7 +20,8 @@ library ReferenceJudge {
         uint8[] memory checkRes = new uint8[](checks.length);
         for (uint256 i; i < checks.length; ++i) {
             Check memory c = checks[i];
-            checkRes[i] = JobSpecLib.checkResult(c, values[c.left], values[c.right]);
+            checkRes[i] =
+                JobSpecLib.checkResult(c.evalType, c.op, c.target, _sum(c.left, values), _sum(c.right, values));
         }
 
         uint8[] memory nodeRes = new uint8[](nodes.length);
@@ -32,6 +33,17 @@ library ReferenceJudge {
         if (root == JobSpecLib.PASS) return Verdict.PASS;
         if (root == JobSpecLib.FAIL) return Verdict.FAIL;
         return Verdict.INCONCLUSIVE;
+    }
+
+    /// @dev A side's sum, read by read: unknown if any read is unreadable or the sum overflows.
+    function _sum(uint8[] memory side, Answer[] memory values) private pure returns (Answer memory total) {
+        total.ok = true;
+        for (uint256 j; j < side.length; ++j) {
+            Answer memory v = values[side[j]];
+            if (!v.ok) return Answer(false, 0);
+            (total.ok, total.value) = JobSpecLib.add(total.value, v.value);
+            if (!total.ok) return Answer(false, 0);
+        }
     }
 
     /// @dev One node from its already-decided children.

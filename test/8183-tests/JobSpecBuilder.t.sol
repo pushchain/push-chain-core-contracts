@@ -265,8 +265,8 @@ contract JobSpecBuilderTest is BuilderFixtures {
             assertEq(uint8(s.reads[i].at), uint8(t.reads[i].at));
         }
         for (uint256 i; i < t.checks.length; ++i) {
-            assertEq(s.checks[i].left, t.checks[i].left);
-            assertEq(s.checks[i].right, t.checks[i].right);
+            assertEq(keccak256(abi.encode(s.checks[i].left)), keccak256(abi.encode(t.checks[i].left)));
+            assertEq(keccak256(abi.encode(s.checks[i].right)), keccak256(abi.encode(t.checks[i].right)));
             assertEq(uint8(s.checks[i].evalType), uint8(t.checks[i].evalType));
             assertEq(uint8(s.checks[i].op), uint8(t.checks[i].op));
         }
@@ -394,8 +394,12 @@ contract JobSpecBuilderTest is BuilderFixtures {
     /// @dev The structural rules the evaluator relies on, checked on the BUILT spec of a well-formed template.
     function _assertStructural(JobSpec memory s) internal pure {
         for (uint256 i; i < s.checks.length; ++i) {
-            assertLt(s.checks[i].left, s.reads.length);
-            assertLt(s.checks[i].right, s.reads.length);
+            for (uint256 j; j < s.checks[i].left.length; ++j) {
+                assertLt(s.checks[i].left[j], s.reads.length);
+            }
+            for (uint256 j; j < s.checks[i].right.length; ++j) {
+                assertLt(s.checks[i].right[j], s.reads.length);
+            }
         }
         for (uint256 i; i < s.logic.length; ++i) {
             for (uint256 j; j < s.logic[i].children.length; ++j) {

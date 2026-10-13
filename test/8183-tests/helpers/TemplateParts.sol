@@ -52,6 +52,8 @@ abstract contract TemplateParts {
         f[1] = b;
     }
 
+    function _none() internal pure returns (uint8[] memory) {}
+
     function _noFills() internal pure returns (Fill[] memory) {
         return new Fill[](0);
     }
@@ -101,7 +103,7 @@ abstract contract TemplateParts {
         pure
         returns (CheckTemplate memory)
     {
-        return CheckTemplate({left: read, right: 0, evalType: e, op: op, source: src, value: value});
+        return CheckTemplate({left: _f(read), right: _none(), evalType: e, op: op, source: src, value: value});
     }
 
     /// @dev A NUM / PCT check: `left` against `right`.
@@ -110,7 +112,7 @@ abstract contract TemplateParts {
         pure
         returns (CheckTemplate memory)
     {
-        return CheckTemplate({left: left, right: right, evalType: e, op: op, source: src, value: value});
+        return CheckTemplate({left: _f(left), right: _f(right), evalType: e, op: op, source: src, value: value});
     }
 
     function _checkNode(uint8 check) internal pure returns (Logic memory) {

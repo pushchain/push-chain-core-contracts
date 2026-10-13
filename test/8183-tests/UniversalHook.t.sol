@@ -215,7 +215,7 @@ contract UniversalHookTest is UniversalEvalBase {
 
     function test_UH11_invalidSpec_refused() public {
         JobSpec memory s = _swapSpec();
-        s.checks[0].left = 5;
+        s.checks[0].left[0] = 5;
         uint256 jobId = _createSpec(s);
         _prefund(jobId, 1 ether);
         bytes memory fp = _fundParams(jobId);

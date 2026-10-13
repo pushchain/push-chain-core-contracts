@@ -1334,11 +1334,12 @@ contract UniversalMarketplaceTest is MarketplaceFixtures {
         assertEq(kernel.getJob(jobId).budget, fee);
     }
 
-    /// @dev Ceilings = measured + 10%, rounded up to 10k (PRD 09 §8.5). Measured 2026-10-02 with the mock wallet
-    ///      and factory: registerCard 2,231,229 · startJob fresh 3,172,694 · startJob existing 1,891,132.
-    uint256 internal constant REGISTER_GAS_CEILING = 2_460_000;
-    uint256 internal constant START_FRESH_GAS_CEILING = 3_490_000;
-    uint256 internal constant START_EXISTING_GAS_CEILING = 2_090_000;
+    /// @dev Ceilings = measured + 10%, rounded up to 10k (PRD 09 §8.5). Measured 2026-10-13 with the mock wallet
+    ///      and factory, after the criteria gained read timing and summed check sides (a longer description):
+    ///      registerCard 2,363,247 · startJob fresh 3,402,542 · startJob existing 2,125,822.
+    uint256 internal constant REGISTER_GAS_CEILING = 2_600_000;
+    uint256 internal constant START_FRESH_GAS_CEILING = 3_750_000;
+    uint256 internal constant START_EXISTING_GAS_CEILING = 2_340_000;
 
     function test_MS18_gasCeilings() public {
         AgentCard memory c = _card();

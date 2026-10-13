@@ -157,10 +157,10 @@ enum TargetSource {
 }
 
 /// @notice A `Check` whose target is a source. `value`: FIXED the target · PRINCIPAL_BPS bps of principal ·
-///         PARAM a param index · CEA unused (the CEA of the `left` read's chain).
+///         PARAM a param index · CEA unused (the CEA on the chain of `left`'s first read).
 struct CheckTemplate {
-    uint8 left;
-    uint8 right;
+    uint8[] left;
+    uint8[] right;
     EvalType evalType;
     Op op;
     TargetSource source;

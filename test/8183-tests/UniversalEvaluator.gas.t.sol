@@ -22,77 +22,115 @@ import {
     MAX_CHECKS,
     MAX_NODES
 } from "../../src/agentic-commerce-8183/libraries/JobSpecTypes.sol";
-import {Verdict} from "../../src/agentic-commerce-8183/evaluator/EvaluationTypes.sol";
+import {Verdict, MAX_DESCRIPTION_LENGTH} from "../../src/agentic-commerce-8183/evaluator/EvaluationTypes.sol";
 
 /// @notice The callbacks must fit Read State's gas limits for the largest spec the rules allow.
-/// @dev Worst case: 32 reads of a 15-field struct (16 POST, 16 PRE), 16 NUM checks, each a POST read against its
-///      own PRE read, and 32 nodes.
+/// @dev Reads are 15-field structs. A spec must also fit MAX_DESCRIPTION_LENGTH (32 KB), which keeps every count from
+///      being at its maximum at once, so the worst cases are split:
+///      - GAS01, the most nodes: 32 nodes over 16 NUM checks, each a POST read against a PRE read (8 of each);
+///      - GAS03, the most reads and terms: 32 POST reads and MAX_TERMS (64) terms across 16 checks that all wait for
+///        the last answer.
 ///      A callback that runs out of gas is never retried, so this is a hard ceiling, not an optimisation.
 contract UniversalEvaluatorGasTest is UniversalEvalBase {
-    uint256 internal constant HALF = MAX_READS / 2;
+    /// @dev GAS01's reads: 0..7 POST, 8..15 their PRE copies.
+    uint256 internal constant VENUES = 8;
 
     function _maxSpec() internal view returns (JobSpec memory s) {
-        s.executeBy = uint64(block.timestamp + 1 hours);
-        s.failFinalAt = uint64(block.timestamp + 2 hours);
-        s.reads = new Read[](MAX_READS);
-        s.checks = new Check[](MAX_CHECKS);
-        s.logic = new Logic[](MAX_NODES);
-        for (uint256 i; i < MAX_READS; ++i) {
-            uint256 venue = i % HALF; // read i + HALF is read i's PRE copy
-            s.reads[i] = Read({
-                chainNamespace: NS,
-                chainId: BASE,
-                minConfirmations: 3,
-                target: address(uint160(0x1000 + venue)),
-                selector: bytes4(keccak256("getReserveData(address)")),
-                args: abi.encode(address(uint160(0x2000 + venue))),
-                outputs: _reserveOutputs(),
-                field: _u8(0, 2),
-                at: i < HALF ? ReadAt.POST_EXECUTION : ReadAt.PRE_EXECUTION
-            });
+        s = _frame(2 * VENUES, MAX_NODES);
+        for (uint256 i; i < 2 * VENUES; ++i) {
+            s.reads[i] = _reserveRead(i % VENUES, i < VENUES ? ReadAt.POST_EXECUTION : ReadAt.PRE_EXECUTION);
         }
         for (uint256 i; i < MAX_CHECKS; ++i) {
             // forge-lint: disable-next-line(unsafe-typecast)
-            s.checks[i] = Check({left: uint8(i), right: uint8(i + HALF), evalType: EvalType.NUM, op: Op.GTE, target: 1});
+            uint8 venue = uint8(i % VENUES);
+            // forge-lint: disable-next-line(unsafe-typecast)
+            s.checks[i] = Check({
+                left: _u8(venue), right: _u8(venue + uint8(VENUES)), evalType: EvalType.NUM, op: Op.GTE, target: 1
+            });
         }
-        // Root ALL over the other 31 nodes, each a CHECK node, so every node is reachable and every check used.
-        uint8[] memory children = new uint8[](MAX_NODES - 1);
-        for (uint256 i; i < MAX_NODES - 1; ++i) {
+    }
+
+    /// @dev 32 POST reads; check i is `(read i + read 31) - (two of reads 16..30) >= 0`, 4 terms each, 64 in all.
+    ///      Every check includes read 31, so its answer, delivered last, sums every side.
+    function _maxTermsSpec() internal view returns (JobSpec memory s) {
+        s = _frame(MAX_READS, 1 + MAX_CHECKS);
+        for (uint256 i; i < MAX_READS; ++i) {
+            s.reads[i] = _reserveRead(i, ReadAt.POST_EXECUTION);
+        }
+        for (uint256 i; i < MAX_CHECKS; ++i) {
+            // forge-lint: disable-next-line(unsafe-typecast)
+            uint8 a = uint8(16 + i % 15);
+            // forge-lint: disable-next-line(unsafe-typecast)
+            uint8 b = uint8(16 + (i + 1) % 15);
+            if (a > b) (a, b) = (b, a);
+            // forge-lint: disable-next-line(unsafe-typecast)
+            s.checks[i] =
+                Check({left: _u8(uint8(i), 31), right: _u8(a, b), evalType: EvalType.NUM, op: Op.GTE, target: 0});
+        }
+    }
+
+    /// @dev `nReads` reads and MAX_CHECKS checks to fill in, and a root ALL over `nNodes - 1` CHECK nodes, so every
+    ///      node is reachable and every check used.
+    function _frame(uint256 nReads, uint256 nNodes) internal view returns (JobSpec memory s) {
+        s.executeBy = uint64(block.timestamp + 1 hours);
+        s.failFinalAt = uint64(block.timestamp + 2 hours);
+        s.reads = new Read[](nReads);
+        s.checks = new Check[](MAX_CHECKS);
+        s.logic = new Logic[](nNodes);
+        uint8[] memory children = new uint8[](nNodes - 1);
+        for (uint256 i; i < nNodes - 1; ++i) {
             // forge-lint: disable-next-line(unsafe-typecast)
             children[i] = uint8(i + 1);
         }
         s.logic[0] = Logic({kind: LogicKind.ALL, check: 0, children: children, k: 0});
-        for (uint256 i = 1; i < MAX_NODES; ++i) {
+        for (uint256 i = 1; i < nNodes; ++i) {
             // forge-lint: disable-next-line(unsafe-typecast)
             s.logic[i] = _checkNode(uint8((i - 1) % MAX_CHECKS));
         }
         s.mutability = CriteriaMutability.NONE;
     }
 
+    /// @dev Aave's `getReserveData` on venue `venue`, its rate (field [0, 2]).
+    function _reserveRead(uint256 venue, ReadAt at) internal pure returns (Read memory) {
+        return Read({
+            chainNamespace: NS,
+            chainId: BASE,
+            minConfirmations: 3,
+            target: address(uint160(0x1000 + venue)),
+            selector: bytes4(keccak256("getReserveData(address)")),
+            args: abi.encode(address(uint160(0x2000 + venue))),
+            outputs: _reserveOutputs(),
+            field: _u8(0, 2),
+            at: at
+        });
+    }
+
     function test_GAS01_maxSpec_callbacksFit() public {
         // `--isolate` runs each call as its own transaction, which does not carry `vm.fee`; with a zero base fee
         // the node's budget rule is trivially met everywhere. Gas use does not depend on the base fee.
         vm.fee(0);
-        uint256 jobId = _createSpec(_maxSpec());
+        JobSpec memory s = _maxSpec();
+        assertLe(abi.encode(s).length, MAX_DESCRIPTION_LENGTH, "fits the description cap");
+        uint256 jobId = _createSpec(s);
         _fund(jobId);
-        for (uint256 i = HALF; i < MAX_READS; ++i) {
+        for (uint256 i = VENUES; i < 2 * VENUES; ++i) {
             assertTrue(_deliverExpectingSuccess(ue.requestOf(jobId, i), _reserveAnswer(100)), "snapshot cb");
         }
         assertTrue(ue.ready(jobId));
         _advance();
 
-        // `submit` fixes 16 end blocks and sends the 16 POST reads; the provider pays this gas.
+        // `submit` fixes the 8 end blocks and sends the 8 POST reads; the provider pays this gas.
         uint256 g0 = gasleft();
         _submit(jobId);
-        console2.log("submit incl. 16 reads, gas:", g0 - gasleft());
+        console2.log("submit incl. 8 reads, gas:", g0 - gasleft());
         assertTrue(ue.evaluationOf(jobId).started, "reads sent inside submit");
 
-        for (uint256 i; i < HALF - 1; ++i) {
+        for (uint256 i; i < VENUES - 1; ++i) {
             assertTrue(_deliverExpectingSuccess(ue.requestOf(jobId, i), _reserveAnswer(200)), "answer cb");
         }
         uint256 g = gasleft();
         assertTrue(
-            _deliverExpectingSuccess(ue.requestOf(jobId, HALF - 1), _reserveAnswer(200)),
+            _deliverExpectingSuccess(ue.requestOf(jobId, VENUES - 1), _reserveAnswer(200)),
             "final callback ran out of gas"
         );
         console2.log("fulfil incl. final callback, gas:", g - gasleft());
@@ -100,6 +138,31 @@ contract UniversalEvaluatorGasTest is UniversalEvalBase {
         UniversalEvaluator.Evaluation memory e = ue.evaluationOf(jobId);
         assertTrue(e.done && e.applied);
         assertEq(uint8(e.verdict), uint8(Verdict.PASS));
+        assertEq(uint8(_status(jobId)), uint8(IAgenticCommerce.JobStatus.Completed));
+    }
+
+    function test_GAS03_maxTerms_finalCallbackFits() public {
+        vm.fee(0);
+        JobSpec memory s = _maxTermsSpec();
+        assertLe(abi.encode(s).length, MAX_DESCRIPTION_LENGTH, "fits the description cap");
+        uint256 jobId = _createSpec(s);
+        _fund(jobId);
+        _advance();
+        uint256 g0 = gasleft();
+        _submit(jobId);
+        console2.log("submit incl. 32 reads, gas:", g0 - gasleft());
+
+        for (uint256 i; i < MAX_READS - 1; ++i) {
+            assertTrue(_deliverExpectingSuccess(ue.requestOf(jobId, i), _reserveAnswer(100)), "answer cb");
+        }
+        assertEq(uint8(_status(jobId)), uint8(IAgenticCommerce.JobStatus.Submitted), "every check waits for read 31");
+        uint256 g = gasleft();
+        assertTrue(
+            _deliverExpectingSuccess(ue.requestOf(jobId, MAX_READS - 1), _reserveAnswer(100)),
+            "final callback ran out of gas"
+        );
+        console2.log("fulfil incl. final callback over 64 terms, gas:", g - gasleft());
+        assertEq(uint8(ue.evaluationOf(jobId).verdict), uint8(Verdict.PASS));
         assertEq(uint8(_status(jobId)), uint8(IAgenticCommerce.JobStatus.Completed));
     }
 

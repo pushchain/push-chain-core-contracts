@@ -266,6 +266,51 @@ contract UniversalEvaluatorCriteriaTest is UniversalEvalBase {
         assertEq(uint8(_status(jobId)), uint8(SUBMITTED));
     }
 
+    // ───────────── sums: several reads on one side ─────────────
+
+    /// @dev CMP on a sum: "aUSDC + Morpho assets ≥ 999.9" after a split deposit. The split is the provider's choice.
+    function test_CR23_sum_splitDeposit() public {
+        Read[] memory reads = _r(
+            _balanceRead(ausdc, cea), _call(morphoVault, "maxWithdraw(address)", abi.encode(cea), _out(T_UINT), _u8(0))
+        );
+        JobSpec memory s = _spec1(reads, _cmp(_u8(0, 1), Op.GTE, 999.9e6));
+        _expect(s, _ans(_u(600e6), _u(399.9e6)), COMPLETED);
+        _expect(s, _ans(_u(999.9e6), _u(0)), COMPLETED); // all in Aave
+        _expect(s, _ans(_u(600e6), _u(399.8e6)), REJECTED);
+    }
+
+    /// @dev PCT on sums: "earned at least 4% across Aave and Morpho combined". Reads 0, 1 after; 2, 3 before.
+    function test_CR24_sum_combinedYield() public {
+        JobSpec memory s = _spec1(_twoVenuesBeforeAfter(), _pct(_u8(0, 1), _u8(2, 3), Op.GTE, 400));
+        // 600 + 400 → 630 + 410: +4% overall, though Aave made 5% and Morpho 2.5%
+        _expect(s, _ans(_u(630e6), _u(410e6), _u(600e6), _u(400e6)), COMPLETED);
+        _expect(s, _ans(_u(620e6), _u(410e6), _u(600e6), _u(400e6)), REJECTED); // +3%
+    }
+
+    /// @dev NUM on sums: "at least 999.9 more across both venues than before the job", whatever was there already.
+    function test_CR25_sum_depositedDuringJob() public {
+        JobSpec memory s = _spec1(_twoVenuesBeforeAfter(), _num(_u8(0, 1), _u8(2, 3), Op.GTE, 999.9e6));
+        _expect(s, _ans(_u(700e6), _u(449.9e6), _u(100e6), _u(50e6)), COMPLETED);
+        _expect(s, _ans(_u(700e6), _u(449.8e6), _u(100e6), _u(50e6)), REJECTED);
+    }
+
+    /// @dev A sum across chains: "the CEAs hold at least 1,000 USDC on Base and Arbitrum together".
+    function test_CR26_sum_acrossChains() public {
+        _track("42161");
+        Read[] memory reads = _r(_balanceRead(usdc, cea), _on(_balanceRead(usdc, cea), "42161"));
+        JobSpec memory s = _spec1(reads, _cmp(_u8(0, 1), Op.GTE, 1_000e6));
+        _expect(s, _ans(_u(700e6), _u(300e6)), COMPLETED);
+        _expect(s, _ans(_u(700e6), _u(299e6)), REJECTED);
+    }
+
+    /// @dev A sum on the right: "b > a + c".
+    function test_CR27_sum_onTheRight() public {
+        Read[] memory reads = _r(_balanceRead(weth, cea), _balanceRead(ausdc, cea), _balanceRead(morphoVault, cea));
+        JobSpec memory s = _spec1(reads, _num(_u8(0), _u8(1, 2), Op.GT, 0));
+        _expect(s, _ans(_u(10), _u(4), _u(5)), COMPLETED);
+        _expect(s, _ans(_u(9), _u(4), _u(5)), REJECTED);
+    }
+
     // ───────────── runner ─────────────
 
     /// @dev One job end to end: fund, answer the PRE reads, move every chain on, submit, then answer the POST reads in
@@ -356,6 +401,16 @@ contract UniversalEvaluatorCriteriaTest is UniversalEvalBase {
         return _r(_balanceRead(token_, cea), _pre(_balanceRead(token_, cea)));
     }
 
+    /// @dev aUSDC and Morpho balances: reads 0, 1 after the job, reads 2, 3 before it.
+    function _twoVenuesBeforeAfter() internal view returns (Read[] memory) {
+        return _r(
+            _balanceRead(ausdc, cea),
+            _balanceRead(morphoVault, cea),
+            _pre(_balanceRead(ausdc, cea)),
+            _pre(_balanceRead(morphoVault, cea))
+        );
+    }
+
     /// @dev A function returning one value of type `code`.
     function _out(uint8 code) internal pure returns (bytes memory) {
         return abi.encodePacked(T_TUPLE, uint8(1), code);
@@ -379,18 +434,40 @@ contract UniversalEvaluatorCriteriaTest is UniversalEvalBase {
     // ───────────── checks ─────────────
 
     function _bool(uint8 read, bool want) internal pure returns (Check memory) {
-        return Check({left: read, right: 0, evalType: EvalType.BOOL, op: Op.EQ, target: want ? int256(1) : int256(0)});
+        return Check({
+            left: _u8(read), right: _none(), evalType: EvalType.BOOL, op: Op.EQ, target: want ? int256(1) : int256(0)
+        });
     }
 
     function _cmp(uint8 read, Op op, int256 target) internal pure returns (Check memory) {
-        return Check({left: read, right: 0, evalType: EvalType.CMP, op: op, target: target});
+        return _cmp(_u8(read), op, target);
+    }
+
+    function _cmp(uint8[] memory left, Op op, int256 target) internal pure returns (Check memory) {
+        return Check({left: left, right: _none(), evalType: EvalType.CMP, op: op, target: target});
     }
 
     function _num(uint8 left, uint8 right, Op op, int256 target) internal pure returns (Check memory) {
+        return _num(_u8(left), _u8(right), op, target);
+    }
+
+    function _num(uint8[] memory left, uint8[] memory right, Op op, int256 target)
+        internal
+        pure
+        returns (Check memory)
+    {
         return Check({left: left, right: right, evalType: EvalType.NUM, op: op, target: target});
     }
 
     function _pct(uint8 left, uint8 right, Op op, int256 target) internal pure returns (Check memory) {
+        return _pct(_u8(left), _u8(right), op, target);
+    }
+
+    function _pct(uint8[] memory left, uint8[] memory right, Op op, int256 target)
+        internal
+        pure
+        returns (Check memory)
+    {
         return Check({left: left, right: right, evalType: EvalType.PCT, op: op, target: target});
     }
 

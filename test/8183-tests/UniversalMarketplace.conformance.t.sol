@@ -46,8 +46,8 @@ contract UniversalMarketplaceConformanceTest is BuilderFixtures {
         reads[1] =
             _docRead("1", 12, AAVE_POOL_ETH, GET_RESERVE_DATA, abi.encode(USDC_ETH), _docReserveOutputs(), _f2(0, 2));
         Check[] memory checks = new Check[](2);
-        checks[0] = Check({left: 0, right: 0, evalType: EvalType.CMP, op: Op.GTE, target: 99.99e6});
-        checks[1] = Check({left: 1, right: 0, evalType: EvalType.CMP, op: Op.GTE, target: 0.04e27});
+        checks[0] = Check({left: _f(0), right: _none(), evalType: EvalType.CMP, op: Op.GTE, target: 99.99e6});
+        checks[1] = Check({left: _f(1), right: _none(), evalType: EvalType.CMP, op: Op.GTE, target: 0.04e27});
         Logic[] memory nodes = new Logic[](3);
         nodes[0] = Logic({kind: LogicKind.ALL, check: 0, children: _kids(1, 2), k: 0});
         nodes[1] = Logic({kind: LogicKind.CHECK, check: 0, children: new uint8[](0), k: 0});
@@ -65,7 +65,7 @@ contract UniversalMarketplaceConformanceTest is BuilderFixtures {
         reads[1] = _docRead("8453", 3, WETH_BASE, BALANCE_OF, abi.encode(cea), _docUintOutputs(), _f(0));
         reads[1].at = ReadAt.PRE_EXECUTION;
         Check[] memory checks = new Check[](1);
-        checks[0] = Check({left: 0, right: 1, evalType: EvalType.NUM, op: Op.GTE, target: 0.38e18});
+        checks[0] = Check({left: _f(0), right: _f(1), evalType: EvalType.NUM, op: Op.GTE, target: 0.38e18});
         Logic[] memory nodes = new Logic[](1);
         nodes[0] = Logic({kind: LogicKind.CHECK, check: 0, children: new uint8[](0), k: 0});
 
@@ -81,8 +81,8 @@ contract UniversalMarketplaceConformanceTest is BuilderFixtures {
         reads[0] = _docRead("1", 12, AUSDC_ETH, BALANCE_OF, abi.encode(cea), _docUintOutputs(), _f(0));
         reads[1] = _docRead("1", 12, MORPHO_VAULT, MAX_WITHDRAW, abi.encode(cea), _docUintOutputs(), _f(0));
         Check[] memory checks = new Check[](2);
-        checks[0] = Check({left: 0, right: 0, evalType: EvalType.CMP, op: Op.GTE, target: 99.99e6});
-        checks[1] = Check({left: 1, right: 0, evalType: EvalType.CMP, op: Op.GTE, target: 99.99e6});
+        checks[0] = Check({left: _f(0), right: _none(), evalType: EvalType.CMP, op: Op.GTE, target: 99.99e6});
+        checks[1] = Check({left: _f(1), right: _none(), evalType: EvalType.CMP, op: Op.GTE, target: 99.99e6});
         Logic[] memory nodes = new Logic[](3);
         nodes[0] = Logic({kind: LogicKind.ANY, check: 0, children: _kids(1, 2), k: 0});
         nodes[1] = Logic({kind: LogicKind.CHECK, check: 0, children: new uint8[](0), k: 0});
@@ -231,8 +231,8 @@ contract UniversalMarketplaceConformanceTest is BuilderFixtures {
         }
         assertEq(a.checks.length, b.checks.length, "checks.length");
         for (uint256 i; i < a.checks.length; ++i) {
-            assertEq(a.checks[i].left, b.checks[i].left, "check.left");
-            assertEq(a.checks[i].right, b.checks[i].right, "check.right");
+            _assertBytesEq(a.checks[i].left, b.checks[i].left, "check.left");
+            _assertBytesEq(a.checks[i].right, b.checks[i].right, "check.right");
             assertEq(uint8(a.checks[i].evalType), uint8(b.checks[i].evalType), "check.evalType");
             assertEq(uint8(a.checks[i].op), uint8(b.checks[i].op), "check.op");
             assertEq(a.checks[i].target, b.checks[i].target, "check.target");
