@@ -6,6 +6,7 @@ import {
     Op,
     LogicKind,
     Logic,
+    ReadAt,
     T_UINT,
     T_ADDRESS,
     T_TUPLE
@@ -80,8 +81,14 @@ abstract contract TemplateParts {
             args: args,
             fills: fills,
             outputs: outputs,
-            field: field
+            field: field,
+            at: ReadAt.POST_EXECUTION
         });
+    }
+
+    function _preRead(ReadTemplate memory r) internal pure returns (ReadTemplate memory) {
+        r.at = ReadAt.PRE_EXECUTION;
+        return r;
     }
 
     /// @dev `token.balanceOf(CEA)` on `chainId`: args are one zero word the CEA fill overwrites.
@@ -94,7 +101,16 @@ abstract contract TemplateParts {
         pure
         returns (CheckTemplate memory)
     {
-        return CheckTemplate({read: read, evalType: e, op: op, source: src, value: value});
+        return CheckTemplate({left: read, right: 0, evalType: e, op: op, source: src, value: value});
+    }
+
+    /// @dev A NUM / PCT check: `left` against `right`.
+    function _pair(uint8 left, uint8 right, EvalType e, Op op, TargetSource src, int256 value)
+        internal
+        pure
+        returns (CheckTemplate memory)
+    {
+        return CheckTemplate({left: left, right: right, evalType: e, op: op, source: src, value: value});
     }
 
     function _checkNode(uint8 check) internal pure returns (Logic memory) {

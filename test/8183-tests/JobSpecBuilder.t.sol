@@ -89,13 +89,16 @@ abstract contract BuilderFixtures is Test, TemplateParts {
         t.params = new ParamBounds[](0);
     }
 
-    /// @dev "The CEA receives at least minOut WETH on Base": one NUM check, `minOut` is the user's param 0.
+    /// @dev "The CEA receives at least minOut WETH on Base": the balance after (read 0) minus before (read 1),
+    ///      `minOut` is the user's param 0.
     function _swap() internal view returns (EvaluationTemplate memory t) {
-        t.reads = new ReadTemplate[](1);
+        t.reads = new ReadTemplate[](2);
         t.reads[0] = _balanceOfCEA("8453", WETH_BASE);
         t.reads[0].minConfirmations = 3;
+        t.reads[1] = _preRead(_balanceOfCEA("8453", WETH_BASE));
+        t.reads[1].minConfirmations = 3;
         t.checks = new CheckTemplate[](1);
-        t.checks[0] = _chk(0, EvalType.NUM, Op.GTE, TargetSource.PARAM, 0);
+        t.checks[0] = _pair(0, 1, EvalType.NUM, Op.GTE, TargetSource.PARAM, 0);
         t.logic = new Logic[](1);
         t.logic[0] = _checkNode(0);
         t.params = new ParamBounds[](1);
@@ -259,9 +262,11 @@ contract JobSpecBuilderTest is BuilderFixtures {
             assertEq(s.reads[i].selector, t.reads[i].selector);
             assertEq(s.reads[i].outputs, t.reads[i].outputs);
             assertEq(keccak256(abi.encode(s.reads[i].field)), keccak256(abi.encode(t.reads[i].field)));
+            assertEq(uint8(s.reads[i].at), uint8(t.reads[i].at));
         }
         for (uint256 i; i < t.checks.length; ++i) {
-            assertEq(s.checks[i].read, t.checks[i].read);
+            assertEq(s.checks[i].left, t.checks[i].left);
+            assertEq(s.checks[i].right, t.checks[i].right);
             assertEq(uint8(s.checks[i].evalType), uint8(t.checks[i].evalType));
             assertEq(uint8(s.checks[i].op), uint8(t.checks[i].op));
         }
@@ -389,7 +394,8 @@ contract JobSpecBuilderTest is BuilderFixtures {
     /// @dev The structural rules the evaluator relies on, checked on the BUILT spec of a well-formed template.
     function _assertStructural(JobSpec memory s) internal pure {
         for (uint256 i; i < s.checks.length; ++i) {
-            assertLt(s.checks[i].read, s.reads.length);
+            assertLt(s.checks[i].left, s.reads.length);
+            assertLt(s.checks[i].right, s.reads.length);
         }
         for (uint256 i; i < s.logic.length; ++i) {
             for (uint256 j; j < s.logic[i].children.length; ++j) {

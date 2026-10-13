@@ -17,6 +17,7 @@ import {
     Op,
     LogicKind,
     CriteriaMutability,
+    ReadAt,
     T_TUPLE,
     T_UINT,
     T_ADDRESS,
@@ -27,9 +28,12 @@ import {
 import {Verdict} from "../../src/agentic-commerce-8183/evaluator/EvaluationTypes.sol";
 
 /// @notice The callbacks must fit Read State's gas limits for the largest spec the rules allow.
-/// @dev Worst case: 16 reads of a 15-field struct, 16 NUM checks (all snapshotted), 32 nodes.
+/// @dev Worst case: 32 reads of a 15-field struct (16 POST, 16 PRE), 16 NUM checks, each a POST read against its
+///      own PRE read, and 32 nodes.
 ///      A callback that runs out of gas is never retried, so this is a hard ceiling, not an optimisation.
 contract UniversalEvaluatorGasTest is UniversalEvalBase {
+    uint256 internal constant HALF = MAX_READS / 2;
+
     /// @dev Aave v3 `getReserveData`-shaped return: one struct of 15 static fields.
     function _reserveOutputs() internal pure returns (bytes memory) {
         return abi.encodePacked(
@@ -70,18 +74,22 @@ contract UniversalEvaluatorGasTest is UniversalEvalBase {
         s.checks = new Check[](MAX_CHECKS);
         s.logic = new Logic[](MAX_NODES);
         for (uint256 i; i < MAX_READS; ++i) {
+            uint256 venue = i % HALF; // read i + HALF is read i's PRE copy
             s.reads[i] = Read({
                 chainNamespace: NS,
                 chainId: BASE,
                 minConfirmations: 3,
-                target: address(uint160(0x1000 + i)),
+                target: address(uint160(0x1000 + venue)),
                 selector: bytes4(keccak256("getReserveData(address)")),
-                args: abi.encode(address(uint160(0x2000 + i))),
+                args: abi.encode(address(uint160(0x2000 + venue))),
                 outputs: _reserveOutputs(),
-                field: _u8(0, 2)
+                field: _u8(0, 2),
+                at: i < HALF ? ReadAt.POST_EXECUTION : ReadAt.PRE_EXECUTION
             });
+        }
+        for (uint256 i; i < MAX_CHECKS; ++i) {
             // forge-lint: disable-next-line(unsafe-typecast)
-            s.checks[i] = Check({read: uint8(i), evalType: EvalType.NUM, op: Op.GTE, target: 1});
+            s.checks[i] = Check({left: uint8(i), right: uint8(i + HALF), evalType: EvalType.NUM, op: Op.GTE, target: 1});
         }
         // Root ALL over the other 31 nodes, each a CHECK node, so every node is reachable and every check used.
         uint8[] memory children = new uint8[](MAX_NODES - 1);
@@ -103,24 +111,24 @@ contract UniversalEvaluatorGasTest is UniversalEvalBase {
         vm.fee(0);
         uint256 jobId = _createSpec(_maxSpec());
         _fund(jobId);
-        for (uint256 i; i < MAX_READS; ++i) {
-            assertTrue(_deliverExpectingSuccess(ue.snapshotRequestOf(jobId, i), _reserveAnswer(100)), "snapshot cb");
+        for (uint256 i = HALF; i < MAX_READS; ++i) {
+            assertTrue(_deliverExpectingSuccess(ue.requestOf(jobId, i), _reserveAnswer(100)), "snapshot cb");
         }
         assertTrue(ue.ready(jobId));
         _advance();
 
-        // `submit` fixes 16 end blocks and sends 16 reads; the provider pays this gas.
+        // `submit` fixes 16 end blocks and sends the 16 POST reads; the provider pays this gas.
         uint256 g0 = gasleft();
         _submit(jobId);
         console2.log("submit incl. 16 reads, gas:", g0 - gasleft());
         assertTrue(ue.evaluationOf(jobId).started, "reads sent inside submit");
 
-        for (uint256 i; i < MAX_READS - 1; ++i) {
+        for (uint256 i; i < HALF - 1; ++i) {
             assertTrue(_deliverExpectingSuccess(ue.requestOf(jobId, i), _reserveAnswer(200)), "answer cb");
         }
         uint256 g = gasleft();
         assertTrue(
-            _deliverExpectingSuccess(ue.requestOf(jobId, MAX_READS - 1), _reserveAnswer(200)),
+            _deliverExpectingSuccess(ue.requestOf(jobId, HALF - 1), _reserveAnswer(200)),
             "final callback ran out of gas"
         );
         console2.log("fulfil incl. final callback, gas:", g - gasleft());
@@ -136,7 +144,7 @@ contract UniversalEvaluatorGasTest is UniversalEvalBase {
         vm.fee(0);
         uint256 jobId = _createSpec(_swapSpec());
         _fund(jobId);
-        assertTrue(_deliverExpectingSuccess(ue.snapshotRequestOf(jobId, 0), abi.encode(uint256(0))));
+        assertTrue(_deliverExpectingSuccess(ue.requestOf(jobId, SWAP_PRE), abi.encode(uint256(0))));
         core.setChainHeight(BASE_KEY, START_HEIGHT + 120);
         uint256 g0 = gasleft();
         _submit(jobId);

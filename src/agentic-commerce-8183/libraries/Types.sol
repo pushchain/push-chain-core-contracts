@@ -2,7 +2,7 @@
 pragma solidity 0.8.26;
 
 import {AllowedCall, OwnerIntent, Session} from "../interfaces/external/IAGW.sol";
-import {EvalType, Op, Logic} from "./JobSpecTypes.sol";
+import {EvalType, Op, Logic, ReadAt} from "./JobSpecTypes.sol";
 
 /// @title Types — the UniversalMarketplace package's structs and enums, file-level.
 /// @dev - Cards, jobs and init: the marketplace (UniversalMarketplace, IUniversalMarketplace).
@@ -145,6 +145,7 @@ struct ReadTemplate {
     Fill[] fills;
     bytes outputs;
     uint8[] field;
+    ReadAt at;
 }
 
 /// @notice Where a check's target comes from.
@@ -156,9 +157,10 @@ enum TargetSource {
 }
 
 /// @notice A `Check` whose target is a source. `value`: FIXED the target · PRINCIPAL_BPS bps of principal ·
-///         PARAM a param index · CEA unused (the CEA of the check's read chain).
+///         PARAM a param index · CEA unused (the CEA of the `left` read's chain).
 struct CheckTemplate {
-    uint8 read;
+    uint8 left;
+    uint8 right;
     EvalType evalType;
     Op op;
     TargetSource source;

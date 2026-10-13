@@ -112,8 +112,11 @@ library JobSpecErrors {
     /// @notice A read's `outputs` / `field` do not name one value of a well-formed return type that fits
     ///         `MAX_RESULT_LENGTH`.
     error ReadShape(uint256 read);
-    /// @notice A check points at a read that does not exist.
+    /// @notice A check points at a read that does not exist, a NUM / PCT `right` equals `left`, or a BOOL / CMP
+    ///         `right` is not 0.
     error CheckRead(uint256 check);
+    /// @notice No read is POST_EXECUTION, so the provider's work would never be measured.
+    error NoPostExecutionRead();
     /// @notice A BOOL check's target is neither 0 nor 1.
     error CheckTarget(uint256 check);
     /// @notice A BOOL check's operator is not `EQ`.

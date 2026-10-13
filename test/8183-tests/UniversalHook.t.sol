@@ -135,7 +135,7 @@ contract UniversalHookTest is UniversalEvalBase {
         assertEq(ue.specHashOf(jobId), keccak256(replacement));
         assertEq(ue.currentSpec(jobId), replacement, "the frozen spec is the provider's replacement");
 
-        _answerSnapshot(jobId, 0, 0);
+        _answerSnapshot(jobId, SWAP_PRE, 0);
         _advance();
         _submit(jobId);
         _answer(jobId, 0, abi.encode(uint256(0.375e18))); // passes 0.37, would fail 0.38
@@ -215,7 +215,7 @@ contract UniversalHookTest is UniversalEvalBase {
 
     function test_UH11_invalidSpec_refused() public {
         JobSpec memory s = _swapSpec();
-        s.checks[0].read = 5;
+        s.checks[0].left = 5;
         uint256 jobId = _createSpec(s);
         _prefund(jobId, 1 ether);
         bytes memory fp = _fundParams(jobId);
@@ -253,8 +253,8 @@ contract UniversalHookTest is UniversalEvalBase {
         uint256 jobId = _createSpec(_swapSpec());
         vm.recordLogs();
         _fund(jobId);
-        uint256 requestId = ue.snapshotRequestOf(jobId, 0);
-        assertEq(ue.fundHeightOf(jobId, 0), START_HEIGHT);
+        uint256 requestId = ue.requestOf(jobId, SWAP_PRE);
+        assertEq(ue.fundHeightOf(jobId, SWAP_PRE), START_HEIGHT);
         assertEq(ue.prepaidOf(jobId), READ_COST, "one round of after-reads left");
 
         PendingRead memory p = readState.getPendingRead(requestId);
@@ -299,7 +299,7 @@ contract UniversalHookTest is UniversalEvalBase {
     function test_UH17_snapshotRetry_sameBlock_clientOrProviderOnly() public {
         uint256 jobId = _createSpec(_swapSpec());
         _fund(jobId);
-        uint256 first = ue.snapshotRequestOf(jobId, 0);
+        uint256 first = ue.requestOf(jobId, SWAP_PRE);
 
         vm.prank(provider);
         vm.expectRevert(abi.encodeWithSelector(UniversalEvaluatorErrors.NothingToSend.selector, jobId));
@@ -316,13 +316,13 @@ contract UniversalHookTest is UniversalEvalBase {
         vm.recordLogs();
         vm.prank(provider);
         ue.retrySnapshot{value: SNAPSHOT_COST}(jobId);
-        uint256 second = ue.snapshotRequestOf(jobId, 0);
+        uint256 second = ue.requestOf(jobId, SWAP_PRE);
         assertTrue(second != first);
         assertEq(_readSpecFromLogs(second).blockNumber, START_HEIGHT);
 
         assertTrue(_deliver(second, abi.encode(uint256(1e18))));
         assertTrue(ue.ready(jobId));
-        (bool ok, int256 v) = ue.snapshotOf(jobId, 0);
+        (bool ok, int256 v) = ue.answerOf(jobId, SWAP_PRE);
         assertTrue(ok);
         assertEq(v, 1e18);
     }

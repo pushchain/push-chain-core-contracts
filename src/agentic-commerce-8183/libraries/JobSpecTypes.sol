@@ -9,7 +9,7 @@ pragma solidity 0.8.26;
 /// @dev - Source: `docs-internal/Universal Evaluator V2 Design`, plus `origin` (marketplace PRD decision Z7).
 ///      - Field order is ABI. Never reorder, never insert; a change here changes every description.
 
-/// @notice How a check compares. BOOL / CMP use the value now; NUM / PCT use the change since the snapshot.
+/// @notice How a check compares. BOOL / CMP: one read against `target` · NUM / PCT: `left` against `right`.
 enum EvalType {
     BOOL,
     CMP,
@@ -45,7 +45,13 @@ enum CriteriaMutability {
     PROVIDER_ONLY
 }
 
-/// @notice One contract call on one chain, and which value in its answer to use.
+/// @notice When a read is taken: after the provider's execution (at `submit`) or before it (at `fund`).
+enum ReadAt {
+    POST_EXECUTION,
+    PRE_EXECUTION
+}
+
+/// @notice One contract call on one chain, at one moment, and which value in its answer to use.
 struct Read {
     // namespace only ("eip155"), with chainId separate — the Read State split (AGW doc D6);
     // AgentCard.chainNamespace is the full CAIP-2 string
@@ -57,11 +63,14 @@ struct Read {
     bytes args; // abi-encoded arguments
     bytes outputs; // the function's return types, as T_* codes
     uint8[] field; // which returned value, by ABI position: [0] = 1st return value, [0, 2] = its 3rd field
+    ReadAt at; // read at the block recorded at `fund` (PRE) or fixed at `submit` (POST)
 }
 
-/// @notice One comparison on one read.
+/// @notice One comparison. BOOL `left == target` · CMP `left op target` · NUM `(left - right) op target` ·
+///         PCT `(left - right) / right op target`, in basis points.
 struct Check {
-    uint8 read; // index into reads
+    uint8 left; // index into reads
+    uint8 right; // NUM / PCT: index into reads, not `left` · BOOL / CMP: 0
     EvalType evalType;
     Op op;
     int256 target; // in the contract's own units
@@ -101,6 +110,6 @@ uint8 constant T_FIXED_ARRAY = 10;
 
 // ─────────────────────────────── limits ───────────────────────────────
 
-uint256 constant MAX_READS = 16;
+uint256 constant MAX_READS = 32;
 uint256 constant MAX_CHECKS = 16;
 uint256 constant MAX_NODES = 32;

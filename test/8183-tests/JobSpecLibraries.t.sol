@@ -16,6 +16,8 @@ import {
     EvalType,
     Op,
     LogicKind,
+    ReadAt,
+    MAX_READS,
     T_UINT,
     T_INT,
     T_BOOL,
@@ -50,20 +52,16 @@ contract LibHarness {
         JobSpecLib.validate(s, MAX_CONFIRMATIONS);
     }
 
-    function snapshotReads(JobSpec memory s) external pure returns (bool[] memory, uint256) {
-        return JobSpecLib.snapshotReads(s);
-    }
-
-    function verdict(Check[] memory checks, Logic[] memory nodes, Answer[] memory afters, Answer[] memory befores)
+    function verdict(Check[] memory checks, Logic[] memory nodes, Answer[] memory values)
         external
         pure
         returns (Verdict)
     {
-        return ReferenceJudge.verdict(checks, nodes, afters, befores);
+        return ReferenceJudge.verdict(checks, nodes, values);
     }
 
     /// @notice The evaluator's path: each check judged alone, then the packed tree.
-    function verdictPacked(Check[] memory checks, Logic[] memory nodes, Answer[] memory afters, Answer[] memory befores)
+    function verdictPacked(Check[] memory checks, Logic[] memory nodes, Answer[] memory values)
         external
         pure
         returns (Verdict)
@@ -71,7 +69,7 @@ contract LibHarness {
         uint32 res;
         for (uint256 i; i < checks.length; ++i) {
             Check memory c = checks[i];
-            res = JobSpecLib.setCheck(res, i, JobSpecLib.checkResult(c, afters[c.read], befores[c.read]));
+            res = JobSpecLib.setCheck(res, i, JobSpecLib.checkResult(c, values[c.left], values[c.right]));
         }
         return JobSpecLib.verdictPacked(JobSpecLib.packNodes(nodes), nodes.length, res);
     }
@@ -276,47 +274,34 @@ contract JobSpecLibrariesTest is Test {
             selector: bytes4(keccak256("balanceOf(address)")),
             args: abi.encode(address(0xCEA)),
             outputs: abi.encodePacked(T_TUPLE, uint8(1), T_UINT),
-            field: _f(0)
+            field: _f(0),
+            at: ReadAt.POST_EXECUTION
         });
     }
 
+    /// @dev The balance after (read 0) grew by at least 1 over the balance before (read 1).
     function _spec() internal pure returns (JobSpec memory s) {
         s.executeBy = 100;
         s.failFinalAt = 200;
-        s.reads = new Read[](1);
+        s.reads = new Read[](2);
         s.reads[0] = _read();
+        s.reads[1] = _read();
+        s.reads[1].at = ReadAt.PRE_EXECUTION;
         s.checks = new Check[](1);
-        s.checks[0] = Check({read: 0, evalType: EvalType.NUM, op: Op.GTE, target: 1});
+        s.checks[0] = Check({left: 0, right: 1, evalType: EvalType.NUM, op: Op.GTE, target: 1});
         s.logic = new Logic[](1);
         s.logic[0] = Logic({kind: LogicKind.CHECK, check: 0, children: new uint8[](0), k: 0});
     }
 
-    /// @dev A valid spec passes, and the snapshot covers exactly the reads a NUM or PCT check compares against.
-    function test_RUL01_validSpec_andSnapshotReads() public view {
+    /// @dev A valid spec passes; one with no POST_EXECUTION read is refused, as the work would never be measured.
+    function test_RUL01_validSpec_needsPostExecutionRead() public {
         lib.validate(_spec());
-        (bool[] memory need, uint256 count) = lib.snapshotReads(_spec()); // one NUM check on read 0
-        assertEq(need.length, 1);
-        assertTrue(need[0]);
-        assertEq(count, 1);
+        lib.validate(_twoVenue());
 
-        JobSpec memory s = _twoVenue(); // CMP only
+        JobSpec memory s = _spec();
+        s.reads[0].at = ReadAt.PRE_EXECUTION;
+        vm.expectRevert(JobSpecErrors.NoPostExecutionRead.selector);
         lib.validate(s);
-        (need, count) = lib.snapshotReads(s);
-        assertFalse(need[0]);
-        assertFalse(need[1]);
-        assertEq(count, 0);
-
-        s.checks[1].evalType = EvalType.PCT; // read 1 now needs a before value; read 0 (CMP) still doesn't
-        (need, count) = lib.snapshotReads(s);
-        assertFalse(need[0]);
-        assertTrue(need[1]);
-        assertEq(count, 1);
-
-        s.checks[0].evalType = EvalType.NUM; // and now read 0 too
-        (need, count) = lib.snapshotReads(s);
-        assertTrue(need[0]);
-        assertTrue(need[1]);
-        assertEq(count, 2);
     }
 
     function test_RUL02_refusals() public {
@@ -342,6 +327,7 @@ contract JobSpecLibrariesTest is Test {
 
         s = _spec();
         s.checks[0].evalType = EvalType.BOOL;
+        s.checks[0].right = 0;
         s.checks[0].op = Op.EQ;
         s.checks[0].target = 2;
         vm.expectRevert(abi.encodeWithSelector(JobSpecErrors.CheckTarget.selector, 0));
@@ -401,7 +387,7 @@ contract JobSpecLibrariesTest is Test {
         lib.validate(s);
 
         s = _spec();
-        s.checks[0] = Check({read: 0, evalType: EvalType.BOOL, op: Op.NEQ, target: 1}); // BOOL is `== target`
+        s.checks[0] = Check({left: 0, right: 0, evalType: EvalType.BOOL, op: Op.NEQ, target: 1}); // BOOL is `== target`
         vm.expectRevert(abi.encodeWithSelector(JobSpecErrors.CheckOp.selector, 0));
         lib.validate(s);
 
@@ -416,7 +402,7 @@ contract JobSpecLibrariesTest is Test {
         lib.validate(s);
 
         s = _twoVenue();
-        s.checks[1].read = 0; // read 1 no longer read
+        s.checks[1].left = 0; // read 1 no longer read
         vm.expectRevert(abi.encodeWithSelector(JobSpecErrors.ReadUnused.selector, 1));
         lib.validate(s);
 
@@ -430,6 +416,61 @@ contract JobSpecLibrariesTest is Test {
         lib.validate(s);
     }
 
+    /// @dev NUM / PCT name two different reads; BOOL / CMP name one and leave `right` at 0.
+    function test_RUL05_checkReadPairs() public {
+        JobSpec memory s = _spec();
+        s.checks[0].right = 0; // NUM against itself
+        vm.expectRevert(abi.encodeWithSelector(JobSpecErrors.CheckRead.selector, 0));
+        lib.validate(s);
+
+        s = _spec();
+        s.checks[0].right = 2; // no such read
+        vm.expectRevert(abi.encodeWithSelector(JobSpecErrors.CheckRead.selector, 0));
+        lib.validate(s);
+
+        s = _twoVenue();
+        s.checks[0].right = 1; // CMP compares with `target`, not a read
+        vm.expectRevert(abi.encodeWithSelector(JobSpecErrors.CheckRead.selector, 0));
+        lib.validate(s);
+
+        s = _twoVenue(); // two POST reads on different chains: read 1 − read 0
+        s.reads[1].chainId = "1";
+        s.checks[0] = Check({left: 1, right: 0, evalType: EvalType.NUM, op: Op.GT, target: 0});
+        lib.validate(s);
+    }
+
+    /// @dev Up to MAX_READS (32) reads: here 16 checks, each a POST read against its own PRE read.
+    function test_RUL06_maxReads() public {
+        JobSpec memory s;
+        s.reads = new Read[](MAX_READS);
+        s.checks = new Check[](MAX_READS / 2);
+        s.logic = new Logic[](1 + MAX_READS / 2);
+        uint8[] memory kids = new uint8[](MAX_READS / 2);
+        for (uint256 i; i < MAX_READS / 2; ++i) {
+            s.reads[i] = _read();
+            s.reads[i + MAX_READS / 2] = _read();
+            s.reads[i + MAX_READS / 2].at = ReadAt.PRE_EXECUTION;
+            // forge-lint: disable-next-line(unsafe-typecast)
+            s.checks[i] =
+                Check({left: uint8(i), right: uint8(i + MAX_READS / 2), evalType: EvalType.NUM, op: Op.GTE, target: 0});
+            // forge-lint: disable-next-line(unsafe-typecast)
+            s.logic[1 + i] = Logic({kind: LogicKind.CHECK, check: uint8(i), children: new uint8[](0), k: 0});
+            // forge-lint: disable-next-line(unsafe-typecast)
+            kids[i] = uint8(1 + i);
+        }
+        s.logic[0] = Logic({kind: LogicKind.ALL, check: 0, children: kids, k: 0});
+        lib.validate(s);
+
+        Read[] memory more = new Read[](MAX_READS + 1);
+        for (uint256 i; i < MAX_READS; ++i) {
+            more[i] = s.reads[i];
+        }
+        more[MAX_READS] = _read();
+        s.reads = more;
+        vm.expectRevert(abi.encodeWithSelector(JobSpecErrors.ReadCount.selector, MAX_READS + 1));
+        lib.validate(s);
+    }
+
     function _twoVenue() internal pure returns (JobSpec memory s) {
         s.executeBy = 100;
         s.failFinalAt = 200;
@@ -437,8 +478,8 @@ contract JobSpecLibrariesTest is Test {
         s.reads[0] = _read();
         s.reads[1] = _read();
         s.checks = new Check[](2);
-        s.checks[0] = Check({read: 0, evalType: EvalType.CMP, op: Op.GTE, target: 1});
-        s.checks[1] = Check({read: 1, evalType: EvalType.CMP, op: Op.GTE, target: 1});
+        s.checks[0] = Check({left: 0, right: 0, evalType: EvalType.CMP, op: Op.GTE, target: 1});
+        s.checks[1] = Check({left: 1, right: 0, evalType: EvalType.CMP, op: Op.GTE, target: 1});
         s.logic = new Logic[](3);
         s.logic[0] = Logic({kind: LogicKind.ANY, check: 0, children: _f(1, 2), k: 0});
         s.logic[1] = Logic({kind: LogicKind.CHECK, check: 0, children: new uint8[](0), k: 0});
@@ -447,69 +488,77 @@ contract JobSpecLibrariesTest is Test {
 
     // ───────────── judge ─────────────
 
-    function test_JDG01_numPctAndOverflow() public view {
-        Check[] memory c = new Check[](1);
+    /// @dev One check under a CHECK root, `left` as read 0 and `right` as read 1.
+    function _one(Check memory c, Answer memory left, Answer memory right) internal view returns (Verdict) {
+        Check[] memory cs = new Check[](1);
+        cs[0] = c;
         Logic[] memory n = new Logic[](1);
         n[0] = Logic({kind: LogicKind.CHECK, check: 0, children: new uint8[](0), k: 0});
+        Answer[] memory v = new Answer[](2);
+        v[0] = left;
+        v[1] = right;
+        return lib.verdict(cs, n, v);
+    }
+
+    function test_JDG01_numPctAndOverflow() public view {
+        Check[] memory c = new Check[](1);
         Answer[] memory a = new Answer[](1);
         Answer[] memory b = new Answer[](1);
 
-        c[0] = Check({read: 0, evalType: EvalType.NUM, op: Op.GTE, target: 0.38e18});
+        c[0] = Check({left: 0, right: 1, evalType: EvalType.NUM, op: Op.GTE, target: 0.38e18});
         a[0] = Answer(true, 0.39e18);
         b[0] = Answer(true, 0);
-        assertEq(uint8(lib.verdict(c, n, a, b)), uint8(Verdict.PASS));
+        assertEq(uint8(_one(c[0], a[0], b[0])), uint8(Verdict.PASS));
 
         a[0] = Answer(true, type(int256).max);
         b[0] = Answer(true, type(int256).min);
-        assertEq(uint8(lib.verdict(c, n, a, b)), uint8(Verdict.INCONCLUSIVE), "overflow is unknown, never a revert");
+        assertEq(uint8(_one(c[0], a[0], b[0])), uint8(Verdict.INCONCLUSIVE), "overflow is unknown, never a revert");
 
-        c[0] = Check({read: 0, evalType: EvalType.PCT, op: Op.GTE, target: 1});
+        c[0] = Check({left: 0, right: 1, evalType: EvalType.PCT, op: Op.GTE, target: 1});
         a[0] = Answer(true, 100.012e6);
         b[0] = Answer(true, 100e6);
-        assertEq(uint8(lib.verdict(c, n, a, b)), uint8(Verdict.PASS), "1.2 bps >= 1 bps");
+        assertEq(uint8(_one(c[0], a[0], b[0])), uint8(Verdict.PASS), "1.2 bps >= 1 bps");
         b[0] = Answer(true, 0);
-        assertEq(uint8(lib.verdict(c, n, a, b)), uint8(Verdict.FAIL), "PCT from zero fails");
+        assertEq(uint8(_one(c[0], a[0], b[0])), uint8(Verdict.FAIL), "PCT from zero fails");
     }
 
     /// @dev PCT is compared exactly (no rounding toward zero), and an overflow on either side is UNKNOWN.
     function test_JDG03_pctExact() public view {
         Check[] memory c = new Check[](1);
-        Logic[] memory n = new Logic[](1);
-        n[0] = Logic({kind: LogicKind.CHECK, check: 0, children: new uint8[](0), k: 0});
         Answer[] memory a = new Answer[](1);
         Answer[] memory b = new Answer[](1);
 
         // A tiny loss: -1 out of 1e6 is -0.01 bps. Dividing first gave 0 and passed ">= 0".
-        c[0] = Check({read: 0, evalType: EvalType.PCT, op: Op.GTE, target: 0});
+        c[0] = Check({left: 0, right: 1, evalType: EvalType.PCT, op: Op.GTE, target: 0});
         a[0] = Answer(true, 1e6 - 1);
         b[0] = Answer(true, 1e6);
-        assertEq(uint8(lib.verdict(c, n, a, b)), uint8(Verdict.FAIL), "a loss is not >= 0%");
+        assertEq(uint8(_one(c[0], a[0], b[0])), uint8(Verdict.FAIL), "a loss is not >= 0%");
         c[0].op = Op.LT;
-        assertEq(uint8(lib.verdict(c, n, a, b)), uint8(Verdict.PASS), "a loss is < 0%");
+        assertEq(uint8(_one(c[0], a[0], b[0])), uint8(Verdict.PASS), "a loss is < 0%");
 
         // Negative target: "lost at most 1%" as change >= -100 bps.
-        c[0] = Check({read: 0, evalType: EvalType.PCT, op: Op.GTE, target: -100});
+        c[0] = Check({left: 0, right: 1, evalType: EvalType.PCT, op: Op.GTE, target: -100});
         a[0] = Answer(true, 99e6);
         b[0] = Answer(true, 100e6); // exactly -1%
-        assertEq(uint8(lib.verdict(c, n, a, b)), uint8(Verdict.PASS));
+        assertEq(uint8(_one(c[0], a[0], b[0])), uint8(Verdict.PASS));
         a[0] = Answer(true, 99e6 - 1); // a hair over 1%
-        assertEq(uint8(lib.verdict(c, n, a, b)), uint8(Verdict.FAIL));
+        assertEq(uint8(_one(c[0], a[0], b[0])), uint8(Verdict.FAIL));
 
         // EQ is exact: 1.2 bps is not 1 bp (dividing first said it was).
-        c[0] = Check({read: 0, evalType: EvalType.PCT, op: Op.EQ, target: 1});
+        c[0] = Check({left: 0, right: 1, evalType: EvalType.PCT, op: Op.EQ, target: 1});
         a[0] = Answer(true, 100.012e6);
         b[0] = Answer(true, 100e6);
-        assertEq(uint8(lib.verdict(c, n, a, b)), uint8(Verdict.FAIL));
+        assertEq(uint8(_one(c[0], a[0], b[0])), uint8(Verdict.FAIL));
 
         // Overflow on either side is UNKNOWN, never a revert.
-        c[0] = Check({read: 0, evalType: EvalType.PCT, op: Op.GTE, target: type(int256).max});
+        c[0] = Check({left: 0, right: 1, evalType: EvalType.PCT, op: Op.GTE, target: type(int256).max});
         a[0] = Answer(true, 3);
         b[0] = Answer(true, 2); // target * before overflows
-        assertEq(uint8(lib.verdict(c, n, a, b)), uint8(Verdict.INCONCLUSIVE));
+        assertEq(uint8(_one(c[0], a[0], b[0])), uint8(Verdict.INCONCLUSIVE));
         c[0].target = 1;
         a[0] = Answer(true, type(int256).max);
         b[0] = Answer(true, 1); // delta * 10_000 overflows
-        assertEq(uint8(lib.verdict(c, n, a, b)), uint8(Verdict.INCONCLUSIVE));
+        assertEq(uint8(_one(c[0], a[0], b[0])), uint8(Verdict.INCONCLUSIVE));
     }
 
     /// @dev Where neither product overflows, PCT equals the exact comparison `delta * 10_000 op target * before`,
@@ -520,14 +569,7 @@ contract JobSpecLibrariesTest is Test {
     {
         vm.assume(beforeV > 0);
         Op op = Op(opSeed % 6);
-        Check[] memory c = new Check[](1);
-        c[0] = Check({read: 0, evalType: EvalType.PCT, op: op, target: target});
-        Logic[] memory n = new Logic[](1);
-        n[0] = Logic({kind: LogicKind.CHECK, check: 0, children: new uint8[](0), k: 0});
-        Answer[] memory a = new Answer[](1);
-        a[0] = Answer(true, afterV);
-        Answer[] memory b = new Answer[](1);
-        b[0] = Answer(true, beforeV);
+        Check memory c = Check({left: 0, right: 1, evalType: EvalType.PCT, op: op, target: target});
 
         int256 lhs = (int256(afterV) - int256(beforeV)) * 10_000; // fits: |delta| < 2^121, times 2^14
         int256 rhs = int256(target) * int256(beforeV); // fits: under 2^240
@@ -536,23 +578,29 @@ contract JobSpecLibrariesTest is Test {
             : op == Op.NEQ
                 ? lhs != rhs
                 : op == Op.GT ? lhs > rhs : op == Op.GTE ? lhs >= rhs : op == Op.LT ? lhs < rhs : lhs <= rhs;
-        assertEq(uint8(lib.verdict(c, n, a, b)), uint8(pass ? Verdict.PASS : Verdict.FAIL));
+        assertEq(uint8(_one(c, Answer(true, afterV), Answer(true, beforeV))), uint8(pass ? Verdict.PASS : Verdict.FAIL));
     }
 
     /// @dev The evaluator's packed path agrees with the reference judge on random three-valued inputs.
     function testFuzz_JDG02_packedEqualsReference(uint256 seed) public view {
         uint256 nChecks = 1 + (seed % 16);
         uint256 nNodes = 1 + ((seed >> 8) % 32);
+        uint256 nReads = 2 + ((seed >> 16) % (MAX_READS - 1));
+        Answer[] memory values = new Answer[](nReads);
+        for (uint256 i; i < nReads; ++i) {
+            uint256 r = uint256(keccak256(abi.encode(seed, "r", i)));
+            values[i] = Answer(r % 5 != 0, int256((r >> 8) % 5));
+        }
         Check[] memory checks = new Check[](nChecks);
-        Answer[] memory afters = new Answer[](nChecks);
-        Answer[] memory befores = new Answer[](nChecks);
         for (uint256 i; i < nChecks; ++i) {
             uint256 r = uint256(keccak256(abi.encode(seed, i)));
+            EvalType e = EvalType(r % 4);
+            uint256 left = (r >> 24) % nReads;
+            uint256 right = e == EvalType.NUM || e == EvalType.PCT ? (left + 1 + (r >> 32) % (nReads - 1)) % nReads : 0;
             // forge-lint: disable-next-line(unsafe-typecast)
-            checks[i] =
-                Check({read: uint8(i), evalType: EvalType(r % 4), op: Op((r >> 8) % 6), target: int256((r >> 16) % 5)});
-            afters[i] = Answer((r >> 32) % 5 != 0, int256((r >> 40) % 5));
-            befores[i] = Answer((r >> 48) % 7 != 0, int256((r >> 56) % 5));
+            checks[i] = Check({
+                left: uint8(left), right: uint8(right), evalType: e, op: Op((r >> 8) % 6), target: int256((r >> 16) % 5)
+            });
         }
         Logic[] memory nodes = new Logic[](nNodes);
         for (uint256 i; i < nNodes; ++i) {
@@ -577,8 +625,6 @@ contract JobSpecLibrariesTest is Test {
                 nodes[i] = Logic({kind: kind, check: 0, children: ch, k: k});
             }
         }
-        assertEq(
-            uint8(lib.verdict(checks, nodes, afters, befores)), uint8(lib.verdictPacked(checks, nodes, afters, befores))
-        );
+        assertEq(uint8(lib.verdict(checks, nodes, values)), uint8(lib.verdictPacked(checks, nodes, values)));
     }
 }

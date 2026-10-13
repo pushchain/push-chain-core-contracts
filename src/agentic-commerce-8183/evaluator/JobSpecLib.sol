@@ -9,6 +9,7 @@ import {
     EvalType,
     Op,
     LogicKind,
+    ReadAt,
     MAX_READS,
     MAX_CHECKS,
     MAX_NODES
@@ -25,13 +26,14 @@ import {JobSpecErrors} from "../libraries/Errors.sol";
 ///        `submit`, and a FAIL there is final).
 ///      - Every rule is one the evaluator relies on, so a funded job can always be judged: indexes are in range,
 ///        nodes form a graph evaluable from last to first, every read is one the evaluator can encode and decodes in
-///        bounded work, and every node, check and read counts toward the verdict.
+///        bounded work, every node, check and read counts toward the verdict, and at least one read is
+///        POST_EXECUTION.
 ///      Judging (every check comes out PASS, FAIL or UNKNOWN; nodes combine them; the root is the verdict):
 ///      - Rules are the V2 design's:
-///        BOOL `after == target` · CMP `after op target` · NUM `(after - before) op target` ·
-///        PCT: the change in basis points, `(after - before) * 10_000 / before op target`, and PCT with
-///        `before <= 0` FAILS.
-///      - PCT is compared exactly, as `(after - before) * 10_000 op target * before` (`before > 0` keeps the
+///        BOOL `left == target` · CMP `left op target` · NUM `(left - right) op target` ·
+///        PCT: the difference in basis points, `(left - right) * 10_000 / right op target`, and PCT with
+///        `right <= 0` FAILS.
+///      - PCT is compared exactly, as `(left - right) * 10_000 op target * right` (`right > 0` keeps the
 ///        direction). Dividing first would round toward zero, so a tiny loss would read as 0 and pass `>= 0`.
 ///      - Never reverts on any answer: an overflow makes the check UNKNOWN.
 ///      - The readable, unpacked reference judge lives in the tests (`helpers/ReferenceJudge.sol`); the suite checks
@@ -55,8 +57,10 @@ library JobSpecLib {
         if (nChecks == 0 || nChecks > MAX_CHECKS) revert JobSpecErrors.CheckCount(nChecks);
         if (nNodes == 0 || nNodes > MAX_NODES) revert JobSpecErrors.NodeCount(nNodes);
 
+        bool anyPost;
         for (uint256 i; i < nReads; ++i) {
             Read memory r = s.reads[i];
+            if (r.at == ReadAt.POST_EXECUTION) anyPost = true;
             uint256 nsLen = bytes(r.chainNamespace).length;
             uint256 idLen = bytes(r.chainId).length;
             if (nsLen == 0 || idLen == 0 || nsLen > MAX_CHAIN_STRING_LENGTH || idLen > MAX_CHAIN_STRING_LENGTH) {
@@ -73,12 +77,14 @@ library JobSpecLib {
             if (r.args.length > MAX_ARGS_LENGTH) revert JobSpecErrors.ReadArgs(i);
             if (!EvmReadLib.isValidShape(r.outputs, r.field)) revert JobSpecErrors.ReadShape(i);
         }
+        if (!anyPost) revert JobSpecErrors.NoPostExecutionRead();
 
         for (uint256 i; i < nChecks; ++i) {
             Check memory c = s.checks[i];
-            if (c.read >= nReads) revert JobSpecErrors.CheckRead(i);
+            bool badRight = isPair(c) ? c.right >= nReads || c.right == c.left : c.right != 0;
+            if (c.left >= nReads || badRight) revert JobSpecErrors.CheckRead(i);
             if (c.evalType == EvalType.BOOL) {
-                if (c.op != Op.EQ) revert JobSpecErrors.CheckOp(i); // BOOL is `after == target`
+                if (c.op != Op.EQ) revert JobSpecErrors.CheckOp(i); // BOOL is `left == target`
                 if (c.target != 0 && c.target != 1) revert JobSpecErrors.CheckTarget(i);
             }
         }
@@ -110,25 +116,18 @@ library JobSpecLib {
         uint256 usedReads;
         for (uint256 i; i < s.checks.length; ++i) {
             if ((usedChecks >> i) & 1 == 0) revert JobSpecErrors.CheckUnused(i);
-            usedReads |= uint256(1) << s.checks[i].read;
+            Check memory c = s.checks[i];
+            usedReads |= uint256(1) << c.left;
+            if (isPair(c)) usedReads |= uint256(1) << c.right;
         }
         for (uint256 i; i < s.reads.length; ++i) {
             if ((usedReads >> i) & 1 == 0) revert JobSpecErrors.ReadUnused(i);
         }
     }
 
-    /// @notice Which reads the "before" snapshot needs: every read used by a NUM or PCT check.
-    /// @return need  `need[i]` is true when read `i` is snapshotted.
-    /// @return count How many reads are snapshotted.
-    function snapshotReads(JobSpec memory s) internal pure returns (bool[] memory need, uint256 count) {
-        need = new bool[](s.reads.length);
-        for (uint256 i; i < s.checks.length; ++i) {
-            Check memory c = s.checks[i];
-            if ((c.evalType == EvalType.NUM || c.evalType == EvalType.PCT) && !need[c.read]) {
-                need[c.read] = true;
-                ++count;
-            }
-        }
+    /// @notice Whether the check compares two reads (NUM / PCT) rather than one read with `target`.
+    function isPair(Check memory c) internal pure returns (bool) {
+        return c.evalType == EvalType.NUM || c.evalType == EvalType.PCT;
     }
 
     /// @dev - CHECK: a check in range, no children.
@@ -151,7 +150,7 @@ library JobSpecLib {
 
     // ───────────────────────────── judging ─────────────────────────────
 
-    /// @notice One check: PASS, FAIL or UNKNOWN.
+    /// @notice One check: PASS, FAIL or UNKNOWN. `a` is the `left` read's value, `b` the `right` one's.
     function checkResult(Check memory c, Answer memory a, Answer memory b) internal pure returns (uint8) {
         if (!a.ok) return UNKNOWN;
         if (c.evalType == EvalType.BOOL) return a.value == c.target ? PASS : FAIL;
@@ -172,7 +171,7 @@ library JobSpecLib {
 
     // ───────────────────────────── packed form ─────────────────────────────
     //
-    // The evaluator judges each check as its read's answer arrives, so the last callback only walks the tree.
+    // The evaluator judges each check as soon as its reads' values are in, so the last callback only walks the tree.
     // Check results: 2 bits per check (UNKNOWN 0, PASS 1, FAIL 2), check i at bits [2i, 2i+1], in a uint32.
     // Nodes: 64 bits per node, 4 per word, node i at bits [64·(i%4), +64) of word i/4:
     //   bits 0-7 kind · 8-15 check · 16-23 k · 24-55 children as a bitmask (bit j: node j is a child).

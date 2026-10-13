@@ -11,9 +11,8 @@ import {JobSpecLib} from "../../../src/agentic-commerce-8183/evaluator/JobSpecLi
 library ReferenceJudge {
     /// @param checks  The job's checks.
     /// @param nodes   The job's pass logic; `nodes[0]` is the root.
-    /// @param afters  The round's answer for each read.
-    /// @param befores The snapshot answer for each read (only read for NUM / PCT checks).
-    function verdict(Check[] memory checks, Logic[] memory nodes, Answer[] memory afters, Answer[] memory befores)
+    /// @param values  Each read's value (a PRE read's snapshot, a POST read's answer).
+    function verdict(Check[] memory checks, Logic[] memory nodes, Answer[] memory values)
         internal
         pure
         returns (Verdict)
@@ -21,7 +20,7 @@ library ReferenceJudge {
         uint8[] memory checkRes = new uint8[](checks.length);
         for (uint256 i; i < checks.length; ++i) {
             Check memory c = checks[i];
-            checkRes[i] = JobSpecLib.checkResult(c, afters[c.read], befores[c.read]);
+            checkRes[i] = JobSpecLib.checkResult(c, values[c.left], values[c.right]);
         }
 
         uint8[] memory nodeRes = new uint8[](nodes.length);

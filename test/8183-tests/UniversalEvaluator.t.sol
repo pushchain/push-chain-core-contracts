@@ -29,7 +29,7 @@ import {
 } from "../../src/agentic-commerce-8183/libraries/JobSpecTypes.sol";
 
 /// @notice The UniversalEvaluator end to end through the UniversalHook, against the real kernel and the real Read
-///         State contract. The snapshot is taken inside `fund`; the "after" reads are sent by `submit`.
+///         State contract. PRE_EXECUTION reads are sent inside `fund`, POST_EXECUTION reads by `submit`.
 contract UniversalEvaluatorTest is UniversalEvalBase {
     // ───────────── happy path ─────────────
 
@@ -41,7 +41,7 @@ contract UniversalEvaluatorTest is UniversalEvalBase {
         UniversalEvaluator.Evaluation memory e = ue.evaluationOf(jobId);
         assertTrue(e.endFixed && e.started, "submit fixed the blocks and sent the reads");
         assertEq(ue.endHeightOf(jobId, 0), START_HEIGHT + 120, "end block = tracked height at submit");
-        assertEq(ue.fundHeightOf(jobId, 0), START_HEIGHT, "snapshot block = tracked height at fund");
+        assertEq(ue.fundHeightOf(jobId, SWAP_PRE), START_HEIGHT, "PRE block = tracked height at fund");
 
         _answer(jobId, 0, abi.encode(uint256(0.3905e18)));
 
@@ -61,7 +61,7 @@ contract UniversalEvaluatorTest is UniversalEvalBase {
     function test_UE03_readAtFixedBlock_andPaid() public {
         uint256 jobId = _createSpec(_swapSpec());
         _fund(jobId);
-        _answerSnapshot(jobId, 0, 0);
+        _answerSnapshot(jobId, SWAP_PRE, 0);
         core.setChainHeight(BASE_KEY, START_HEIGHT + 77);
         uint256 before = ue.prepaidOf(jobId);
         vm.recordLogs();
@@ -164,7 +164,7 @@ contract UniversalEvaluatorTest is UniversalEvalBase {
         (uint256 snap,) = ue.prefundCost(jobId);
         _prefund(jobId, snap); // the snapshot only
         _fundWith(jobId, _fundParams(jobId));
-        _answerSnapshot(jobId, 0, 0);
+        _answerSnapshot(jobId, SWAP_PRE, 0);
         core.setChainHeight(BASE_KEY, START_HEIGHT + 120);
         _submit(jobId);
 
@@ -191,7 +191,7 @@ contract UniversalEvaluatorTest is UniversalEvalBase {
     function test_UE10_readStatePaused_submitSucceeds() public {
         uint256 jobId = _createSpec(_swapSpec());
         _fund(jobId);
-        _answerSnapshot(jobId, 0, 0);
+        _answerSnapshot(jobId, SWAP_PRE, 0);
         vm.prank(readAdmin);
         readState.pause();
         _advance();
@@ -224,7 +224,7 @@ contract UniversalEvaluatorTest is UniversalEvalBase {
         vm.expectRevert(abi.encodeWithSelector(UniversalEvaluatorErrors.SnapshotNotReady.selector, jobId));
         ue.sendReads(jobId);
 
-        _answerSnapshot(jobId, 0, 0);
+        _answerSnapshot(jobId, SWAP_PRE, 0);
         core.setChainHeight(BASE_KEY, START_HEIGHT + 900);
         vm.recordLogs();
         vm.prank(provider);
@@ -284,8 +284,10 @@ contract UniversalEvaluatorTest is UniversalEvalBase {
         assertEq(answer.length, 4096);
 
         JobSpec memory s = _swapSpec();
+        s.reads = _single(s.reads[0]);
         s.reads[0].outputs = abi.encodePacked(T_TUPLE, uint8(1), T_BYTES);
-        s.checks[0] = Check({read: 0, evalType: EvalType.CMP, op: Op.EQ, target: int256(uint256(keccak256(payload)))});
+        s.checks[0] =
+            Check({left: 0, right: 0, evalType: EvalType.CMP, op: Op.EQ, target: int256(uint256(keccak256(payload)))});
 
         uint256 over = _createSpec(s);
         _fund(over); // CMP only: nothing to snapshot
@@ -312,8 +314,9 @@ contract UniversalEvaluatorTest is UniversalEvalBase {
     /// @dev "how many elements": a length word not backed by elements is not a value.
     function test_UE15_forgedArrayLength_unreadable() public {
         JobSpec memory s = _swapSpec();
+        s.reads = _single(s.reads[0]);
         s.reads[0].outputs = abi.encodePacked(T_TUPLE, uint8(1), T_ARRAY, T_UINT);
-        s.checks[0] = Check({read: 0, evalType: EvalType.CMP, op: Op.GTE, target: 2});
+        s.checks[0] = Check({left: 0, right: 0, evalType: EvalType.CMP, op: Op.GTE, target: 2});
         uint256 jobId = _createSpec(s);
         _fund(jobId);
         _advance();
@@ -350,18 +353,16 @@ contract UniversalEvaluatorTest is UniversalEvalBase {
         _answer(jobId, 1, a1); // out of order on purpose
         _answer(jobId, 0, a0);
 
-        (bytes32 leaf0,) = ue.evidenceOf(jobId, 0);
-        (bytes32 leaf1,) = ue.evidenceOf(jobId, 1);
+        bytes32 leaf0 = ue.evidenceOf(jobId, 0);
+        bytes32 leaf1 = ue.evidenceOf(jobId, 1);
         uint64 h = ue.endHeightOf(jobId, 0);
         assertEq(leaf0, keccak256(abi.encode(uint8(0), r0, h, keccak256(a0), true, int256(100e6))));
         assertEq(leaf1, keccak256(abi.encode(uint8(1), r1, h, keccak256(a1), true, int256(5e6))));
 
-        bytes32[] memory afters = new bytes32[](2);
-        afters[0] = leaf0;
-        afters[1] = leaf1;
-        bytes32[] memory befores = new bytes32[](2);
-        bytes32 expected =
-            keccak256(abi.encode(jobId, ue.specHashOf(jobId), befores, afters, Verdict.PASS, OwnerCheck.CLEAN));
+        bytes32[] memory leaves = new bytes32[](2);
+        leaves[0] = leaf0;
+        leaves[1] = leaf1;
+        bytes32 expected = keccak256(abi.encode(jobId, ue.specHashOf(jobId), leaves, Verdict.PASS, OwnerCheck.CLEAN));
         assertEq(ue.specHashOf(jobId), keccak256(bytes(kernel.getJob(jobId).description)));
         assertEq(_reasonFromLogs(), expected);
     }
@@ -386,7 +387,7 @@ contract UniversalEvaluatorTest is UniversalEvalBase {
         vm.expectRevert(abi.encodeWithSelector(UniversalEvaluatorErrors.JobStillLive.selector, jobId));
         ue.claimPrepaid(jobId);
 
-        _answerSnapshot(jobId, 0, 0);
+        _answerSnapshot(jobId, SWAP_PRE, 0);
         _advance();
         _submit(jobId);
         _answer(jobId, 0, abi.encode(uint256(0.4e18)));
@@ -511,7 +512,7 @@ contract UniversalEvaluatorTest is UniversalEvalBase {
     function test_UE25_endHeightMustBeAboveFundHeight() public {
         uint256 jobId = _createSpec(_swapSpec());
         _fund(jobId);
-        _answerSnapshot(jobId, 0, 0);
+        _answerSnapshot(jobId, SWAP_PRE, 0);
         vm.prank(provider); // the tracked height is still the one recorded at fund
         vm.expectRevert(
             abi.encodeWithSelector(
@@ -533,7 +534,7 @@ contract UniversalEvaluatorTest is UniversalEvalBase {
     function test_UE28_staleHeightAtSubmit_reverts() public {
         uint256 jobId = _createSpec(_swapSpec());
         _fund(jobId);
-        _answerSnapshot(jobId, 0, 0);
+        _answerSnapshot(jobId, SWAP_PRE, 0);
         _advance(); // the swap lands; observed now
         uint256 seen = core.timestampObservedAtByChainNamespace(BASE_KEY);
         vm.warp(seen + _config().maxHeightAge + 1); // and not observed since
@@ -554,7 +555,7 @@ contract UniversalEvaluatorTest is UniversalEvalBase {
     function test_UE26_submitNeverSucceedsWithoutEndBlocks() public {
         uint256 jobId = _createSpec(_swapSpec());
         _fund(jobId);
-        _answerSnapshot(jobId, 0, 0);
+        _answerSnapshot(jobId, SWAP_PRE, 0);
         _advance();
         bytes memory submitCall = abi.encodeCall(kernel.submit, (jobId, keccak256("done"), bytes("")));
 
@@ -582,7 +583,7 @@ contract UniversalEvaluatorTest is UniversalEvalBase {
     function test_UE32_sendReads_requiresEndBlocksFixedInSubmit() public {
         uint256 jobId = _createSpec(_swapSpec());
         _fund(jobId);
-        _answerSnapshot(jobId, 0, 0);
+        _answerSnapshot(jobId, SWAP_PRE, 0);
         uint256[] memory ids = new uint256[](1);
         ids[0] = jobId;
         vm.prank(admin);
@@ -684,5 +685,89 @@ contract UniversalEvaluatorTest is UniversalEvalBase {
         ue.settle(jobId);
         assertTrue(ue.evaluationOf(jobId).applied);
         assertEq(uint8(_status(jobId)), uint8(IAgenticCommerce.JobStatus.Rejected));
+    }
+
+    // ───────────── comparing reads: chain against chain, before against before ─────────────
+
+    /// @dev "b on Base > a on Ethereum AND b > c on Arbitrum, after the job": two NUM checks on POST reads across
+    ///      three chains. Each check waits for both of its reads.
+    function test_UE34_crossChainPairs_allMustHold() public {
+        _track("1");
+        _track("42161");
+        JobSpec memory s = _anySpec();
+        s.reads = new Read[](3);
+        s.reads[0] = _balanceRead(weth, cea); // b on Base
+        s.reads[1] = _on(_balanceRead(weth, cea), "1"); // a on Ethereum
+        s.reads[2] = _on(_balanceRead(weth, cea), "42161"); // c on Arbitrum
+        s.checks[0] = Check({left: 0, right: 1, evalType: EvalType.NUM, op: Op.GT, target: 0});
+        s.checks[1] = Check({left: 0, right: 2, evalType: EvalType.NUM, op: Op.GT, target: 0});
+        s.logic[0].kind = LogicKind.ALL;
+        uint256 jobId = _createSpec(s);
+        _fund(jobId);
+        _advance();
+        _move("1");
+        _move("42161");
+        _submit(jobId);
+
+        _answer(jobId, 0, abi.encode(uint256(5e18)));
+        _answer(jobId, 1, abi.encode(uint256(4e18))); // b > a; b against c still open
+        assertEq(uint8(_status(jobId)), uint8(IAgenticCommerce.JobStatus.Submitted));
+        _answer(jobId, 2, abi.encode(uint256(3e18)));
+        assertEq(uint8(_status(jobId)), uint8(IAgenticCommerce.JobStatus.Completed));
+    }
+
+    /// @dev A check on two PRE reads is judged when the evaluation starts: here it fails, so the first usable answer
+    ///      rejects the job.
+    function test_UE35_prePair_failsAtStart() public {
+        uint256 jobId = _createSpec(_overtakeSpec());
+        _fund(jobId);
+        _answerSnapshot(jobId, 2, 3e18); // a before
+        _answerSnapshot(jobId, 3, 2e18); // b before: not ahead
+        _advance();
+        _submit(jobId);
+        _answer(jobId, 0, abi.encode(uint256(9e18))); // a after: ahead, but the root already failed
+        assertEq(uint8(_status(jobId)), uint8(IAgenticCommerce.JobStatus.Rejected));
+    }
+
+    function test_UE36_preAndPostPairs_pass() public {
+        uint256 jobId = _createSpec(_overtakeSpec());
+        _fund(jobId);
+        _answerSnapshot(jobId, 2, 1e18);
+        _answerSnapshot(jobId, 3, 2e18); // b ahead before
+        _advance();
+        _submit(jobId);
+        _answer(jobId, 0, abi.encode(uint256(5e18)));
+        assertEq(uint8(_status(jobId)), uint8(IAgenticCommerce.JobStatus.Submitted), "b after is still out");
+        _answer(jobId, 1, abi.encode(uint256(4e18))); // a ahead after
+        assertEq(uint8(_status(jobId)), uint8(IAgenticCommerce.JobStatus.Completed));
+    }
+
+    /// @dev "b was ahead before the job, a is ahead after it". Reads: 0 a after, 1 b after, 2 a before, 3 b before.
+    function _overtakeSpec() internal view returns (JobSpec memory s) {
+        s = _anySpec();
+        s.reads = new Read[](4);
+        s.reads[0] = _balanceRead(ausdc, cea);
+        s.reads[1] = _balanceRead(morphoVault, cea);
+        s.reads[2] = _pre(_balanceRead(ausdc, cea));
+        s.reads[3] = _pre(_balanceRead(morphoVault, cea));
+        s.checks[0] = Check({left: 3, right: 2, evalType: EvalType.NUM, op: Op.GT, target: 0});
+        s.checks[1] = Check({left: 0, right: 1, evalType: EvalType.NUM, op: Op.GT, target: 0});
+        s.logic[0].kind = LogicKind.ALL;
+    }
+
+    /// @dev Tracks `chainId` next to Base: same start height and read fee.
+    function _track(string memory chainId) internal {
+        core.setReadBaseFee(NS, chainId, READ_FEE);
+        core.setChainHeight(string.concat(NS, ":", chainId), START_HEIGHT);
+    }
+
+    function _move(string memory chainId) internal {
+        string memory key = string.concat(NS, ":", chainId);
+        core.setChainHeight(key, core.chainHeightByChainNamespace(key) + 120);
+    }
+
+    function _on(Read memory r, string memory chainId) internal pure returns (Read memory) {
+        r.chainId = chainId;
+        return r;
     }
 }

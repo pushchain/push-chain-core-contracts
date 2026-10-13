@@ -223,11 +223,13 @@ abstract contract MarketplaceFixtures is KernelBase, TemplateParts {
 
     /// @dev The V2 doc's swap criteria on Sepolia: the CEA's WETH grows by at least `minOut`, the job's param 0.
     function _swapTemplate() internal view returns (EvaluationTemplate memory t) {
-        t.reads = new ReadTemplate[](1);
+        t.reads = new ReadTemplate[](2);
         t.reads[0] = _balanceOfCEA(SEPOLIA_ID, weth);
         t.reads[0].minConfirmations = 3;
+        t.reads[1] = _preRead(_balanceOfCEA(SEPOLIA_ID, weth));
+        t.reads[1].minConfirmations = 3;
         t.checks = new CheckTemplate[](1);
-        t.checks[0] = _chk(0, EvalType.NUM, Op.GTE, TargetSource.PARAM, 0);
+        t.checks[0] = _pair(0, 1, EvalType.NUM, Op.GTE, TargetSource.PARAM, 0);
         t.logic = new Logic[](1);
         t.logic[0] = _checkNode(0);
         t.params = new ParamBounds[](1);

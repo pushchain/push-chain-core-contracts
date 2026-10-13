@@ -9,7 +9,7 @@ import {IAgenticCommerce} from "../interfaces/IAgenticCommerce.sol";
 import {IUniversalEvaluator} from "../interfaces/IUniversalEvaluator.sol";
 import {IUniversalCallback} from "../../interfaces/IUniversalCallback.sol";
 import {RequestStatus, MAX_CALLBACK_GAS_LIMIT} from "../../libraries/ReadTypes.sol";
-import {JobSpec, Read, Check, EvalType} from "../libraries/JobSpecTypes.sol";
+import {JobSpec, Read, Check, ReadAt} from "../libraries/JobSpecTypes.sol";
 import {
     Answer,
     Verdict,
@@ -29,9 +29,9 @@ import {UniversalEvaluatorErrors, JobSpecErrors} from "../libraries/Errors.sol";
 /// @title UniversalEvaluator
 /// @notice One evaluator for every job. It holds each job's spec, prepaid PC, "before" snapshot and evaluation:
 ///         - inside `fund`, the UniversalHook hands it the final spec (`startSnapshot`): it is checked, frozen, every
-///           read's fresh tracked height is recorded, and every read a NUM or PCT check compares against is read there;
-///         - inside `submit`, the hook calls `verifyFromSubmit`: the end block of every read is fixed at its fresh
-///           tracked height, which must be above the one recorded at `fund`, then every read is sent at its block;
+///           read's fresh tracked height is recorded, and every PRE_EXECUTION read is read there (the snapshot);
+///         - inside `submit`, the hook calls `verifyFromSubmit`: the end block of every POST_EXECUTION read is fixed at
+///           its fresh tracked height, which must be above the one recorded at `fund`, then each is sent at its block;
 ///         - the callback that delivers the last answer works out the verdict and applies it: PASS completes,
 ///           FAIL rejects.
 /// @dev - The end blocks are recorded before the reads are sent, and sending runs in its own guarded call, so a
@@ -49,7 +49,7 @@ import {UniversalEvaluatorErrors, JobSpecErrors} from "../libraries/Errors.sol";
 ///      - The verdict is applied as soon as the root is decided: the three-valued logic is monotone, so once the
 ///        root is PASS or FAIL no later answer can change it, and reads still out don't hold up payment.
 ///      - The kernel `reason` commits to the spec and to every read in index order (block, request, raw answer hash,
-///        value; zero for a read not answered when the root was decided), so it can be re-derived from events.
+///        value; zero for a POST read not answered when the root was decided), so it can be re-derived from events.
 ///      - `JobSpec.executeBy` and `JobSpec.failFinalAt` are not used: a FAIL at fixed blocks is final.
 ///      - One contract: `JobSpecLib` and `EvmReadLib` are internal libraries compiled into it, so deploying it deploys
 ///        nothing else and it calls no code of its own elsewhere.
@@ -67,13 +67,14 @@ contract UniversalEvaluator is IUniversalEvaluator, ReentrancyGuard {
         bool checkpointOk; // the wallet's counter could be read at `fund`
         uint64 checkpointAtFund;
         bytes32 specHash; // keccak256 of the exact frozen spec bytes
-        uint256 readChecks; // per read i, a 16-bit mask of the checks that use it, at bits [16i, 16i+16)
+        uint256[2] readChecks; // per read i, a 16-bit mask of the checks that use it: word i / 16, bits 16·(i % 16)
     }
 
     /// @notice The "before" snapshot of a job.
     struct Snapshot {
-        uint8 needed; // reads a NUM or PCT check compares against
+        uint8 needed; // PRE_EXECUTION reads
         uint8 okCount; // of those, answered with a usable value
+        uint32 pre; // bit i: read i is PRE_EXECUTION
     }
 
     /// @notice The evaluation of a submitted job.
@@ -87,7 +88,7 @@ contract UniversalEvaluator is IUniversalEvaluator, ReentrancyGuard {
         bool applied; // the kernel accepted the verdict
         OwnerCheck ownerCheck; // recorded only
         uint32 checkRes; // each check's result, 2 bits per check (JobSpecLib)
-        uint16 answered; // bit i: read i answered since it was last sent
+        uint32 answered; // bit i: read i answered since it was last sent
     }
 
     /// @notice Which read of which job a Read State request answers.
@@ -151,15 +152,13 @@ contract UniversalEvaluator is IUniversalEvaluator, ReentrancyGuard {
     mapping(uint256 => Check[]) internal _checks;
     mapping(uint256 => uint256[]) internal _packedNodes; // JobSpecLib.packNodes
     mapping(uint256 => Snapshot) internal _snapshots;
-    mapping(uint256 => mapping(uint256 => Answer)) internal _before; // jobId => read => snapshot answer
-    mapping(uint256 => mapping(uint256 => uint256)) internal _snapshotRequest;
-    mapping(uint256 => mapping(uint256 => bytes32)) internal _snapshotLeaf;
-    mapping(uint256 => uint256[4]) internal _fundHeights; // every read's tracked height at fund, 4 uint64 per word
+    mapping(uint256 => uint256[8]) internal _fundHeights; // every read's tracked height at fund, 4 uint64 per word
     mapping(uint256 => Evaluation) internal _evals;
-    mapping(uint256 => mapping(uint256 => Answer)) internal _answers; // jobId => read => latest answer
+    // Per read, PRE or POST alike: a PRE read's snapshot, a POST read's latest answer.
+    mapping(uint256 => mapping(uint256 => Answer)) internal _answers; // jobId => read => value
     mapping(uint256 => mapping(uint256 => uint256)) internal _request; // jobId => read => current request
     mapping(uint256 => mapping(uint256 => bytes32)) internal _leaf; // jobId => read => evidence of its answer
-    mapping(uint256 => uint256[4]) internal _endHeights; // 4 uint64 per word
+    mapping(uint256 => uint256[8]) internal _endHeights; // POST reads only, 4 uint64 per word
     mapping(uint256 => RequestRef) internal _requests;
 
     /// @dev `HOOK` is fixed here, for good: every later hook change must be an upgrade of that same proxy, since a
@@ -249,20 +248,23 @@ contract UniversalEvaluator is IUniversalEvaluator, ReentrancyGuard {
         _cacheSpec(jobId, s);
         emit SpecFrozenHere(jobId, specHash, cpOk ? OwnerCheck.CLEAN : OwnerCheck.UNKNOWN, cp);
 
-        (bool[] memory need, uint256 count) = JobSpecLib.snapshotReads(s);
-        // forge-lint: disable-next-line(unsafe-typecast)
-        _snapshots[jobId].needed = uint8(count); // safe: count <= reads <= MAX_READS (16)
-        for (uint256 i; i < need.length; ++i) {
+        Snapshot storage sn = _snapshots[jobId];
+        for (uint256 i; i < s.reads.length; ++i) {
             Read memory r = s.reads[i];
             // Preflight only: Read State's admin can still block the domain after `fund`.
             if (IReadStateDomains(address(READ_STATE)).isDomainBlocked(r.chainNamespace, r.chainId)) {
                 revert UniversalEvaluatorErrors.ReadDomainBlocked(i);
             }
             uint64 h = EvmReadLib.latestHeight(UNIVERSAL_CORE, r, MAX_HEIGHT_AGE);
-            _setHeight(_fundHeights[jobId], i, h); // every end block must be above this
-            if (need[i]) _fireSnapshot(jobId, i, r, h);
+            _setHeight(_fundHeights[jobId], i, h); // a PRE read's block; a POST read's end block must be above it
+            if (r.at == ReadAt.PRE_EXECUTION) {
+                // forge-lint: disable-next-line(unsafe-typecast)
+                sn.pre |= uint32(1 << i); // safe: i < MAX_READS (32)
+                ++sn.needed; // answers come in later transactions, so counting as we fire is safe
+                _fireSnapshot(jobId, i, r, h);
+            }
         }
-        if (count == 0) emit SnapshotReady(jobId);
+        if (sn.needed == 0) emit SnapshotReady(jobId);
     }
 
     /// @inheritdoc IUniversalEvaluator
@@ -303,12 +305,13 @@ contract UniversalEvaluator is IUniversalEvaluator, ReentrancyGuard {
         bytes memory spec = _replacement[jobId];
         if (spec.length == 0) spec = bytes(KERNEL.getJob(jobId).description);
         JobSpec memory s = _decodeSpec(spec);
-        (bool[] memory need,) = JobSpecLib.snapshotReads(s);
         for (uint256 i; i < s.reads.length; ++i) {
-            evaluation += EvmReadLib.price(READ_STATE, s.reads[i], CALLBACK_GAS_LIMIT, BUDGET_MULTIPLIER);
-            if (need[i]) {
-                snapshot += EvmReadLib.price(READ_STATE, s.reads[i], SNAPSHOT_CALLBACK_GAS_LIMIT, BUDGET_MULTIPLIER);
-            }
+            bool pre = s.reads[i].at == ReadAt.PRE_EXECUTION;
+            uint256 p = EvmReadLib.price(
+                READ_STATE, s.reads[i], pre ? SNAPSHOT_CALLBACK_GAS_LIMIT : CALLBACK_GAS_LIMIT, BUDGET_MULTIPLIER
+            );
+            if (pre) snapshot += p;
+            else evaluation += p;
         }
     }
 
@@ -365,11 +368,11 @@ contract UniversalEvaluator is IUniversalEvaluator, ReentrancyGuard {
         }
         _addPrepaid(jobId);
         JobSpec memory s = _frozenSpec(jobId, job.description);
-        (bool[] memory need,) = JobSpecLib.snapshotReads(s);
+        uint32 pre = sn.pre;
         uint256 sent;
-        for (uint256 i; i < need.length; ++i) {
-            if (!need[i] || _before[jobId][i].ok) continue;
-            if (READ_STATE.statusOf(_snapshotRequest[jobId][i]) == RequestStatus.PENDING) continue;
+        for (uint256 i; i < s.reads.length; ++i) {
+            if ((pre >> i) & 1 == 0 || _answers[jobId][i].ok) continue;
+            if (READ_STATE.statusOf(_request[jobId][i]) == RequestStatus.PENDING) continue;
             _fireSnapshot(jobId, i, s.reads[i], _height(_fundHeights[jobId], i));
             ++sent;
         }
@@ -414,12 +417,12 @@ contract UniversalEvaluator is IUniversalEvaluator, ReentrancyGuard {
     }
 
     function _onSnapshot(uint256 jobId, uint8 read, uint256 requestId, bytes calldata result) internal {
-        if (_snapshotRequest[jobId][read] != requestId || _before[jobId][read].ok) return;
+        if (_request[jobId][read] != requestId || _answers[jobId][read].ok) return;
         (bool ok, int256 value, bytes32 resultHash) = _decodeResult(jobId, read, result);
         emit SnapshotAnswered(jobId, read, requestId, ok, value);
         if (!ok) return;
-        _before[jobId][read] = Answer({ok: true, value: value});
-        _snapshotLeaf[jobId][read] =
+        _answers[jobId][read] = Answer({ok: true, value: value});
+        _leaf[jobId][read] =
             keccak256(abi.encode(read, requestId, _height(_fundHeights[jobId], read), resultHash, value));
         Snapshot storage sn = _snapshots[jobId];
         if (++sn.okCount == sn.needed) emit SnapshotReady(jobId);
@@ -434,11 +437,11 @@ contract UniversalEvaluator is IUniversalEvaluator, ReentrancyGuard {
         uint64 height = _height(_endHeights[jobId], read);
         _answers[jobId][read] = Answer({ok: ok, value: value});
         _leaf[jobId][read] = keccak256(abi.encode(read, requestId, height, resultHash, ok, value));
-        e.answered |= uint16(1) << read;
+        e.answered |= uint32(1) << read;
         emit ReadAnswered(jobId, read, requestId, height, ok, value);
 
-        // Judge now every check that uses this read; unanswered and unreadable ones stay UNKNOWN (0).
-        if (ok) e.checkRes = _judgeRead(jobId, read, value, e.checkRes);
+        // Judge now every check that uses this read; one still missing a usable value stays UNKNOWN (0).
+        if (ok) e.checkRes = _judgeRead(jobId, read, e.checkRes);
         --e.pending;
 
         // The logic is monotone: once the root is PASS or FAIL no later answer can change it, so apply it now.
@@ -475,17 +478,13 @@ contract UniversalEvaluator is IUniversalEvaluator, ReentrancyGuard {
         return _cache[jobId].frozen && sn.okCount == sn.needed;
     }
 
-    function snapshotOf(uint256 jobId, uint256 read) external view returns (bool ok, int256 value) {
-        Answer memory a = _before[jobId][read];
-        return (a.ok, a.value);
-    }
-
+    /// @notice A read's value: a PRE read's snapshot, a POST read's latest answer.
     function answerOf(uint256 jobId, uint256 read) external view returns (bool ok, int256 value) {
         Answer memory a = _answers[jobId][read];
         return (a.ok, a.value);
     }
 
-    /// @notice The read's tracked height recorded at `fund`; a snapshot read is read at this block.
+    /// @notice The read's tracked height recorded at `fund`; a PRE_EXECUTION read is read at this block.
     function fundHeightOf(uint256 jobId, uint256 read) external view returns (uint64) {
         return _height(_fundHeights[jobId], read);
     }
@@ -494,17 +493,14 @@ contract UniversalEvaluator is IUniversalEvaluator, ReentrancyGuard {
         return _height(_endHeights[jobId], read);
     }
 
-    function snapshotRequestOf(uint256 jobId, uint256 read) external view returns (uint256) {
-        return _snapshotRequest[jobId][read];
-    }
-
     function requestOf(uint256 jobId, uint256 read) external view returns (uint256) {
         return _request[jobId][read];
     }
 
-    /// @notice The evidence of one read's latest answer: keccak256(read, request, block, raw answer hash, ok, value).
-    function evidenceOf(uint256 jobId, uint256 read) external view returns (bytes32 after_, bytes32 before_) {
-        return (_leaf[jobId][read], _snapshotLeaf[jobId][read]);
+    /// @notice The evidence of one read's answer: keccak256(read, request, block, raw answer hash, ok, value) for a
+    ///         POST read, keccak256(read, request, block, raw answer hash, value) for a PRE read.
+    function evidenceOf(uint256 jobId, uint256 read) external view returns (bytes32) {
+        return _leaf[jobId][read];
     }
 
     // ═════════════════════════════════ internal ═════════════════════════════════
@@ -529,32 +525,37 @@ contract UniversalEvaluator is IUniversalEvaluator, ReentrancyGuard {
             p.outputs = s.reads[i].outputs;
             p.field = s.reads[i].field;
         }
-        uint256 readChecks;
+        JobCache storage c = _cache[jobId];
         Check[] storage checks = _checks[jobId];
         for (uint256 i; i < s.checks.length; ++i) {
             Check memory chk = s.checks[i];
             checks.push(chk);
-            readChecks |= uint256(1) << (16 * uint256(chk.read) + i);
+            _markCheck(c, chk.left, i);
+            if (JobSpecLib.isPair(chk)) _markCheck(c, chk.right, i);
         }
         _packedNodes[jobId] = JobSpecLib.packNodes(s.logic);
-        JobCache storage c = _cache[jobId];
         // forge-lint: disable-next-line(unsafe-typecast)
         c.nodes = uint8(s.logic.length); // safe: JobSpecLib caps nodes at MAX_NODES (32)
-        c.readChecks = readChecks;
     }
 
-    /// @dev Each end block is the read's fresh tracked height, strictly above the one recorded at `fund`.
+    function _markCheck(JobCache storage c, uint256 read, uint256 check) internal {
+        c.readChecks[read / 16] |= uint256(1) << (16 * (read % 16) + check);
+    }
+
+    /// @dev Each POST read's end block is its fresh tracked height, strictly above the one recorded at `fund`.
     ///      - A floor, not a proof of work: a height that has not moved since `fund` can't include the provider's
     ///        work, but one that has moved may still be below the block the work landed in. The provider (SDK) must
     ///        submit only once each tracked height covers that block; a too-early `submit` reads pre-work state.
-    ///      - Applies to every read's chain, including one the provider did not act on, so `submit` waits until each
-    ///        tracked height has moved on and is fresh. An intended liveness requirement.
+    ///      - Applies to every POST read's chain, including one the provider did not act on, so `submit` waits until
+    ///        each tracked height has moved on and is fresh. An intended liveness requirement.
     function _fixEndBlocks(uint256 jobId, JobSpec memory s) internal {
         Evaluation storage e = _evals[jobId];
         if (e.endFixed) return;
-        uint256[4] storage heights = _endHeights[jobId];
-        uint256[4] storage atFund = _fundHeights[jobId];
+        uint256[8] storage heights = _endHeights[jobId];
+        uint256[8] storage atFund = _fundHeights[jobId];
+        uint32 pre = _snapshots[jobId].pre;
         for (uint256 i; i < s.reads.length; ++i) {
+            if ((pre >> i) & 1 == 1) continue; // a PRE read has no end block
             uint64 h = EvmReadLib.latestHeight(UNIVERSAL_CORE, s.reads[i], MAX_HEIGHT_AGE);
             uint64 f = _height(atFund, i);
             if (h <= f) revert UniversalEvaluatorErrors.EndHeightNotAfterFund(jobId, i, f, h);
@@ -564,32 +565,40 @@ contract UniversalEvaluator is IUniversalEvaluator, ReentrancyGuard {
         emit EndBlocksFixed(jobId);
     }
 
-    /// @dev Starts the evaluation: every "after" read goes out at its fixed block. Needs the snapshot complete.
+    /// @dev Starts the evaluation: judges the checks on PRE reads alone, then sends every POST read at its fixed
+    ///      block. Needs the snapshot complete.
     function _start(uint256 jobId, JobSpec memory s) internal {
         if (!ready(jobId)) revert UniversalEvaluatorErrors.SnapshotNotReady(jobId);
         Evaluation storage e = _evals[jobId];
         e.started = true;
         // forge-lint: disable-next-line(unsafe-typecast)
-        e.reads = uint8(s.reads.length); // safe: JobSpecLib caps reads at MAX_READS (16)
+        e.reads = uint8(s.reads.length); // safe: JobSpecLib caps reads at MAX_READS (32)
         // forge-lint: disable-next-line(unsafe-typecast)
-        e.pending = uint8(s.reads.length); // safe: as above
+        e.pending = uint8(s.reads.length - _snapshots[jobId].needed); // the POST reads; safe: as above
+        uint32 res;
+        for (uint256 i; i < s.checks.length; ++i) {
+            res = _judge(jobId, i, s.checks[i], res); // a check needing a POST value stays UNKNOWN
+        }
+        e.checkRes = res;
         _sendMissing(jobId, s);
     }
 
-    /// @dev Sends, at its fixed block, every "after" read with no usable answer that is not in flight, and reopens the
-    ///      verdict. On the first send that is every read: none has an answer or a request yet.
+    /// @dev Sends, at its fixed block, every POST read with no usable answer that is not in flight, and reopens the
+    ///      verdict. On the first send that is every POST read: none has an answer or a request yet.
     function _sendMissing(uint256 jobId, JobSpec memory s) internal {
         Evaluation storage e = _evals[jobId];
+        uint32 pre = _snapshots[jobId].pre;
         uint256 sent;
         uint256 paid;
         for (uint256 i; i < e.reads; ++i) {
+            if ((pre >> i) & 1 == 1) continue;
             bool answered = (e.answered >> i) & 1 == 1;
             if (answered && _answers[jobId][i].ok) continue;
             uint256 req = _request[jobId][i];
             if (req != 0 && READ_STATE.statusOf(req) == RequestStatus.PENDING) continue;
             if (answered) {
                 // forge-lint: disable-next-line(unsafe-typecast)
-                e.answered = uint16(uint256(e.answered) & ~(uint256(1) << i)); // safe: clears one bit of a uint16
+                e.answered = uint32(uint256(e.answered) & ~(uint256(1) << i)); // safe: clears one bit of a uint32
                 ++e.pending; // it had been counted as answered
             }
             paid += _fireRead(jobId, i, s.reads[i]);
@@ -606,15 +615,15 @@ contract UniversalEvaluator is IUniversalEvaluator, ReentrancyGuard {
         uint256 requestId = _fire(r, _height(_endHeights[jobId], read), value, CALLBACK_GAS_LIMIT, READ_TTL, jobId);
         _request[jobId][read] = requestId;
         // forge-lint: disable-next-line(unsafe-typecast)
-        _requests[requestId] = RequestRef({jobId: jobId, read: uint8(read), snapshot: false}); // safe: read < 16
+        _requests[requestId] = RequestRef({jobId: jobId, read: uint8(read), snapshot: false}); // safe: read < 32
     }
 
     function _fireSnapshot(uint256 jobId, uint256 read, Read memory r, uint64 height) internal {
         uint256 value = _spend(jobId, EvmReadLib.price(READ_STATE, r, SNAPSHOT_CALLBACK_GAS_LIMIT, BUDGET_MULTIPLIER));
         uint256 requestId = _fire(r, height, value, SNAPSHOT_CALLBACK_GAS_LIMIT, READ_TTL, jobId);
-        _snapshotRequest[jobId][read] = requestId;
+        _request[jobId][read] = requestId;
         // forge-lint: disable-next-line(unsafe-typecast)
-        _requests[requestId] = RequestRef({jobId: jobId, read: uint8(read), snapshot: true}); // safe: read < 16
+        _requests[requestId] = RequestRef({jobId: jobId, read: uint8(read), snapshot: true}); // safe: read < 32
         // forge-lint: disable-next-line(unsafe-typecast)
         emit SnapshotRequested(jobId, uint8(read), requestId, height); // safe: as above
     }
@@ -666,21 +675,21 @@ contract UniversalEvaluator is IUniversalEvaluator, ReentrancyGuard {
         } catch {}
     }
 
-    /// @dev Sets the result of every check that uses `read`, from its answer and the snapshot.
-    function _judgeRead(uint256 jobId, uint256 read, int256 value, uint32 checkRes) internal view returns (uint32) {
-        uint256 mask = (_cache[jobId].readChecks >> (16 * read)) & type(uint16).max;
+    /// @dev Judges every check that uses `read`.
+    function _judgeRead(uint256 jobId, uint256 read, uint32 checkRes) internal view returns (uint32) {
+        uint256 mask = (_cache[jobId].readChecks[read / 16] >> (16 * (read % 16))) & type(uint16).max;
         for (uint256 i; mask != 0; ++i) {
-            if (mask & 1 != 0) {
-                Check storage chk = _checks[jobId][i];
-                bool needsBefore = chk.evalType == EvalType.NUM || chk.evalType == EvalType.PCT;
-                Answer memory before;
-                if (needsBefore) before = _before[jobId][read];
-                checkRes =
-                    JobSpecLib.setCheck(checkRes, i, JobSpecLib.checkResult(chk, Answer({ok: true, value: value}), before));
-            }
+            if (mask & 1 != 0) checkRes = _judge(jobId, i, _checks[jobId][i], checkRes);
             mask >>= 1;
         }
         return checkRes;
+    }
+
+    /// @dev Sets check `i`'s result from the values in so far; a missing or unreadable one leaves it UNKNOWN.
+    function _judge(uint256 jobId, uint256 i, Check memory chk, uint32 checkRes) internal view returns (uint32) {
+        Answer memory b;
+        if (JobSpecLib.isPair(chk)) b = _answers[jobId][chk.right];
+        return JobSpecLib.setCheck(checkRes, i, JobSpecLib.checkResult(chk, _answers[jobId][chk.left], b));
     }
 
     /// @dev Records the verdict `v` (worked out from the per-check results), then tries to apply PASS or FAIL on the
@@ -726,25 +735,23 @@ contract UniversalEvaluator is IUniversalEvaluator, ReentrancyGuard {
         return (true, uint64(v)); // safe: checked on the line above
     }
 
-    /// @dev The kernel `reason`: the job, the exact frozen spec, every read's snapshot and "after" evidence in index
-    ///      order, the verdict and the owner check. Independent of the order answers arrived in.
+    /// @dev The kernel `reason`: the job, the exact frozen spec, every read's evidence in index order, the verdict
+    ///      and the owner check. Independent of the order answers arrived in.
     function _reason(uint256 jobId, Verdict v, OwnerCheck oc) internal view returns (bytes32) {
         uint256 n = _evals[jobId].reads;
-        bytes32[] memory afters = new bytes32[](n);
-        bytes32[] memory befores = new bytes32[](n);
+        bytes32[] memory leaves = new bytes32[](n);
         for (uint256 i; i < n; ++i) {
-            afters[i] = _leaf[jobId][i];
-            befores[i] = _snapshotLeaf[jobId][i];
+            leaves[i] = _leaf[jobId][i];
         }
-        return keccak256(abi.encode(jobId, _cache[jobId].specHash, befores, afters, v, oc));
+        return keccak256(abi.encode(jobId, _cache[jobId].specHash, leaves, v, oc));
     }
 
-    function _setHeight(uint256[4] storage heights, uint256 read, uint64 h) internal {
+    function _setHeight(uint256[8] storage heights, uint256 read, uint64 h) internal {
         uint256 shift = 64 * (read % 4);
         heights[read / 4] = (heights[read / 4] & ~(uint256(type(uint64).max) << shift)) | (uint256(h) << shift);
     }
 
-    function _height(uint256[4] storage heights, uint256 read) internal view returns (uint64) {
+    function _height(uint256[8] storage heights, uint256 read) internal view returns (uint64) {
         // forge-lint: disable-next-line(unsafe-typecast)
         return uint64(heights[read / 4] >> (64 * (read % 4))); // safe: masked to 64 bits by the cast
     }
