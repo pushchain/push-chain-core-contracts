@@ -9,7 +9,6 @@ import {JobSpec, CriteriaMutability} from "../../src/agentic-commerce-8183/libra
 import {EvmQueryEnvelope} from "../../src/agentic-commerce-8183/evaluator/EvmReadLib.sol";
 import {OwnerCheck} from "../../src/agentic-commerce-8183/evaluator/EvaluationTypes.sol";
 import {
-    RulesBindingHookErrors,
     UniversalHookErrors,
     UniversalEvaluatorErrors,
     JobSpecErrors,
@@ -57,7 +56,7 @@ contract UniversalHookTest is UniversalEvalBase {
         _prefund(jobId, snap + eval_);
 
         vm.prank(owner);
-        vm.expectRevert(abi.encodeWithSelector(RulesBindingHookErrors.InvalidOptParams.selector, 64));
+        vm.expectRevert(abi.encodeWithSelector(UniversalHookErrors.InvalidOptParams.selector, 64));
         agw.execute(address(kernel), 0, abi.encodeCall(kernel.fund, (jobId, BUDGET, abi.encode(RULES, RULES))));
 
         // the old 32-byte format carries no spec hash, so an evaluated job can't be funded with it
@@ -69,14 +68,14 @@ contract UniversalHookTest is UniversalEvalBase {
         engine.setPermission(RULES, address(agw), false);
         bytes memory fp = _fundParams(jobId);
         vm.prank(owner);
-        vm.expectRevert(abi.encodeWithSelector(RulesBindingHookErrors.RulesNotLive.selector, address(agw), RULES));
+        vm.expectRevert(abi.encodeWithSelector(UniversalHookErrors.RulesNotLive.selector, address(agw), RULES));
         agw.execute(address(kernel), 0, abi.encodeCall(kernel.fund, (jobId, BUDGET, fp)));
         engine.setPermission(RULES, address(agw), true);
 
         factory.setWallet(address(agw), false);
         fp = _fundParams(jobId);
         vm.prank(owner);
-        vm.expectRevert(abi.encodeWithSelector(RulesBindingHookErrors.CallerIsNotAGW.selector, address(agw)));
+        vm.expectRevert(abi.encodeWithSelector(UniversalHookErrors.CallerIsNotAGW.selector, address(agw)));
         agw.execute(address(kernel), 0, abi.encodeCall(kernel.fund, (jobId, BUDGET, fp)));
     }
 
@@ -86,7 +85,7 @@ contract UniversalHookTest is UniversalEvalBase {
         uint256 second = _createSpec(_anySpec());
         bytes memory fp = _fundParams(second);
         vm.prank(owner);
-        vm.expectRevert(abi.encodeWithSelector(RulesBindingHookErrors.AGWHasLiveJob.selector, address(agw), first));
+        vm.expectRevert(abi.encodeWithSelector(UniversalHookErrors.AGWHasLiveJob.selector, address(agw), first));
         agw.execute(address(kernel), 0, abi.encodeCall(kernel.fund, (second, BUDGET, fp)));
     }
 

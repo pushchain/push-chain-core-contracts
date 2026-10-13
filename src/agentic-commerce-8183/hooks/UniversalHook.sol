@@ -7,7 +7,7 @@ import {IAGWFactory} from "../interfaces/external/IAGWFactory.sol";
 import {ISmartSession} from "../interfaces/external/ISmartSession.sol";
 import {IUniversalEvaluator} from "../interfaces/IUniversalEvaluator.sol";
 import {JobSpec, CriteriaMutability} from "../libraries/JobSpecTypes.sol";   // enum CriteriaMutability { BOTH, NONE, CLIENT_ONLY, PROVIDER_ONLY }
-import {RulesBindingHookErrors, ERC8183HookErrors, UniversalHookErrors} from "../libraries/Errors.sol";
+import {ERC8183HookErrors, UniversalHookErrors} from "../libraries/Errors.sol";
 
 /// @title UniversalHook
 /// @notice The one hook for evaluated jobs: binds the job to the funding AGW's rules set, controls who may
@@ -97,11 +97,11 @@ contract UniversalHook is BaseERC8183Hook {
     ///      - Runs in `beforeAction`, so any revert leaves the job Open with no escrow moved.
     function _preFund(uint256 jobId, address caller, bytes memory optParams) internal override {
         (bytes32 rulesId, , ) = _parseFundParams(optParams);
-        if (!IAGWFactory(AGW_FACTORY).isWallet(caller)) revert RulesBindingHookErrors.CallerIsNotAGW(caller);
+        if (!IAGWFactory(AGW_FACTORY).isWallet(caller)) revert UniversalHookErrors.CallerIsNotAGW(caller);
         if (!ISmartSession(SESSION_ENGINE).isPermissionEnabled(rulesId, caller)) {
-            revert RulesBindingHookErrors.RulesNotLive(caller, rulesId);
+            revert UniversalHookErrors.RulesNotLive(caller, rulesId);
         }
-        if (isAGWBusy(caller)) revert RulesBindingHookErrors.AGWHasLiveJob(caller, liveJobOf[caller]); // 2nd read only on revert
+        if (isAGWBusy(caller)) revert UniversalHookErrors.AGWHasLiveJob(caller, liveJobOf[caller]); // 2nd read only on revert
 
         rulesOf[jobId] = Binding({agw: caller, rulesId: rulesId});
         liveJobOf[caller] = jobId;
@@ -162,7 +162,7 @@ contract UniversalHook is BaseERC8183Hook {
         returns (bytes32 rulesId, bytes32 expectedSpecHash, bytes memory newSpec)
     {
         if (p.length == 32) return (abi.decode(p, (bytes32)), bytes32(0), "");
-        if (p.length < 128) revert RulesBindingHookErrors.InvalidOptParams(p.length);                   // smallest valid encoding: 4 words
+        if (p.length < 128) revert UniversalHookErrors.InvalidOptParams(p.length);                   // smallest valid encoding: 4 words
         return abi.decode(p, (bytes32, bytes32, bytes));
     }
 

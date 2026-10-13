@@ -9,7 +9,7 @@ import {UniversalMarketplaceTerms} from "../../src/agentic-commerce-8183/Univers
 import {IUniversalMarketplace} from "../../src/agentic-commerce-8183/interfaces/IUniversalMarketplace.sol";
 import {
     UniversalMarketplaceErrors,
-    RulesBindingHookErrors,
+    UniversalHookErrors,
     ERC8183HookErrors
 } from "../../src/agentic-commerce-8183/libraries/Errors.sol";
 
@@ -25,8 +25,8 @@ contract TermsSelectorsHarness is UniversalMarketplaceTerms {
 contract NamingTest is Test {
     function test_naming_hookTopicsAndErrors() public pure {
         assertEq(UniversalHook.RulesBound.selector, keccak256("RulesBound(uint256,address,bytes32)"));
-        assertEq(RulesBindingHookErrors.RulesNotLive.selector, bytes4(keccak256("RulesNotLive(address,bytes32)")));
-        assertEq(RulesBindingHookErrors.CallerIsNotAGW.selector, bytes4(keccak256("CallerIsNotAGW(address)")));
+        assertEq(UniversalHookErrors.RulesNotLive.selector, bytes4(keccak256("RulesNotLive(address,bytes32)")));
+        assertEq(UniversalHookErrors.CallerIsNotAGW.selector, bytes4(keccak256("CallerIsNotAGW(address)")));
         assertEq(ERC8183HookErrors.CallerIsNotKernel.selector, bytes4(keccak256("CallerIsNotKernel(address)")));
     }
 

@@ -68,19 +68,6 @@ library UniversalMarketplaceErrors {
     error JobMismatch();
 }
 
-/// @title RulesBindingHookErrors
-/// @notice The errors of the interim job hook.
-library RulesBindingHookErrors {
-    /// @notice `fund.optParams` is not exactly 32 bytes.
-    error InvalidOptParams(uint256 length);
-    /// @notice The funding client is not a factory-deployed AGW.
-    error CallerIsNotAGW(address caller);
-    /// @notice The rules set is not enabled on this AGW.
-    error RulesNotLive(address agw, bytes32 rulesId);
-    /// @notice The AGW already has a Funded or Submitted job under this hook.
-    error AGWHasLiveJob(address agw, uint256 liveJobId);
-}
-
 /// @title ERC8183HookErrors
 /// @notice The errors of BaseERC8183Hook, shared by every hook built on it.
 library ERC8183HookErrors {
@@ -146,8 +133,17 @@ library EvmReadErrors {
 }
 
 /// @title UniversalHookErrors
-/// @notice The UniversalHook's spec errors. Its binding errors are `RulesBindingHookErrors`.
+/// @notice The UniversalHook's errors: binding the rules set at `fund`, and replacing and freezing the spec.
 library UniversalHookErrors {
+    /// @notice `fund.optParams` is neither 32 bytes (the rulesId alone) nor long enough to hold
+    ///         `(rulesId, specHash, newSpec)`.
+    error InvalidOptParams(uint256 length);
+    /// @notice The funding client is not a factory-deployed AGW.
+    error CallerIsNotAGW(address caller);
+    /// @notice The rules set is not enabled on this AGW.
+    error RulesNotLive(address agw, bytes32 rulesId);
+    /// @notice The AGW already has a Funded or Submitted job under this hook.
+    error AGWHasLiveJob(address agw, uint256 liveJobId);
     /// @notice The job's mutability flag does not let this party replace the spec.
     error SpecChangeNotAllowed(CriteriaMutability flag);
     /// @notice A replacement spec tried to change the mutability flag.

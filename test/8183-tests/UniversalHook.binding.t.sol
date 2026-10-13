@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 pragma solidity 0.8.26;
 
-import {RulesBindingHookErrors, ERC8183HookErrors} from "../../src/agentic-commerce-8183/libraries/Errors.sol";
+import {UniversalHookErrors, ERC8183HookErrors} from "../../src/agentic-commerce-8183/libraries/Errors.sol";
 import {TransparentUpgradeableProxy} from "@openzeppelin/contracts/proxy/transparent/TransparentUpgradeableProxy.sol";
 import {ITransparentUpgradeableProxy} from "@openzeppelin/contracts/proxy/transparent/TransparentUpgradeableProxy.sol";
 import {ProxyAdmin} from "@openzeppelin/contracts/proxy/transparent/ProxyAdmin.sol";
@@ -105,7 +105,7 @@ contract UniversalHookBindingTest is KernelBase {
             uint256 jobId = _open(agw, BUDGET);
             uint256 bal = token.balanceOf(agw);
             vm.prank(agw);
-            vm.expectRevert(abi.encodeWithSelector(RulesBindingHookErrors.InvalidOptParams.selector, lens[i]));
+            vm.expectRevert(abi.encodeWithSelector(UniversalHookErrors.InvalidOptParams.selector, lens[i]));
             kernel.fund(jobId, BUDGET, new bytes(lens[i]));
             _assertStillOpenAndUnbound(jobId, bal);
         }
@@ -118,7 +118,7 @@ contract UniversalHookBindingTest is KernelBase {
         engine.setPermission(P, eoa, true);
         uint256 jobId = _open(eoa, BUDGET);
         vm.prank(eoa);
-        vm.expectRevert(abi.encodeWithSelector(RulesBindingHookErrors.CallerIsNotAGW.selector, eoa));
+        vm.expectRevert(abi.encodeWithSelector(UniversalHookErrors.CallerIsNotAGW.selector, eoa));
         kernel.fund(jobId, BUDGET, abi.encode(P));
         assertEq(uint8(_status(jobId)), uint8(IAgenticCommerce.JobStatus.Open));
     }
@@ -128,7 +128,7 @@ contract UniversalHookBindingTest is KernelBase {
         uint256 jobId = _open(c, BUDGET);
         uint256 bal = token.balanceOf(c);
         vm.prank(c);
-        vm.expectRevert(abi.encodeWithSelector(RulesBindingHookErrors.CallerIsNotAGW.selector, c));
+        vm.expectRevert(abi.encodeWithSelector(UniversalHookErrors.CallerIsNotAGW.selector, c));
         kernel.fund(jobId, BUDGET, abi.encode(P));
         assertEq(token.balanceOf(c), bal);
         assertEq(uint8(_status(jobId)), uint8(IAgenticCommerce.JobStatus.Open));
@@ -142,7 +142,7 @@ contract UniversalHookBindingTest is KernelBase {
         uint256 jobId = _open(agw, BUDGET);
         uint256 bal = token.balanceOf(agw);
         vm.prank(agw);
-        vm.expectRevert(abi.encodeWithSelector(RulesBindingHookErrors.RulesNotLive.selector, agw, P2));
+        vm.expectRevert(abi.encodeWithSelector(UniversalHookErrors.RulesNotLive.selector, agw, P2));
         kernel.fund(jobId, BUDGET, abi.encode(P2));
         _assertStillOpenAndUnbound(jobId, bal);
     }
@@ -152,7 +152,7 @@ contract UniversalHookBindingTest is KernelBase {
         uint256 jobId = _open(agw, BUDGET);
         uint256 bal = token.balanceOf(agw);
         vm.prank(agw);
-        vm.expectRevert(abi.encodeWithSelector(RulesBindingHookErrors.RulesNotLive.selector, agw, P));
+        vm.expectRevert(abi.encodeWithSelector(UniversalHookErrors.RulesNotLive.selector, agw, P));
         kernel.fund(jobId, BUDGET, abi.encode(P));
         _assertStillOpenAndUnbound(jobId, bal);
     }
@@ -164,7 +164,7 @@ contract UniversalHookBindingTest is KernelBase {
         uint256 jobId = _open(agw, BUDGET);
         uint256 bal = token.balanceOf(agw);
         vm.prank(agw);
-        vm.expectRevert(abi.encodeWithSelector(RulesBindingHookErrors.RulesNotLive.selector, agw, P2));
+        vm.expectRevert(abi.encodeWithSelector(UniversalHookErrors.RulesNotLive.selector, agw, P2));
         kernel.fund(jobId, BUDGET, abi.encode(P2));
         _assertStillOpenAndUnbound(jobId, bal);
     }
@@ -176,7 +176,7 @@ contract UniversalHookBindingTest is KernelBase {
         uint256 second = _open(agw, BUDGET);
         uint256 bal = token.balanceOf(agw);
         vm.prank(agw);
-        vm.expectRevert(abi.encodeWithSelector(RulesBindingHookErrors.AGWHasLiveJob.selector, agw, first));
+        vm.expectRevert(abi.encodeWithSelector(UniversalHookErrors.AGWHasLiveJob.selector, agw, first));
         kernel.fund(second, BUDGET, abi.encode(P));
         _assertStillOpenAndUnbound(second, bal);
     }
@@ -189,7 +189,7 @@ contract UniversalHookBindingTest is KernelBase {
         uint256 second = _open(agw, BUDGET);
         uint256 bal = token.balanceOf(agw);
         vm.prank(agw);
-        vm.expectRevert(abi.encodeWithSelector(RulesBindingHookErrors.AGWHasLiveJob.selector, agw, first));
+        vm.expectRevert(abi.encodeWithSelector(UniversalHookErrors.AGWHasLiveJob.selector, agw, first));
         kernel.fund(second, BUDGET, abi.encode(P));
         _assertStillOpenAndUnbound(second, bal);
     }
@@ -398,7 +398,7 @@ contract UniversalHookBindingTest is KernelBase {
 
         uint256 second = _open(agw, BUDGET);
         vm.prank(agw);
-        vm.expectRevert(abi.encodeWithSelector(RulesBindingHookErrors.AGWHasLiveJob.selector, agw, first));
+        vm.expectRevert(abi.encodeWithSelector(UniversalHookErrors.AGWHasLiveJob.selector, agw, first));
         kernel.fund(second, BUDGET, abi.encode(P));
     }
 
