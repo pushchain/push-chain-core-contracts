@@ -1,7 +1,6 @@
 // SPDX-License-Identifier: MIT
 pragma solidity 0.8.26;
 
-import {ERC1967Utils} from "@openzeppelin/contracts/proxy/ERC1967/ERC1967Utils.sol";
 import {BaseERC8183Hook} from "./BaseERC8183Hook.sol";
 import {IAgenticCommerce} from "../interfaces/IAgenticCommerce.sol";
 import {IAGWFactory} from "../interfaces/external/IAGWFactory.sol";
@@ -17,7 +16,7 @@ import {RulesBindingHookErrors, ERC8183HookErrors, UniversalHookErrors} from "..
 ///      - Spec: the provider may replace it in `setBudget`, the client in `fund`, as the `mutability` flag in the
 ///        createJob description allows. Frozen in `afterAction(fund)`.
 ///      - Stateless for evaluation: the evaluator holds the spec, prepaid PC, snapshot answers and rounds.
-///      - Storage continues the base at slot 50. Slots 50–53 match RulesBindingHook, so its proxy can be upgraded to this.
+///      - Storage continues the base at slot 50.
 contract UniversalHook is BaseERC8183Hook {
     /// @notice The job ↔ rules set record.
     struct Binding {
@@ -63,19 +62,6 @@ contract UniversalHook is BaseERC8183Hook {
         __BaseERC8183Hook_init(kernel_);
         AGW_FACTORY = agwFactory_;
         SESSION_ENGINE = sessionEngine_;
-        EVALUATOR = evaluator_;
-    }
-
-    /// @notice Upgrade step for the RulesBindingHook proxy: sets the evaluator, which `initialize` can't (it already ran there).
-    /// @dev - PREPARED FOR REVIEW: not in the original hook design; needed by its "upgrade the proxy in place" plan.
-    ///      - Only the proxy's admin may call, so only through `ProxyAdmin.upgradeAndCall` in the upgrade transaction:
-    ///        nobody can set the evaluator between the upgrade and this call.
-    ///      - Migration only: refused once an evaluator is set (a fresh proxy sets it in `initialize`).
-    ///      - Slots 50–53 (factory, engine, bindings, live jobs) are kept as they are.
-    function initializeV2(address evaluator_) external reinitializer(2) {
-        if (msg.sender != ERC1967Utils.getAdmin()) revert UniversalHookErrors.CallerIsNotProxyAdmin(msg.sender);
-        if (EVALUATOR != address(0)) revert UniversalHookErrors.EvaluatorAlreadySet(EVALUATOR);
-        if (evaluator_ == address(0)) revert ERC8183HookErrors.ZeroAddress();
         EVALUATOR = evaluator_;
     }
 

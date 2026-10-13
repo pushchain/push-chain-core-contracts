@@ -163,10 +163,9 @@ contract UniversalEvaluator is IUniversalEvaluator, ReentrancyGuard {
     mapping(uint256 => RequestRef) internal _requests;
 
     /// @dev `HOOK` is fixed here, for good: every later hook change must be an upgrade of that same proxy, since a
-    ///      hook deployed at another address can't call this evaluator. In place (production): the hook proxy
-    ///      already exists, so deploy this first, then upgrade the proxy with `UniversalHook.initializeV2(this)`
-    ///      (`scripts/agentic-commerce-8183`). A fresh hook needs this address at its `initialize`, so predict it,
-    ///      deploy the hook proxy with it, then deploy this.
+    ///      hook deployed at another address can't call this evaluator. The hook needs this address at its
+    ///      `initialize`, so the two are deployed together: predict this address, deploy the hook proxy with it, then
+    ///      deploy this (`scripts/agentic-commerce-8183`).
     constructor(
         address kernel_,
         address hook_,

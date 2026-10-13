@@ -2,13 +2,9 @@
 pragma solidity 0.8.26;
 
 import {Vm} from "forge-std/Vm.sol";
-import {ProxyAdmin} from "@openzeppelin/contracts/proxy/transparent/ProxyAdmin.sol";
-import {ITransparentUpgradeableProxy} from "@openzeppelin/contracts/proxy/transparent/TransparentUpgradeableProxy.sol";
-import {ERC1967Utils} from "@openzeppelin/contracts/proxy/ERC1967/ERC1967Utils.sol";
 
 import {UniversalEvalBase} from "./UniversalEvalBase.t.sol";
 import {UniversalEvaluator} from "../../src/agentic-commerce-8183/evaluator/UniversalEvaluator.sol";
-import {UniversalHook} from "../../src/agentic-commerce-8183/hooks/UniversalHook.sol";
 import {JobSpec, CriteriaMutability} from "../../src/agentic-commerce-8183/libraries/JobSpecTypes.sol";
 import {EvmQueryEnvelope} from "../../src/agentic-commerce-8183/evaluator/EvmReadLib.sol";
 import {OwnerCheck} from "../../src/agentic-commerce-8183/evaluator/EvaluationTypes.sol";
@@ -330,23 +326,6 @@ contract UniversalHookTest is UniversalEvalBase {
     function test_UH18_prefundUnknownJob_refused() public {
         vm.expectRevert(abi.encodeWithSelector(UniversalEvaluatorErrors.UnknownJob.selector, 99));
         ue.prefund{value: 1}(99);
-    }
-
-    /// @dev On a freshly deployed hook the upgrade step can't replace the evaluator: not by a stranger, and not by the
-    ///      proxy's admin through `upgradeAndCall` either.
-    function test_UH19_initializeV2_migrationOnly() public {
-        vm.prank(stranger);
-        vm.expectRevert(abi.encodeWithSelector(UniversalHookErrors.CallerIsNotProxyAdmin.selector, stranger));
-        hook.initializeV2(stranger);
-
-        ProxyAdmin pa = ProxyAdmin(address(uint160(uint256(vm.load(address(hook), ERC1967Utils.ADMIN_SLOT)))));
-        address impl = address(uint160(uint256(vm.load(address(hook), ERC1967Utils.IMPLEMENTATION_SLOT))));
-        vm.prank(proxyAdminOwner);
-        vm.expectRevert(abi.encodeWithSelector(UniversalHookErrors.EvaluatorAlreadySet.selector, address(ue)));
-        pa.upgradeAndCall(
-            ITransparentUpgradeableProxy(address(hook)), impl, abi.encodeCall(UniversalHook.initializeV2, (stranger))
-        );
-        assertEq(hook.EVALUATOR(), address(ue));
     }
 
     /// @dev `BOTH` is the zero value, so a spec whose encoder never sets `mutability` can be replaced by the

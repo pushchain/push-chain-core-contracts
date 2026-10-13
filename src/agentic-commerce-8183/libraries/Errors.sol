@@ -154,10 +154,6 @@ library UniversalHookErrors {
     error FlagChanged(CriteriaMutability expected, CriteriaMutability got);
     /// @notice The spec being frozen is not the one the client agreed to.
     error SpecHashMismatch(bytes32 expected, bytes32 actual);
-    /// @notice Only the proxy's admin (through `ProxyAdmin.upgradeAndCall`) may run this upgrade step.
-    error CallerIsNotProxyAdmin(address caller);
-    /// @notice The upgrade step is for a proxy with no evaluator yet.
-    error EvaluatorAlreadySet(address evaluator);
 }
 
 /// @title UniversalEvaluatorErrors
