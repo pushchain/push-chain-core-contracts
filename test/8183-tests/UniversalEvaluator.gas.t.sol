@@ -20,14 +20,14 @@ import {
     ReadAt,
     MAX_READS,
     MAX_CHECKS,
-    MAX_NODES
+    MAX_LOGIC
 } from "../../src/agentic-commerce-8183/libraries/JobSpecTypes.sol";
 import {Verdict, MAX_DESCRIPTION_LENGTH} from "../../src/agentic-commerce-8183/evaluator/EvaluationTypes.sol";
 
 /// @notice The callbacks must fit Read State's gas limits for the largest spec the rules allow.
 /// @dev Reads are 15-field structs. A spec must also fit MAX_DESCRIPTION_LENGTH (32 KB), which keeps every count from
 ///      being at its maximum at once, so the worst cases are split:
-///      - GAS01, the most nodes: 32 nodes over 16 NUM checks, each a POST read against a PRE read (8 of each);
+///      - GAS01, the most logic: 32 entries over 16 NUM checks, each a POST read against a PRE read (8 of each);
 ///      - GAS03, the most reads and terms: 32 POST reads and MAX_TERMS (64) terms across 16 checks that all wait for
 ///        the last answer.
 ///      A callback that runs out of gas is never retried, so this is a hard ceiling, not an optimisation.
@@ -36,7 +36,7 @@ contract UniversalEvaluatorGasTest is UniversalEvalBase {
     uint256 internal constant VENUES = 8;
 
     function _maxSpec() internal view returns (JobSpec memory s) {
-        s = _frame(2 * VENUES, MAX_NODES);
+        s = _frame(2 * VENUES, MAX_LOGIC);
         for (uint256 i; i < 2 * VENUES; ++i) {
             s.reads[i] = _reserveRead(i % VENUES, i < VENUES ? ReadAt.POST_EXECUTION : ReadAt.PRE_EXECUTION);
         }
@@ -69,23 +69,23 @@ contract UniversalEvaluatorGasTest is UniversalEvalBase {
         }
     }
 
-    /// @dev `nReads` reads and MAX_CHECKS checks to fill in, and a root ALL over `nNodes - 1` CHECK nodes, so every
-    ///      node is reachable and every check used.
-    function _frame(uint256 nReads, uint256 nNodes) internal view returns (JobSpec memory s) {
+    /// @dev `nReads` reads and MAX_CHECKS checks to fill in, and a root ALL over `nLogic - 1` CHECK entries, so every
+    ///      entry is reachable and every check used.
+    function _frame(uint256 nReads, uint256 nLogic) internal view returns (JobSpec memory s) {
         s.executeBy = uint64(block.timestamp + 1 hours);
         s.failFinalAt = uint64(block.timestamp + 2 hours);
         s.reads = new Read[](nReads);
         s.checks = new Check[](MAX_CHECKS);
-        s.logic = new Logic[](nNodes);
-        uint8[] memory children = new uint8[](nNodes - 1);
-        for (uint256 i; i < nNodes - 1; ++i) {
+        s.logic = new Logic[](nLogic);
+        uint8[] memory children = new uint8[](nLogic - 1);
+        for (uint256 i; i < nLogic - 1; ++i) {
             // forge-lint: disable-next-line(unsafe-typecast)
             children[i] = uint8(i + 1);
         }
         s.logic[0] = Logic({kind: LogicKind.ALL, check: 0, children: children, k: 0});
-        for (uint256 i = 1; i < nNodes; ++i) {
+        for (uint256 i = 1; i < nLogic; ++i) {
             // forge-lint: disable-next-line(unsafe-typecast)
-            s.logic[i] = _checkNode(uint8((i - 1) % MAX_CHECKS));
+            s.logic[i] = _checkLogic(uint8((i - 1) % MAX_CHECKS));
         }
         s.mutability = CriteriaMutability.NONE;
     }

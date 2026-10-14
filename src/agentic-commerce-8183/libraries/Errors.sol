@@ -86,8 +86,8 @@ library JobSpecErrors {
     error ReadCount(uint256 count);
     /// @notice `checks.length` is 0 or above `MAX_CHECKS`.
     error CheckCount(uint256 count);
-    /// @notice `nodes.length` is 0 or above `MAX_NODES`.
-    error NodeCount(uint256 count);
+    /// @notice `logic.length` is 0 or above `MAX_LOGIC`.
+    error LogicCount(uint256 count);
     /// @notice A read names an empty or too long chain namespace or chain id, or a namespace other than `eip155`.
     error ReadChain(uint256 read);
     /// @notice A read asks for zero confirmations, or more than the evaluator's maximum.
@@ -113,11 +113,11 @@ library JobSpecErrors {
     error CheckTarget(uint256 check);
     /// @notice A BOOL check's operator is not `EQ`.
     error CheckOp(uint256 check);
-    /// @notice A node is malformed: bad check index, children out of order or out of range, or a bad `k`.
-    error NodeShape(uint256 node);
-    /// @notice A node no path from the root reaches.
-    error NodeUnreachable(uint256 node);
-    /// @notice A check no reachable node uses.
+    /// @notice A logic entry is malformed: bad check index, children out of order or out of range, or a bad `k`.
+    error LogicShape(uint256 entry);
+    /// @notice A logic entry no path from the root reaches.
+    error LogicUnreachable(uint256 entry);
+    /// @notice A check no reachable logic entry uses.
     error CheckUnused(uint256 check);
     /// @notice A read no used check reads.
     error ReadUnused(uint256 read);
@@ -167,7 +167,7 @@ library UniversalEvaluatorErrors {
     error SpecFrozen(uint256 jobId);
     /// @notice The job's PC does not cover a read.
     error PrepaidTooLow(uint256 needed, uint256 available);
-    /// @notice The job's "before" snapshot is not complete yet.
+    /// @notice A PRE_EXECUTION read has no answer yet.
     error SnapshotNotReady(uint256 jobId);
     /// @notice No read to send: every one is answered or still in flight, or the job is decided.
     error NothingToSend(uint256 jobId);

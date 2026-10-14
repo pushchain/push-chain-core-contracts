@@ -63,7 +63,7 @@ abstract contract TemplateParts {
         fills[0] = Fill({word: word, source: FillSource.CEA, param: 0});
     }
 
-    // ───────── reads, checks, nodes ─────────
+    // ───────── reads, checks, logic ─────────
 
     function _read(
         string memory chainId,
@@ -115,7 +115,7 @@ abstract contract TemplateParts {
         return CheckTemplate({left: _f(left), right: _f(right), evalType: e, op: op, source: src, value: value});
     }
 
-    function _checkNode(uint8 check) internal pure returns (Logic memory) {
+    function _checkLogic(uint8 check) internal pure returns (Logic memory) {
         return Logic({kind: LogicKind.CHECK, check: check, children: new uint8[](0), k: 0});
     }
 

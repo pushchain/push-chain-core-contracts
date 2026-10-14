@@ -12,7 +12,7 @@ import {
     ReadAt,
     MAX_READS,
     MAX_CHECKS,
-    MAX_NODES,
+    MAX_LOGIC,
     MAX_TERMS
 } from "../libraries/JobSpecTypes.sol";
 import {Answer, Verdict, MAX_ARGS_LENGTH, MAX_CHAIN_STRING_LENGTH} from "./EvaluationTypes.sol";
@@ -27,10 +27,10 @@ import {JobSpecErrors} from "../libraries/Errors.sol";
 ///      - `executeBy` and `failFinalAt` are not checked: the evaluator does not use them (the end blocks are fixed at
 ///        `submit`, and a FAIL there is final).
 ///      - Every rule is one the evaluator relies on, so a funded job can always be judged: indexes are in range,
-///        nodes form a graph evaluable from last to first, every read is one the evaluator can encode and decodes in
-///        bounded work, every node, check and read counts toward the verdict, at least one read is POST_EXECUTION,
-///        and the checks' sides name at most `MAX_TERMS` reads, so a callback's work stays bounded.
-///      Judging (every check comes out PASS, FAIL or UNKNOWN; nodes combine them; the root is the verdict):
+///        the logic forms a graph evaluable from last to first, every read is one the evaluator can encode and
+///        decodes in bounded work, every logic entry, check and read counts toward the verdict, at least one read is
+///        POST_EXECUTION, and the checks' sides name at most `MAX_TERMS` reads, so a callback's work stays bounded.
+///      Judging (every check comes out PASS, FAIL or UNKNOWN; the logic combines them; the root is the verdict):
 ///      - Each side is the sum of its reads; a side with a missing or unreadable read, or a sum that overflows, is
 ///        UNKNOWN. With L = Σleft and R = Σright:
 ///        BOOL `L == target` · CMP `L op target` · NUM `(L - R) op target` ·
@@ -41,7 +41,7 @@ import {JobSpecErrors} from "../libraries/Errors.sol";
 ///      - The readable, unpacked reference judge lives in the tests (`helpers/ReferenceJudge.sol`); the suite checks
 ///        `verdictPacked` agrees with it on random inputs.
 library JobSpecLib {
-    /// @notice A check's or a node's result.
+    /// @notice A check's or a logic entry's result.
     uint8 internal constant UNKNOWN = 0;
     uint8 internal constant PASS = 1;
     uint8 internal constant FAIL = 2;
@@ -54,10 +54,10 @@ library JobSpecLib {
     function validate(JobSpec memory s, uint256 maxConfirmations) public pure {
         uint256 nReads = s.reads.length;
         uint256 nChecks = s.checks.length;
-        uint256 nNodes = s.logic.length;
+        uint256 nLogic = s.logic.length;
         if (nReads == 0 || nReads > MAX_READS) revert JobSpecErrors.ReadCount(nReads);
         if (nChecks == 0 || nChecks > MAX_CHECKS) revert JobSpecErrors.CheckCount(nChecks);
-        if (nNodes == 0 || nNodes > MAX_NODES) revert JobSpecErrors.NodeCount(nNodes);
+        if (nLogic == 0 || nLogic > MAX_LOGIC) revert JobSpecErrors.LogicCount(nLogic);
 
         bool anyPost;
         for (uint256 i; i < nReads; ++i) {
@@ -100,8 +100,8 @@ library JobSpecLib {
 
         if (terms > MAX_TERMS) revert JobSpecErrors.TermCount(terms);
 
-        for (uint256 i; i < nNodes; ++i) {
-            if (!_nodeOk(s.logic[i], i, nNodes, nChecks)) revert JobSpecErrors.NodeShape(i);
+        for (uint256 i; i < nLogic; ++i) {
+            if (!_logicOk(s.logic[i], i, nLogic, nChecks)) revert JobSpecErrors.LogicShape(i);
         }
         _requireAllUsed(s);
     }
@@ -118,15 +118,15 @@ library JobSpecLib {
         return (true, mask);
     }
 
-    /// @dev Everything counts toward the verdict: every node is reachable from the root, every check is used by a
-    ///      reachable CHECK node, every read by a used check. Nothing is paid for or shown without affecting payment.
-    ///      Children come after their parents (`_nodeOk`), so one forward pass finds every reachable node. A node may
-    ///      have several parents; that changes nothing in the verdict.
+    /// @dev Everything counts toward the verdict: every logic entry is reachable from the root, every check is used by
+    ///      a reachable CHECK entry, every read by a used check. Nothing is paid for or shown without affecting payment.
+    ///      Children come after their parents (`_logicOk`), so one forward pass finds every reachable entry. An entry
+    ///      may have several parents; that changes nothing in the verdict.
     function _requireAllUsed(JobSpec memory s) private pure {
         uint256 reached = 1; // the root
         uint256 usedChecks;
         for (uint256 i; i < s.logic.length; ++i) {
-            if ((reached >> i) & 1 == 0) revert JobSpecErrors.NodeUnreachable(i);
+            if ((reached >> i) & 1 == 0) revert JobSpecErrors.LogicUnreachable(i);
             Logic memory n = s.logic[i];
             if (n.kind == LogicKind.CHECK) {
                 usedChecks |= uint256(1) << n.check;
@@ -160,17 +160,17 @@ library JobSpecLib {
     }
 
     /// @dev - CHECK: a check in range, no children.
-    ///      - ALL / ANY / AT_LEAST: one or more children, strictly increasing, each after this node and in range,
+    ///      - ALL / ANY / AT_LEAST: one or more children, strictly increasing, each after this entry and in range,
     ///        so the tree is acyclic and no child is counted twice.
     ///      - AT_LEAST: `1 <= k <= children`.
-    function _nodeOk(Logic memory n, uint256 i, uint256 nNodes, uint256 nChecks) private pure returns (bool) {
+    function _logicOk(Logic memory n, uint256 i, uint256 nLogic, uint256 nChecks) private pure returns (bool) {
         if (n.kind == LogicKind.CHECK) return n.check < nChecks && n.children.length == 0;
         uint256 len = n.children.length;
         if (len == 0) return false;
         uint256 prev = i;
         for (uint256 j; j < len; ++j) {
             uint256 c = n.children[j];
-            if (c <= prev || c >= nNodes) return false;
+            if (c <= prev || c >= nLogic) return false;
             prev = c;
         }
         if (n.kind == LogicKind.AT_LEAST) return n.k >= 1 && n.k <= len;
@@ -215,14 +215,14 @@ library JobSpecLib {
     //
     // The evaluator judges each check as soon as its reads' values are in, so the last callback only walks the tree.
     // Check results: 2 bits per check (UNKNOWN 0, PASS 1, FAIL 2), check i at bits [2i, 2i+1], in a uint32.
-    // Nodes: 64 bits per node, 4 per word, node i at bits [64·(i%4), +64) of word i/4:
-    //   bits 0-7 kind · 8-15 check · 16-23 k · 24-55 children as a bitmask (bit j: node j is a child).
+    // Logic: 64 bits per entry, 4 per word, entry i at bits [64·(i%4), +64) of word i/4:
+    //   bits 0-7 kind · 8-15 check · 16-23 k · 24-55 children as a bitmask (bit j: entry j is a child).
 
-    /// @notice Packs `nodes` into words of four. Assumes `validate` passed (at most 32 nodes).
-    function packNodes(Logic[] memory nodes) internal pure returns (uint256[] memory words) {
-        words = new uint256[]((nodes.length + 3) / 4);
-        for (uint256 i; i < nodes.length; ++i) {
-            Logic memory n = nodes[i];
+    /// @notice Packs `logic` into words of four. Assumes `validate` passed (at most 32 entries).
+    function packLogic(Logic[] memory logic) internal pure returns (uint256[] memory words) {
+        words = new uint256[]((logic.length + 3) / 4);
+        for (uint256 i; i < logic.length; ++i) {
+            Logic memory n = logic[i];
             uint256 mask;
             for (uint256 j; j < n.children.length; ++j) {
                 mask |= uint256(1) << n.children[j];
@@ -238,13 +238,13 @@ library JobSpecLib {
         return checkRes | uint32(uint256(result) << (2 * index)); // safe: index < 16, so the shift stays below 32
     }
 
-    /// @notice The verdict from packed nodes and packed check results.
-    function verdictPacked(uint256[] memory words, uint256 nNodes, uint32 checkRes) internal pure returns (Verdict) {
-        uint256 nodeRes; // 2 bits per node, as checkRes
-        for (uint256 i = nNodes; i > 0; --i) {
+    /// @notice The verdict from packed logic and packed check results.
+    function verdictPacked(uint256[] memory words, uint256 nLogic, uint32 checkRes) internal pure returns (Verdict) {
+        uint256 logicRes; // 2 bits per entry, as checkRes
+        for (uint256 i = nLogic; i > 0; --i) {
             uint256 idx = i - 1;
             uint256 packed = (words[idx / 4] >> (64 * (idx % 4))) & type(uint64).max;
-            // The casts below pick one byte out of the packed node (layout above): dropping the rest is the intent.
+            // The casts below pick one byte out of the packed entry (layout above): dropping the rest is the intent.
             // forge-lint: disable-next-line(unsafe-typecast)
             uint8 kind = uint8(packed);
             uint8 r;
@@ -256,10 +256,10 @@ library JobSpecLib {
                 uint256 total;
                 uint256 pass;
                 uint256 fail;
-                for (uint256 j = idx + 1; j < nNodes; ++j) {
+                for (uint256 j = idx + 1; j < nLogic; ++j) {
                     if (mask & (uint256(1) << j) == 0) continue;
                     ++total;
-                    uint256 c = (nodeRes >> (2 * j)) & 3;
+                    uint256 c = (logicRes >> (2 * j)) & 3;
                     if (c == PASS) ++pass;
                     else if (c == FAIL) ++fail;
                 }
@@ -267,9 +267,9 @@ library JobSpecLib {
                 uint256 need = kind == uint8(LogicKind.ALL) ? total : kind == uint8(LogicKind.ANY) ? 1 : uint8(packed >> 16);
                 r = pass >= need ? PASS : total - fail < need ? FAIL : UNKNOWN;
             }
-            nodeRes |= uint256(r) << (2 * idx);
+            logicRes |= uint256(r) << (2 * idx);
         }
-        uint256 root = nodeRes & 3;
+        uint256 root = logicRes & 3;
         if (root == PASS) return Verdict.PASS;
         if (root == FAIL) return Verdict.FAIL;
         return Verdict.INCONCLUSIVE;

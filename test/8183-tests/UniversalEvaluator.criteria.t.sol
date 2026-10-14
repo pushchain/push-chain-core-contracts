@@ -221,7 +221,7 @@ contract UniversalEvaluatorCriteriaTest is UniversalEvalBase {
         logic[1] = Logic({kind: LogicKind.ALL, check: 0, children: _u8(3, 4), k: 0});
         logic[2] = Logic({kind: LogicKind.ALL, check: 0, children: _u8(5, 6), k: 0});
         for (uint8 i; i < 4; ++i) {
-            logic[3 + i] = _checkNode(i);
+            logic[3 + i] = _checkLogic(i);
         }
         JobSpec memory s = _spec(reads, checks, logic);
 
@@ -359,7 +359,7 @@ contract UniversalEvaluatorCriteriaTest is UniversalEvalBase {
         Check[] memory checks = new Check[](1);
         checks[0] = c;
         Logic[] memory logic = new Logic[](1);
-        logic[0] = _checkNode(0);
+        logic[0] = _checkLogic(0);
         return _spec(reads, checks, logic);
     }
 
@@ -375,7 +375,7 @@ contract UniversalEvaluatorCriteriaTest is UniversalEvalBase {
             // forge-lint: disable-next-line(unsafe-typecast)
             kids[i] = uint8(1 + i); // safe: at most MAX_CHECKS
             // forge-lint: disable-next-line(unsafe-typecast)
-            logic[1 + i] = _checkNode(uint8(i));
+            logic[1 + i] = _checkLogic(uint8(i));
         }
         logic[0] = Logic({kind: kind, check: 0, children: kids, k: k});
         return _spec(reads, checks, logic);

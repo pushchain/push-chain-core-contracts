@@ -52,16 +52,16 @@ contract LibHarness {
         JobSpecLib.validate(s, MAX_CONFIRMATIONS);
     }
 
-    function verdict(Check[] memory checks, Logic[] memory nodes, Answer[] memory values)
+    function verdict(Check[] memory checks, Logic[] memory logic, Answer[] memory values)
         external
         pure
         returns (Verdict)
     {
-        return ReferenceJudge.verdict(checks, nodes, values);
+        return ReferenceJudge.verdict(checks, logic, values);
     }
 
     /// @notice The evaluator's path: each check judged alone, then the packed tree.
-    function verdictPacked(Check[] memory checks, Logic[] memory nodes, Answer[] memory values)
+    function verdictPacked(Check[] memory checks, Logic[] memory logic, Answer[] memory values)
         external
         pure
         returns (Verdict)
@@ -75,7 +75,7 @@ contract LibHarness {
             Answer memory a = _sum(JobSpecLib.packSide(c.left), values);
             res = JobSpecLib.setCheck(res, i, JobSpecLib.checkResult(c.evalType, c.op, c.target, a, b));
         }
-        return JobSpecLib.verdictPacked(JobSpecLib.packNodes(nodes), nodes.length, res);
+        return JobSpecLib.verdictPacked(JobSpecLib.packLogic(logic), logic.length, res);
     }
 
     /// @dev As the evaluator's `_sum`, over `values` instead of storage.
@@ -382,26 +382,26 @@ contract JobSpecLibrariesTest is Test {
         lib.validate(s);
     }
 
-    function test_RUL03_nodeRefusals() public {
+    function test_RUL03_logicRefusals() public {
         JobSpec memory s = _twoVenue();
         s.logic[0].children = _f(2, 1); // out of order
-        vm.expectRevert(abi.encodeWithSelector(JobSpecErrors.NodeShape.selector, 0));
+        vm.expectRevert(abi.encodeWithSelector(JobSpecErrors.LogicShape.selector, 0));
         lib.validate(s);
 
         s = _twoVenue();
         s.logic[0].children = _f(1, 1); // duplicate child: would count one venue twice
-        vm.expectRevert(abi.encodeWithSelector(JobSpecErrors.NodeShape.selector, 0));
+        vm.expectRevert(abi.encodeWithSelector(JobSpecErrors.LogicShape.selector, 0));
         lib.validate(s);
 
         s = _twoVenue();
         s.logic[0].kind = LogicKind.AT_LEAST;
         s.logic[0].k = 3;
-        vm.expectRevert(abi.encodeWithSelector(JobSpecErrors.NodeShape.selector, 0));
+        vm.expectRevert(abi.encodeWithSelector(JobSpecErrors.LogicShape.selector, 0));
         lib.validate(s);
 
         s = _twoVenue();
         s.logic[1].check = 9;
-        vm.expectRevert(abi.encodeWithSelector(JobSpecErrors.NodeShape.selector, 1));
+        vm.expectRevert(abi.encodeWithSelector(JobSpecErrors.LogicShape.selector, 1));
         lib.validate(s);
     }
 
@@ -426,7 +426,7 @@ contract JobSpecLibrariesTest is Test {
 
         s = _twoVenue();
         s.logic[0] = Logic({kind: LogicKind.CHECK, check: 0, children: new uint8[](0), k: 0}); // 1 and 2 cut off
-        vm.expectRevert(abi.encodeWithSelector(JobSpecErrors.NodeUnreachable.selector, 1));
+        vm.expectRevert(abi.encodeWithSelector(JobSpecErrors.LogicUnreachable.selector, 1));
         lib.validate(s);
 
         s = _twoVenue();
@@ -676,7 +676,7 @@ contract JobSpecLibrariesTest is Test {
     /// @dev The evaluator's packed path agrees with the reference judge on random three-valued inputs.
     function testFuzz_JDG02_packedEqualsReference(uint256 seed) public view {
         uint256 nChecks = 1 + (seed % 16);
-        uint256 nNodes = 1 + ((seed >> 8) % 32);
+        uint256 nLogic = 1 + ((seed >> 8) % 32);
         uint256 nReads = 2 + ((seed >> 16) % (MAX_READS - 1));
         Answer[] memory values = new Answer[](nReads);
         for (uint256 i; i < nReads; ++i) {
@@ -704,18 +704,18 @@ contract JobSpecLibrariesTest is Test {
                 target: int256((r >> 16) % 5)
             });
         }
-        Logic[] memory nodes = new Logic[](nNodes);
-        for (uint256 i; i < nNodes; ++i) {
+        Logic[] memory logic = new Logic[](nLogic);
+        for (uint256 i; i < nLogic; ++i) {
             uint256 r = uint256(keccak256(abi.encode(seed, "n", i)));
             uint256 kids;
             uint8[] memory tmp = new uint8[](32);
-            for (uint256 j = i + 1; j < nNodes; ++j) {
+            for (uint256 j = i + 1; j < nLogic; ++j) {
                 // forge-lint: disable-next-line(unsafe-typecast)
                 if ((r >> j) & 1 == 1) tmp[kids++] = uint8(j);
             }
             if (kids == 0) {
                 // forge-lint: disable-next-line(unsafe-typecast)
-                nodes[i] = Logic({kind: LogicKind.CHECK, check: uint8(r % nChecks), children: new uint8[](0), k: 0});
+                logic[i] = Logic({kind: LogicKind.CHECK, check: uint8(r % nChecks), children: new uint8[](0), k: 0});
             } else {
                 uint8[] memory ch = new uint8[](kids);
                 for (uint256 j; j < kids; ++j) {
@@ -724,10 +724,10 @@ contract JobSpecLibrariesTest is Test {
                 LogicKind kind = LogicKind(1 + ((r >> 40) % 3));
                 // forge-lint: disable-next-line(unsafe-typecast)
                 uint8 k = uint8(1 + ((r >> 48) % kids));
-                nodes[i] = Logic({kind: kind, check: 0, children: ch, k: k});
+                logic[i] = Logic({kind: kind, check: 0, children: ch, k: k});
             }
         }
-        assertEq(uint8(lib.verdict(checks, nodes, values)), uint8(lib.verdictPacked(checks, nodes, values)));
+        assertEq(uint8(lib.verdict(checks, logic, values)), uint8(lib.verdictPacked(checks, logic, values)));
     }
 
     /// @dev Every operator, with the value below, at and above the target: on CMP (the value), NUM (a difference)
@@ -806,17 +806,17 @@ contract JobSpecLibrariesTest is Test {
     function _logic(LogicKind kind, uint8 k, uint8[3] memory results, Verdict want) internal view {
         Check[] memory checks = new Check[](3);
         Answer[] memory values = new Answer[](3);
-        Logic[] memory nodes = new Logic[](4);
+        Logic[] memory logic = new Logic[](4);
         uint8[] memory kids = new uint8[](3);
         for (uint8 i; i < 3; ++i) {
             checks[i] = Check({left: _f(i), right: _none(), evalType: EvalType.CMP, op: Op.EQ, target: 1});
             values[i] = Answer(results[i] != JobSpecLib.UNKNOWN, results[i] == JobSpecLib.PASS ? int256(1) : int256(0));
-            nodes[1 + i] = Logic({kind: LogicKind.CHECK, check: i, children: new uint8[](0), k: 0});
+            logic[1 + i] = Logic({kind: LogicKind.CHECK, check: i, children: new uint8[](0), k: 0});
             kids[i] = 1 + i;
         }
-        nodes[0] = Logic({kind: kind, check: 0, children: kids, k: k});
-        assertEq(uint8(lib.verdict(checks, nodes, values)), uint8(want), "reference");
-        assertEq(uint8(lib.verdictPacked(checks, nodes, values)), uint8(want), "packed");
+        logic[0] = Logic({kind: kind, check: 0, children: kids, k: k});
+        assertEq(uint8(lib.verdict(checks, logic, values)), uint8(want), "reference");
+        assertEq(uint8(lib.verdictPacked(checks, logic, values)), uint8(want), "packed");
     }
 
     /// @dev Each side is the sum of its reads; one unreadable read, or a sum that overflows, leaves the check UNKNOWN.

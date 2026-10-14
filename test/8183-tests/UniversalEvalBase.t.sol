@@ -71,7 +71,7 @@ abstract contract UniversalEvalBase is KernelBase {
     uint256 internal constant READ_FEE = 0.01 ether;
     uint256 internal constant BASE_FEE = 1 gwei;
     uint64 internal constant START_HEIGHT = 30_000_000;
-    /// @dev One "after" read's price: protocol fee + 1M callback gas × base fee × 3.
+    /// @dev One evaluation read's price: protocol fee + 1M callback gas × base fee × 3.
     uint256 internal constant READ_COST = READ_FEE + 1_000_000 * BASE_FEE * 3;
     /// @dev One snapshot read's price: protocol fee + 300k callback gas × base fee × 3.
     uint256 internal constant SNAPSHOT_COST = READ_FEE + 300_000 * BASE_FEE * 3;
@@ -225,7 +225,7 @@ abstract contract UniversalEvalBase is KernelBase {
         return abi.encode(w);
     }
 
-    function _checkNode(uint8 check) internal pure returns (Logic memory) {
+    function _checkLogic(uint8 check) internal pure returns (Logic memory) {
         return Logic({kind: LogicKind.CHECK, check: check, children: new uint8[](0), k: 0});
     }
 
@@ -239,7 +239,7 @@ abstract contract UniversalEvalBase is KernelBase {
         s.checks = new Check[](1);
         s.checks[0] = Check({left: _u8(0), right: _u8(1), evalType: EvalType.NUM, op: Op.GTE, target: 0.38e18});
         s.logic = new Logic[](1);
-        s.logic[0] = _checkNode(0);
+        s.logic[0] = _checkLogic(0);
         s.mutability = CriteriaMutability.NONE;
     }
 
@@ -255,8 +255,8 @@ abstract contract UniversalEvalBase is KernelBase {
         s.checks[1] = Check({left: _u8(1), right: _none(), evalType: EvalType.CMP, op: Op.GTE, target: 99.99e6});
         s.logic = new Logic[](3);
         s.logic[0] = Logic({kind: LogicKind.ANY, check: 0, children: _u8(1, 2), k: 0});
-        s.logic[1] = _checkNode(0);
-        s.logic[2] = _checkNode(1);
+        s.logic[1] = _checkLogic(0);
+        s.logic[2] = _checkLogic(1);
         s.mutability = CriteriaMutability.NONE;
     }
 
@@ -294,7 +294,7 @@ abstract contract UniversalEvalBase is KernelBase {
         agw.execute(address(kernel), 0, abi.encodeCall(kernel.fund, (jobId, BUDGET, optParams)));
     }
 
-    /// @notice The funding batch: prepay the snapshot and one round of "after" reads, then fund.
+    /// @notice The funding batch: prepay the snapshot and one round of POST reads, then fund.
     function _fund(uint256 jobId) internal {
         (uint256 snap, uint256 eval_) = ue.prefundCost(jobId);
         _prefund(jobId, snap + eval_);

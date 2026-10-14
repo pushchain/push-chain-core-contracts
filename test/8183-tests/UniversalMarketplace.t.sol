@@ -219,8 +219,8 @@ abstract contract MarketplaceFixtures is KernelBase, TemplateParts {
         t.checks[1] = _chk(1, EvalType.CMP, Op.GTE, TargetSource.FIXED, 0.04e27);
         t.logic = new Logic[](3);
         t.logic[0] = _parent(LogicKind.ALL, _kids(1, 2), 0);
-        t.logic[1] = _checkNode(0);
-        t.logic[2] = _checkNode(1);
+        t.logic[1] = _checkLogic(0);
+        t.logic[2] = _checkLogic(1);
         t.params = new ParamBounds[](0);
     }
 
@@ -234,7 +234,7 @@ abstract contract MarketplaceFixtures is KernelBase, TemplateParts {
         t.checks = new CheckTemplate[](1);
         t.checks[0] = _pair(0, 1, EvalType.NUM, Op.GTE, TargetSource.PARAM, 0);
         t.logic = new Logic[](1);
-        t.logic[0] = _checkNode(0);
+        t.logic[0] = _checkLogic(0);
         t.params = new ParamBounds[](1);
         t.params[0] = ParamBounds({min: 1, max: 1e30});
     }

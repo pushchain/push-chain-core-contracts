@@ -63,7 +63,7 @@ contract UniversalEvaluator is IUniversalEvaluator, ReentrancyGuard {
     /// @notice What the evaluator keeps per job once its spec is frozen.
     struct JobCache {
         address client;
-        uint8 nodes; // node count of the packed tree
+        uint8 logicCount; // entries in the packed logic
         bool frozen;
         bool checkpointOk; // the wallet's counter could be read at `fund`
         uint64 checkpointAtFund;
@@ -151,7 +151,7 @@ contract UniversalEvaluator is IUniversalEvaluator, ReentrancyGuard {
     mapping(uint256 => JobCache) internal _cache;
     mapping(uint256 => ReadPlan[]) internal _plans;
     mapping(uint256 => PackedCheck[]) internal _checks;
-    mapping(uint256 => uint256[]) internal _packedNodes; // JobSpecLib.packNodes
+    mapping(uint256 => uint256[]) internal _packedLogic; // JobSpecLib.packLogic
     mapping(uint256 => Snapshot) internal _snapshots;
     mapping(uint256 => uint256[8]) internal _fundHeights; // every read's tracked height at fund, 4 uint64 per word
     mapping(uint256 => Evaluation) internal _evals;
@@ -447,7 +447,7 @@ contract UniversalEvaluator is IUniversalEvaluator, ReentrancyGuard {
         // The logic is monotone: once the root is PASS or FAIL no later answer can change it, so apply it now.
         // An unreadable answer changes no check, so only a usable one can decide the root.
         if (ok || e.pending == 0) {
-            Verdict v = JobSpecLib.verdictPacked(_packedNodes[jobId], _cache[jobId].nodes, e.checkRes);
+            Verdict v = JobSpecLib.verdictPacked(_packedLogic[jobId], _cache[jobId].logicCount, e.checkRes);
             if (v != Verdict.INCONCLUSIVE || e.pending == 0) _finish(jobId, v);
         }
     }
@@ -538,9 +538,9 @@ contract UniversalEvaluator is IUniversalEvaluator, ReentrancyGuard {
                 reads >>= 1;
             }
         }
-        _packedNodes[jobId] = JobSpecLib.packNodes(s.logic);
+        _packedLogic[jobId] = JobSpecLib.packLogic(s.logic);
         // forge-lint: disable-next-line(unsafe-typecast)
-        c.nodes = uint8(s.logic.length); // safe: JobSpecLib caps nodes at MAX_NODES (32)
+        c.logicCount = uint8(s.logic.length); // safe: JobSpecLib caps logic at MAX_LOGIC (32)
     }
 
     function _markCheck(JobCache storage c, uint256 read, uint256 check) internal {

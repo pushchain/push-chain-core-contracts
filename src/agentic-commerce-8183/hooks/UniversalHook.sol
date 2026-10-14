@@ -112,7 +112,7 @@ contract UniversalHook is BaseERC8183Hook {
 
     /// @dev - The final spec: the client's replacement if sent, else the provider's (stored in the evaluator), else the description.
     ///      - It must hash to `expectedSpecHash`, so nobody can swap it between the client's look and its fund.
-    ///      - `startSnapshot` stores it, freezes it and fires the "before" reads; if it reverts, so does fund.
+    ///      - `startSnapshot` stores it, freezes it and fires the PRE_EXECUTION reads; if it reverts, so does fund.
     function _postFund(uint256 jobId, address, bytes memory optParams) internal override {
         IAgenticCommerce.Job memory job = IAgenticCommerce(KERNEL).getJob(jobId);
         if (job.evaluator != EVALUATOR) return;                                   // not evaluated by us: rules binding only

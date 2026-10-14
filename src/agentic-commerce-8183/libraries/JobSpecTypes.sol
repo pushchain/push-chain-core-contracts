@@ -5,7 +5,7 @@ pragma solidity 0.8.26;
 /// @notice One definition, shared by everything that writes or reads a job's criteria:
 ///         - UniversalMarketplace builds a `JobSpec` and stores `abi.encode(spec)` as the job's description;
 ///         - the UniversalHook decodes it at `fund` and freezes it;
-///         - the UniversalEvaluator fires its reads and judges its checks and nodes.
+///         - the UniversalEvaluator fires its reads and judges its checks and logic.
 /// @dev - Source: `docs-internal/Universal Evaluator V2 Design`, plus `origin` (marketplace PRD decision Z7).
 ///      - Field order is ABI. Never reorder, never insert; a change here changes every description.
 
@@ -112,5 +112,5 @@ uint8 constant T_FIXED_ARRAY = 10;
 
 uint256 constant MAX_READS = 32;
 uint256 constant MAX_CHECKS = 16;
-uint256 constant MAX_NODES = 32;
+uint256 constant MAX_LOGIC = 32;
 uint256 constant MAX_TERMS = 64; // read indexes across every check's sides; bounds a callback's work
