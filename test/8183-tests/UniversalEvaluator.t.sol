@@ -743,6 +743,84 @@ contract UniversalEvaluatorTest is UniversalEvalBase {
         assertEq(uint8(_status(jobId)), uint8(IAgenticCommerce.JobStatus.Completed));
     }
 
+    // ───────────── an unreadable PRE answer ─────────────
+
+    /// @dev It counts as answered: the evaluation starts, and the other branch passes the job without it.
+    function test_UE37_unreadablePre_otherBranchPasses() public {
+        uint256 jobId = _createSpec(_depositSpec());
+        _fund(jobId);
+        _answer(jobId, 1, "");
+        assertTrue(ue.ready(jobId));
+        (bool ok,) = ue.answerOf(jobId, 1);
+        assertFalse(ok);
+
+        _prefund(jobId, READ_COST); // read 1 goes out again with the POST reads
+        _advance();
+        _submit(jobId);
+        assertTrue(ue.evaluationOf(jobId).started);
+        _answer(jobId, 2, abi.encode(uint256(100e6))); // Morpho holds it: ANY passes, Aave's check still UNKNOWN
+        assertEq(uint8(_status(jobId)), uint8(IAgenticCommerce.JobStatus.Completed));
+    }
+
+    /// @dev Once the evaluation starts it is read again at its `fund` block, by the evaluation, and that answer
+    ///      decides the check it feeds. `retrySnapshot` is closed from then on.
+    function test_UE38_unreadablePre_resentAtFundBlock_decides() public {
+        uint256 jobId = _createSpec(_depositSpec());
+        _fund(jobId);
+        uint256 first = ue.requestOf(jobId, 1);
+        _answer(jobId, 1, "");
+        _prefund(jobId, READ_COST);
+        _advance();
+        vm.recordLogs();
+        _submit(jobId);
+        uint256 again = ue.requestOf(jobId, 1);
+        assertTrue(again != first);
+        assertEq(_readSpecFromLogs(again).blockNumber, START_HEIGHT, "the fund block");
+
+        vm.prank(provider);
+        vm.expectRevert(abi.encodeWithSelector(UniversalEvaluatorErrors.NothingToSend.selector, jobId));
+        ue.retrySnapshot{value: SNAPSHOT_COST}(jobId);
+
+        _answer(jobId, 0, abi.encode(uint256(150e6)));
+        _answer(jobId, 2, abi.encode(uint256(0))); // Morpho fails; ANY waits on Aave's check
+        assertEq(uint8(_status(jobId)), uint8(IAgenticCommerce.JobStatus.Submitted));
+        bytes memory before = abi.encode(uint256(50e6));
+        _answer(jobId, 1, before); // 150 - 50 >= 99.99
+        assertEq(uint8(_status(jobId)), uint8(IAgenticCommerce.JobStatus.Completed));
+        bytes32 leaf = keccak256(abi.encode(uint8(1), again, START_HEIGHT, keccak256(before), true, int256(50e6)));
+        assertEq(ue.evidenceOf(jobId, 1), leaf, "evidence at the fund block");
+    }
+
+    /// @dev Under ALL a failing branch rejects without it. Prepaid for one round only, `submit` can't also re-send
+    ///      it, so nothing goes out until the provider tops up.
+    function test_UE39_unreadablePre_otherBranchFails() public {
+        JobSpec memory s = _depositSpec();
+        s.logic[0].kind = LogicKind.ALL;
+        uint256 jobId = _createSpec(s);
+        _fund(jobId);
+        _answer(jobId, 1, "");
+        _advance();
+        _submit(jobId);
+        assertFalse(ue.evaluationOf(jobId).started);
+
+        vm.prank(provider);
+        ue.sendReads{value: READ_COST}(jobId);
+        _answer(jobId, 2, abi.encode(uint256(1e6))); // below 99.99: ALL fails whatever Aave's check says
+        assertEq(uint8(_status(jobId)), uint8(IAgenticCommerce.JobStatus.Rejected));
+    }
+
+    /// @dev "Deposited into Aave during the job, OR Morpho holds it". Reads: 0 aUSDC after, 1 aUSDC before,
+    ///      2 Morpho after.
+    function _depositSpec() internal view returns (JobSpec memory s) {
+        s = _anySpec();
+        s.reads = new Read[](3);
+        s.reads[0] = _balanceRead(ausdc, cea);
+        s.reads[1] = _pre(_balanceRead(ausdc, cea));
+        s.reads[2] = _balanceRead(morphoVault, cea);
+        s.checks[0] = Check({left: _u8(0), right: _u8(1), evalType: EvalType.NUM, op: Op.GTE, target: 99.99e6});
+        s.checks[1].left = _u8(2);
+    }
+
     /// @dev "b was ahead before the job, a is ahead after it". Reads: 0 a after, 1 b after, 2 a before, 3 b before.
     function _overtakeSpec() internal view returns (JobSpec memory s) {
         s = _anySpec();

@@ -28,7 +28,7 @@ import {EvmReadLib, FireParams} from "./EvmReadLib.sol";
 import {UniversalEvaluatorErrors, JobSpecErrors} from "../libraries/Errors.sol";
 
 /// @title UniversalEvaluator
-/// @notice One evaluator for every job. It holds each job's spec, prepaid PC, "before" snapshot and evaluation:
+/// @notice One evaluator for every job. It holds each job's spec, prepaid PC, PRE_EXECUTION snapshot and evaluation:
 ///         - inside `fund`, the UniversalHook hands it the final spec (`startSnapshot`): it is checked, frozen, every
 ///           read's fresh tracked height is recorded, and every PRE_EXECUTION read is read there (the snapshot);
 ///         - inside `submit`, the hook calls `verifyFromSubmit`: the end block of every POST_EXECUTION read is fixed at
@@ -41,16 +41,18 @@ import {UniversalEvaluatorErrors, JobSpecErrors} from "../libraries/Errors.sol";
 ///      - Every tracked height used (at `fund` and at `submit`) must be at most `MAX_HEIGHT_AGE` old.
 ///      - The end blocks are fixed only inside `submit`: the hook calls `verifyFromSubmit` without try/catch, so if
 ///        they can't be fixed (a stale or unmoved height, too little gas) `submit` reverts and is sent again later.
+///      - An unreadable answer counts as answered, PRE or POST: the checks that need it stay UNKNOWN and the rest may
+///        still decide the root. Once the evaluation starts, an unreadable PRE read is sent again with the POST reads.
 ///      - Retries re-read the same blocks; there is no attempt limit. Only the provider spends PC on reads after
 ///        `submit` (`sendReads`), and only while the job is Submitted and undecided; snapshot retries
-///        (`retrySnapshot`) are the client's or the provider's.
+///        (`retrySnapshot`, until the evaluation starts) are the client's or the provider's.
 ///      - A job with no verdict ends through the kernel: after `expiredAt + EVALUATOR_GRACE_PERIOD` anyone may call
 ///        `claimRefund`, which refunds the client and frees the wallet.
 ///      - Answers longer than `MAX_RESULT_LENGTH` are unreadable. Read State itself does not cap answers yet.
 ///      - The verdict is applied as soon as the root is decided: the three-valued logic is monotone, so once the
 ///        root is PASS or FAIL no later answer can change it, and reads still out don't hold up payment.
-///      - The kernel `reason` commits to the spec and to every read in index order (block, request, raw answer hash,
-///        value; zero for a POST read not answered when the root was decided), so it can be re-derived from events.
+///      - The kernel `reason` commits to the spec and to every read's evidence (`evidenceOf`) in index order, zero
+///        for a read not answered when the root was decided, so it can be re-derived from events.
 ///      - `JobSpec.executeBy` and `JobSpec.failFinalAt` are not used: a FAIL at fixed blocks is final.
 ///      - `JobSpecLib.validate` runs in a linked library (DELEGATECALL; its address is fixed in this bytecode at
 ///        deployment, and it is stateless). Everything else, `EvmReadLib` included, is compiled in.
@@ -71,17 +73,17 @@ contract UniversalEvaluator is IUniversalEvaluator, ReentrancyGuard {
         uint256[2] readChecks; // per read i, a 16-bit mask of the checks that use it: word i / 16, bits 16·(i % 16)
     }
 
-    /// @notice The "before" snapshot of a job.
+    /// @notice The PRE_EXECUTION snapshot of a job.
     struct Snapshot {
         uint8 needed; // PRE_EXECUTION reads
-        uint8 okCount; // of those, answered with a usable value
         uint32 pre; // bit i: read i is PRE_EXECUTION
+        uint32 answered; // bit i: PRE read i answered, usable or not, since it was last sent
     }
 
     /// @notice The evaluation of a submitted job.
     struct Evaluation {
         bool endFixed; // the end blocks are recorded
-        bool started; // the "after" reads were sent
+        bool started; // the POST reads were sent
         uint8 reads;
         uint8 pending; // reads still waiting for an answer
         bool done; // a verdict was worked out from the current answers
@@ -89,7 +91,7 @@ contract UniversalEvaluator is IUniversalEvaluator, ReentrancyGuard {
         bool applied; // the kernel accepted the verdict
         OwnerCheck ownerCheck; // recorded only
         uint32 checkRes; // each check's result, 2 bits per check (JobSpecLib)
-        uint32 answered; // bit i: read i answered since it was last sent
+        uint32 answered; // bit i: read i answered since it was last sent; PRE reads start answered by the snapshot
     }
 
     /// @notice Which read of which job a Read State request answers.
@@ -335,9 +337,11 @@ contract UniversalEvaluator is IUniversalEvaluator, ReentrancyGuard {
 
     // ═════════════════════════════════ provider / client recovery ═════════════════════════════════
 
-    /// @notice Sends the job's "after" reads, at the blocks fixed at `submit`. Provider only, and only while the job
-    ///         is Submitted: once it has ended, its PC is the client's to claim. `msg.value` is added to the job's PC.
-    ///         - If they did not go out inside `submit` (PC short, snapshot not ready, Read State paused): all of them.
+    /// @notice Sends the job's reads for evaluation: POST reads at the blocks fixed at `submit`, PRE reads again at
+    ///         their `fund` blocks. Provider only, and only while the job is Submitted: once it has ended, its PC is
+    ///         the client's to claim. `msg.value` is added to the job's PC.
+    ///         - If they did not go out inside `submit` (PC short, snapshot not ready, Read State paused): every POST
+    ///           read, and every PRE read with no usable value.
     ///         - Once sent: every read with no usable answer that is not in flight (an error answer, an undecodable
     ///           or oversized one, an expired request, a failed callback). There is no attempt limit.
     /// @dev Never fixes the blocks, so the provider can't choose when the job is measured.
@@ -354,25 +358,25 @@ contract UniversalEvaluator is IUniversalEvaluator, ReentrancyGuard {
         else _start(jobId, s);
     }
 
-    /// @notice Sends again, at the same blocks, every snapshot read with no usable value that is not in flight.
-    ///         The job's client or provider only.
+    /// @notice Sends again, at the same blocks, every PRE read with no usable value that is not in flight. The job's
+    ///         client or provider only, until the evaluation starts; after that, `sendReads` sends them.
     function retrySnapshot(uint256 jobId) external payable nonReentrant {
         IAgenticCommerce.Job memory job = KERNEL.getJob(jobId);
         if (msg.sender != job.client && msg.sender != job.provider) {
             revert UniversalEvaluatorErrors.CallerIsNotClientOrProvider(msg.sender);
         }
-        Snapshot storage sn = _snapshots[jobId];
-        if (!_cache[jobId].frozen || sn.okCount == sn.needed) revert UniversalEvaluatorErrors.NothingToSend(jobId);
+        if (!_cache[jobId].frozen || _evals[jobId].started) revert UniversalEvaluatorErrors.NothingToSend(jobId);
         if (job.status != IAgenticCommerce.JobStatus.Funded && job.status != IAgenticCommerce.JobStatus.Submitted) {
             revert UniversalEvaluatorErrors.WrongStatus(jobId);
         }
         _addPrepaid(jobId);
         JobSpec memory s = _frozenSpec(jobId, job.description);
-        uint32 pre = sn.pre;
+        Snapshot storage sn = _snapshots[jobId];
         uint256 sent;
         for (uint256 i; i < s.reads.length; ++i) {
-            if ((pre >> i) & 1 == 0 || _answers[jobId][i].ok) continue;
+            if ((sn.pre >> i) & 1 == 0 || _answers[jobId][i].ok) continue;
             if (READ_STATE.statusOf(_request[jobId][i]) == RequestStatus.PENDING) continue;
+            sn.answered &= ~(uint32(1) << i); // `ready` waits for the new answer
             _fireSnapshot(jobId, i, s.reads[i], _height(_fundHeights[jobId], i));
             ++sent;
         }
@@ -404,7 +408,8 @@ contract UniversalEvaluator is IUniversalEvaluator, ReentrancyGuard {
 
     // ═════════════════════════════════ callback ═════════════════════════════════
 
-    /// @notice Read State delivers one answer, snapshot or "after". The last "after" answer applies the verdict.
+    /// @notice Read State delivers one answer, to a snapshot or an evaluation request. An evaluation answer that
+    ///         decides the root applies the verdict.
     /// @dev Never reverts for a known request: bad or oversized answers become "can't tell", and a kernel revert is
     ///      caught. An answer to a superseded request is ignored.
     function onUniversalData(uint256 requestId, bytes calldata result) external {
@@ -416,16 +421,14 @@ contract UniversalEvaluator is IUniversalEvaluator, ReentrancyGuard {
         else _onAnswer(q.jobId, q.read, requestId, result);
     }
 
+    /// @dev Usable or not, the answer completes this read's part of the snapshot.
     function _onSnapshot(uint256 jobId, uint8 read, uint256 requestId, bytes calldata result) internal {
-        if (_request[jobId][read] != requestId || _answers[jobId][read].ok) return;
-        (bool ok, int256 value, bytes32 resultHash) = _decodeResult(jobId, read, result);
-        emit SnapshotAnswered(jobId, read, requestId, ok, value);
-        if (!ok) return;
-        _answers[jobId][read] = Answer({ok: true, value: value});
-        _leaf[jobId][read] =
-            keccak256(abi.encode(read, requestId, _height(_fundHeights[jobId], read), resultHash, value));
         Snapshot storage sn = _snapshots[jobId];
-        if (++sn.okCount == sn.needed) emit SnapshotReady(jobId);
+        if (_request[jobId][read] != requestId || (sn.answered >> read) & 1 == 1) return;
+        (bool ok, int256 value) = _record(jobId, read, requestId, _height(_fundHeights[jobId], read), result);
+        sn.answered |= uint32(1) << read;
+        emit SnapshotAnswered(jobId, read, requestId, ok, value);
+        if (sn.answered == sn.pre) emit SnapshotReady(jobId);
     }
 
     function _onAnswer(uint256 jobId, uint8 read, uint256 requestId, bytes calldata result) internal {
@@ -433,10 +436,8 @@ contract UniversalEvaluator is IUniversalEvaluator, ReentrancyGuard {
         Evaluation storage e = _evals[jobId];
         if (e.done || (e.answered >> read) & 1 == 1) return;
 
-        (bool ok, int256 value, bytes32 resultHash) = _decodeResult(jobId, read, result);
-        uint64 height = _height(_endHeights[jobId], read);
-        _answers[jobId][read] = Answer({ok: ok, value: value});
-        _leaf[jobId][read] = keccak256(abi.encode(read, requestId, height, resultHash, ok, value));
+        uint64 height = _blockOf(jobId, read);
+        (bool ok, int256 value) = _record(jobId, read, requestId, height, result);
         e.answered |= uint32(1) << read;
         emit ReadAnswered(jobId, read, requestId, height, ok, value);
 
@@ -472,10 +473,10 @@ contract UniversalEvaluator is IUniversalEvaluator, ReentrancyGuard {
         return _cache[jobId].specHash;
     }
 
-    /// @notice True once the spec is frozen and every snapshot read has a usable value.
+    /// @notice True once the spec is frozen and every PRE_EXECUTION read is answered, usable or not (`answerOf`).
     function ready(uint256 jobId) public view returns (bool) {
         Snapshot storage sn = _snapshots[jobId];
-        return _cache[jobId].frozen && sn.okCount == sn.needed;
+        return _cache[jobId].frozen && sn.answered == sn.pre;
     }
 
     /// @notice A read's value: a PRE read's snapshot, a POST read's latest answer.
@@ -497,8 +498,7 @@ contract UniversalEvaluator is IUniversalEvaluator, ReentrancyGuard {
         return _request[jobId][read];
     }
 
-    /// @notice The evidence of one read's answer: keccak256(read, request, block, raw answer hash, ok, value) for a
-    ///         POST read, keccak256(read, request, block, raw answer hash, value) for a PRE read.
+    /// @notice The evidence of one read's latest answer: keccak256(read, request, block, raw answer hash, ok, value).
     function evidenceOf(uint256 jobId, uint256 read) external view returns (bytes32) {
         return _leaf[jobId][read];
     }
@@ -570,16 +570,18 @@ contract UniversalEvaluator is IUniversalEvaluator, ReentrancyGuard {
         emit EndBlocksFixed(jobId);
     }
 
-    /// @dev Starts the evaluation: judges the checks on PRE reads alone, then sends every POST read at its fixed
-    ///      block. Needs the snapshot complete.
+    /// @dev Starts the evaluation: judges the checks on PRE values alone, then sends every POST read at its end block
+    ///      and every unreadable PRE read again at its `fund` block. Needs every PRE read answered.
     function _start(uint256 jobId, JobSpec memory s) internal {
         if (!ready(jobId)) revert UniversalEvaluatorErrors.SnapshotNotReady(jobId);
         Evaluation storage e = _evals[jobId];
+        Snapshot storage sn = _snapshots[jobId];
         e.started = true;
         // forge-lint: disable-next-line(unsafe-typecast)
         e.reads = uint8(s.reads.length); // safe: JobSpecLib caps reads at MAX_READS (32)
         // forge-lint: disable-next-line(unsafe-typecast)
-        e.pending = uint8(s.reads.length - _snapshots[jobId].needed); // the POST reads; safe: as above
+        e.pending = uint8(s.reads.length - sn.needed); // the POST reads; safe: as above
+        e.answered = sn.pre;
         uint32 res;
         for (uint256 i; i < s.checks.length; ++i) {
             res = _judge(jobId, i, _checks[jobId][i], res); // a check needing a POST value stays UNKNOWN
@@ -588,15 +590,13 @@ contract UniversalEvaluator is IUniversalEvaluator, ReentrancyGuard {
         _sendMissing(jobId, s);
     }
 
-    /// @dev Sends, at its fixed block, every POST read with no usable answer that is not in flight, and reopens the
-    ///      verdict. On the first send that is every POST read: none has an answer or a request yet.
+    /// @dev Sends, at its block, every read with no usable answer that is not in flight, and reopens the verdict. On
+    ///      the first send that is every POST read and every unreadable PRE read.
     function _sendMissing(uint256 jobId, JobSpec memory s) internal {
         Evaluation storage e = _evals[jobId];
-        uint32 pre = _snapshots[jobId].pre;
         uint256 sent;
         uint256 paid;
         for (uint256 i; i < e.reads; ++i) {
-            if ((pre >> i) & 1 == 1) continue;
             bool answered = (e.answered >> i) & 1 == 1;
             if (answered && _answers[jobId][i].ok) continue;
             uint256 req = _request[jobId][i];
@@ -617,7 +617,7 @@ contract UniversalEvaluator is IUniversalEvaluator, ReentrancyGuard {
 
     function _fireRead(uint256 jobId, uint256 read, Read memory r) internal returns (uint256 value) {
         value = _spend(jobId, EvmReadLib.price(READ_STATE, r, CALLBACK_GAS_LIMIT, BUDGET_MULTIPLIER));
-        uint256 requestId = _fire(r, _height(_endHeights[jobId], read), value, CALLBACK_GAS_LIMIT, READ_TTL, jobId);
+        uint256 requestId = _fire(r, _blockOf(jobId, read), value, CALLBACK_GAS_LIMIT, READ_TTL, jobId);
         _request[jobId][read] = requestId;
         // forge-lint: disable-next-line(unsafe-typecast)
         _requests[requestId] = RequestRef({jobId: jobId, read: uint8(read), snapshot: false}); // safe: read < 32
@@ -664,6 +664,23 @@ contract UniversalEvaluator is IUniversalEvaluator, ReentrancyGuard {
         if (msg.value == 0) return;
         prepaidOf[jobId] += msg.value;
         emit Prefunded(jobId, msg.sender, msg.value);
+    }
+
+    /// @dev Stores a read's answer, usable or not, and its evidence.
+    function _record(uint256 jobId, uint8 read, uint256 requestId, uint64 height, bytes calldata result)
+        internal
+        returns (bool ok, int256 value)
+    {
+        bytes32 resultHash;
+        (ok, value, resultHash) = _decodeResult(jobId, read, result);
+        _answers[jobId][read] = Answer({ok: ok, value: value});
+        _leaf[jobId][read] = keccak256(abi.encode(read, requestId, height, resultHash, ok, value));
+    }
+
+    /// @dev The block a read is read at: a PRE read's recorded at `fund`, a POST read's fixed at `submit`.
+    function _blockOf(uint256 jobId, uint256 read) internal view returns (uint64) {
+        bool pre = (_snapshots[jobId].pre >> read) & 1 == 1;
+        return _height(pre ? _fundHeights[jobId] : _endHeights[jobId], read);
     }
 
     /// @dev Caps, then decodes. Oversized answers are unreadable and are not hashed (the hash would copy them).

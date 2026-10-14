@@ -144,7 +144,9 @@ contract UniversalHookTest is UniversalEvalBase {
         uint256 jobId = _createSpec(_swapSpec()); // NONE
         JobSpec memory counter = _swapSpec();
         vm.prank(provider);
-        vm.expectRevert(abi.encodeWithSelector(UniversalHookErrors.SpecChangeNotAllowed.selector, CriteriaMutability.NONE));
+        vm.expectRevert(
+            abi.encodeWithSelector(UniversalHookErrors.SpecChangeNotAllowed.selector, CriteriaMutability.NONE)
+        );
         kernel.setBudget(jobId, BUDGET, abi.encode(counter));
     }
 
@@ -156,7 +158,9 @@ contract UniversalHookTest is UniversalEvalBase {
         counter.mutability = CriteriaMutability.CLIENT_ONLY;
         vm.prank(provider);
         vm.expectRevert(
-            abi.encodeWithSelector(UniversalHookErrors.FlagChanged.selector, CriteriaMutability.BOTH, CriteriaMutability.CLIENT_ONLY)
+            abi.encodeWithSelector(
+                UniversalHookErrors.FlagChanged.selector, CriteriaMutability.BOTH, CriteriaMutability.CLIENT_ONLY
+            )
         );
         kernel.setBudget(jobId, BUDGET, abi.encode(counter));
     }
@@ -290,7 +294,8 @@ contract UniversalHookTest is UniversalEvalBase {
         agw.execute(address(kernel), 0, abi.encodeCall(kernel.fund, (jobId, BUDGET, fp)));
     }
 
-    /// @dev An error answer leaves the snapshot read missing; a retry by the client or provider re-reads the SAME block.
+    /// @dev An error answer counts as answered but leaves no value; a retry by the client or provider re-reads the
+    ///      SAME block, and `ready` waits for it.
     function test_UH17_snapshotRetry_sameBlock_clientOrProviderOnly() public {
         uint256 jobId = _createSpec(_swapSpec());
         _fund(jobId);
@@ -301,7 +306,9 @@ contract UniversalHookTest is UniversalEvalBase {
         ue.retrySnapshot{value: SNAPSHOT_COST}(jobId); // still in flight
 
         assertTrue(_deliver(first, ""));
-        assertFalse(ue.ready(jobId));
+        assertTrue(ue.ready(jobId), "answered, though unreadable");
+        (bool unreadable,) = ue.answerOf(jobId, SWAP_PRE);
+        assertFalse(unreadable);
 
         vm.prank(stranger);
         vm.expectRevert(abi.encodeWithSelector(UniversalEvaluatorErrors.CallerIsNotClientOrProvider.selector, stranger));
@@ -314,6 +321,7 @@ contract UniversalHookTest is UniversalEvalBase {
         uint256 second = ue.requestOf(jobId, SWAP_PRE);
         assertTrue(second != first);
         assertEq(_readSpecFromLogs(second).blockNumber, START_HEIGHT);
+        assertFalse(ue.ready(jobId), "waits for the retry");
 
         assertTrue(_deliver(second, abi.encode(uint256(1e18))));
         assertTrue(ue.ready(jobId));
