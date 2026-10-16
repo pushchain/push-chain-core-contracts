@@ -49,7 +49,7 @@ contract UniversalHookDesignProofsTest is UniversalEvalBase {
     function test_DP01_designTryCatch_letsStarvedSubmitThroughWithoutEndBlocks() public {
         uint256 jobId = _createSpec(_swapSpec());
         _fund(jobId);
-        _answerSnapshot(jobId, 0, 0);
+        _answerSnapshot(jobId, SWAP_PRE, 0);
         _advance();
         bytes memory submitCall = abi.encodeCall(kernel.submit, (jobId, keccak256("done"), bytes("")));
 

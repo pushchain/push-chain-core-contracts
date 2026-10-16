@@ -3,7 +3,7 @@ pragma solidity 0.8.26;
 
 import {IUniversalMarketplace} from "../interfaces/IUniversalMarketplace.sol";
 import {UniversalMarketplaceErrors} from "./Errors.sol";
-import {Read, Check, JobSpec, Mutability} from "./JobSpecTypes.sol";
+import {Read, Check, JobSpec, AllowedMutability} from "./JobSpecTypes.sol";
 import {
     FillSource,
     Fill,
@@ -40,8 +40,8 @@ library JobSpecBuilder {
         spec.executeBy = uint64(ctx.executeBy);
         spec.failFinalAt = uint64(ctx.executeBy) + ctx.settleWindow;
         spec.origin = ctx.origin;
-        spec.mutability = Mutability.NONE; // the criteria are exactly the card's; neither side may replace them
-        spec.nodes = t.nodes;
+        spec.allowedMutability = AllowedMutability.NONE; // the criteria are exactly the card's; neither side may replace them
+        spec.logic = t.logic;
         spec.reads = new Read[](t.reads.length);
         for (uint256 i; i < t.reads.length; ++i) {
             spec.reads[i] = _buildRead(t.reads[i], i, ctx.params, cea[i]);
@@ -72,7 +72,7 @@ library JobSpecBuilder {
             if (_hasCEAFill(t.reads[i])) cea[i] = _ceaOf(agw, t.reads[i]);
         }
         for (uint256 j; j < t.checks.length; ++j) {
-            uint8 r = t.checks[j].read;
+            uint8 r = t.checks[j].left[0];
             if (t.checks[j].source == TargetSource.CEA && cea[r] == address(0)) {
                 cea[r] = _ceaOf(agw, t.reads[r]);
             }
@@ -113,7 +113,8 @@ library JobSpecBuilder {
             selector: r.selector,
             args: args,
             outputs: r.outputs,
-            field: r.field
+            field: r.field,
+            at: r.at
         });
     }
 
@@ -132,9 +133,9 @@ library JobSpecBuilder {
         } else if (c.source == TargetSource.PARAM) {
             target = ctx.params[uint256(c.value)];
         } else if (c.source == TargetSource.CEA) {
-            target = int256(uint256(uint160(cea[c.read])));
+            target = int256(uint256(uint160(cea[c.left[0]])));
         }
-        return Check({read: c.read, evalType: c.evalType, op: c.op, target: target});
+        return Check({left: c.left, right: c.right, evaluation: c.evaluation, operation: c.operation, target: target});
     }
 
     /// @dev The AGW's CEA on the read's chain, from the caller (the marketplace, under DELEGATECALL). The key is

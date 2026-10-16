@@ -12,10 +12,13 @@ import {
     JobSpec,
     Read,
     Check,
-    Node,
-    EvalType,
-    Op,
-    NodeKind,
+    Logic,
+    Evaluation,
+    Operation,
+    LogicKind,
+    ReadAt,
+    MAX_READS,
+    MAX_CHECKS,
     T_UINT,
     T_INT,
     T_BOOL,
@@ -50,20 +53,16 @@ contract LibHarness {
         JobSpecLib.validate(s, MAX_CONFIRMATIONS);
     }
 
-    function snapshotReads(JobSpec memory s) external pure returns (bool[] memory, uint256) {
-        return JobSpecLib.snapshotReads(s);
-    }
-
-    function verdict(Check[] memory checks, Node[] memory nodes, Answer[] memory afters, Answer[] memory befores)
+    function verdict(Check[] memory checks, Logic[] memory logic, Answer[] memory values)
         external
         pure
         returns (Verdict)
     {
-        return ReferenceJudge.verdict(checks, nodes, afters, befores);
+        return ReferenceJudge.verdict(checks, logic, values);
     }
 
     /// @notice The evaluator's path: each check judged alone, then the packed tree.
-    function verdictPacked(Check[] memory checks, Node[] memory nodes, Answer[] memory afters, Answer[] memory befores)
+    function verdictPacked(Check[] memory checks, Logic[] memory logic, Answer[] memory values)
         external
         pure
         returns (Verdict)
@@ -71,9 +70,26 @@ contract LibHarness {
         uint32 res;
         for (uint256 i; i < checks.length; ++i) {
             Check memory c = checks[i];
-            res = JobSpecLib.setCheck(res, i, JobSpecLib.checkResult(c, afters[c.read], befores[c.read]));
+            uint32 right = JobSpecLib.packSide(c.right);
+            Answer memory b;
+            if (right != 0) b = _sum(right, values);
+            Answer memory a = _sum(JobSpecLib.packSide(c.left), values);
+            res = JobSpecLib.setCheck(res, i, JobSpecLib.checkResult(c.evaluation, c.operation, c.target, a, b));
         }
-        return JobSpecLib.verdictPacked(JobSpecLib.packNodes(nodes), nodes.length, res);
+        return JobSpecLib.verdictPacked(JobSpecLib.packLogic(logic), logic.length, res);
+    }
+
+    /// @dev As the evaluator's `_sum`, over `values` instead of storage.
+    function _sum(uint256 mask, Answer[] memory values) internal pure returns (Answer memory total) {
+        total.ok = true;
+        for (uint256 r; mask != 0; ++r) {
+            if (mask & 1 != 0) {
+                if (!values[r].ok) return Answer(false, 0);
+                (total.ok, total.value) = JobSpecLib.add(total.value, values[r].value);
+                if (!total.ok) return total;
+            }
+            mask >>= 1;
+        }
     }
 }
 
@@ -95,6 +111,22 @@ contract JobSpecLibrariesTest is Test {
         x = new uint8[](2);
         x[0] = a;
         x[1] = b;
+    }
+
+    function _none() internal pure returns (uint8[] memory) {}
+
+    /// @dev A bitmask of reads as an increasing list of indexes.
+    function _toSide(uint256 mask) internal pure returns (uint8[] memory side) {
+        side = new uint8[](32);
+        uint256 n;
+        for (uint256 r; mask != 0; ++r) {
+            // forge-lint: disable-next-line(unsafe-typecast)
+            if (mask & 1 != 0) side[n++] = uint8(r);
+            mask >>= 1;
+        }
+        assembly ("memory-safe") {
+            mstore(side, n)
+        }
     }
 
     // ───────────── decoder ─────────────
@@ -276,47 +308,36 @@ contract JobSpecLibrariesTest is Test {
             selector: bytes4(keccak256("balanceOf(address)")),
             args: abi.encode(address(0xCEA)),
             outputs: abi.encodePacked(T_TUPLE, uint8(1), T_UINT),
-            field: _f(0)
+            field: _f(0),
+            at: ReadAt.POST_EXECUTION
         });
     }
 
+    /// @dev The balance after (read 0) grew by at least 1 over the balance before (read 1).
     function _spec() internal pure returns (JobSpec memory s) {
         s.executeBy = 100;
         s.failFinalAt = 200;
-        s.reads = new Read[](1);
+        s.reads = new Read[](2);
         s.reads[0] = _read();
+        s.reads[1] = _read();
+        s.reads[1].at = ReadAt.PRE_EXECUTION;
         s.checks = new Check[](1);
-        s.checks[0] = Check({read: 0, evalType: EvalType.NUM, op: Op.GTE, target: 1});
-        s.nodes = new Node[](1);
-        s.nodes[0] = Node({kind: NodeKind.CHECK, check: 0, children: new uint8[](0), k: 0});
+        s.checks[0] = Check({
+            left: _f(0), right: _f(1), evaluation: Evaluation.NUMBER, operation: Operation.GREATER_OR_EQUAL, target: 1
+        });
+        s.logic = new Logic[](1);
+        s.logic[0] = Logic({kind: LogicKind.CHECK, check: 0, children: new uint8[](0), k: 0});
     }
 
-    /// @dev A valid spec passes, and the snapshot covers exactly the reads a NUM or PCT check compares against.
-    function test_RUL01_validSpec_andSnapshotReads() public view {
+    /// @dev A valid spec passes; one with no POST_EXECUTION read is refused, as the work would never be measured.
+    function test_RUL01_validSpec_needsPostExecutionRead() public {
         lib.validate(_spec());
-        (bool[] memory need, uint256 count) = lib.snapshotReads(_spec()); // one NUM check on read 0
-        assertEq(need.length, 1);
-        assertTrue(need[0]);
-        assertEq(count, 1);
+        lib.validate(_twoVenue());
 
-        JobSpec memory s = _twoVenue(); // CMP only
+        JobSpec memory s = _spec();
+        s.reads[0].at = ReadAt.PRE_EXECUTION;
+        vm.expectRevert(JobSpecErrors.NoPostExecutionRead.selector);
         lib.validate(s);
-        (need, count) = lib.snapshotReads(s);
-        assertFalse(need[0]);
-        assertFalse(need[1]);
-        assertEq(count, 0);
-
-        s.checks[1].evalType = EvalType.PCT; // read 1 now needs a before value; read 0 (CMP) still doesn't
-        (need, count) = lib.snapshotReads(s);
-        assertFalse(need[0]);
-        assertTrue(need[1]);
-        assertEq(count, 1);
-
-        s.checks[0].evalType = EvalType.NUM; // and now read 0 too
-        (need, count) = lib.snapshotReads(s);
-        assertTrue(need[0]);
-        assertTrue(need[1]);
-        assertEq(count, 2);
     }
 
     function test_RUL02_refusals() public {
@@ -341,8 +362,9 @@ contract JobSpecLibrariesTest is Test {
         lib.validate(s);
 
         s = _spec();
-        s.checks[0].evalType = EvalType.BOOL;
-        s.checks[0].op = Op.EQ;
+        s.checks[0].evaluation = Evaluation.BOOLEAN;
+        s.checks[0].right = _none();
+        s.checks[0].operation = Operation.EQUAL;
         s.checks[0].target = 2;
         vm.expectRevert(abi.encodeWithSelector(JobSpecErrors.CheckTarget.selector, 0));
         lib.validate(s);
@@ -363,26 +385,26 @@ contract JobSpecLibrariesTest is Test {
         lib.validate(s);
     }
 
-    function test_RUL03_nodeRefusals() public {
+    function test_RUL03_logicRefusals() public {
         JobSpec memory s = _twoVenue();
-        s.nodes[0].children = _f(2, 1); // out of order
-        vm.expectRevert(abi.encodeWithSelector(JobSpecErrors.NodeShape.selector, 0));
+        s.logic[0].children = _f(2, 1); // out of order
+        vm.expectRevert(abi.encodeWithSelector(JobSpecErrors.LogicShape.selector, 0));
         lib.validate(s);
 
         s = _twoVenue();
-        s.nodes[0].children = _f(1, 1); // duplicate child: would count one venue twice
-        vm.expectRevert(abi.encodeWithSelector(JobSpecErrors.NodeShape.selector, 0));
+        s.logic[0].children = _f(1, 1); // duplicate child: would count one venue twice
+        vm.expectRevert(abi.encodeWithSelector(JobSpecErrors.LogicShape.selector, 0));
         lib.validate(s);
 
         s = _twoVenue();
-        s.nodes[0].kind = NodeKind.AT_LEAST;
-        s.nodes[0].k = 3;
-        vm.expectRevert(abi.encodeWithSelector(JobSpecErrors.NodeShape.selector, 0));
+        s.logic[0].kind = LogicKind.AT_LEAST;
+        s.logic[0].k = 3;
+        vm.expectRevert(abi.encodeWithSelector(JobSpecErrors.LogicShape.selector, 0));
         lib.validate(s);
 
         s = _twoVenue();
-        s.nodes[1].check = 9;
-        vm.expectRevert(abi.encodeWithSelector(JobSpecErrors.NodeShape.selector, 1));
+        s.logic[1].check = 9;
+        vm.expectRevert(abi.encodeWithSelector(JobSpecErrors.LogicShape.selector, 1));
         lib.validate(s);
     }
 
@@ -401,33 +423,162 @@ contract JobSpecLibrariesTest is Test {
         lib.validate(s);
 
         s = _spec();
-        s.checks[0] = Check({read: 0, evalType: EvalType.BOOL, op: Op.NEQ, target: 1}); // BOOL is `== target`
+        s.checks[0] = Check({
+            left: _f(0), right: _none(), evaluation: Evaluation.BOOLEAN, operation: Operation.NOT_EQUAL, target: 1
+        }); // BOOLEAN is `== target`
         vm.expectRevert(abi.encodeWithSelector(JobSpecErrors.CheckOp.selector, 0));
         lib.validate(s);
 
         s = _twoVenue();
-        s.nodes[0] = Node({kind: NodeKind.CHECK, check: 0, children: new uint8[](0), k: 0}); // 1 and 2 cut off
-        vm.expectRevert(abi.encodeWithSelector(JobSpecErrors.NodeUnreachable.selector, 1));
+        s.logic[0] = Logic({kind: LogicKind.CHECK, check: 0, children: new uint8[](0), k: 0}); // 1 and 2 cut off
+        vm.expectRevert(abi.encodeWithSelector(JobSpecErrors.LogicUnreachable.selector, 1));
         lib.validate(s);
 
         s = _twoVenue();
-        s.nodes[2].check = 0; // check 1 no longer used
+        s.logic[2].check = 0; // check 1 no longer used
         vm.expectRevert(abi.encodeWithSelector(JobSpecErrors.CheckUnused.selector, 1));
         lib.validate(s);
 
         s = _twoVenue();
-        s.checks[1].read = 0; // read 1 no longer read
+        s.checks[1].left = _f(0); // read 1 no longer read
         vm.expectRevert(abi.encodeWithSelector(JobSpecErrors.ReadUnused.selector, 1));
         lib.validate(s);
 
         s = _twoVenue();
-        s.nodes = new Node[](5); // a shared child is fine: 0 → {1, 2}, 1 → {3}, 2 → {3, 4}
-        s.nodes[0] = Node({kind: NodeKind.ALL, check: 0, children: _f(1, 2), k: 0});
-        s.nodes[1] = Node({kind: NodeKind.ANY, check: 0, children: _f(3), k: 0});
-        s.nodes[2] = Node({kind: NodeKind.ANY, check: 0, children: _f(3, 4), k: 0});
-        s.nodes[3] = Node({kind: NodeKind.CHECK, check: 0, children: new uint8[](0), k: 0});
-        s.nodes[4] = Node({kind: NodeKind.CHECK, check: 1, children: new uint8[](0), k: 0});
+        s.logic = new Logic[](5); // a shared child is fine: 0 → {1, 2}, 1 → {3}, 2 → {3, 4}
+        s.logic[0] = Logic({kind: LogicKind.ALL, check: 0, children: _f(1, 2), k: 0});
+        s.logic[1] = Logic({kind: LogicKind.ANY, check: 0, children: _f(3), k: 0});
+        s.logic[2] = Logic({kind: LogicKind.ANY, check: 0, children: _f(3, 4), k: 0});
+        s.logic[3] = Logic({kind: LogicKind.CHECK, check: 0, children: new uint8[](0), k: 0});
+        s.logic[4] = Logic({kind: LogicKind.CHECK, check: 1, children: new uint8[](0), k: 0});
         lib.validate(s);
+    }
+
+    /// @dev Sides name existing reads, in increasing order, none on both sides; their lengths fit the type.
+    function test_RUL05_checkSides() public {
+        JobSpec memory s = _spec();
+        s.checks[0].right = _f(0); // read 0 on both sides
+        vm.expectRevert(abi.encodeWithSelector(JobSpecErrors.CheckRead.selector, 0));
+        lib.validate(s);
+
+        s = _spec();
+        s.checks[0].right = _f(2); // no such read
+        vm.expectRevert(abi.encodeWithSelector(JobSpecErrors.CheckRead.selector, 0));
+        lib.validate(s);
+
+        s = _twoVenue();
+        s.checks[0].left = _f(1, 0); // out of order
+        vm.expectRevert(abi.encodeWithSelector(JobSpecErrors.CheckRead.selector, 0));
+        lib.validate(s);
+
+        s = _twoVenue();
+        s.checks[0].left = _f(0, 0); // repeated
+        vm.expectRevert(abi.encodeWithSelector(JobSpecErrors.CheckRead.selector, 0));
+        lib.validate(s);
+
+        s = _twoVenue();
+        s.checks[0].right = _f(1); // COMPARE compares with `target`, not a side
+        vm.expectRevert(abi.encodeWithSelector(JobSpecErrors.CheckSides.selector, 0));
+        lib.validate(s);
+
+        s = _twoVenue();
+        s.checks[0].left = _none(); // nothing to compare
+        vm.expectRevert(abi.encodeWithSelector(JobSpecErrors.CheckSides.selector, 0));
+        lib.validate(s);
+
+        s = _spec();
+        s.checks[0].right = _none(); // NUMBER needs a right side
+        vm.expectRevert(abi.encodeWithSelector(JobSpecErrors.CheckSides.selector, 0));
+        lib.validate(s);
+
+        s = _twoVenue();
+        s.checks[0] = Check({
+            left: _f(0, 1), right: _none(), evaluation: Evaluation.BOOLEAN, operation: Operation.EQUAL, target: 1
+        });
+        vm.expectRevert(abi.encodeWithSelector(JobSpecErrors.CheckSides.selector, 0)); // BOOLEAN reads one value
+        lib.validate(s);
+
+        s = _twoVenue(); // a sum on the left: read 0 + read 1
+        s.checks[0].left = _f(0, 1);
+        lib.validate(s);
+
+        s = _twoVenue(); // two POST reads on different chains: read 1 − read 0
+        s.reads[1].chainId = "1";
+        s.checks[0] = Check({
+            left: _f(1), right: _f(0), evaluation: Evaluation.NUMBER, operation: Operation.GREATER_THAN, target: 0
+        });
+        lib.validate(s);
+    }
+
+    /// @dev Up to MAX_READS (32) reads: here 16 checks, each a POST read against its own PRE read.
+    function test_RUL06_maxReads() public {
+        JobSpec memory s;
+        s.reads = new Read[](MAX_READS);
+        s.checks = new Check[](MAX_READS / 2);
+        s.logic = new Logic[](1 + MAX_READS / 2);
+        uint8[] memory kids = new uint8[](MAX_READS / 2);
+        for (uint256 i; i < MAX_READS / 2; ++i) {
+            s.reads[i] = _read();
+            s.reads[i + MAX_READS / 2] = _read();
+            s.reads[i + MAX_READS / 2].at = ReadAt.PRE_EXECUTION;
+            // forge-lint: disable-next-line(unsafe-typecast)
+            s.checks[i] = Check({
+                left: _f(uint8(i)),
+                right: _f(uint8(i + MAX_READS / 2)),
+                evaluation: Evaluation.NUMBER,
+                operation: Operation.GREATER_OR_EQUAL,
+                target: 0
+            });
+            // forge-lint: disable-next-line(unsafe-typecast)
+            s.logic[1 + i] = Logic({kind: LogicKind.CHECK, check: uint8(i), children: new uint8[](0), k: 0});
+            // forge-lint: disable-next-line(unsafe-typecast)
+            kids[i] = uint8(1 + i);
+        }
+        s.logic[0] = Logic({kind: LogicKind.ALL, check: 0, children: kids, k: 0});
+        lib.validate(s);
+
+        Read[] memory more = new Read[](MAX_READS + 1);
+        for (uint256 i; i < MAX_READS; ++i) {
+            more[i] = s.reads[i];
+        }
+        more[MAX_READS] = _read();
+        s.reads = more;
+        vm.expectRevert(abi.encodeWithSelector(JobSpecErrors.ReadCount.selector, MAX_READS + 1));
+        lib.validate(s);
+    }
+
+    /// @dev Terms are not capped: 16 checks each summing all 32 reads pass. A real spec is bounded by the 32 KB
+    ///      description cap (UniversalEvaluator.gas.t.sol measures the heaviest that fits).
+    function test_RUL07_termsUncapped() public view {
+        lib.validate(_sums(MAX_CHECKS, MAX_READS));
+    }
+
+    /// @dev `nChecks` COMPARE checks, each summing reads 0 to `width - 1`, all under one ALL root.
+    function _sums(uint256 nChecks, uint256 width) internal pure returns (JobSpec memory s) {
+        s.reads = new Read[](width);
+        uint8[] memory side = new uint8[](width);
+        for (uint256 j; j < width; ++j) {
+            s.reads[j] = _read();
+            // forge-lint: disable-next-line(unsafe-typecast)
+            side[j] = uint8(j);
+        }
+        s.checks = new Check[](nChecks);
+        s.logic = new Logic[](1 + nChecks);
+        uint8[] memory kids = new uint8[](nChecks);
+        for (uint256 i; i < nChecks; ++i) {
+            s.checks[i] = Check({
+                left: side,
+                right: _none(),
+                evaluation: Evaluation.COMPARE,
+                operation: Operation.GREATER_OR_EQUAL,
+                target: 1
+            });
+            // forge-lint: disable-next-line(unsafe-typecast)
+            s.logic[1 + i] = Logic({kind: LogicKind.CHECK, check: uint8(i), children: new uint8[](0), k: 0});
+            // forge-lint: disable-next-line(unsafe-typecast)
+            kids[i] = uint8(1 + i);
+        }
+        s.logic[0] = Logic({kind: LogicKind.ALL, check: 0, children: kids, k: 0});
     }
 
     function _twoVenue() internal pure returns (JobSpec memory s) {
@@ -437,148 +588,409 @@ contract JobSpecLibrariesTest is Test {
         s.reads[0] = _read();
         s.reads[1] = _read();
         s.checks = new Check[](2);
-        s.checks[0] = Check({read: 0, evalType: EvalType.CMP, op: Op.GTE, target: 1});
-        s.checks[1] = Check({read: 1, evalType: EvalType.CMP, op: Op.GTE, target: 1});
-        s.nodes = new Node[](3);
-        s.nodes[0] = Node({kind: NodeKind.ANY, check: 0, children: _f(1, 2), k: 0});
-        s.nodes[1] = Node({kind: NodeKind.CHECK, check: 0, children: new uint8[](0), k: 0});
-        s.nodes[2] = Node({kind: NodeKind.CHECK, check: 1, children: new uint8[](0), k: 0});
+        s.checks[0] = Check({
+            left: _f(0),
+            right: _none(),
+            evaluation: Evaluation.COMPARE,
+            operation: Operation.GREATER_OR_EQUAL,
+            target: 1
+        });
+        s.checks[1] = Check({
+            left: _f(1),
+            right: _none(),
+            evaluation: Evaluation.COMPARE,
+            operation: Operation.GREATER_OR_EQUAL,
+            target: 1
+        });
+        s.logic = new Logic[](3);
+        s.logic[0] = Logic({kind: LogicKind.ANY, check: 0, children: _f(1, 2), k: 0});
+        s.logic[1] = Logic({kind: LogicKind.CHECK, check: 0, children: new uint8[](0), k: 0});
+        s.logic[2] = Logic({kind: LogicKind.CHECK, check: 1, children: new uint8[](0), k: 0});
     }
 
     // ───────────── judge ─────────────
 
+    /// @dev One check under a CHECK root, `left` as read 0 and `right` as read 1.
+    function _one(Check memory c, Answer memory left, Answer memory right) internal view returns (Verdict) {
+        Check[] memory cs = new Check[](1);
+        cs[0] = c;
+        Logic[] memory n = new Logic[](1);
+        n[0] = Logic({kind: LogicKind.CHECK, check: 0, children: new uint8[](0), k: 0});
+        Answer[] memory v = new Answer[](2);
+        v[0] = left;
+        v[1] = right;
+        return lib.verdict(cs, n, v);
+    }
+
     function test_JDG01_numPctAndOverflow() public view {
         Check[] memory c = new Check[](1);
-        Node[] memory n = new Node[](1);
-        n[0] = Node({kind: NodeKind.CHECK, check: 0, children: new uint8[](0), k: 0});
         Answer[] memory a = new Answer[](1);
         Answer[] memory b = new Answer[](1);
 
-        c[0] = Check({read: 0, evalType: EvalType.NUM, op: Op.GTE, target: 0.38e18});
+        c[0] = Check({
+            left: _f(0),
+            right: _f(1),
+            evaluation: Evaluation.NUMBER,
+            operation: Operation.GREATER_OR_EQUAL,
+            target: 0.38e18
+        });
         a[0] = Answer(true, 0.39e18);
         b[0] = Answer(true, 0);
-        assertEq(uint8(lib.verdict(c, n, a, b)), uint8(Verdict.PASS));
+        assertEq(uint8(_one(c[0], a[0], b[0])), uint8(Verdict.PASS));
 
         a[0] = Answer(true, type(int256).max);
         b[0] = Answer(true, type(int256).min);
-        assertEq(uint8(lib.verdict(c, n, a, b)), uint8(Verdict.INCONCLUSIVE), "overflow is unknown, never a revert");
+        assertEq(uint8(_one(c[0], a[0], b[0])), uint8(Verdict.INCONCLUSIVE), "overflow is unknown, never a revert");
 
-        c[0] = Check({read: 0, evalType: EvalType.PCT, op: Op.GTE, target: 1});
+        c[0] = Check({
+            left: _f(0),
+            right: _f(1),
+            evaluation: Evaluation.PERCENTAGE,
+            operation: Operation.GREATER_OR_EQUAL,
+            target: 1
+        });
         a[0] = Answer(true, 100.012e6);
         b[0] = Answer(true, 100e6);
-        assertEq(uint8(lib.verdict(c, n, a, b)), uint8(Verdict.PASS), "1.2 bps >= 1 bps");
+        assertEq(uint8(_one(c[0], a[0], b[0])), uint8(Verdict.PASS), "1.2 bps >= 1 bps");
         b[0] = Answer(true, 0);
-        assertEq(uint8(lib.verdict(c, n, a, b)), uint8(Verdict.FAIL), "PCT from zero fails");
+        assertEq(uint8(_one(c[0], a[0], b[0])), uint8(Verdict.FAIL), "PERCENTAGE from zero fails");
     }
 
-    /// @dev PCT is compared exactly (no rounding toward zero), and an overflow on either side is UNKNOWN.
+    /// @dev PERCENTAGE is compared exactly (no rounding toward zero), and an overflow on either side is UNKNOWN.
     function test_JDG03_pctExact() public view {
         Check[] memory c = new Check[](1);
-        Node[] memory n = new Node[](1);
-        n[0] = Node({kind: NodeKind.CHECK, check: 0, children: new uint8[](0), k: 0});
         Answer[] memory a = new Answer[](1);
         Answer[] memory b = new Answer[](1);
 
         // A tiny loss: -1 out of 1e6 is -0.01 bps. Dividing first gave 0 and passed ">= 0".
-        c[0] = Check({read: 0, evalType: EvalType.PCT, op: Op.GTE, target: 0});
+        c[0] = Check({
+            left: _f(0),
+            right: _f(1),
+            evaluation: Evaluation.PERCENTAGE,
+            operation: Operation.GREATER_OR_EQUAL,
+            target: 0
+        });
         a[0] = Answer(true, 1e6 - 1);
         b[0] = Answer(true, 1e6);
-        assertEq(uint8(lib.verdict(c, n, a, b)), uint8(Verdict.FAIL), "a loss is not >= 0%");
-        c[0].op = Op.LT;
-        assertEq(uint8(lib.verdict(c, n, a, b)), uint8(Verdict.PASS), "a loss is < 0%");
+        assertEq(uint8(_one(c[0], a[0], b[0])), uint8(Verdict.FAIL), "a loss is not >= 0%");
+        c[0].operation = Operation.LESS_THAN;
+        assertEq(uint8(_one(c[0], a[0], b[0])), uint8(Verdict.PASS), "a loss is < 0%");
 
         // Negative target: "lost at most 1%" as change >= -100 bps.
-        c[0] = Check({read: 0, evalType: EvalType.PCT, op: Op.GTE, target: -100});
+        c[0] = Check({
+            left: _f(0),
+            right: _f(1),
+            evaluation: Evaluation.PERCENTAGE,
+            operation: Operation.GREATER_OR_EQUAL,
+            target: -100
+        });
         a[0] = Answer(true, 99e6);
         b[0] = Answer(true, 100e6); // exactly -1%
-        assertEq(uint8(lib.verdict(c, n, a, b)), uint8(Verdict.PASS));
+        assertEq(uint8(_one(c[0], a[0], b[0])), uint8(Verdict.PASS));
         a[0] = Answer(true, 99e6 - 1); // a hair over 1%
-        assertEq(uint8(lib.verdict(c, n, a, b)), uint8(Verdict.FAIL));
+        assertEq(uint8(_one(c[0], a[0], b[0])), uint8(Verdict.FAIL));
 
-        // EQ is exact: 1.2 bps is not 1 bp (dividing first said it was).
-        c[0] = Check({read: 0, evalType: EvalType.PCT, op: Op.EQ, target: 1});
+        // EQUAL is exact: 1.2 bps is not 1 bp (dividing first said it was).
+        c[0] = Check({
+            left: _f(0), right: _f(1), evaluation: Evaluation.PERCENTAGE, operation: Operation.EQUAL, target: 1
+        });
         a[0] = Answer(true, 100.012e6);
         b[0] = Answer(true, 100e6);
-        assertEq(uint8(lib.verdict(c, n, a, b)), uint8(Verdict.FAIL));
+        assertEq(uint8(_one(c[0], a[0], b[0])), uint8(Verdict.FAIL));
 
         // Overflow on either side is UNKNOWN, never a revert.
-        c[0] = Check({read: 0, evalType: EvalType.PCT, op: Op.GTE, target: type(int256).max});
+        c[0] = Check({
+            left: _f(0),
+            right: _f(1),
+            evaluation: Evaluation.PERCENTAGE,
+            operation: Operation.GREATER_OR_EQUAL,
+            target: type(int256).max
+        });
         a[0] = Answer(true, 3);
         b[0] = Answer(true, 2); // target * before overflows
-        assertEq(uint8(lib.verdict(c, n, a, b)), uint8(Verdict.INCONCLUSIVE));
+        assertEq(uint8(_one(c[0], a[0], b[0])), uint8(Verdict.INCONCLUSIVE));
         c[0].target = 1;
         a[0] = Answer(true, type(int256).max);
         b[0] = Answer(true, 1); // delta * 10_000 overflows
-        assertEq(uint8(lib.verdict(c, n, a, b)), uint8(Verdict.INCONCLUSIVE));
+        assertEq(uint8(_one(c[0], a[0], b[0])), uint8(Verdict.INCONCLUSIVE));
     }
 
-    /// @dev Where neither product overflows, PCT equals the exact comparison `delta * 10_000 op target * before`,
+    /// @dev Where neither product overflows, PERCENTAGE equals the exact comparison `delta * 10_000 op target * before`,
     ///      for every operator and any signs.
     function testFuzz_JDG04_pctMatchesExactComparison(int120 afterV, int120 beforeV, int120 target, uint8 opSeed)
         public
         view
     {
         vm.assume(beforeV > 0);
-        Op op = Op(opSeed % 6);
-        Check[] memory c = new Check[](1);
-        c[0] = Check({read: 0, evalType: EvalType.PCT, op: op, target: target});
-        Node[] memory n = new Node[](1);
-        n[0] = Node({kind: NodeKind.CHECK, check: 0, children: new uint8[](0), k: 0});
-        Answer[] memory a = new Answer[](1);
-        a[0] = Answer(true, afterV);
-        Answer[] memory b = new Answer[](1);
-        b[0] = Answer(true, beforeV);
+        Operation op = Operation(opSeed % 6);
+        Check memory c =
+            Check({left: _f(0), right: _f(1), evaluation: Evaluation.PERCENTAGE, operation: op, target: target});
 
         int256 lhs = (int256(afterV) - int256(beforeV)) * 10_000; // fits: |delta| < 2^121, times 2^14
         int256 rhs = int256(target) * int256(beforeV); // fits: under 2^240
-        bool pass = op == Op.EQ
+        bool pass = op == Operation.EQUAL
             ? lhs == rhs
-            : op == Op.NEQ
+            : op == Operation.NOT_EQUAL
                 ? lhs != rhs
-                : op == Op.GT ? lhs > rhs : op == Op.GTE ? lhs >= rhs : op == Op.LT ? lhs < rhs : lhs <= rhs;
-        assertEq(uint8(lib.verdict(c, n, a, b)), uint8(pass ? Verdict.PASS : Verdict.FAIL));
+                : op == Operation.GREATER_THAN
+                    ? lhs > rhs
+                    : op == Operation.GREATER_OR_EQUAL ? lhs >= rhs : op == Operation.LESS_THAN ? lhs < rhs : lhs <= rhs;
+        assertEq(uint8(_one(c, Answer(true, afterV), Answer(true, beforeV))), uint8(pass ? Verdict.PASS : Verdict.FAIL));
     }
 
     /// @dev The evaluator's packed path agrees with the reference judge on random three-valued inputs.
     function testFuzz_JDG02_packedEqualsReference(uint256 seed) public view {
         uint256 nChecks = 1 + (seed % 16);
-        uint256 nNodes = 1 + ((seed >> 8) % 32);
+        uint256 nLogic = 1 + ((seed >> 8) % 32);
+        uint256 nReads = 2 + ((seed >> 16) % (MAX_READS - 1));
+        Answer[] memory values = new Answer[](nReads);
+        for (uint256 i; i < nReads; ++i) {
+            uint256 r = uint256(keccak256(abi.encode(seed, "r", i)));
+            values[i] = Answer(r % 5 != 0, int256((r >> 8) % 5));
+        }
         Check[] memory checks = new Check[](nChecks);
-        Answer[] memory afters = new Answer[](nChecks);
-        Answer[] memory befores = new Answer[](nChecks);
         for (uint256 i; i < nChecks; ++i) {
             uint256 r = uint256(keccak256(abi.encode(seed, i)));
-            // forge-lint: disable-next-line(unsafe-typecast)
-            checks[i] =
-                Check({read: uint8(i), evalType: EvalType(r % 4), op: Op((r >> 8) % 6), target: int256((r >> 16) % 5)});
-            afters[i] = Answer((r >> 32) % 5 != 0, int256((r >> 40) % 5));
-            befores[i] = Answer((r >> 48) % 7 != 0, int256((r >> 56) % 5));
+            Evaluation e = Evaluation(r % 4);
+            // Valid sides: left from reads [0, p), right from [p, nReads), each non-empty where the type needs it.
+            uint256 p = 1 + (r >> 24) % (nReads - 1);
+            uint256 left = (r >> 32) & ((uint256(1) << p) - 1);
+            if (left == 0 || e == Evaluation.BOOLEAN) left = uint256(1) << ((r >> 32) % p);
+            uint256 right;
+            if (e == Evaluation.NUMBER || e == Evaluation.PERCENTAGE) {
+                right = ((r >> 96) << p) & ((uint256(1) << nReads) - 1);
+                if (right == 0) right = uint256(1) << p;
+            }
+            checks[i] = Check({
+                left: _toSide(left),
+                right: _toSide(right),
+                evaluation: e,
+                operation: Operation((r >> 8) % 6),
+                target: int256((r >> 16) % 5)
+            });
         }
-        Node[] memory nodes = new Node[](nNodes);
-        for (uint256 i; i < nNodes; ++i) {
+        Logic[] memory logic = new Logic[](nLogic);
+        for (uint256 i; i < nLogic; ++i) {
             uint256 r = uint256(keccak256(abi.encode(seed, "n", i)));
             uint256 kids;
             uint8[] memory tmp = new uint8[](32);
-            for (uint256 j = i + 1; j < nNodes; ++j) {
+            for (uint256 j = i + 1; j < nLogic; ++j) {
                 // forge-lint: disable-next-line(unsafe-typecast)
                 if ((r >> j) & 1 == 1) tmp[kids++] = uint8(j);
             }
             if (kids == 0) {
                 // forge-lint: disable-next-line(unsafe-typecast)
-                nodes[i] = Node({kind: NodeKind.CHECK, check: uint8(r % nChecks), children: new uint8[](0), k: 0});
+                logic[i] = Logic({kind: LogicKind.CHECK, check: uint8(r % nChecks), children: new uint8[](0), k: 0});
             } else {
                 uint8[] memory ch = new uint8[](kids);
                 for (uint256 j; j < kids; ++j) {
                     ch[j] = tmp[j];
                 }
-                NodeKind kind = NodeKind(1 + ((r >> 40) % 3));
+                LogicKind kind = LogicKind(1 + ((r >> 40) % 3));
                 // forge-lint: disable-next-line(unsafe-typecast)
                 uint8 k = uint8(1 + ((r >> 48) % kids));
-                nodes[i] = Node({kind: kind, check: 0, children: ch, k: k});
+                logic[i] = Logic({kind: kind, check: 0, children: ch, k: k});
             }
         }
-        assertEq(
-            uint8(lib.verdict(checks, nodes, afters, befores)), uint8(lib.verdictPacked(checks, nodes, afters, befores))
+        assertEq(uint8(lib.verdict(checks, logic, values)), uint8(lib.verdictPacked(checks, logic, values)));
+    }
+
+    /// @dev Every operator, with the value below, at and above the target: on COMPARE (the value), NUMBER (a difference)
+    ///      and PERCENTAGE (a change in bps from a base of 10,000).
+    function test_JDG05_everyOperator() public view {
+        bool[3][6] memory want = [
+            [false, true, false], // EQUAL
+            [true, false, true], // NOT_EQUAL
+            [false, false, true], // GREATER_THAN
+            [false, true, true], // GREATER_OR_EQUAL
+            [true, false, false], // LESS_THAN
+            [true, true, false] // LESS_OR_EQUAL
+        ];
+        int256[3] memory values = [int256(99), 100, 101];
+        for (uint256 op; op < 6; ++op) {
+            for (uint256 j; j < 3; ++j) {
+                uint8 expected = uint8(want[op][j] ? Verdict.PASS : Verdict.FAIL);
+                int256 v = values[j];
+                Check memory c = Check({
+                    left: _f(0), right: _none(), evaluation: Evaluation.COMPARE, operation: Operation(op), target: 100
+                });
+                assertEq(uint8(_one(c, Answer(true, v), Answer(false, 0))), expected, "COMPARE");
+                c = Check({
+                    left: _f(0), right: _f(1), evaluation: Evaluation.NUMBER, operation: Operation(op), target: 100
+                });
+                assertEq(uint8(_one(c, Answer(true, v - 50), Answer(true, -50))), expected, "NUMBER");
+                c = Check({
+                    left: _f(0), right: _f(1), evaluation: Evaluation.PERCENTAGE, operation: Operation(op), target: 100
+                });
+                assertEq(uint8(_one(c, Answer(true, 10_000 + v), Answer(true, 10_000))), expected, "PERCENTAGE");
+            }
+        }
+    }
+
+    /// @dev BOOLEAN is `left == target`, the target 0 or 1.
+    function test_JDG06_bool() public view {
+        for (int256 t; t < 2; ++t) {
+            for (int256 v; v < 2; ++v) {
+                Check memory c = Check({
+                    left: _f(0), right: _none(), evaluation: Evaluation.BOOLEAN, operation: Operation.EQUAL, target: t
+                });
+                assertEq(uint8(_one(c, Answer(true, v), Answer(false, 0))), uint8(v == t ? Verdict.PASS : Verdict.FAIL));
+            }
+        }
+    }
+
+    /// @dev A value that could not be read leaves every check using it UNKNOWN: `left` for all four types, `right`
+    ///      for NUMBER and PERCENTAGE.
+    function test_JDG07_unreadableValues() public view {
+        Answer memory none = Answer(false, 0);
+        Answer memory one = Answer(true, 1);
+        for (uint256 e; e < 4; ++e) {
+            bool pair = e >= uint256(Evaluation.NUMBER);
+            Check memory c = Check({
+                left: _f(0),
+                right: pair ? _f(1) : _none(),
+                evaluation: Evaluation(e),
+                operation: Operation.EQUAL,
+                target: pair ? int256(0) : int256(1)
+            });
+            assertEq(uint8(_one(c, one, one)), uint8(Verdict.PASS), "both readable");
+            assertEq(uint8(_one(c, none, one)), uint8(Verdict.INCONCLUSIVE), "left unreadable");
+            if (pair) assertEq(uint8(_one(c, one, none)), uint8(Verdict.INCONCLUSIVE), "right unreadable");
+        }
+    }
+
+    /// @dev ALL, ANY and AT_LEAST over checks that PASS, FAIL or are UNKNOWN: decided once no UNKNOWN can change them.
+    function test_JDG08_logicOverUnknowns() public view {
+        (uint8 p, uint8 f, uint8 u) = (JobSpecLib.PASS, JobSpecLib.FAIL, JobSpecLib.UNKNOWN);
+        _logic(LogicKind.ALL, 0, [p, p, p], Verdict.PASS);
+        _logic(LogicKind.ALL, 0, [p, p, u], Verdict.INCONCLUSIVE);
+        _logic(LogicKind.ALL, 0, [p, f, u], Verdict.FAIL);
+        _logic(LogicKind.ANY, 0, [f, f, f], Verdict.FAIL);
+        _logic(LogicKind.ANY, 0, [f, f, u], Verdict.INCONCLUSIVE);
+        _logic(LogicKind.ANY, 0, [u, p, f], Verdict.PASS);
+        _logic(LogicKind.AT_LEAST, 2, [p, p, u], Verdict.PASS);
+        _logic(LogicKind.AT_LEAST, 2, [p, f, u], Verdict.INCONCLUSIVE);
+        _logic(LogicKind.AT_LEAST, 2, [f, f, u], Verdict.FAIL);
+        _logic(LogicKind.AT_LEAST, 3, [p, p, u], Verdict.INCONCLUSIVE);
+        _logic(LogicKind.AT_LEAST, 1, [f, f, p], Verdict.PASS);
+    }
+
+    /// @dev Three COMPARE checks under one `kind` root, each forced to PASS, FAIL or UNKNOWN; both judges must agree.
+    function _logic(LogicKind kind, uint8 k, uint8[3] memory results, Verdict want) internal view {
+        Check[] memory checks = new Check[](3);
+        Answer[] memory values = new Answer[](3);
+        Logic[] memory logic = new Logic[](4);
+        uint8[] memory kids = new uint8[](3);
+        for (uint8 i; i < 3; ++i) {
+            checks[i] = Check({
+                left: _f(i), right: _none(), evaluation: Evaluation.COMPARE, operation: Operation.EQUAL, target: 1
+            });
+            values[i] = Answer(results[i] != JobSpecLib.UNKNOWN, results[i] == JobSpecLib.PASS ? int256(1) : int256(0));
+            logic[1 + i] = Logic({kind: LogicKind.CHECK, check: i, children: new uint8[](0), k: 0});
+            kids[i] = 1 + i;
+        }
+        logic[0] = Logic({kind: kind, check: 0, children: kids, k: k});
+        assertEq(uint8(lib.verdict(checks, logic, values)), uint8(want), "reference");
+        assertEq(uint8(lib.verdictPacked(checks, logic, values)), uint8(want), "packed");
+    }
+
+    /// @dev Each side is the sum of its reads; one unreadable read, or a sum that overflows, leaves the check UNKNOWN.
+    function test_JDG09_sides() public view {
+        Answer[] memory v = new Answer[](5);
+        v[0] = Answer(true, 3);
+        v[1] = Answer(true, 4);
+        v[2] = Answer(true, 5);
+        v[3] = Answer(false, 0); // unreadable
+        v[4] = Answer(true, type(int256).max);
+
+        _judged(
+            Check({
+                left: _f(0, 1),
+                right: _none(),
+                evaluation: Evaluation.COMPARE,
+                operation: Operation.GREATER_OR_EQUAL,
+                target: 7
+            }),
+            v,
+            Verdict.PASS
         );
+        _judged(
+            Check({
+                left: _f(0, 1),
+                right: _none(),
+                evaluation: Evaluation.COMPARE,
+                operation: Operation.GREATER_OR_EQUAL,
+                target: 8
+            }),
+            v,
+            Verdict.FAIL
+        );
+        _judged(
+            Check({left: _f(0, 1), right: _f(2), evaluation: Evaluation.NUMBER, operation: Operation.EQUAL, target: 2}),
+            v,
+            Verdict.PASS
+        ); // 7 - 5
+        _judged(
+            Check({
+                left: _f(2), right: _f(0, 1), evaluation: Evaluation.NUMBER, operation: Operation.LESS_THAN, target: 0
+            }),
+            v,
+            Verdict.PASS
+        ); // 5 - 7
+        // (7 - 5) / 5 = +40%
+        _judged(
+            Check({
+                left: _f(0, 1),
+                right: _f(2),
+                evaluation: Evaluation.PERCENTAGE,
+                operation: Operation.EQUAL,
+                target: 4000
+            }),
+            v,
+            Verdict.PASS
+        );
+        _judged(
+            Check({
+                left: _f(0, 3),
+                right: _none(),
+                evaluation: Evaluation.COMPARE,
+                operation: Operation.GREATER_OR_EQUAL,
+                target: 0
+            }),
+            v,
+            Verdict.INCONCLUSIVE
+        );
+        _judged(
+            Check({
+                left: _f(2),
+                right: _f(1, 3),
+                evaluation: Evaluation.NUMBER,
+                operation: Operation.GREATER_OR_EQUAL,
+                target: 0
+            }),
+            v,
+            Verdict.INCONCLUSIVE
+        );
+        _judged(
+            Check({
+                left: _f(1, 4),
+                right: _none(),
+                evaluation: Evaluation.COMPARE,
+                operation: Operation.GREATER_OR_EQUAL,
+                target: 0
+            }),
+            v,
+            Verdict.INCONCLUSIVE
+        );
+    }
+
+    /// @dev One check under a CHECK root over `values`, through both judges.
+    function _judged(Check memory c, Answer[] memory values, Verdict want) internal view {
+        Check[] memory cs = new Check[](1);
+        cs[0] = c;
+        Logic[] memory n = new Logic[](1);
+        n[0] = Logic({kind: LogicKind.CHECK, check: 0, children: new uint8[](0), k: 0});
+        assertEq(uint8(lib.verdict(cs, n, values)), uint8(want), "reference");
+        assertEq(uint8(lib.verdictPacked(cs, n, values)), uint8(want), "packed");
     }
 }

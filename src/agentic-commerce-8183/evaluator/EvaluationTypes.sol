@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: MIT
 pragma solidity 0.8.26;
 
+import {Evaluation, Operation} from "../libraries/JobSpecTypes.sol";
+
 /// @title EvaluationTypes — values, limits and outside views of the UniversalEvaluator
 /// @dev - Not part of the `JobSpec` wire format; changing these never changes a job's description.
 
@@ -27,6 +29,15 @@ enum OwnerCheck {
     TOUCHED
 }
 
+/// @notice A check as the evaluator keeps it: each side's reads as a bitmask (bit i: read i).
+struct PackedCheck {
+    uint32 left;
+    uint32 right;
+    Evaluation evaluation;
+    Operation operation;
+    int256 target;
+}
+
 /// @notice The decode instructions for one read, kept so a callback never decodes the whole spec.
 struct ReadPlan {
     bytes outputs;
@@ -36,9 +47,9 @@ struct ReadPlan {
 /// @notice How the evaluator sends Read State requests. Fixed at deployment.
 /// @param readTtl                  Push blocks before an unanswered request may be expired. Must leave validators
 ///                                 time to wait for the read's confirmations.
-/// @param callbackGasLimit         Gas an "after" read's callback declares; the last one applies the verdict.
-///                                 At most Read State's 1,000,000.
-/// @param snapshotCallbackGasLimit Gas a "before" (snapshot) read's callback declares; it only stores a value.
+/// @param callbackGasLimit         Gas an evaluation read's callback declares; the one that decides the root
+///                                 applies the verdict. At most Read State's 1,000,000.
+/// @param snapshotCallbackGasLimit Gas a snapshot (PRE_EXECUTION) read's callback declares; it only stores a value.
 /// @param budgetMultiplier         Callback budget = `gas limit × base fee × budgetMultiplier`, so a base fee that
 ///                                 rises before delivery still clears the node's check. Unspent budget is refunded.
 /// @param maxHeightAge             Seconds a tracked height may be old when used, at `fund` and at `submit`. Non-zero.

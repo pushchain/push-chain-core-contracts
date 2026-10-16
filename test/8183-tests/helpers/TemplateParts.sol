@@ -2,10 +2,11 @@
 pragma solidity 0.8.26;
 
 import {
-    EvalType,
-    Op,
-    NodeKind,
-    Node,
+    Evaluation,
+    Operation,
+    LogicKind,
+    Logic,
+    ReadAt,
     T_UINT,
     T_ADDRESS,
     T_TUPLE
@@ -51,6 +52,8 @@ abstract contract TemplateParts {
         f[1] = b;
     }
 
+    function _none() internal pure returns (uint8[] memory) {}
+
     function _noFills() internal pure returns (Fill[] memory) {
         return new Fill[](0);
     }
@@ -60,7 +63,7 @@ abstract contract TemplateParts {
         fills[0] = Fill({word: word, source: FillSource.CEA, param: 0});
     }
 
-    // ───────── reads, checks, nodes ─────────
+    // ───────── reads, checks, logic ─────────
 
     function _read(
         string memory chainId,
@@ -80,8 +83,14 @@ abstract contract TemplateParts {
             args: args,
             fills: fills,
             outputs: outputs,
-            field: field
+            field: field,
+            at: ReadAt.POST_EXECUTION
         });
+    }
+
+    function _preRead(ReadTemplate memory r) internal pure returns (ReadTemplate memory) {
+        r.at = ReadAt.PRE_EXECUTION;
+        return r;
     }
 
     /// @dev `token.balanceOf(CEA)` on `chainId`: args are one zero word the CEA fill overwrites.
@@ -89,20 +98,30 @@ abstract contract TemplateParts {
         return _read(chainId, token, BALANCE_OF, new bytes(32), _ceaFill(0), _uintOut(), _f(0));
     }
 
-    function _chk(uint8 read, EvalType e, Op op, TargetSource src, int256 value)
+    function _chk(uint8 read, Evaluation e, Operation op, TargetSource src, int256 value)
         internal
         pure
         returns (CheckTemplate memory)
     {
-        return CheckTemplate({read: read, evalType: e, op: op, source: src, value: value});
+        return CheckTemplate({left: _f(read), right: _none(), evaluation: e, operation: op, source: src, value: value});
     }
 
-    function _checkNode(uint8 check) internal pure returns (Node memory) {
-        return Node({kind: NodeKind.CHECK, check: check, children: new uint8[](0), k: 0});
+    /// @dev A NUMBER / PERCENTAGE check: `left` against `right`.
+    function _pair(uint8 left, uint8 right, Evaluation e, Operation op, TargetSource src, int256 value)
+        internal
+        pure
+        returns (CheckTemplate memory)
+    {
+        return
+            CheckTemplate({left: _f(left), right: _f(right), evaluation: e, operation: op, source: src, value: value});
     }
 
-    function _parent(NodeKind kind, uint8[] memory children, uint8 k) internal pure returns (Node memory) {
-        return Node({kind: kind, check: 0, children: children, k: k});
+    function _checkLogic(uint8 check) internal pure returns (Logic memory) {
+        return Logic({kind: LogicKind.CHECK, check: check, children: new uint8[](0), k: 0});
+    }
+
+    function _parent(LogicKind kind, uint8[] memory children, uint8 k) internal pure returns (Logic memory) {
+        return Logic({kind: kind, check: 0, children: children, k: k});
     }
 
     function _kids(uint8 a, uint8 b) internal pure returns (uint8[] memory c) {

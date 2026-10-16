@@ -9,7 +9,7 @@ code that enforces it, and every assumption the code makes about something else 
 | [`reference.md`](./reference.md) | Every function, event, error and storage slot, one by one |
 | [`criteria.md`](./criteria.md) | The criteria template format, how a job's `JobSpec` is built from it, and a worked example |
 
-Code as of commit `cb69e0b` (branch `universalMarketplace_v1`).
+Code as of branch `feat/universal-evaluator-pre-post-reads`.
 
 ---
 
@@ -21,8 +21,8 @@ Code as of commit `cb69e0b` (branch `universalMarketplace_v1`).
 | **UniversalMarketplaceTerms** | [`src/agentic-commerce-8183/UniversalMarketplaceTerms.sol`](../../src/agentic-commerce-8183/UniversalMarketplaceTerms.sol) | Stateless, `pure`, not upgradeable. The rules-side checks. |
 | **JobSpecBuilder** | [`src/agentic-commerce-8183/libraries/JobSpecBuilder.sol`](../../src/agentic-commerce-8183/libraries/JobSpecBuilder.sol) | External library, linked into the marketplace and called by `DELEGATECALL`. Builds each job's criteria. |
 | Types | [`src/agentic-commerce-8183/libraries/Types.sol`](../../src/agentic-commerce-8183/libraries/Types.sol) | Every struct and enum of the package (file-level). |
-| Errors | [`src/agentic-commerce-8183/libraries/Errors.sol`](../../src/agentic-commerce-8183/libraries/Errors.sol) | `UniversalMarketplaceErrors` (37 errors), `RulesBindingHookErrors`, `ERC8183HookErrors`. |
-| JobSpecTypes | [`src/agentic-commerce-8183/libraries/JobSpecTypes.sol`](../../src/agentic-commerce-8183/libraries/JobSpecTypes.sol) | The built criteria (`JobSpec`): the wire format shared with the future UniversalHook and UniversalEvaluator. |
+| Errors | [`src/agentic-commerce-8183/libraries/Errors.sol`](../../src/agentic-commerce-8183/libraries/Errors.sol) | `UniversalMarketplaceErrors` (37 errors), `UniversalHookErrors`, `ERC8183HookErrors`; the evaluator's `UniversalEvaluatorErrors`, `JobSpecErrors` and `EvmReadErrors`. |
+| JobSpecTypes | [`src/agentic-commerce-8183/libraries/JobSpecTypes.sol`](../../src/agentic-commerce-8183/libraries/JobSpecTypes.sol) | The built criteria (`JobSpec`): the wire format shared with the UniversalHook and UniversalEvaluator. |
 | IUniversalMarketplace | [`src/agentic-commerce-8183/interfaces/IUniversalMarketplace.sol`](../../src/agentic-commerce-8183/interfaces/IUniversalMarketplace.sol) | The marketplace's events and functions. |
 | IUniversalMarketplaceTerms | [`src/agentic-commerce-8183/interfaces/IUniversalMarketplaceTerms.sol`](../../src/agentic-commerce-8183/interfaces/IUniversalMarketplaceTerms.sol) | The Terms helper's two functions. |
 | AGW mirrors | [`interfaces/external/IAGW.sol`](../../src/agentic-commerce-8183/interfaces/external/IAGW.sol), [`IAGWFactory.sol`](../../src/agentic-commerce-8183/interfaces/external/IAGWFactory.sol), [`ISmartSession.sol`](../../src/agentic-commerce-8183/interfaces/external/ISmartSession.sol) | Byte-exact mirrors of the Push Agentic Wallet (AGW) types and functions the package calls. |
@@ -32,11 +32,11 @@ Contracts the marketplace works with, but which are **not** part of it:
 | Contract | Where | Role |
 |---|---|---|
 | **AgenticCommerce** (the "kernel") | [`src/agentic-commerce-8183/AgenticCommerce.sol`](../../src/agentic-commerce-8183/AgenticCommerce.sol) | The ERC-8183 job kernel: jobs, budgets, escrow, payout. The marketplace only creates jobs on it (through the user's wallet). |
-| **RulesBindingHook** | [`src/agentic-commerce-8183/hooks/RulesBindingHook.sol`](../../src/agentic-commerce-8183/hooks/RulesBindingHook.sol) | The interim 8183 hook every marketplace job is created with. At `fund` it binds the job to the wallet's live rules set and allows one live job per wallet. |
+| **UniversalHook** | [`src/agentic-commerce-8183/hooks/UniversalHook.sol`](../../src/agentic-commerce-8183/hooks/UniversalHook.sol) | The 8183 hook marketplace jobs are created with. At `fund` it binds the job to the wallet's live rules set and allows one live job per wallet. For jobs whose evaluator is its UniversalEvaluator, it also controls who may replace the criteria, freezes them at `fund` and starts the evaluation at `submit`. |
 | **AGW + AGWFactory** | `push-agentic-wallet` repo | The user's agentic wallet (an ERC-7579 account with SmartSession) and its factory. Verifies the owner's signature. |
 | **UniversalRulesPolicy (URP)** | `push-agentic-wallet` repo | The SmartSession policy that enforces the agent's rules when the agent sends outbound calls through the gateway. |
 | **CEAFactory** | destination chain (`src/cea/CEAFactory.sol` here) | Deploys each user's Chain Executor Account (CEA) on the destination chain. The marketplace only predicts CEA addresses. |
-| UniversalHook, UniversalEvaluator (V2) | not built yet | The intended long-term hook and evaluator. Until they ship, jobs use RulesBindingHook and a Push-controlled evaluator address. |
+| **UniversalEvaluator** | [`src/agentic-commerce-8183/evaluator/UniversalEvaluator.sol`](../../src/agentic-commerce-8183/evaluator/UniversalEvaluator.sol) | Judges a job's `JobSpec` with Push Read State reads (PRE reads at `fund`, POST reads after `submit`) and completes or rejects it. Not upgradeable. Deployed together with the UniversalHook by [`deployUniversalEvaluator.s.sol`](../../scripts/agentic-commerce-8183/deployUniversalEvaluator.s.sol). |
 
 ---
 
@@ -60,7 +60,7 @@ What the marketplace deliberately does **not** do:
 | Move any funds | The user funds the AGW in a separate transaction. The provider prices the job with `setBudget`; the AGW funds it with `fund`. Both are kernel calls. |
 | Execute the card's token approvals | The owner executes them in the funding transaction the SDK builds. The card only declares them (`Approval[]`). |
 | Judge whether the criteria make sense | Nobody, on-chain. The admin's **verified tag** is the review. |
-| Evaluate the job | The job's evaluator (the UniversalEvaluator, once shipped). |
+| Evaluate the job | The job's evaluator (the UniversalEvaluator). |
 | Enforce the agent's rules at execution | The AGW's SmartSession engine and URP. |
 
 The marketplace never holds tokens or native PC. Tests `test_MS02_movesNoFunds` and the invariants
@@ -78,8 +78,8 @@ The marketplace never holds tokens or native PC. Tests `test_MS02_movesNoFunds` 
 | **CEA** | Chain Executor Account: the AGW's account on the destination chain, at an address derived from the AGW. It is where the agent's outbound calls execute and where the criteria read balances. |
 | **Rules** | The SmartSession `Session` granted to the agent on the AGW. Its one action carries the URP policy with `UniversalTerms` (asset, caps, allowed calls, expected CEA, expiry). `rulesId` is the engine's `permissionId`. |
 | **OwnerIntent** | The single owner-signed message (AGW type). One signature authorises the wallet deploy, the rules grant and the `createJob` execution. |
-| **Criteria template** | `EvaluationTemplate`: the V2 `JobSpec` with holes. Stored on the card. |
-| **JobSpec** | The built criteria for one job: reads on the execution chain, checks against targets, and an AND/OR tree. `abi.encode(JobSpec)` is the 8183 job's `description`. |
+| **Criteria template** | `EvaluationTemplate`: the `JobSpec` with holes. Stored on the card. |
+| **JobSpec** | The built criteria for one job: reads (view calls on EVM chains, taken before or after the provider's execution), checks on sums of them, and an AND/OR tree (`logic`). `abi.encode(JobSpec)` is the 8183 job's `description`. |
 | **Card version** | 1 at registration, +1 per modification. Bound into every job's criteria, so an intent signed against one version can't start a job on another. |
 | **Verified tag** | An admin label: "this card, at this version, was reviewed". A tag, not a gate. |
 | **chainHash** | `keccak256` of a CAIP-2 string such as `"eip155:11155111"`. The key for chain configuration. |
@@ -100,7 +100,8 @@ flowchart LR
     MKT -- grantRulesWithSig / executeWithSig --> AGW[User's AGW]
     AGW -- createJob --> KERNEL[AgenticCommerce kernel]
     MKT -- jobCounter / getJob / whitelistedHooks --> KERNEL
-    KERNEL -- beforeAction / afterAction --> HOOK[RulesBindingHook]
+    KERNEL -- beforeAction / afterAction --> HOOK[UniversalHook]
+    HOOK -. evaluated jobs .-> EVAL[UniversalEvaluator]
 ```
 
 - **The marketplace** holds the cards and runs `startJob`. It is the `executor` named in the user's intent: the
@@ -200,7 +201,7 @@ sequenceDiagram
     participant F as AGWFactory
     participant W as User's AGW
     participant K as Kernel (AgenticCommerce)
-    participant H as RulesBindingHook
+    participant H as UniversalHook
 
     P->>M: registerCard(card, rulesTerms, template)
     U->>SDK: pick a card, principal, times, params
@@ -231,7 +232,9 @@ sequenceDiagram
 5. **The AGW funds** the job: `kernel.fund(jobId, card.fee, abi.encode(rulesId))`. The kernel calls the hook, which
    checks the AGW is a factory wallet, the rules set is live, and the AGW has no other live job. A provider who
    prices above the card's fee cannot be funded, because the owner's `expectedBudget` is the card fee
-   (`BudgetMismatch`); `test_MS17_8183Continuation_feeEnforcedAtFund` covers this.
+   (`BudgetMismatch`); `test_MS17_8183Continuation_feeEnforcedAtFund` covers this. When the job's evaluator is the
+   hook's UniversalEvaluator, `fund` carries `abi.encode(rulesId, specHash, "")` instead (marketplace criteria
+   can't be replaced), and the hook also freezes the criteria and the evaluator takes its PRE reads (§12.1).
 6. **The agent executes** within the rules, submits, and the evaluator completes or rejects (kernel).
 
 Steps 3–6 are outside the marketplace. They are shown because the marketplace's design depends on them.
@@ -308,13 +311,14 @@ the owner's single signature covers the exact criteria, and the marketplace re-d
 | a check target `FIXED` | the template's value |
 | a check target `PRINCIPAL_BPS` | `principal × bps / 10 000`, rounded down |
 | a check target `PARAM` | one of the job's `params` |
-| a check target `CEA` | the AGW's CEA on the check's read chain |
+| a check target `CEA` | the AGW's CEA on the chain of the check's first `left` read |
 | `executeBy` | the job's `executeBy` |
 | `failFinalAt` | `executeBy + card.settleWindow` |
 | `origin` | `keccak256(abi.encode(marketplace, cardId, cardVersion, principal))` |
 
-`nodes` (the AND/OR tree) and every other read field are copied verbatim. The full format and a worked example
-are in [`criteria.md`](./criteria.md).
+`logic` (the AND/OR tree), each check's `left` and `right` reads, and every other read field (`at` included) are
+copied verbatim; `allowedMutability` is always `NONE`. The full format and a worked example are in
+[`criteria.md`](./criteria.md).
 
 ### 7.3 What building checks, and what it doesn't
 
@@ -330,7 +334,7 @@ The template is **not judged**. Building checks only what building needs:
 
 Anything else malformed reverts on its own when a job is built (an index out of range panics, undecodable bytes
 fail in `abi.decode`). A template the evaluator could not run, such as a read no check uses or an unreachable
-node, **builds without complaint** (`test_JB08_doesNotJudgeTheTemplate`). The verified tag is the review.
+logic entry, **builds without complaint** (`test_JB08_doesNotJudgeTheTemplate`). The verified tag is the review.
 
 ---
 
@@ -420,7 +424,7 @@ Two rules, at two moments:
 | Rule | Where | Busy when |
 |---|---|---|
 | `isAGWFree(agw)` | marketplace, `startJob` step 8 | the last job **started here** for the AGW is Funded, Submitted, or Open and not yet expired |
-| `AGWHasLiveJob` | RulesBindingHook, at `fund` | the AGW's last job **bound by the hook** is Funded or Submitted |
+| `WalletHasActiveJob` | UniversalHook, at `fund` | the AGW's last job **bound by the hook** is Funded or Submitted (`activeJobOf`) |
 
 The marketplace's rule is stronger: an Open, unexpired job also blocks, so a user cannot stack unfunded jobs on
 one wallet. An Open job frees the wallet once it expires or is rejected; a Funded or Submitted job frees it once
@@ -466,8 +470,12 @@ trust points of the deployment.
    terms, admin})`. Every field must be non-zero, and the hook must be whitelisted on the kernel.
 5. `setCEADeployment` for each supported destination chain.
 
-Interim configuration (until the V2 UniversalHook and UniversalEvaluator ship): `hook` = RulesBindingHook,
-`evaluator` = a Push-controlled address.
+The hook and the UniversalEvaluator are deployed together by
+[`deployUniversalEvaluator.s.sol`](../../scripts/agentic-commerce-8183/deployUniversalEvaluator.s.sol); its
+NatSpec has the three steps. Step 3 points new marketplace jobs at both (`setHook`, `setEvaluator`); it waits
+until the SDK sends the evaluator's `fund` params, since under the pair a marketplace `fund` without them reverts.
+Until then, `evaluator` is a Push-controlled address, and a UniversalHook only binds the rules of such jobs (`fund`
+takes `abi.encode(rulesId)`, as in the test fixtures).
 
 ### 12.2 Upgradeability
 
@@ -482,18 +490,18 @@ Interim configuration (until the V2 UniversalHook and UniversalEvaluator ship): 
 ### 12.3 Build configuration
 
 - solc 0.8.26, `via_ir`, EVM `shanghai`.
-- **`UniversalMarketplace.sol` compiles at 1 000 optimizer runs**; every other contract uses 99 999. This is the
-  `compilation_restrictions` entry in `foundry.toml`. At 99 999 runs the inliner puts the marketplace over the
-  EIP-170 limit.
-- Coverage must run with `FOUNDRY_PROFILE=coverage`, which drops that restriction. Otherwise contracts tested
-  from both compile jobs exist twice, and coverage keeps the hits of only one.
+- **`UniversalMarketplace.sol` compiles at 1 000 optimizer runs** and `UniversalEvaluator.sol` at 200; every
+  other contract uses 99 999. These are the `compilation_restrictions` entries in `foundry.toml`. At 99 999 runs
+  the inliner puts each of the two over the EIP-170 limit.
+- Coverage must run with `FOUNDRY_PROFILE=coverage`, which drops those restrictions. Otherwise contracts tested
+  from several compile jobs exist more than once, and coverage keeps the hits of only one.
 
 | Contract | Runtime size | Margin to EIP-170 |
 |---|---|---|
 | UniversalMarketplace (1 000 runs) | 21,283 B | 3,293 B |
-| JobSpecBuilder | 6,452 B | 18,124 B |
+| JobSpecBuilder | 6,784 B | 17,792 B |
 | UniversalMarketplaceTerms | 5,383 B | 19,193 B |
-| RulesBindingHook | 4,539 B | 20,037 B |
+| UniversalHook | 8,057 B | 16,519 B |
 
 ---
 
@@ -560,7 +568,7 @@ The wallet is the factory's deterministic deployment for the intent's owner, re-
 |---|---|
 | **The AGW must ship agent identity (AGW "D3")** | `verifySession` requires `sessionValidatorInitData == abi.encode(provider)`. The AGW's current validator expects a different config format, so a real `startJob` fails at `grantRulesWithSig` until the AGW implements D3. The package's tests use `MockAGW`. |
 | **EVM destinations only** | Cards name `eip155:*` chains, never Push. Solana and native (Push-side) cards are out of v1. |
-| **Interim hook and evaluator** | RulesBindingHook and a Push-controlled evaluator until the V2 UniversalHook and UniversalEvaluator ship. The `JobSpec` description is inert to RulesBindingHook. |
+| **Interim evaluator** | Until the SDK sends the evaluator's `fund` params (§12.1), marketplace jobs name a Push-controlled evaluator. The UniversalHook then only binds the rules, and the `JobSpec` description is inert to it. |
 | **Approvals are declared, not executed** | The owner runs them in the SDK-built funding transaction; nothing on-chain checks they ran. |
 | **A card can be internally inconsistent** | Registration checks `minExecuteWindow + settleWindow ≤ maxDuration` only. A card whose `minDuration` is shorter than that sum simply can't start jobs at its shortest expiry (`ExecuteByOutOfRange`). |
 | **Error decoding** | Each contract's ABI lists only the errors it raises itself. Decode marketplace reverts, including Terms and builder errors that bubble through `startJob`, with the `UniversalMarketplaceErrors` artifact, which lists all 37. |
@@ -586,7 +594,8 @@ card, cancels jobs and moves time.
 
 ## 15 · Tests
 
-`forge test --match-path 'test/8183-tests/*'`: 236 tests, all passing. The marketplace-related suites:
+`forge test --match-path 'test/8183-tests/*'` runs the whole ERC-8183 package: kernel, hook, evaluator and
+marketplace. The marketplace-related suites:
 
 | Suite | Tests | Covers |
 |---|---|---|
@@ -596,12 +605,13 @@ card, cancels jobs and moves time.
 | [`UniversalMarketplace.conformance.t.sol`](../../test/8183-tests/UniversalMarketplace.conformance.t.sol) | 4 | Built criteria equal the Universal Evaluator V2 design doc's hand-written examples, field by field; every built read decodes in a copy of the V2 evaluator's decoder |
 | [`UniversalMarketplace.invariants.t.sol`](../../test/8183-tests/UniversalMarketplace.invariants.t.sol) | 5 | §14 |
 | [`Naming.t.sol`](../../test/8183-tests/Naming.t.sol) | 5 | Renamed selectors, topics and getters pinned to literal signatures; no retired names in ABIs |
-| [`RulesBindingHook.t.sol`](../../test/8183-tests/RulesBindingHook.t.sol) | 31 | The interim hook |
+| [`UniversalHook.binding.t.sol`](../../test/8183-tests/UniversalHook.binding.t.sol) | 32 | The hook's rules binding at `fund` and one live job per wallet |
 
-Test fixtures use the real kernel, the real RulesBindingHook, the real Terms helper and builder library, and the
-real `CEAFactory`. The AGW factory and wallet are mocks: they enforce the rules the marketplace relies on
-(executor, hashes, nonces) and verify no signature. `MockAGW` has misbehaving modes (two jobs, foreign client,
-rewritten evaluator) to test the marketplace's post-creation checks.
+Test fixtures use the real kernel, the real UniversalHook (binding the rules only: the fixture's jobs name another
+evaluator), the real Terms helper and builder library, and the real `CEAFactory`. The AGW factory and wallet are
+mocks: they enforce the rules the marketplace relies on (executor, hashes, nonces) and verify no signature.
+`MockAGW` has misbehaving modes (two jobs, foreign client, rewritten evaluator) to test the marketplace's
+post-creation checks.
 
 **Coverage** (`FOUNDRY_PROFILE=coverage`, `--ir-minimum`, gas test excluded):
 
@@ -618,10 +628,11 @@ bodies. The audited kernel `AgenticCommerce` shows the same six lines unattribut
 
 **Mutation testing.** 52 hand-written mutants were run against the suites: 12 on JobSpecBuilder, 28 on the
 marketplace and 12 on Terms. Each removes a check, shifts a bound, or breaks a computed value. Every one was
-killed by a named test. That run predates the naming-standard change (`cb69e0b`), which renamed labels only.
+killed by a named test. That run predates the naming-standard change (`cb69e0b`), which renamed labels only,
+and the builder's later `JobSpec` changes (read timing, check sides).
 
-**Gas ceilings** (`test_MS18_gasCeilings`, mock wallet and factory): `registerCard` (lending card) ≤ 2.46 M,
-`startJob` on a fresh wallet ≤ 3.49 M, on an existing wallet ≤ 2.09 M. `registerCard` is dominated by storing the
+**Gas ceilings** (`test_MS18_gasCeilings`, mock wallet and factory): `registerCard` (lending card) ≤ 2.60 M,
+`startJob` on a fresh wallet ≤ 3.75 M, on an existing wallet ≤ 2.34 M. `registerCard` is dominated by storing the
 two content blobs; `startJob` by the wallet deploy and the kernel storing the description.
 
 ---
@@ -642,4 +653,4 @@ Where to look first:
 5. **`_requireAssetOnChain`**: the raw `staticcall` ABI-shape check.
 6. **Storage layout and upgrade safety** (§12.2, [`reference.md`](./reference.md#storage-layout)).
 7. **Admin trust points** (§11): evaluator, hook, CEA deployments.
-8. **The interim hook** (`RulesBindingHook`): the `fund`-time binding and the busy rule.
+8. **The hook's rules binding** (`UniversalHook`, `beforeAction(fund)`): the `fund`-time binding and the busy rule.

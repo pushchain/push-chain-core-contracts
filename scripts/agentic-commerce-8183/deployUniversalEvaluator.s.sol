@@ -9,14 +9,14 @@ import {ReadConfig} from "../../src/agentic-commerce-8183/evaluator/EvaluationTy
 
 /**
  * @title DeployUniversalEvaluatorScript
- * @notice Ships the UniversalEvaluator by upgrading the existing RulesBindingHook proxy in place
- *         (see `UniversalEvaluatorDeploy` for the three steps).
+ * @notice Deploys the UniversalHook and the UniversalEvaluator together (see `UniversalEvaluatorDeploy` for the three
+ *         steps).
  *
  * @dev Precondition: the JobSpec layout is final. The evaluator is not upgradeable and decodes the layout it was
  *      compiled with.
  *
  *      Every address and setting comes from the environment; nothing has a default:
- *        KERNEL, HOOK_PROXY, EXPECTED_HOOK_IMPL (the RulesBindingHook implementation the proxy runs today),
+ *        KERNEL, AGW_FACTORY, SESSION_ENGINE, HOOK_ADMIN_OWNER (owns the hook proxy's ProxyAdmin),
  *        READ_STATE, UNIVERSAL_CORE, FEE_RECIPIENT,
  *        READ_TTL, CALLBACK_GAS_LIMIT, SNAPSHOT_CALLBACK_GAS_LIMIT, BUDGET_MULTIPLIER, MAX_HEIGHT_AGE, MAX_CONFIRMATIONS
  *      MAX_HEIGHT_AGE gates every `fund` and `submit`: set it above the slowest tracked chain's update interval.
@@ -25,56 +25,61 @@ import {ReadConfig} from "../../src/agentic-commerce-8183/evaluator/EvaluationTy
  *
  *      Step 1, any deployer:
  *        forge script scripts/agentic-commerce-8183/deployUniversalEvaluator.s.sol --rpc-url $RPC_URL --broadcast
- *      Prints the evaluator and hook implementation addresses, and the step-2 call for a multisig.
+ *      Prints the hook, its implementation and the evaluator, and the step-2 call for a multisig.
  *
- *      Step 2, the hook's ProxyAdmin owner (skip if the multisig sends the printed call instead):
- *        EVALUATOR=0x.. HOOK_IMPL=0x.. forge script ... --sig "upgrade()" --rpc-url $RPC_URL --broadcast
+ *      Step 2, the kernel admin (skip if the multisig sends the printed call instead):
+ *        HOOK=0x.. EVALUATOR=0x.. forge script ... --sig "whitelist()" --rpc-url $RPC_URL --broadcast
  *
- *      Step 3, the marketplace admin: `UniversalMarketplace.setEvaluator(EVALUATOR)`, only once the marketplace builds
- *      the final JobSpec and the SDK sends the new `fund` params. Before that, every marketplace `fund` would revert.
+ *      Step 3, the marketplace admin: `UniversalMarketplace.setHook(HOOK)` and `setEvaluator(EVALUATOR)`, only once the
+ *      marketplace builds the final JobSpec and the SDK sends the new `fund` params. Before that, every marketplace
+ *      `fund` would revert.
  */
 contract DeployUniversalEvaluatorScript is Script {
     function run() external {
         UniversalEvaluatorDeploy.Params memory p = _params();
         vm.startBroadcast();
-        UniversalEvaluatorDeploy.Deployed memory d = UniversalEvaluatorDeploy.deploy(p);
+        (, address deployer,) = vm.readCallers();
+        UniversalEvaluatorDeploy.Deployed memory d = UniversalEvaluatorDeploy.deploy(p, deployer);
         vm.stopBroadcast();
 
-        (address target, bytes memory data) = UniversalEvaluatorDeploy.upgradeCall(p, d);
-        console.log("=== UniversalEvaluator deployed (step 1) ===");
+        (address target, bytes memory data) = UniversalEvaluatorDeploy.whitelistCall(p, d);
+        console.log("=== UniversalHook and UniversalEvaluator deployed (step 1) ===");
+        console.log("Hook (proxy):", address(d.hook));
+        console.log("Hook implementation:", address(d.hookImpl));
         console.log("Evaluator:", address(d.evaluator));
-        console.log("UniversalHook implementation:", address(d.hookImpl));
-        console.log("Step 2: the ProxyAdmin owner sends this call to", target);
+        console.log("Step 2: the kernel admin sends this call to", target);
         console.logBytes(data);
-        console.log(
-            "Step 3, only after the marketplace builds the final JobSpec and the SDK sends the new fund params:"
-        );
-        console.log("  the marketplace admin calls setEvaluator with the evaluator address");
+        _logStep3();
     }
 
-    function upgrade() external {
+    function whitelist() external {
         UniversalEvaluatorDeploy.Params memory p = _params();
+        UniversalHook hook = UniversalHook(vm.envAddress("HOOK"));
         UniversalEvaluatorDeploy.Deployed memory d = UniversalEvaluatorDeploy.Deployed({
-            evaluator: UniversalEvaluator(vm.envAddress("EVALUATOR")),
-            hookImpl: UniversalHook(vm.envAddress("HOOK_IMPL"))
+            hook: hook,
+            hookImpl: UniversalHook(UniversalEvaluatorDeploy.implementationOf(address(hook))),
+            evaluator: UniversalEvaluator(vm.envAddress("EVALUATOR"))
         });
-        UniversalEvaluatorDeploy.checkEvaluator(p, d);
         vm.startBroadcast();
-        UniversalEvaluatorDeploy.upgrade(p, d);
+        UniversalEvaluatorDeploy.whitelist(p, d);
         vm.stopBroadcast();
-        console.log("=== Hook upgraded in place (step 2) ===");
-        console.log("Hook proxy:", p.hookProxy);
-        console.log("Evaluator:", address(d.evaluator));
+        console.log("=== Hook whitelisted on the kernel (step 2) ===");
+        console.log("Hook (proxy):", address(d.hook));
+        _logStep3();
+    }
+
+    function _logStep3() internal pure {
         console.log(
             "Step 3, only after the marketplace builds the final JobSpec and the SDK sends the new fund params:"
         );
-        console.log("  the marketplace admin calls setEvaluator with the evaluator address");
+        console.log("  the marketplace admin calls setHook with the hook and setEvaluator with the evaluator");
     }
 
     function _params() internal view returns (UniversalEvaluatorDeploy.Params memory p) {
         p.kernel = vm.envAddress("KERNEL");
-        p.hookProxy = vm.envAddress("HOOK_PROXY");
-        p.expectedHookImpl = vm.envAddress("EXPECTED_HOOK_IMPL");
+        p.agwFactory = vm.envAddress("AGW_FACTORY");
+        p.sessionEngine = vm.envAddress("SESSION_ENGINE");
+        p.hookAdminOwner = vm.envAddress("HOOK_ADMIN_OWNER");
         p.readState = vm.envAddress("READ_STATE");
         p.universalCore = vm.envAddress("UNIVERSAL_CORE");
         p.feeRecipient = vm.envAddress("FEE_RECIPIENT");
