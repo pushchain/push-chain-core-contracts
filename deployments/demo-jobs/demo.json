@@ -1,0 +1,18 @@
+{
+  "ceaBase": "0xd5B34340f0b64A17CB7a60f327B57d4963902C32",
+  "ceaSep": "0xE1bf1a61f8fAb2B34C51B40CBa563BA4b84cbAEe",
+  "vault": "0xDD8B373a96cf31d4caA018e3703a1FacA56eaaCD",
+  "bridgeTx_sep": "0x399a46e13fe20df89373a7feb7618c380a129761f66c2ac42f7407427f58e553",
+  "vaultImpl": "0xBB91b3f79CF1D7d8a4a2768f3631cAbF7d5398FC",
+  "vaultDeployTx": "0x14cd8172bb4f107637f3fc17dbf6f5c81479ec861bac211bebe70cb0f7ea449d",
+  "bridgeTx_base": "0xae0e5ac902ea6938c5be1a2f3e50230535005705cafb530e1a05f09440ee64e1",
+  "job": "3",
+  "jobId": "3",
+  "outboundTx_base": "0x57387cb1ff194f78149d193d962c271194ec24ab4841d6d9d9945fc72c18ef20",
+  "execBlock_base": "48189986",
+  "execTx_base": "0x7c8d11980084c364ee46188df5bc428c9b8214d2491f0042ba4489bdf14fda62",
+  "outboundTx_sep": "0xd1e7180e35bcb9769e68b614ab089091912d7b9b6da1c92bd9a5613bab84b540",
+  "execBlock_sep": "11927002",
+  "execTx_sep": "0x564054d7f58300dfb3bbf76ad36cb0b30edaab6aa32500f006b6b29162c330da",
+  "submitTx": "0x42c77211190c5e07653b8fcda7186950d8de83332bf163c6b78150f09095aaeb"
+}

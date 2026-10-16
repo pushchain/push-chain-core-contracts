@@ -1,0 +1,7 @@
+{
+  "failedOutboundPushTx": "0xb1929500e59bc28dc2a4e1f5e1131c693d3f2cf5063e7a595d4a686db864710d",
+  "failedVaultTxSepolia": "0xb6784ea526fb1ead2113983eefe88cd31a865728223aca1635bc92c228d0e3e1",
+  "failedReason": "out of gas: 956,697 of 1,000,000 (CEA deploy + wrap + approve + supply on Ethereum Sepolia)",
+  "refunded": "0.0045 pETH (Ethereum Sepolia) back to the UEA",
+  "retryGasLimit": 3000000
+}

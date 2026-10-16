@@ -1,0 +1,15 @@
+{
+  "ceaBase": "0xd5B34340f0b64A17CB7a60f327B57d4963902C32",
+  "ceaSep": "0xE1bf1a61f8fAb2B34C51B40CBa563BA4b84cbAEe",
+  "vault": "0xDD8B373a96cf31d4caA018e3703a1FacA56eaaCD",
+  "bridgeTx_sep": "0x399a46e13fe20df89373a7feb7618c380a129761f66c2ac42f7407427f58e553",
+  "vaultImpl": "0xBB91b3f79CF1D7d8a4a2768f3631cAbF7d5398FC",
+  "vaultDeployTx": "0x14cd8172bb4f107637f3fc17dbf6f5c81479ec861bac211bebe70cb0f7ea449d",
+  "bridgeTx_base": "0xae0e5ac902ea6938c5be1a2f3e50230535005705cafb530e1a05f09440ee64e1",
+  "job": "1",
+  "jobId": "1",
+  "outboundTx_base": "0x8ca14e3d158d0707d2b27c40244e430dc61e6712db99b32b0b7fa24c6bc4caf1",
+  "execBlock_base": "48189356",
+  "execTx_base": "0x8f29d07650d5d9f953802b226c41634582d8dec4e63d8d704c54c678ed2fee1a",
+  "submitTx": "0xf51b82cd71a5b648dfa4a8bf3a49609c2b61b1ce09aadba23221cea32233ecd9"
+}
