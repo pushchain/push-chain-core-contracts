@@ -12,8 +12,7 @@ import {
     ReadAt,
     MAX_READS,
     MAX_CHECKS,
-    MAX_LOGIC,
-    MAX_TERMS
+    MAX_LOGIC
 } from "../libraries/JobSpecTypes.sol";
 import {Answer, Verdict, MAX_ARGS_LENGTH, MAX_CHAIN_STRING_LENGTH} from "./EvaluationTypes.sol";
 import {EvmReadLib} from "./EvmReadLib.sol";
@@ -29,7 +28,7 @@ import {JobSpecErrors} from "../libraries/Errors.sol";
 ///      - Every rule is one the evaluator relies on, so a funded job can always be judged: indexes are in range,
 ///        the logic forms a graph evaluable from last to first, every read is one the evaluator can encode and
 ///        decodes in bounded work, every logic entry, check and read counts toward the verdict, at least one read is
-///        POST_EXECUTION, and the checks' sides name at most `MAX_TERMS` reads, so a callback's work stays bounded.
+///        POST_EXECUTION.
 ///      Judging (every check comes out PASS, FAIL or UNKNOWN; the logic combines them; the root is the verdict):
 ///      - Each side is the sum of its reads; a side with a missing or unreadable read, or a sum that overflows, is
 ///        UNKNOWN. With L = Σleft and R = Σright:
@@ -81,7 +80,6 @@ library JobSpecLib {
         }
         if (!anyPost) revert JobSpecErrors.NoPostExecutionRead();
 
-        uint256 terms;
         for (uint256 i; i < nChecks; ++i) {
             Check memory c = s.checks[i];
             (bool okL, uint256 left) = _side(c.left, nReads);
@@ -91,14 +89,11 @@ library JobSpecLib {
             uint256 nr = c.right.length;
             bool sides = c.evaluation == Evaluation.BOOLEAN ? nl == 1 && nr == 0 : nl != 0 && (nr != 0) == isPair(c.evaluation);
             if (!sides) revert JobSpecErrors.CheckSides(i);
-            terms += nl + nr;
             if (c.evaluation == Evaluation.BOOLEAN) {
                 if (c.operation != Operation.EQUAL) revert JobSpecErrors.CheckOp(i); // BOOLEAN is `left == target`
                 if (c.target != 0 && c.target != 1) revert JobSpecErrors.CheckTarget(i);
             }
         }
-
-        if (terms > MAX_TERMS) revert JobSpecErrors.TermCount(terms);
 
         for (uint256 i; i < nLogic; ++i) {
             if (!_logicOk(s.logic[i], i, nLogic, nChecks)) revert JobSpecErrors.LogicShape(i);

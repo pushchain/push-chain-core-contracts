@@ -105,8 +105,6 @@ library JobSpecErrors {
     /// @notice A check's sides don't fit its type: BOOLEAN one `left` read and no `right` · COMPARE no `right` ·
     ///         NUMBER / PERCENTAGE both sides.
     error CheckSides(uint256 check);
-    /// @notice The checks' sides name more than `MAX_TERMS` reads in total.
-    error TermCount(uint256 count);
     /// @notice No read is POST_EXECUTION, so the provider's work would never be measured.
     error NoPostExecutionRead();
     /// @notice A BOOLEAN check's target is neither 0 nor 1.

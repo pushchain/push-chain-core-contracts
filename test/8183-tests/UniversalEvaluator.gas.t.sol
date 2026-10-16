@@ -26,11 +26,13 @@ import {Verdict, MAX_DESCRIPTION_LENGTH} from "../../src/agentic-commerce-8183/e
 
 /// @notice The callbacks must fit Read State's gas limits for the largest spec the rules allow.
 /// @dev Reads are 15-field structs. A spec must also fit MAX_DESCRIPTION_LENGTH (32 KB), which keeps every count from
-///      being at its maximum at once, so the worst cases are split:
+///      being at its maximum at once, and is what bounds the terms (read indexes across all checks' sides), so the
+///      worst cases are split:
 ///      - GAS01, the most logic: 32 entries over 16 NUMBER checks, each a POST read against a PRE read (8 of each);
-///      - GAS03, the most reads and terms: 32 POST reads and MAX_TERMS (64) terms across 16 checks that all wait for
-///        the last answer.
-///      A callback that runs out of gas is never retried, so this is a hard ceiling, not an optimisation.
+///      - GAS03, the most reads: 32 POST reads and as many terms as still fit, across 16 checks that all wait for
+///        the last answer;
+///      - GAS04, the most terms: 20 POST reads, every check summing as many of them as fit.
+///      A callback that runs out of gas fails again on every retry, so this is a hard ceiling, not an optimisation.
 contract UniversalEvaluatorGasTest is UniversalEvalBase {
     /// @dev GAS01's reads: 0..7 POST, 8..15 their PRE copies.
     uint256 internal constant VENUES = 8;
@@ -54,26 +56,43 @@ contract UniversalEvaluatorGasTest is UniversalEvalBase {
         }
     }
 
-    /// @dev 32 POST reads; check i is `(read i + read 31) - (two of reads 16..30) >= 0`, 4 terms each, 64 in all.
-    ///      Every check includes read 31, so its answer, delivered last, sums every side.
-    function _maxTermsSpec() internal view returns (JobSpec memory s) {
-        s = _frame(MAX_READS, 1 + MAX_CHECKS);
-        for (uint256 i; i < MAX_READS; ++i) {
+    /// @dev The most terms that still fit MAX_DESCRIPTION_LENGTH with `nReads` POST reads: `perCheck` per check.
+    function _mostTermsSpec(uint256 nReads) internal view returns (JobSpec memory best, uint256 perCheck) {
+        for (uint256 t = 2; t <= nReads; ++t) {
+            JobSpec memory s = _termsSpec(nReads, t);
+            if (abi.encode(s).length > MAX_DESCRIPTION_LENGTH) break;
+            (best, perCheck) = (s, t);
+        }
+    }
+
+    /// @dev `nReads` POST reads; check i is `(reads 0..a-1 + the last read) - (b reads from a window) >= 0`, with
+    ///      `a + 1 + b == perCheck` and `a + 1 >= b`, so equal answers PASS. The windows slide so every read is used.
+    ///      Every check includes the last read, so its answer, delivered last, sums every side.
+    function _termsSpec(uint256 nReads, uint256 perCheck) internal view returns (JobSpec memory s) {
+        s = _frame(nReads, 1 + MAX_CHECKS);
+        for (uint256 i; i < nReads; ++i) {
             s.reads[i] = _reserveRead(i, ReadAt.POST_EXECUTION);
         }
+        uint256 a = (perCheck + 1) / 2 - 1;
+        uint256 b = perCheck - a - 1;
+        uint8[] memory left = new uint8[](a + 1);
+        for (uint256 j; j < a; ++j) {
+            // forge-lint: disable-next-line(unsafe-typecast)
+            left[j] = uint8(j);
+        }
+        // forge-lint: disable-next-line(unsafe-typecast)
+        left[a] = uint8(nReads - 1);
+        uint256 lastStart = nReads - 1 - b; // the window must end before the last read
         for (uint256 i; i < MAX_CHECKS; ++i) {
-            // forge-lint: disable-next-line(unsafe-typecast)
-            uint8 a = uint8(16 + i % 15);
-            // forge-lint: disable-next-line(unsafe-typecast)
-            uint8 b = uint8(16 + (i + 1) % 15);
-            if (a > b) (a, b) = (b, a);
-            // forge-lint: disable-next-line(unsafe-typecast)
+            uint256 start = a + i * b;
+            if (start > lastStart) start = lastStart;
+            uint8[] memory right = new uint8[](b);
+            for (uint256 j; j < b; ++j) {
+                // forge-lint: disable-next-line(unsafe-typecast)
+                right[j] = uint8(start + j);
+            }
             s.checks[i] = Check({
-                left: _u8(uint8(i), 31),
-                right: _u8(a, b),
-                evaluation: Evaluation.NUMBER,
-                operation: Operation.GREATER_OR_EQUAL,
-                target: 0
+                left: left, right: right, evaluation: Evaluation.NUMBER, operation: Operation.GREATER_OR_EQUAL, target: 0
             });
         }
     }
@@ -150,27 +169,39 @@ contract UniversalEvaluatorGasTest is UniversalEvalBase {
         assertEq(uint8(_status(jobId)), uint8(IAgenticCommerce.JobStatus.Completed));
     }
 
-    function test_GAS03_maxTerms_finalCallbackFits() public {
+    function test_GAS03_mostReads_finalCallbackFits() public {
+        _mostTermsFit(MAX_READS);
+    }
+
+    function test_GAS04_mostTerms_finalCallbackFits() public {
+        _mostTermsFit(20);
+    }
+
+    /// @dev The heaviest spec with `nReads` POST reads: every answer but the last leaves the job waiting; the last
+    ///      sums every term and settles, inside the callback gas limit.
+    function _mostTermsFit(uint256 nReads) internal {
         vm.fee(0);
-        JobSpec memory s = _maxTermsSpec();
-        assertLe(abi.encode(s).length, MAX_DESCRIPTION_LENGTH, "fits the description cap");
+        (JobSpec memory s, uint256 perCheck) = _mostTermsSpec(nReads);
+        assertGt(perCheck, 0, "no spec fits the description cap");
+        console2.log("reads:", nReads, "terms:", perCheck * MAX_CHECKS);
+        console2.log("description bytes:", abi.encode(s).length);
         uint256 jobId = _createSpec(s);
         _fund(jobId);
         _advance();
         uint256 g0 = gasleft();
         _submit(jobId);
-        console2.log("submit incl. 32 reads, gas:", g0 - gasleft());
+        console2.log("submit incl. reads, gas:", g0 - gasleft());
 
-        for (uint256 i; i < MAX_READS - 1; ++i) {
+        for (uint256 i; i < nReads - 1; ++i) {
             assertTrue(_deliverExpectingSuccess(ue.requestOf(jobId, i), _reserveAnswer(100)), "answer cb");
         }
-        assertEq(uint8(_status(jobId)), uint8(IAgenticCommerce.JobStatus.Submitted), "every check waits for read 31");
+        assertEq(uint8(_status(jobId)), uint8(IAgenticCommerce.JobStatus.Submitted), "every check waits for the last");
         uint256 g = gasleft();
         assertTrue(
-            _deliverExpectingSuccess(ue.requestOf(jobId, MAX_READS - 1), _reserveAnswer(100)),
+            _deliverExpectingSuccess(ue.requestOf(jobId, nReads - 1), _reserveAnswer(100)),
             "final callback ran out of gas"
         );
-        console2.log("fulfil incl. final callback over 64 terms, gas:", g - gasleft());
+        console2.log("fulfil incl. final callback, gas:", g - gasleft());
         assertEq(uint8(ue.evaluationOf(jobId).verdict), uint8(Verdict.PASS));
         assertEq(uint8(_status(jobId)), uint8(IAgenticCommerce.JobStatus.Completed));
     }

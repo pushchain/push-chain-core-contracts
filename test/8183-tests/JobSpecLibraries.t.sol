@@ -18,6 +18,7 @@ import {
     LogicKind,
     ReadAt,
     MAX_READS,
+    MAX_CHECKS,
     T_UINT,
     T_INT,
     T_BOOL,
@@ -546,11 +547,10 @@ contract JobSpecLibrariesTest is Test {
         lib.validate(s);
     }
 
-    /// @dev The checks' sides name at most MAX_TERMS (64) reads in total: 16 checks of 4 pass, 13 of 5 don't.
-    function test_RUL07_maxTerms() public {
-        lib.validate(_sums(16, 4));
-        vm.expectRevert(abi.encodeWithSelector(JobSpecErrors.TermCount.selector, 65));
-        lib.validate(_sums(13, 5));
+    /// @dev Terms are not capped: 16 checks each summing all 32 reads pass. A real spec is bounded by the 32 KB
+    ///      description cap (UniversalEvaluator.gas.t.sol measures the heaviest that fits).
+    function test_RUL07_termsUncapped() public view {
+        lib.validate(_sums(MAX_CHECKS, MAX_READS));
     }
 
     /// @dev `nChecks` COMPARE checks, each summing reads 0 to `width - 1`, all under one ALL root.

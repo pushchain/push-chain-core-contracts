@@ -125,8 +125,7 @@ Each side is the sum of its reads: L = Σ`left`, R = Σ`right`.
 
 A side with a missing or unreadable read, or a sum that overflows, makes the check UNKNOWN. With a PRE read on the
 right, `NUMBER` and `PERCENTAGE` measure the change over the job: `left [after], right [before], NUMBER, GREATER_OR_EQUAL, x` is "grew by at
-least x". Sums compare totals, for example Aave plus Morpho holdings after the job against the same two before. The
-checks' sides may name at most `MAX_TERMS` (64) reads in total.
+least x". Sums compare totals, for example Aave plus Morpho holdings after the job against the same two before.
 
 ### Logic: the pass logic
 
@@ -280,8 +279,8 @@ logic entries or side terms; check sides that don't fit their type, point past t
 overlap; outputs that are not valid type codes; fields that point nowhere; reads no check uses; unreachable logic
 entries; and trivially true criteria. All of these build as given (`test_JB08_doesNotJudgeTheTemplate`), except
 where building needs an index: an empty `left` panics, as does an out-of-range fill `param`, `PARAM` target, or
-first `left` read of a `CEA`-target check. The caps `MAX_READS` (32), `MAX_CHECKS` (16), `MAX_LOGIC` (32) and
-`MAX_TERMS` (64) in JobSpecTypes are the evaluator's, not enforced here: `JobSpecLib.validate` refuses a spec that
+first `left` read of a `CEA`-target check. The caps `MAX_READS` (32), `MAX_CHECKS` (16) and `MAX_LOGIC` (32)
+in JobSpecTypes are the evaluator's, not enforced here: `JobSpecLib.validate` refuses a spec that
 breaks them, or any rule above, when the UniversalEvaluator freezes it at `fund` (`JobSpecErrors`). Anything that
 reverts here makes `startJob` and both previews of that card revert.
 

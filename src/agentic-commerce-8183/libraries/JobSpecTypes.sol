@@ -113,4 +113,3 @@ uint8 constant T_FIXED_ARRAY = 10;
 uint256 constant MAX_READS = 32;
 uint256 constant MAX_CHECKS = 16;
 uint256 constant MAX_LOGIC = 32;
-uint256 constant MAX_TERMS = 64; // read indexes across every check's sides; bounds a callback's work
