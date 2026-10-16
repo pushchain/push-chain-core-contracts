@@ -19,8 +19,8 @@ import {
     JobSpec,
     Read,
     Check,
-    EvalType,
-    Op,
+    Evaluation,
+    Operation,
     LogicKind,
     T_TUPLE,
     T_BYTES,
@@ -75,7 +75,7 @@ contract UniversalEvaluatorTest is UniversalEvalBase {
 
     // ───────────── FAIL is final ─────────────
 
-    /// @dev NUM measures the change: WETH already in the CEA does not count, and the FAIL rejects at once.
+    /// @dev NUMBER measures the change: WETH already in the CEA does not count, and the FAIL rejects at once.
     function test_UE04_failRejectsAtOnce_andRefundsClient() public {
         uint256 jobId = _submittedSwap(5e18);
         uint256 clientBefore = token.balanceOf(address(agw));
@@ -133,21 +133,21 @@ contract UniversalEvaluatorTest is UniversalEvalBase {
     function test_UE07_stuckJob_endsThroughClaimRefund() public {
         uint256 jobId = _submittedSwap(0);
         _answer(jobId, 0, "");
-        assertTrue(hook.isAGWBusy(address(agw)));
+        assertEq(hook.activeJobOf(address(agw)), jobId);
 
         vm.warp(kernel.getJob(jobId).expiredAt + kernel.EVALUATOR_GRACE_PERIOD());
-        assertTrue(hook.isAGWBusy(address(agw)), "eligible is not expired: someone must call claimRefund");
+        assertEq(hook.activeJobOf(address(agw)), jobId, "eligible is not expired: someone must call claimRefund");
         uint256 clientBefore = token.balanceOf(address(agw));
         vm.prank(stranger);
         kernel.claimRefund(jobId);
         assertEq(token.balanceOf(address(agw)) - clientBefore, BUDGET);
-        assertFalse(hook.isAGWBusy(address(agw)));
+        assertEq(hook.activeJobOf(address(agw)), 0);
     }
 
     /// @dev ANY: one venue passes, the other answers with an error. One pass is enough.
     function test_UE08_anyPassesDespiteUnreadableBranch() public {
         uint256 jobId = _createSpec(_anySpec());
-        _fund(jobId); // CMP only: nothing to snapshot
+        _fund(jobId); // COMPARE only: nothing to snapshot
         assertTrue(ue.ready(jobId));
         _advance();
         _submit(jobId);
@@ -287,11 +287,15 @@ contract UniversalEvaluatorTest is UniversalEvalBase {
         s.reads = _single(s.reads[0]);
         s.reads[0].outputs = abi.encodePacked(T_TUPLE, uint8(1), T_BYTES);
         s.checks[0] = Check({
-            left: _u8(0), right: _none(), evalType: EvalType.CMP, op: Op.EQ, target: int256(uint256(keccak256(payload)))
+            left: _u8(0),
+            right: _none(),
+            evaluation: Evaluation.COMPARE,
+            operation: Operation.EQUAL,
+            target: int256(uint256(keccak256(payload)))
         });
 
         uint256 over = _createSpec(s);
-        _fund(over); // CMP only: nothing to snapshot
+        _fund(over); // COMPARE only: nothing to snapshot
         _advance();
         _submit(over);
         _answer(over, 0, bytes.concat(answer, hex"00")); // 4,097 bytes
@@ -317,7 +321,13 @@ contract UniversalEvaluatorTest is UniversalEvalBase {
         JobSpec memory s = _swapSpec();
         s.reads = _single(s.reads[0]);
         s.reads[0].outputs = abi.encodePacked(T_TUPLE, uint8(1), T_ARRAY, T_UINT);
-        s.checks[0] = Check({left: _u8(0), right: _none(), evalType: EvalType.CMP, op: Op.GTE, target: 2});
+        s.checks[0] = Check({
+            left: _u8(0),
+            right: _none(),
+            evaluation: Evaluation.COMPARE,
+            operation: Operation.GREATER_OR_EQUAL,
+            target: 2
+        });
         uint256 jobId = _createSpec(s);
         _fund(jobId);
         _advance();
@@ -498,7 +508,7 @@ contract UniversalEvaluatorTest is UniversalEvalBase {
 
     /// @dev Every read's tracked height must be fresh at `fund`, not only the snapshot reads'.
     function test_UE24_staleHeightAtFund_refused() public {
-        uint256 jobId = _createSpec(_anySpec()); // CMP only: no snapshot read
+        uint256 jobId = _createSpec(_anySpec()); // COMPARE only: no snapshot read
         (uint256 snap, uint256 eval_) = ue.prefundCost(jobId);
         _prefund(jobId, snap + eval_);
         uint256 seen = core.timestampObservedAtByChainNamespace(BASE_KEY);
@@ -600,7 +610,7 @@ contract UniversalEvaluatorTest is UniversalEvalBase {
 
     /// @dev Preflight only (the admin can still block the chain later): a read Read State would refuse fails `fund`.
     function test_UE27_blockedDomainAtFund_refused() public {
-        uint256 jobId = _createSpec(_anySpec()); // CMP only: no snapshot read would reach Read State at fund
+        uint256 jobId = _createSpec(_anySpec()); // COMPARE only: no snapshot read would reach Read State at fund
         (uint256 snap, uint256 eval_) = ue.prefundCost(jobId);
         _prefund(jobId, snap + eval_);
         vm.prank(readAdmin);
@@ -690,7 +700,7 @@ contract UniversalEvaluatorTest is UniversalEvalBase {
 
     // ───────────── comparing reads: chain against chain, before against before ─────────────
 
-    /// @dev "b on Base > a on Ethereum AND b > c on Arbitrum, after the job": two NUM checks on POST reads across
+    /// @dev "b on Base > a on Ethereum AND b > c on Arbitrum, after the job": two NUMBER checks on POST reads across
     ///      three chains. Each check waits for both of its reads.
     function test_UE34_crossChainPairs_allMustHold() public {
         _track("1");
@@ -700,8 +710,12 @@ contract UniversalEvaluatorTest is UniversalEvalBase {
         s.reads[0] = _balanceRead(weth, cea); // b on Base
         s.reads[1] = _on(_balanceRead(weth, cea), "1"); // a on Ethereum
         s.reads[2] = _on(_balanceRead(weth, cea), "42161"); // c on Arbitrum
-        s.checks[0] = Check({left: _u8(0), right: _u8(1), evalType: EvalType.NUM, op: Op.GT, target: 0});
-        s.checks[1] = Check({left: _u8(0), right: _u8(2), evalType: EvalType.NUM, op: Op.GT, target: 0});
+        s.checks[0] = Check({
+            left: _u8(0), right: _u8(1), evaluation: Evaluation.NUMBER, operation: Operation.GREATER_THAN, target: 0
+        });
+        s.checks[1] = Check({
+            left: _u8(0), right: _u8(2), evaluation: Evaluation.NUMBER, operation: Operation.GREATER_THAN, target: 0
+        });
         s.logic[0].kind = LogicKind.ALL;
         uint256 jobId = _createSpec(s);
         _fund(jobId);
@@ -817,7 +831,13 @@ contract UniversalEvaluatorTest is UniversalEvalBase {
         s.reads[0] = _balanceRead(ausdc, cea);
         s.reads[1] = _pre(_balanceRead(ausdc, cea));
         s.reads[2] = _balanceRead(morphoVault, cea);
-        s.checks[0] = Check({left: _u8(0), right: _u8(1), evalType: EvalType.NUM, op: Op.GTE, target: 99.99e6});
+        s.checks[0] = Check({
+            left: _u8(0),
+            right: _u8(1),
+            evaluation: Evaluation.NUMBER,
+            operation: Operation.GREATER_OR_EQUAL,
+            target: 99.99e6
+        });
         s.checks[1].left = _u8(2);
     }
 
@@ -829,8 +849,12 @@ contract UniversalEvaluatorTest is UniversalEvalBase {
         s.reads[1] = _balanceRead(morphoVault, cea);
         s.reads[2] = _pre(_balanceRead(ausdc, cea));
         s.reads[3] = _pre(_balanceRead(morphoVault, cea));
-        s.checks[0] = Check({left: _u8(3), right: _u8(2), evalType: EvalType.NUM, op: Op.GT, target: 0});
-        s.checks[1] = Check({left: _u8(0), right: _u8(1), evalType: EvalType.NUM, op: Op.GT, target: 0});
+        s.checks[0] = Check({
+            left: _u8(3), right: _u8(2), evaluation: Evaluation.NUMBER, operation: Operation.GREATER_THAN, target: 0
+        });
+        s.checks[1] = Check({
+            left: _u8(0), right: _u8(1), evaluation: Evaluation.NUMBER, operation: Operation.GREATER_THAN, target: 0
+        });
         s.logic[0].kind = LogicKind.ALL;
     }
 }

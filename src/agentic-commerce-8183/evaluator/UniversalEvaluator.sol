@@ -531,7 +531,11 @@ contract UniversalEvaluator is IUniversalEvaluator, ReentrancyGuard {
             Check memory chk = s.checks[i];
             uint32 left = JobSpecLib.packSide(chk.left);
             uint32 right = JobSpecLib.packSide(chk.right);
-            checks.push(PackedCheck({left: left, right: right, evalType: chk.evalType, op: chk.op, target: chk.target}));
+            checks.push(
+                PackedCheck({
+                    left: left, right: right, evaluation: chk.evaluation, operation: chk.operation, target: chk.target
+                })
+            );
             uint256 reads = left | right;
             for (uint256 r; reads != 0; ++r) {
                 if (reads & 1 != 0) _markCheck(c, r, i);
@@ -712,7 +716,7 @@ contract UniversalEvaluator is IUniversalEvaluator, ReentrancyGuard {
         Answer memory b;
         if (chk.right != 0) b = _sum(jobId, chk.right);
         return JobSpecLib.setCheck(
-            checkRes, i, JobSpecLib.checkResult(chk.evalType, chk.op, chk.target, _sum(jobId, chk.left), b)
+            checkRes, i, JobSpecLib.checkResult(chk.evaluation, chk.operation, chk.target, _sum(jobId, chk.left), b)
         );
     }
 

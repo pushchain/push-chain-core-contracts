@@ -9,22 +9,22 @@ pragma solidity 0.8.26;
 /// @dev - Source: `docs-internal/Universal Evaluator V2 Design`, plus `origin` (marketplace PRD decision Z7).
 ///      - Field order is ABI. Never reorder, never insert; a change here changes every description.
 
-/// @notice How a check compares. BOOL / CMP: the `left` side against `target` · NUM / PCT: `left` against `right`.
-enum EvalType {
-    BOOL,
-    CMP,
-    NUM,
-    PCT
+/// @notice How a check compares. BOOLEAN / COMPARE: the `left` side against `target` · NUMBER / PERCENTAGE: `left` against `right`.
+enum Evaluation {
+    BOOLEAN,
+    COMPARE,
+    NUMBER,
+    PERCENTAGE
 }
 
 /// @notice The comparison operator: == != > >= < <=.
-enum Op {
-    EQ,
-    NEQ,
-    GT,
-    GTE,
-    LT,
-    LTE
+enum Operation {
+    EQUAL,
+    NOT_EQUAL,
+    GREATER_THAN,
+    GREATER_OR_EQUAL,
+    LESS_THAN,
+    LESS_OR_EQUAL
 }
 
 /// @notice One step of the pass logic. CHECK: one check · ALL / ANY / AT_LEAST: combine children.
@@ -38,11 +38,11 @@ enum LogicKind {
 /// @notice Who may replace a job's criteria before it is funded: the provider in `setBudget`, the client in `fund`.
 /// @dev - The flag is always the one in the `createJob` description; a replacement must carry the same flag.
 ///      - `BOTH` is the zero value, so a spec that never sets the flag can be replaced by either side.
-enum CriteriaMutability {
+enum AllowedMutability {
     BOTH,
     NONE,
-    CLIENT_ONLY,
-    PROVIDER_ONLY
+    CLIENT,
+    PROVIDER
 }
 
 /// @notice When a read is taken: after the provider's execution (at `submit`) or before it (at `fund`).
@@ -66,13 +66,13 @@ struct Read {
     ReadAt at; // read at the block recorded at `fund` (PRE) or fixed at `submit` (POST)
 }
 
-/// @notice One comparison. Each side is the sum of its reads. BOOL `left == target` · CMP `Σleft op target` ·
-///         NUM `(Σleft - Σright) op target` · PCT `(Σleft - Σright) / Σright op target`, in basis points.
+/// @notice One comparison. Each side is the sum of its reads. BOOLEAN `left == target` · COMPARE `Σleft op target` ·
+///         NUMBER `(Σleft - Σright) op target` · PERCENTAGE `(Σleft - Σright) / Σright op target`, in basis points.
 struct Check {
-    uint8[] left; // indexes into reads, increasing · BOOL: exactly one
-    uint8[] right; // indexes into reads, increasing, none in `left` · NUM / PCT: at least one · BOOL / CMP: none
-    EvalType evalType;
-    Op op;
+    uint8[] left; // indexes into reads, increasing · BOOLEAN: exactly one
+    uint8[] right; // indexes into reads, increasing, none in `left` · NUMBER / PERCENTAGE: at least one · BOOLEAN / COMPARE: none
+    Evaluation evaluation;
+    Operation operation;
     int256 target; // in the contract's own units
 }
 
@@ -91,7 +91,7 @@ struct JobSpec {
     Read[] reads;
     Check[] checks;
     Logic[] logic;
-    CriteriaMutability mutability; // who may replace these criteria before `fund`; marketplace jobs are NONE
+    AllowedMutability allowedMutability; // who may replace these criteria before `fund`; marketplace jobs are NONE
     bytes32 origin; // keccak256(abi.encode(marketplace, cardId, cardVersion, principal)); opaque to hook and evaluator
 }
 

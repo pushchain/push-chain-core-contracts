@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 pragma solidity 0.8.26;
 
-import {EvalType, Op} from "../libraries/JobSpecTypes.sol";
+import {Evaluation, Operation} from "../libraries/JobSpecTypes.sol";
 
 /// @title EvaluationTypes — values, limits and outside views of the UniversalEvaluator
 /// @dev - Not part of the `JobSpec` wire format; changing these never changes a job's description.
@@ -33,8 +33,8 @@ enum OwnerCheck {
 struct PackedCheck {
     uint32 left;
     uint32 right;
-    EvalType evalType;
-    Op op;
+    Evaluation evaluation;
+    Operation operation;
     int256 target;
 }
 

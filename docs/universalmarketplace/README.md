@@ -317,7 +317,7 @@ the owner's single signature covers the exact criteria, and the marketplace re-d
 | `origin` | `keccak256(abi.encode(marketplace, cardId, cardVersion, principal))` |
 
 `logic` (the AND/OR tree), each check's `left` and `right` reads, and every other read field (`at` included) are
-copied verbatim; `mutability` is always `NONE`. The full format and a worked example are in
+copied verbatim; `allowedMutability` is always `NONE`. The full format and a worked example are in
 [`criteria.md`](./criteria.md).
 
 ### 7.3 What building checks, and what it doesn't
@@ -424,7 +424,7 @@ Two rules, at two moments:
 | Rule | Where | Busy when |
 |---|---|---|
 | `isAGWFree(agw)` | marketplace, `startJob` step 8 | the last job **started here** for the AGW is Funded, Submitted, or Open and not yet expired |
-| `AGWHasLiveJob` | UniversalHook, at `fund` | the AGW's last job **bound by the hook** is Funded or Submitted |
+| `WalletHasActiveJob` | UniversalHook, at `fund` | the AGW's last job **bound by the hook** is Funded or Submitted (`activeJobOf`) |
 
 The marketplace's rule is stronger: an Open, unexpired job also blocks, so a user cannot stack unfunded jobs on
 one wallet. An Open job frees the wallet once it expires or is rejected; a Funded or Submitted job frees it once

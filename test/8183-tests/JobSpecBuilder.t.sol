@@ -7,8 +7,8 @@ import {TemplateParts} from "./helpers/TemplateParts.sol";
 import {UniversalMarketplaceErrors} from "../../src/agentic-commerce-8183/libraries/Errors.sol";
 import {JobSpecBuilder} from "../../src/agentic-commerce-8183/libraries/JobSpecBuilder.sol";
 import {
-    EvalType,
-    Op,
+    Evaluation,
+    Operation,
     LogicKind,
     Logic,
     JobSpec,
@@ -80,8 +80,8 @@ abstract contract BuilderFixtures is Test, TemplateParts {
         t.reads[1] =
             _read("1", AAVE_POOL_ETH, GET_RESERVE_DATA, abi.encode(USDC_ETH), _noFills(), _reserveDataOut(), _f2(0, 2));
         t.checks = new CheckTemplate[](2);
-        t.checks[0] = _chk(0, EvalType.CMP, Op.GTE, TargetSource.PRINCIPAL_BPS, 9999);
-        t.checks[1] = _chk(1, EvalType.CMP, Op.GTE, TargetSource.FIXED, 0.04e27);
+        t.checks[0] = _chk(0, Evaluation.COMPARE, Operation.GREATER_OR_EQUAL, TargetSource.PRINCIPAL_BPS, 9999);
+        t.checks[1] = _chk(1, Evaluation.COMPARE, Operation.GREATER_OR_EQUAL, TargetSource.FIXED, 0.04e27);
         t.logic = new Logic[](3);
         t.logic[0] = _parent(LogicKind.ALL, _kids(1, 2), 0);
         t.logic[1] = _checkLogic(0);
@@ -98,21 +98,21 @@ abstract contract BuilderFixtures is Test, TemplateParts {
         t.reads[1] = _preRead(_balanceOfCEA("8453", WETH_BASE));
         t.reads[1].minConfirmations = 3;
         t.checks = new CheckTemplate[](1);
-        t.checks[0] = _pair(0, 1, EvalType.NUM, Op.GTE, TargetSource.PARAM, 0);
+        t.checks[0] = _pair(0, 1, Evaluation.NUMBER, Operation.GREATER_OR_EQUAL, TargetSource.PARAM, 0);
         t.logic = new Logic[](1);
         t.logic[0] = _checkLogic(0);
         t.params = new ParamBounds[](1);
         t.params[0] = ParamBounds({min: 1, max: 1e30});
     }
 
-    /// @dev "Aave OR Morpho": ANY over two CMP checks.
+    /// @dev "Aave OR Morpho": ANY over two COMPARE checks.
     function _either() internal view returns (EvaluationTemplate memory t) {
         t.reads = new ReadTemplate[](2);
         t.reads[0] = _balanceOfCEA("1", AUSDC_ETH);
         t.reads[1] = _read("1", MORPHO_VAULT, MAX_WITHDRAW, new bytes(32), _ceaFill(0), _uintOut(), _f(0));
         t.checks = new CheckTemplate[](2);
-        t.checks[0] = _chk(0, EvalType.CMP, Op.GTE, TargetSource.PRINCIPAL_BPS, 9999);
-        t.checks[1] = _chk(1, EvalType.CMP, Op.GTE, TargetSource.PRINCIPAL_BPS, 9999);
+        t.checks[0] = _chk(0, Evaluation.COMPARE, Operation.GREATER_OR_EQUAL, TargetSource.PRINCIPAL_BPS, 9999);
+        t.checks[1] = _chk(1, Evaluation.COMPARE, Operation.GREATER_OR_EQUAL, TargetSource.PRINCIPAL_BPS, 9999);
         t.logic = new Logic[](3);
         t.logic[0] = _parent(LogicKind.ANY, _kids(1, 2), 0);
         t.logic[1] = _checkLogic(0);
@@ -128,7 +128,7 @@ abstract contract BuilderFixtures is Test, TemplateParts {
         t.reads[2] = _balanceOfCEA("1", SPARK);
         t.checks = new CheckTemplate[](3);
         for (uint8 i; i < 3; ++i) {
-            t.checks[i] = _chk(i, EvalType.CMP, Op.GTE, TargetSource.FIXED, 99.99e6);
+            t.checks[i] = _chk(i, Evaluation.COMPARE, Operation.GREATER_OR_EQUAL, TargetSource.FIXED, 99.99e6);
         }
         t.logic = new Logic[](4);
         t.logic[0] = _parent(LogicKind.AT_LEAST, _kids3(1, 2, 3), 2);
@@ -147,10 +147,10 @@ abstract contract BuilderFixtures is Test, TemplateParts {
         t.reads[2] = _read("1", MORPHO_VAULT, MAX_WITHDRAW, new bytes(32), _ceaFill(0), _uintOut(), _f(0));
         t.reads[3] = _read("1", MORPHO_VAULT, bytes4(keccak256("supplyRate()")), "", _noFills(), _uintOut(), _f(0));
         t.checks = new CheckTemplate[](4);
-        t.checks[0] = _chk(0, EvalType.CMP, Op.GTE, TargetSource.FIXED, 99.99e6);
-        t.checks[1] = _chk(1, EvalType.CMP, Op.GTE, TargetSource.FIXED, 0.04e27);
-        t.checks[2] = _chk(2, EvalType.CMP, Op.GTE, TargetSource.FIXED, 99.99e6);
-        t.checks[3] = _chk(3, EvalType.CMP, Op.GTE, TargetSource.FIXED, 0.04e18);
+        t.checks[0] = _chk(0, Evaluation.COMPARE, Operation.GREATER_OR_EQUAL, TargetSource.FIXED, 99.99e6);
+        t.checks[1] = _chk(1, Evaluation.COMPARE, Operation.GREATER_OR_EQUAL, TargetSource.FIXED, 0.04e27);
+        t.checks[2] = _chk(2, Evaluation.COMPARE, Operation.GREATER_OR_EQUAL, TargetSource.FIXED, 99.99e6);
+        t.checks[3] = _chk(3, Evaluation.COMPARE, Operation.GREATER_OR_EQUAL, TargetSource.FIXED, 0.04e18);
         t.logic = new Logic[](7);
         t.logic[0] = _parent(LogicKind.ANY, _kids(1, 2), 0);
         t.logic[1] = _parent(LogicKind.ALL, _kids(3, 4), 0);
@@ -204,7 +204,7 @@ contract JobSpecBuilderTest is BuilderFixtures {
             _f(0)
         );
         t.checks = new CheckTemplate[](1);
-        t.checks[0] = _chk(0, EvalType.CMP, Op.EQ, TargetSource.CEA, 0);
+        t.checks[0] = _chk(0, Evaluation.COMPARE, Operation.EQUAL, TargetSource.CEA, 0);
         t.logic = new Logic[](1);
         t.logic[0] = _checkLogic(0);
         t.params = new ParamBounds[](0);
@@ -214,7 +214,7 @@ contract JobSpecBuilderTest is BuilderFixtures {
         // one read on Ethereum and one on Base: each gets its own chain's CEA
         EvaluationTemplate memory t = _either();
         t.reads[1] = _balanceOfCEA("8453", WETH_BASE);
-        t.checks[1] = _chk(1, EvalType.CMP, Op.GTE, TargetSource.FIXED, 1);
+        t.checks[1] = _chk(1, Evaluation.COMPARE, Operation.GREATER_OR_EQUAL, TargetSource.FIXED, 1);
         JobSpec memory s = _build(t, _ctx(100e6, _noParams()));
         assertEq(s.reads[0].args, abi.encode(builder.ceaFor(AGW, ETH_HASH)), "eth read: eth CEA");
         assertEq(s.reads[1].args, abi.encode(builder.ceaFor(AGW, BASE_HASH)), "base read: base CEA");
@@ -267,8 +267,8 @@ contract JobSpecBuilderTest is BuilderFixtures {
         for (uint256 i; i < t.checks.length; ++i) {
             assertEq(keccak256(abi.encode(s.checks[i].left)), keccak256(abi.encode(t.checks[i].left)));
             assertEq(keccak256(abi.encode(s.checks[i].right)), keccak256(abi.encode(t.checks[i].right)));
-            assertEq(uint8(s.checks[i].evalType), uint8(t.checks[i].evalType));
-            assertEq(uint8(s.checks[i].op), uint8(t.checks[i].op));
+            assertEq(uint8(s.checks[i].evaluation), uint8(t.checks[i].evaluation));
+            assertEq(uint8(s.checks[i].operation), uint8(t.checks[i].operation));
         }
     }
 
@@ -339,7 +339,7 @@ contract JobSpecBuilderTest is BuilderFixtures {
         // no CEA anywhere: no chain is asked, so an unsupported chain is fine
         t = _ownerIsCEA();
         t.reads[0].chainId = "137";
-        t.checks[0] = _chk(0, EvalType.CMP, Op.EQ, TargetSource.FIXED, 7);
+        t.checks[0] = _chk(0, Evaluation.COMPARE, Operation.EQUAL, TargetSource.FIXED, 7);
         _build(t, _ctx(1, _noParams()));
     }
 

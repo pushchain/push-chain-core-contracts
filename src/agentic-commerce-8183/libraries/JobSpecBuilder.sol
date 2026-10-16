@@ -3,7 +3,7 @@ pragma solidity 0.8.26;
 
 import {IUniversalMarketplace} from "../interfaces/IUniversalMarketplace.sol";
 import {UniversalMarketplaceErrors} from "./Errors.sol";
-import {Read, Check, JobSpec, CriteriaMutability} from "./JobSpecTypes.sol";
+import {Read, Check, JobSpec, AllowedMutability} from "./JobSpecTypes.sol";
 import {
     FillSource,
     Fill,
@@ -40,7 +40,7 @@ library JobSpecBuilder {
         spec.executeBy = uint64(ctx.executeBy);
         spec.failFinalAt = uint64(ctx.executeBy) + ctx.settleWindow;
         spec.origin = ctx.origin;
-        spec.mutability = CriteriaMutability.NONE; // the criteria are exactly the card's; neither side may replace them
+        spec.allowedMutability = AllowedMutability.NONE; // the criteria are exactly the card's; neither side may replace them
         spec.logic = t.logic;
         spec.reads = new Read[](t.reads.length);
         for (uint256 i; i < t.reads.length; ++i) {
@@ -135,7 +135,7 @@ library JobSpecBuilder {
         } else if (c.source == TargetSource.CEA) {
             target = int256(uint256(uint160(cea[c.left[0]])));
         }
-        return Check({left: c.left, right: c.right, evalType: c.evalType, op: c.op, target: target});
+        return Check({left: c.left, right: c.right, evaluation: c.evaluation, operation: c.operation, target: target});
     }
 
     /// @dev The AGW's CEA on the read's chain, from the caller (the marketplace, under DELEGATECALL). The key is

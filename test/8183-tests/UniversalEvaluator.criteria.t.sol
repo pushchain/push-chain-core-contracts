@@ -9,11 +9,11 @@ import {
     Read,
     Check,
     Logic,
-    EvalType,
-    Op,
+    Evaluation,
+    Operation,
     LogicKind,
     ReadAt,
-    CriteriaMutability,
+    AllowedMutability,
     T_TUPLE,
     T_UINT,
     T_INT,
@@ -39,14 +39,14 @@ contract UniversalEvaluatorCriteriaTest is UniversalEvalBase {
 
     // ───────────── one value against a fixed number ─────────────
 
-    /// @dev CMP: "the CEA holds at least 100 aUSDC after the job". The target itself passes.
+    /// @dev COMPARE: "the CEA holds at least 100 aUSDC after the job". The target itself passes.
     function test_CR01_cmp_balanceAtLeast() public {
-        JobSpec memory s = _spec1(_single(_balanceRead(ausdc, cea)), _cmp(0, Op.GTE, 100e6));
+        JobSpec memory s = _spec1(_single(_balanceRead(ausdc, cea)), _cmp(0, Operation.GREATER_OR_EQUAL, 100e6));
         _expect(s, _ans(_u(100e6)), COMPLETED);
         _expect(s, _ans(_u(100e6 - 1)), REJECTED);
     }
 
-    /// @dev BOOL: "the vault is not paused after the job".
+    /// @dev BOOLEAN: "the vault is not paused after the job".
     function test_CR02_bool_notPaused() public {
         JobSpec memory s = _spec1(_single(_call(vault, "paused()", "", _out(T_BOOL), _u8(0))), _bool(0, false));
         _expect(s, _ans(abi.encode(false)), COMPLETED);
@@ -56,7 +56,7 @@ contract UniversalEvaluatorCriteriaTest is UniversalEvalBase {
     /// @dev A struct field: Aave's `getReserveData(usdc).currentLiquidityRate` (field [0, 2]) is at least 4%.
     function test_CR03_cmp_structField() public {
         Read memory rate = _call(aavePool, "getReserveData(address)", abi.encode(usdc), _reserveOutputs(), _u8(0, 2));
-        JobSpec memory s = _spec1(_single(rate), _cmp(0, Op.GTE, 0.04e27));
+        JobSpec memory s = _spec1(_single(rate), _cmp(0, Operation.GREATER_OR_EQUAL, 0.04e27));
         _expect(s, _ans(_reserveAnswer(0.052e27)), COMPLETED);
         _expect(s, _ans(_reserveAnswer(0.03e27)), REJECTED);
     }
@@ -65,7 +65,7 @@ contract UniversalEvaluatorCriteriaTest is UniversalEvalBase {
     function test_CR04_cmp_addressIsCEA() public {
         Read memory holder = _call(positions, "ownerOf(uint256)", abi.encode(uint256(1234)), _out(T_ADDRESS), _u8(0));
         // forge-lint: disable-next-line(unsafe-typecast)
-        JobSpec memory s = _spec1(_single(holder), _cmp(0, Op.EQ, int256(uint256(uint160(cea)))));
+        JobSpec memory s = _spec1(_single(holder), _cmp(0, Operation.EQUAL, int256(uint256(uint160(cea)))));
         _expect(s, _ans(abi.encode(cea)), COMPLETED);
         _expect(s, _ans(abi.encode(stranger)), REJECTED);
     }
@@ -73,7 +73,8 @@ contract UniversalEvaluatorCriteriaTest is UniversalEvalBase {
     /// @dev A signed value: "the position's PnL is at least -5".
     function test_CR05_cmp_signedValue() public {
         JobSpec memory s = _spec1(
-            _single(_call(perp, "pnlOf(address)", abi.encode(cea), _out(T_INT), _u8(0))), _cmp(0, Op.GTE, -5e18)
+            _single(_call(perp, "pnlOf(address)", abi.encode(cea), _out(T_INT), _u8(0))),
+            _cmp(0, Operation.GREATER_OR_EQUAL, -5e18)
         );
         _expect(s, _ans(abi.encode(int256(-3e18))), COMPLETED);
         _expect(s, _ans(abi.encode(int256(-10e18))), REJECTED);
@@ -84,7 +85,7 @@ contract UniversalEvaluatorCriteriaTest is UniversalEvalBase {
         JobSpec memory s = _spec1(
             _single(_call(vault, "name()", "", _out(T_STRING), _u8(0))),
             // forge-lint: disable-next-line(unsafe-typecast)
-            _cmp(0, Op.EQ, int256(uint256(keccak256("Aave USDC"))))
+            _cmp(0, Operation.EQUAL, int256(uint256(keccak256("Aave USDC"))))
         );
         _expect(s, _ans(abi.encode("Aave USDC")), COMPLETED);
         _expect(s, _ans(abi.encode("Fake USDC")), REJECTED);
@@ -94,7 +95,8 @@ contract UniversalEvaluatorCriteriaTest is UniversalEvalBase {
     function test_CR07_cmp_arrayLength() public {
         bytes memory outs = abi.encodePacked(T_TUPLE, uint8(1), T_ARRAY, T_UINT);
         JobSpec memory s = _spec1(
-            _single(_call(positions, "positionsOf(address)", abi.encode(cea), outs, _u8(0))), _cmp(0, Op.GTE, 2)
+            _single(_call(positions, "positionsOf(address)", abi.encode(cea), outs, _u8(0))),
+            _cmp(0, Operation.GREATER_OR_EQUAL, 2)
         );
         _expect(s, _ans(abi.encode(new uint256[](2))), COMPLETED);
         _expect(s, _ans(abi.encode(new uint256[](1))), REJECTED);
@@ -107,7 +109,8 @@ contract UniversalEvaluatorCriteriaTest is UniversalEvalBase {
             _call(vault, "positionOf(address)", abi.encode(cea), outs, _u8(0)),
             _call(vault, "positionOf(address)", abi.encode(cea), outs, _u8(1))
         );
-        JobSpec memory s = _specOf(reads, _c(_cmp(0, Op.GTE, 10), _bool(1, false)), LogicKind.ALL, 0);
+        JobSpec memory s =
+            _specOf(reads, _c(_cmp(0, Operation.GREATER_OR_EQUAL, 10), _bool(1, false)), LogicKind.ALL, 0);
         bytes memory open_ = abi.encode(uint256(10), false);
         bytes memory locked = abi.encode(uint256(10), true);
         _expect(s, _ans(open_, open_), COMPLETED);
@@ -116,66 +119,73 @@ contract UniversalEvaluatorCriteriaTest is UniversalEvalBase {
 
     // ───────────── change during the job: the same call before and after ─────────────
 
-    /// @dev NUM, before minus after: "spent at most 100 USDC".
+    /// @dev NUMBER, before minus after: "spent at most 100 USDC".
     function test_CR09_num_spentAtMost() public {
-        JobSpec memory s = _spec1(_beforeAfter(usdc), _num(1, 0, Op.LTE, 100e6));
+        JobSpec memory s = _spec1(_beforeAfter(usdc), _num(1, 0, Operation.LESS_OR_EQUAL, 100e6));
         _expect(s, _ans(_u(420e6), _u(500e6)), COMPLETED); // spent 80
         _expect(s, _ans(_u(350e6), _u(500e6)), REJECTED); // spent 150
     }
 
-    /// @dev NUM EQ 0: "the collateral did not move".
+    /// @dev NUMBER EQUAL 0: "the collateral did not move".
     function test_CR10_num_unchanged() public {
-        JobSpec memory s = _spec1(_beforeAfter(weth), _num(0, 1, Op.EQ, 0));
+        JobSpec memory s = _spec1(_beforeAfter(weth), _num(0, 1, Operation.EQUAL, 0));
         _expect(s, _ans(_u(5e18), _u(5e18)), COMPLETED);
         _expect(s, _ans(_u(5e18 + 1), _u(5e18)), REJECTED);
     }
 
-    /// @dev PCT: "the deposit earned at least 4%". Exactly 4% passes.
+    /// @dev PERCENTAGE: "the deposit earned at least 4%". Exactly 4% passes.
     function test_CR11_pct_yieldAtLeast() public {
-        JobSpec memory s = _spec1(_beforeAfter(ausdc), _pct(0, 1, Op.GTE, 400));
+        JobSpec memory s = _spec1(_beforeAfter(ausdc), _pct(0, 1, Operation.GREATER_OR_EQUAL, 400));
         _expect(s, _ans(_u(104e6), _u(100e6)), COMPLETED);
         _expect(s, _ans(_u(103.99e6), _u(100e6)), REJECTED);
     }
 
-    /// @dev PCT with a negative target: "lost at most 1%".
+    /// @dev PERCENTAGE with a negative target: "lost at most 1%".
     function test_CR12_pct_lossAtMost() public {
-        JobSpec memory s = _spec1(_beforeAfter(ausdc), _pct(0, 1, Op.GTE, -100));
+        JobSpec memory s = _spec1(_beforeAfter(ausdc), _pct(0, 1, Operation.GREATER_OR_EQUAL, -100));
         _expect(s, _ans(_u(99e6), _u(100e6)), COMPLETED);
         _expect(s, _ans(_u(98.99e6), _u(100e6)), REJECTED);
     }
 
-    /// @dev A change from zero has no percentage: PCT FAILS, whatever the target.
+    /// @dev A change from zero has no percentage: PERCENTAGE FAILS, whatever the target.
     function test_CR13_pct_fromZeroFails() public {
-        _expect(_spec1(_beforeAfter(ausdc), _pct(0, 1, Op.GTE, 0)), _ans(_u(100e6), _u(0)), REJECTED);
+        _expect(
+            _spec1(_beforeAfter(ausdc), _pct(0, 1, Operation.GREATER_OR_EQUAL, 0)), _ans(_u(100e6), _u(0)), REJECTED
+        );
     }
 
-    /// @dev CMP on a PRE read, a precondition: "Aave held at least 1M USDC when the job started" AND "deposited".
+    /// @dev COMPARE on a PRE read, a precondition: "Aave held at least 1M USDC when the job started" AND "deposited".
     ///      Judged when the evaluation starts; a failure rejects on the first usable answer.
     function test_CR14_cmp_preconditionAtStart() public {
         Read[] memory reads = _r(_balanceRead(ausdc, cea), _pre(_balanceRead(usdc, aavePool)));
-        JobSpec memory s = _specOf(reads, _c(_cmp(0, Op.GTE, 99.99e6), _cmp(1, Op.GTE, 1_000_000e6)), LogicKind.ALL, 0);
+        JobSpec memory s = _specOf(
+            reads,
+            _c(_cmp(0, Operation.GREATER_OR_EQUAL, 99.99e6), _cmp(1, Operation.GREATER_OR_EQUAL, 1_000_000e6)),
+            LogicKind.ALL,
+            0
+        );
         _expect(s, _ans(_u(100e6), _u(2_000_000e6)), COMPLETED);
         _expect(s, _ans(_u(100e6), _u(500_000e6)), REJECTED);
     }
 
     // ───────────── one read against another ─────────────
 
-    /// @dev NUM between two reads after the job: "a ≥ b", then "a − b > 1".
+    /// @dev NUMBER between two reads after the job: "a ≥ b", then "a − b > 1".
     function test_CR15_num_readAgainstRead() public {
         Read[] memory reads = _r(_balanceRead(ausdc, cea), _balanceRead(morphoVault, cea));
-        JobSpec memory s = _spec1(reads, _num(0, 1, Op.GTE, 0));
+        JobSpec memory s = _spec1(reads, _num(0, 1, Operation.GREATER_OR_EQUAL, 0));
         _expect(s, _ans(_u(5e6), _u(5e6)), COMPLETED);
         _expect(s, _ans(_u(4e6), _u(5e6)), REJECTED);
 
-        s = _spec1(reads, _num(0, 1, Op.GT, 1));
+        s = _spec1(reads, _num(0, 1, Operation.GREATER_THAN, 1));
         _expect(s, _ans(_u(7), _u(5)), COMPLETED);
         _expect(s, _ans(_u(6), _u(5)), REJECTED);
     }
 
-    /// @dev PCT between two reads: "Aave holds at least 5% more than Morpho".
+    /// @dev PERCENTAGE between two reads: "Aave holds at least 5% more than Morpho".
     function test_CR16_pct_readAgainstRead() public {
         Read[] memory reads = _r(_balanceRead(ausdc, cea), _balanceRead(morphoVault, cea));
-        JobSpec memory s = _spec1(reads, _pct(0, 1, Op.GTE, 500));
+        JobSpec memory s = _spec1(reads, _pct(0, 1, Operation.GREATER_OR_EQUAL, 500));
         _expect(s, _ans(_u(105e6), _u(100e6)), COMPLETED);
         _expect(s, _ans(_u(104.99e6), _u(100e6)), REJECTED);
     }
@@ -185,7 +195,7 @@ contract UniversalEvaluatorCriteriaTest is UniversalEvalBase {
     function test_CR17_crossChain_afterAgainstBefore() public {
         _track("1");
         Read[] memory reads = _r(_balanceRead(weth, cea), _pre(_on(_balanceRead(weth, cea), "1")));
-        JobSpec memory s = _spec1(reads, _num(0, 1, Op.GTE, 0));
+        JobSpec memory s = _spec1(reads, _num(0, 1, Operation.GREATER_OR_EQUAL, 0));
         _expect(s, _ans(_u(100e18), _u(100e18)), COMPLETED);
         _expect(s, _ans(_u(99e18), _u(100e18)), REJECTED);
     }
@@ -195,7 +205,11 @@ contract UniversalEvaluatorCriteriaTest is UniversalEvalBase {
     /// @dev AT_LEAST 2 of 3 venues: settled by the second answer when it can be, else by the third.
     function test_CR18_atLeastTwoOfThree() public {
         Read[] memory reads = _r(_balanceRead(ausdc, cea), _balanceRead(morphoVault, cea), _balanceRead(spark, cea));
-        Check[] memory checks = _c(_cmp(0, Op.GTE, 99.99e6), _cmp(1, Op.GTE, 99.99e6), _cmp(2, Op.GTE, 99.99e6));
+        Check[] memory checks = _c(
+            _cmp(0, Operation.GREATER_OR_EQUAL, 99.99e6),
+            _cmp(1, Operation.GREATER_OR_EQUAL, 99.99e6),
+            _cmp(2, Operation.GREATER_OR_EQUAL, 99.99e6)
+        );
         JobSpec memory s = _specOf(reads, checks, LogicKind.AT_LEAST, 2);
 
         uint256 jobId = _expect(s, _ans(_u(100e6), _u(100e6), _u(0)), COMPLETED);
@@ -214,8 +228,12 @@ contract UniversalEvaluatorCriteriaTest is UniversalEvalBase {
             _balanceRead(morphoVault, cea),
             _call(morphoVault, "supplyRate()", "", _out(T_UINT), _u8(0))
         );
-        Check[] memory checks =
-            _c(_cmp(0, Op.GTE, 99.99e6), _cmp(1, Op.GTE, 0.04e27), _cmp(2, Op.GTE, 99.99e6), _cmp(3, Op.GTE, 0.04e18));
+        Check[] memory checks = _c(
+            _cmp(0, Operation.GREATER_OR_EQUAL, 99.99e6),
+            _cmp(1, Operation.GREATER_OR_EQUAL, 0.04e27),
+            _cmp(2, Operation.GREATER_OR_EQUAL, 99.99e6),
+            _cmp(3, Operation.GREATER_OR_EQUAL, 0.04e18)
+        );
         Logic[] memory logic = new Logic[](7);
         logic[0] = Logic({kind: LogicKind.ANY, check: 0, children: _u8(1, 2), k: 0});
         logic[1] = Logic({kind: LogicKind.ALL, check: 0, children: _u8(3, 4), k: 0});
@@ -233,8 +251,12 @@ contract UniversalEvaluatorCriteriaTest is UniversalEvalBase {
 
     /// @dev One read in two checks: "holds at least 100 after the job" AND "grew by at least 10 during it".
     function test_CR20_oneReadInTwoChecks() public {
-        JobSpec memory s =
-            _specOf(_beforeAfter(ausdc), _c(_cmp(0, Op.GTE, 100e6), _num(0, 1, Op.GTE, 10e6)), LogicKind.ALL, 0);
+        JobSpec memory s = _specOf(
+            _beforeAfter(ausdc),
+            _c(_cmp(0, Operation.GREATER_OR_EQUAL, 100e6), _num(0, 1, Operation.GREATER_OR_EQUAL, 10e6)),
+            LogicKind.ALL,
+            0
+        );
         _expect(s, _ans(_u(105e6), _u(95e6)), COMPLETED);
         _expect(s, _ans(_u(105e6), _u(100e6)), REJECTED); // above 100, but grew by 5 only
     }
@@ -260,36 +282,39 @@ contract UniversalEvaluatorCriteriaTest is UniversalEvalBase {
             _call(perp, "pnlOf(address)", abi.encode(cea), _out(T_INT), _u8(0)),
             _call(perp, "pnlOf(address)", abi.encode(stranger), _out(T_INT), _u8(0))
         );
-        uint256 jobId =
-            _run(_spec1(reads, _num(0, 1, Op.GT, 0)), _ans(abi.encode(type(int256).max), abi.encode(int256(-1))));
+        uint256 jobId = _run(
+            _spec1(reads, _num(0, 1, Operation.GREATER_THAN, 0)),
+            _ans(abi.encode(type(int256).max), abi.encode(int256(-1)))
+        );
         assertEq(uint8(ue.evaluationOf(jobId).verdict), uint8(Verdict.INCONCLUSIVE));
         assertEq(uint8(_status(jobId)), uint8(SUBMITTED));
     }
 
     // ───────────── sums: several reads on one side ─────────────
 
-    /// @dev CMP on a sum: "aUSDC + Morpho assets ≥ 999.9" after a split deposit. The split is the provider's choice.
+    /// @dev COMPARE on a sum: "aUSDC + Morpho assets ≥ 999.9" after a split deposit. The split is the provider's choice.
     function test_CR23_sum_splitDeposit() public {
         Read[] memory reads = _r(
             _balanceRead(ausdc, cea), _call(morphoVault, "maxWithdraw(address)", abi.encode(cea), _out(T_UINT), _u8(0))
         );
-        JobSpec memory s = _spec1(reads, _cmp(_u8(0, 1), Op.GTE, 999.9e6));
+        JobSpec memory s = _spec1(reads, _cmp(_u8(0, 1), Operation.GREATER_OR_EQUAL, 999.9e6));
         _expect(s, _ans(_u(600e6), _u(399.9e6)), COMPLETED);
         _expect(s, _ans(_u(999.9e6), _u(0)), COMPLETED); // all in Aave
         _expect(s, _ans(_u(600e6), _u(399.8e6)), REJECTED);
     }
 
-    /// @dev PCT on sums: "earned at least 4% across Aave and Morpho combined". Reads 0, 1 after; 2, 3 before.
+    /// @dev PERCENTAGE on sums: "earned at least 4% across Aave and Morpho combined". Reads 0, 1 after; 2, 3 before.
     function test_CR24_sum_combinedYield() public {
-        JobSpec memory s = _spec1(_twoVenuesBeforeAfter(), _pct(_u8(0, 1), _u8(2, 3), Op.GTE, 400));
+        JobSpec memory s = _spec1(_twoVenuesBeforeAfter(), _pct(_u8(0, 1), _u8(2, 3), Operation.GREATER_OR_EQUAL, 400));
         // 600 + 400 → 630 + 410: +4% overall, though Aave made 5% and Morpho 2.5%
         _expect(s, _ans(_u(630e6), _u(410e6), _u(600e6), _u(400e6)), COMPLETED);
         _expect(s, _ans(_u(620e6), _u(410e6), _u(600e6), _u(400e6)), REJECTED); // +3%
     }
 
-    /// @dev NUM on sums: "at least 999.9 more across both venues than before the job", whatever was there already.
+    /// @dev NUMBER on sums: "at least 999.9 more across both venues than before the job", whatever was there already.
     function test_CR25_sum_depositedDuringJob() public {
-        JobSpec memory s = _spec1(_twoVenuesBeforeAfter(), _num(_u8(0, 1), _u8(2, 3), Op.GTE, 999.9e6));
+        JobSpec memory s =
+            _spec1(_twoVenuesBeforeAfter(), _num(_u8(0, 1), _u8(2, 3), Operation.GREATER_OR_EQUAL, 999.9e6));
         _expect(s, _ans(_u(700e6), _u(449.9e6), _u(100e6), _u(50e6)), COMPLETED);
         _expect(s, _ans(_u(700e6), _u(449.8e6), _u(100e6), _u(50e6)), REJECTED);
     }
@@ -298,7 +323,7 @@ contract UniversalEvaluatorCriteriaTest is UniversalEvalBase {
     function test_CR26_sum_acrossChains() public {
         _track("42161");
         Read[] memory reads = _r(_balanceRead(usdc, cea), _on(_balanceRead(usdc, cea), "42161"));
-        JobSpec memory s = _spec1(reads, _cmp(_u8(0, 1), Op.GTE, 1_000e6));
+        JobSpec memory s = _spec1(reads, _cmp(_u8(0, 1), Operation.GREATER_OR_EQUAL, 1_000e6));
         _expect(s, _ans(_u(700e6), _u(300e6)), COMPLETED);
         _expect(s, _ans(_u(700e6), _u(299e6)), REJECTED);
     }
@@ -306,7 +331,7 @@ contract UniversalEvaluatorCriteriaTest is UniversalEvalBase {
     /// @dev A sum on the right: "b > a + c".
     function test_CR27_sum_onTheRight() public {
         Read[] memory reads = _r(_balanceRead(weth, cea), _balanceRead(ausdc, cea), _balanceRead(morphoVault, cea));
-        JobSpec memory s = _spec1(reads, _num(_u8(0), _u8(1, 2), Op.GT, 0));
+        JobSpec memory s = _spec1(reads, _num(_u8(0), _u8(1, 2), Operation.GREATER_THAN, 0));
         _expect(s, _ans(_u(10), _u(4), _u(5)), COMPLETED);
         _expect(s, _ans(_u(9), _u(4), _u(5)), REJECTED);
     }
@@ -351,7 +376,7 @@ contract UniversalEvaluatorCriteriaTest is UniversalEvalBase {
         s.reads = reads;
         s.checks = checks;
         s.logic = logic;
-        s.mutability = CriteriaMutability.NONE;
+        s.allowedMutability = AllowedMutability.NONE;
     }
 
     /// @dev One check, as the root.
@@ -435,40 +460,44 @@ contract UniversalEvaluatorCriteriaTest is UniversalEvalBase {
 
     function _bool(uint8 read, bool want) internal pure returns (Check memory) {
         return Check({
-            left: _u8(read), right: _none(), evalType: EvalType.BOOL, op: Op.EQ, target: want ? int256(1) : int256(0)
+            left: _u8(read),
+            right: _none(),
+            evaluation: Evaluation.BOOLEAN,
+            operation: Operation.EQUAL,
+            target: want ? int256(1) : int256(0)
         });
     }
 
-    function _cmp(uint8 read, Op op, int256 target) internal pure returns (Check memory) {
+    function _cmp(uint8 read, Operation op, int256 target) internal pure returns (Check memory) {
         return _cmp(_u8(read), op, target);
     }
 
-    function _cmp(uint8[] memory left, Op op, int256 target) internal pure returns (Check memory) {
-        return Check({left: left, right: _none(), evalType: EvalType.CMP, op: op, target: target});
+    function _cmp(uint8[] memory left, Operation op, int256 target) internal pure returns (Check memory) {
+        return Check({left: left, right: _none(), evaluation: Evaluation.COMPARE, operation: op, target: target});
     }
 
-    function _num(uint8 left, uint8 right, Op op, int256 target) internal pure returns (Check memory) {
+    function _num(uint8 left, uint8 right, Operation op, int256 target) internal pure returns (Check memory) {
         return _num(_u8(left), _u8(right), op, target);
     }
 
-    function _num(uint8[] memory left, uint8[] memory right, Op op, int256 target)
+    function _num(uint8[] memory left, uint8[] memory right, Operation op, int256 target)
         internal
         pure
         returns (Check memory)
     {
-        return Check({left: left, right: right, evalType: EvalType.NUM, op: op, target: target});
+        return Check({left: left, right: right, evaluation: Evaluation.NUMBER, operation: op, target: target});
     }
 
-    function _pct(uint8 left, uint8 right, Op op, int256 target) internal pure returns (Check memory) {
+    function _pct(uint8 left, uint8 right, Operation op, int256 target) internal pure returns (Check memory) {
         return _pct(_u8(left), _u8(right), op, target);
     }
 
-    function _pct(uint8[] memory left, uint8[] memory right, Op op, int256 target)
+    function _pct(uint8[] memory left, uint8[] memory right, Operation op, int256 target)
         internal
         pure
         returns (Check memory)
     {
-        return Check({left: left, right: right, evalType: EvalType.PCT, op: op, target: target});
+        return Check({left: left, right: right, evaluation: Evaluation.PERCENTAGE, operation: op, target: target});
     }
 
     function _c(Check memory a, Check memory b) internal pure returns (Check[] memory x) {

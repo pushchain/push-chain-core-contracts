@@ -63,16 +63,17 @@ contract NamingTest is Test {
                 )
             )
         );
-        assertEq(hook.rulesOf.selector, bytes4(keccak256("rulesOf(uint256)")));
+        assertEq(hook.rulesOfJob.selector, bytes4(keccak256("rulesOfJob(uint256)")));
+        assertEq(hook.agwOfJob.selector, bytes4(keccak256("agwOfJob(uint256)")));
+        assertEq(hook.activeJobOf.selector, bytes4(keccak256("activeJobOf(address)")));
         assertEq(hook.AGW_FACTORY.selector, bytes4(keccak256("AGW_FACTORY()")));
         assertEq(hook.SESSION_ENGINE.selector, bytes4(keccak256("SESSION_ENGINE()")));
         assertEq(hook.KERNEL.selector, bytes4(keccak256("KERNEL()")));
         assertEq(hook.KERNEL(), kernel);
         assertEq(hook.AGW_FACTORY(), factory);
         assertEq(hook.SESSION_ENGINE(), engine);
-        (address agw, bytes32 rulesId) = hook.rulesOf(1);
-        assertEq(agw, address(0));
-        assertEq(rulesId, bytes32(0));
+        assertEq(hook.agwOfJob(1), address(0));
+        assertEq(hook.rulesOfJob(1), bytes32(0));
     }
 
     function test_naming_derivedErc20Selectors() public {

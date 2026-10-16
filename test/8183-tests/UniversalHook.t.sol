@@ -5,7 +5,7 @@ import {Vm} from "forge-std/Vm.sol";
 
 import {UniversalEvalBase} from "./UniversalEvalBase.t.sol";
 import {UniversalEvaluator} from "../../src/agentic-commerce-8183/evaluator/UniversalEvaluator.sol";
-import {JobSpec, CriteriaMutability} from "../../src/agentic-commerce-8183/libraries/JobSpecTypes.sol";
+import {JobSpec, AllowedMutability} from "../../src/agentic-commerce-8183/libraries/JobSpecTypes.sol";
 import {EvmQueryEnvelope} from "../../src/agentic-commerce-8183/evaluator/EvmReadLib.sol";
 import {OwnerCheck} from "../../src/agentic-commerce-8183/evaluator/EvaluationTypes.sol";
 import {
@@ -37,10 +37,9 @@ contract UniversalHookTest is UniversalEvalBase {
         uint256 jobId = _createSpec(_swapSpec());
         vm.recordLogs();
         _fund(jobId);
-        (address boundAgw, bytes32 rulesId) = hook.rulesOf(jobId);
-        assertEq(boundAgw, address(agw));
-        assertEq(rulesId, RULES);
-        assertEq(hook.liveJobOf(address(agw)), jobId);
+        assertEq(hook.agwOfJob(jobId), address(agw));
+        assertEq(hook.rulesOfJob(jobId), RULES);
+        assertEq(hook.activeJobOf(address(agw)), jobId);
 
         assertEq(ue.specHashOf(jobId), keccak256(bytes(kernel.getJob(jobId).description)), "frozen: the description");
         assertEq(ue.currentSpec(jobId).length, 0, "no replacement stored");
@@ -85,7 +84,7 @@ contract UniversalHookTest is UniversalEvalBase {
         uint256 second = _createSpec(_anySpec());
         bytes memory fp = _fundParams(second);
         vm.prank(owner);
-        vm.expectRevert(abi.encodeWithSelector(UniversalHookErrors.AGWHasLiveJob.selector, address(agw), first));
+        vm.expectRevert(abi.encodeWithSelector(UniversalHookErrors.WalletHasActiveJob.selector, address(agw), first));
         agw.execute(address(kernel), 0, abi.encodeCall(kernel.fund, (second, BUDGET, fp)));
     }
 
@@ -102,22 +101,21 @@ contract UniversalHookTest is UniversalEvalBase {
         vm.prank(provider);
         kernel.setBudget(jobId, BUDGET, "");
         _fundWith(jobId, abi.encode(RULES));
-        (address boundAgw,) = hook.rulesOf(jobId);
-        assertEq(boundAgw, address(agw));
+        assertEq(hook.agwOfJob(jobId), address(agw));
         assertEq(ue.specHashOf(jobId), bytes32(0), "not frozen");
     }
 
     // ───────────── spec replacement (mutability) ─────────────
 
-    /// @dev PROVIDER_ONLY: the provider replaces the spec when pricing; the client funds against the replacement's
+    /// @dev PROVIDER: the provider replaces the spec when pricing; the client funds against the replacement's
     ///      hash, and that is what gets frozen and judged.
     function test_UH05_providerReplacesSpec_inSetBudget() public {
         JobSpec memory s = _swapSpec();
-        s.mutability = CriteriaMutability.PROVIDER_ONLY;
+        s.allowedMutability = AllowedMutability.PROVIDER;
         uint256 jobId = _createSpec(s);
 
         JobSpec memory counter = _swapSpec();
-        counter.mutability = CriteriaMutability.PROVIDER_ONLY;
+        counter.allowedMutability = AllowedMutability.PROVIDER;
         counter.checks[0].target = 0.37e18; // "I can do 0.37, not 0.38"
         bytes memory replacement = abi.encode(counter);
         vm.prank(provider);
@@ -145,33 +143,33 @@ contract UniversalHookTest is UniversalEvalBase {
         JobSpec memory counter = _swapSpec();
         vm.prank(provider);
         vm.expectRevert(
-            abi.encodeWithSelector(UniversalHookErrors.SpecChangeNotAllowed.selector, CriteriaMutability.NONE)
+            abi.encodeWithSelector(UniversalHookErrors.SpecChangeNotAllowed.selector, AllowedMutability.NONE)
         );
         kernel.setBudget(jobId, BUDGET, abi.encode(counter));
     }
 
     function test_UH07_replacementMayNotChangeFlag() public {
         JobSpec memory s = _swapSpec();
-        s.mutability = CriteriaMutability.BOTH;
+        s.allowedMutability = AllowedMutability.BOTH;
         uint256 jobId = _createSpec(s);
         JobSpec memory counter = _swapSpec();
-        counter.mutability = CriteriaMutability.CLIENT_ONLY;
+        counter.allowedMutability = AllowedMutability.CLIENT;
         vm.prank(provider);
         vm.expectRevert(
             abi.encodeWithSelector(
-                UniversalHookErrors.FlagChanged.selector, CriteriaMutability.BOTH, CriteriaMutability.CLIENT_ONLY
+                UniversalHookErrors.FlagChanged.selector, AllowedMutability.BOTH, AllowedMutability.CLIENT
             )
         );
         kernel.setBudget(jobId, BUDGET, abi.encode(counter));
     }
 
-    /// @dev CLIENT_ONLY: the client sends its replacement with `fund`; the hash must be the replacement's.
+    /// @dev CLIENT: the client sends its replacement with `fund`; the hash must be the replacement's.
     function test_UH08_clientReplacesSpec_inFund() public {
         JobSpec memory s = _anySpec();
-        s.mutability = CriteriaMutability.CLIENT_ONLY;
+        s.allowedMutability = AllowedMutability.CLIENT;
         uint256 jobId = _createSpec(s);
         JobSpec memory mine = _anySpec();
-        mine.mutability = CriteriaMutability.CLIENT_ONLY;
+        mine.allowedMutability = AllowedMutability.CLIENT;
         mine.checks[0].target = 150e6;
         bytes memory replacement = abi.encode(mine);
         _prefund(jobId, 1 ether);
@@ -194,7 +192,7 @@ contract UniversalHookTest is UniversalEvalBase {
 
     function test_UH09_specFrozenAtFund() public {
         JobSpec memory s = _swapSpec();
-        s.mutability = CriteriaMutability.PROVIDER_ONLY;
+        s.allowedMutability = AllowedMutability.PROVIDER;
         uint256 jobId = _createSpec(s);
         _fund(jobId);
         vm.prank(address(hook));
@@ -335,17 +333,17 @@ contract UniversalHookTest is UniversalEvalBase {
         ue.prefund{value: 1}(99);
     }
 
-    /// @dev `BOTH` is the zero value, so a spec whose encoder never sets `mutability` can be replaced by the
+    /// @dev `BOTH` is the zero value, so a spec whose encoder never sets `allowedMutability` can be replaced by the
     ///      provider in `setBudget` and then by the client in `fund`.
     function test_UH20_unsetMutability_isBoth_allowsReplacement() public {
-        assertEq(uint8(CriteriaMutability.BOTH), 0, "BOTH is the zero value");
+        assertEq(uint8(AllowedMutability.BOTH), 0, "BOTH is the zero value");
         JobSpec memory s = _swapSpec();
-        delete s.mutability; // as an encoder that never sets the field would leave it
-        assertEq(uint8(s.mutability), uint8(CriteriaMutability.BOTH));
+        delete s.allowedMutability; // as an encoder that never sets the field would leave it
+        assertEq(uint8(s.allowedMutability), uint8(AllowedMutability.BOTH));
         uint256 jobId = _createSpec(s);
 
         JobSpec memory r = _swapSpec();
-        delete r.mutability;
+        delete r.allowedMutability;
         r.checks[0].target = 0.37e18;
         bytes memory byProvider = abi.encode(r);
         vm.prank(provider);

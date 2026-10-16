@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 pragma solidity 0.8.26;
 
-import {CriteriaMutability} from "./JobSpecTypes.sol";
+import {AllowedMutability} from "./JobSpecTypes.sol";
 
 /// @title UniversalMarketplaceErrors
 /// @notice Every error the marketplace, its Terms helper and JobSpecBuilder raise.
@@ -102,16 +102,16 @@ library JobSpecErrors {
     /// @notice A check side names a read that does not exist or is not in increasing order, or both sides name
     ///         the same read.
     error CheckRead(uint256 check);
-    /// @notice A check's sides don't fit its type: BOOL one `left` read and no `right` · CMP no `right` ·
-    ///         NUM / PCT both sides.
+    /// @notice A check's sides don't fit its type: BOOLEAN one `left` read and no `right` · COMPARE no `right` ·
+    ///         NUMBER / PERCENTAGE both sides.
     error CheckSides(uint256 check);
     /// @notice The checks' sides name more than `MAX_TERMS` reads in total.
     error TermCount(uint256 count);
     /// @notice No read is POST_EXECUTION, so the provider's work would never be measured.
     error NoPostExecutionRead();
-    /// @notice A BOOL check's target is neither 0 nor 1.
+    /// @notice A BOOLEAN check's target is neither 0 nor 1.
     error CheckTarget(uint256 check);
-    /// @notice A BOOL check's operator is not `EQ`.
+    /// @notice A BOOLEAN check's operator is not `EQUAL`.
     error CheckOp(uint256 check);
     /// @notice A logic entry is malformed: bad check index, children out of order or out of range, or a bad `k`.
     error LogicShape(uint256 entry);
@@ -143,11 +143,11 @@ library UniversalHookErrors {
     /// @notice The rules set is not enabled on this AGW.
     error RulesNotLive(address agw, bytes32 rulesId);
     /// @notice The AGW already has a Funded or Submitted job under this hook.
-    error AGWHasLiveJob(address agw, uint256 liveJobId);
+    error WalletHasActiveJob(address agw, uint256 jobId);
     /// @notice The job's mutability flag does not let this party replace the spec.
-    error SpecChangeNotAllowed(CriteriaMutability flag);
+    error SpecChangeNotAllowed(AllowedMutability flag);
     /// @notice A replacement spec tried to change the mutability flag.
-    error FlagChanged(CriteriaMutability expected, CriteriaMutability got);
+    error FlagChanged(AllowedMutability expected, AllowedMutability got);
     /// @notice The spec being frozen is not the one the client agreed to.
     error SpecHashMismatch(bytes32 expected, bytes32 actual);
 }

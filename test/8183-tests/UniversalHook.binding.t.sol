@@ -70,8 +70,7 @@ contract UniversalHookBindingTest is KernelBase {
     function _assertStillOpenAndUnbound(uint256 jobId, uint256 clientBalBefore) internal view {
         assertEq(uint8(_status(jobId)), uint8(IAgenticCommerce.JobStatus.Open));
         assertEq(token.balanceOf(agw), clientBalBefore);
-        (address a,) = hook.rulesOf(jobId);
-        assertEq(a, address(0));
+        assertEq(hook.agwOfJob(jobId), address(0));
     }
 
     // ═════════════════════════ happy path ═════════════════════════
@@ -83,18 +82,15 @@ contract UniversalHookBindingTest is KernelBase {
         vm.prank(agw);
         kernel.fund(jobId, BUDGET, abi.encode(P));
 
-        (address a, bytes32 pid) = hook.rulesOf(jobId);
-        assertEq(a, agw);
-        assertEq(pid, P);
-        assertEq(hook.liveJobOf(agw), jobId);
-        assertTrue(hook.isAGWBusy(agw));
+        assertEq(hook.agwOfJob(jobId), agw);
+        assertEq(hook.rulesOfJob(jobId), P);
+        assertEq(hook.activeJobOf(agw), jobId);
         assertEq(uint8(_status(jobId)), uint8(IAgenticCommerce.JobStatus.Funded));
     }
 
     function test_zeroBudgetJob_bindsNormally() public {
         uint256 jobId = _bind(agw, P, 0);
-        assertEq(hook.liveJobOf(agw), jobId);
-        assertTrue(hook.isAGWBusy(agw));
+        assertEq(hook.activeJobOf(agw), jobId);
     }
 
     // ═════════════════════════ check 1 · optParams length ═════════════════════════
@@ -132,8 +128,7 @@ contract UniversalHookBindingTest is KernelBase {
         kernel.fund(jobId, BUDGET, abi.encode(P));
         assertEq(token.balanceOf(c), bal);
         assertEq(uint8(_status(jobId)), uint8(IAgenticCommerce.JobStatus.Open));
-        (address a,) = hook.rulesOf(jobId);
-        assertEq(a, address(0));
+        assertEq(hook.agwOfJob(jobId), address(0));
     }
 
     // ═════════════════════════ check 3 · mandate live ═════════════════════════
@@ -176,7 +171,7 @@ contract UniversalHookBindingTest is KernelBase {
         uint256 second = _open(agw, BUDGET);
         uint256 bal = token.balanceOf(agw);
         vm.prank(agw);
-        vm.expectRevert(abi.encodeWithSelector(UniversalHookErrors.AGWHasLiveJob.selector, agw, first));
+        vm.expectRevert(abi.encodeWithSelector(UniversalHookErrors.WalletHasActiveJob.selector, agw, first));
         kernel.fund(second, BUDGET, abi.encode(P));
         _assertStillOpenAndUnbound(second, bal);
     }
@@ -185,11 +180,11 @@ contract UniversalHookBindingTest is KernelBase {
         uint256 first = _bind(agw, P, BUDGET);
         vm.prank(provider);
         kernel.submit(first, bytes32(0), "");
-        assertTrue(hook.isAGWBusy(agw));
+        assertEq(hook.activeJobOf(agw), first);
         uint256 second = _open(agw, BUDGET);
         uint256 bal = token.balanceOf(agw);
         vm.prank(agw);
-        vm.expectRevert(abi.encodeWithSelector(UniversalHookErrors.AGWHasLiveJob.selector, agw, first));
+        vm.expectRevert(abi.encodeWithSelector(UniversalHookErrors.WalletHasActiveJob.selector, agw, first));
         kernel.fund(second, BUDGET, abi.encode(P));
         _assertStillOpenAndUnbound(second, bal);
     }
@@ -197,9 +192,9 @@ contract UniversalHookBindingTest is KernelBase {
     // ═════════════════════════ freeing the AGW — every path ═════════════════════════
 
     function _assertSecondJobFunds() internal {
-        assertFalse(hook.isAGWBusy(agw));
+        assertEq(hook.activeJobOf(agw), 0);
         uint256 second = _bind(agw, P, BUDGET);
-        assertEq(hook.liveJobOf(agw), second);
+        assertEq(hook.activeJobOf(agw), second);
     }
 
     function test_freed_afterComplete() public {
@@ -231,7 +226,7 @@ contract UniversalHookBindingTest is KernelBase {
         ids[0] = first;
         vm.prank(admin);
         kernel.batchDetachHook(ids);
-        assertTrue(hook.isAGWBusy(agw), "detach alone does not end the job");
+        assertEq(hook.activeJobOf(agw), first, "detach alone does not end the job");
         vm.warp(block.timestamp + EXPIRY_OFFSET);
         kernel.claimRefund(first);
         _assertSecondJobFunds();
@@ -249,8 +244,8 @@ contract UniversalHookBindingTest is KernelBase {
 
         uint256 a = _bind(agw, P, BUDGET);
         uint256 b = _bind(agw2, P2, BUDGET);
-        assertEq(hook.liveJobOf(agw), a);
-        assertEq(hook.liveJobOf(agw2), b);
+        assertEq(hook.activeJobOf(agw), a);
+        assertEq(hook.activeJobOf(agw2), b);
     }
 
     function test_samePermissionId_differentAGWs_bindIndependently() public {
@@ -263,12 +258,10 @@ contract UniversalHookBindingTest is KernelBase {
 
         uint256 a = _bind(agw, P, BUDGET);
         uint256 b = _bind(agw2, P, BUDGET);
-        (address wa, bytes32 pa) = hook.rulesOf(a);
-        (address wb, bytes32 pb) = hook.rulesOf(b);
-        assertEq(wa, agw);
-        assertEq(wb, agw2);
-        assertEq(pa, P);
-        assertEq(pb, P);
+        assertEq(hook.agwOfJob(a), agw);
+        assertEq(hook.agwOfJob(b), agw2);
+        assertEq(hook.rulesOfJob(a), P);
+        assertEq(hook.rulesOfJob(b), P);
     }
 
     function test_sameRules_sequentialJobs_allowed() public {
@@ -276,8 +269,7 @@ contract UniversalHookBindingTest is KernelBase {
         vm.prank(evaluator);
         kernel.reject(first, bytes32(0), "");
         uint256 second = _bind(agw, P, BUDGET);
-        (, bytes32 pid) = hook.rulesOf(second);
-        assertEq(pid, P);
+        assertEq(hook.rulesOfJob(second), P);
     }
 
     // ═════════════════════════ caller auth ═════════════════════════
@@ -311,10 +303,8 @@ contract UniversalHookBindingTest is KernelBase {
         );
         kernel.fund(jobId, BUDGET, abi.encode(P));
 
-        (address a,) = hook.rulesOf(jobId);
-        assertEq(a, address(0));
-        assertEq(hook.liveJobOf(agw3), 0);
-        assertFalse(hook.isAGWBusy(agw3));
+        assertEq(hook.agwOfJob(jobId), address(0));
+        assertEq(hook.activeJobOf(agw3), 0);
         assertEq(uint8(_status(jobId)), uint8(IAgenticCommerce.JobStatus.Open));
     }
 
@@ -354,15 +344,15 @@ contract UniversalHookBindingTest is KernelBase {
 
     // ═════════════════════════ views ═════════════════════════
 
-    function test_isAGWBusy_neverSeen_false() public {
-        assertFalse(hook.isAGWBusy(makeAddr("never")));
+    function test_activeJobOf_neverSeen_zero() public {
+        assertEq(hook.activeJobOf(makeAddr("never")), 0);
     }
 
     // ═════════════════════════ scope of the rule (D-25) ═════════════════════════
 
     function test_scope_hooklessJob_fundsWhileBusy() public {
-        _bind(agw, P, BUDGET);
-        assertTrue(hook.isAGWBusy(agw));
+        uint256 bound = _bind(agw, P, BUDGET);
+        assertEq(hook.activeJobOf(agw), bound);
         uint256 plain = _budgeted(address(0), BUDGET); // `client` == agw
         vm.prank(agw);
         kernel.fund(plain, BUDGET, "");
@@ -376,9 +366,8 @@ contract UniversalHookBindingTest is KernelBase {
         uint256 jobId = _budgeted(address(other), BUDGET);
         vm.prank(agw);
         kernel.fund(jobId, BUDGET, abi.encode(P));
-        assertEq(hook.liveJobOf(agw), 0);
-        (address a,) = hook.rulesOf(jobId);
-        assertEq(a, address(0));
+        assertEq(hook.activeJobOf(agw), 0);
+        assertEq(hook.agwOfJob(jobId), address(0));
     }
 
     // ═════════════════════════ upgrade + layout ═════════════════════════
@@ -391,14 +380,13 @@ contract UniversalHookBindingTest is KernelBase {
         vm.prank(hookProxyAdminOwner);
         pa.upgradeAndCall(ITransparentUpgradeableProxy(address(hook)), newImpl, "");
 
-        (address a, bytes32 pid) = hook.rulesOf(first);
-        assertEq(a, agw);
-        assertEq(pid, P);
-        assertEq(hook.liveJobOf(agw), first);
+        assertEq(hook.agwOfJob(first), agw);
+        assertEq(hook.rulesOfJob(first), P);
+        assertEq(hook.activeJobOf(agw), first);
 
         uint256 second = _open(agw, BUDGET);
         vm.prank(agw);
-        vm.expectRevert(abi.encodeWithSelector(UniversalHookErrors.AGWHasLiveJob.selector, agw, first));
+        vm.expectRevert(abi.encodeWithSelector(UniversalHookErrors.WalletHasActiveJob.selector, agw, first));
         kernel.fund(second, BUDGET, abi.encode(P));
     }
 

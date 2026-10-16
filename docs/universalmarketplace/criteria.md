@@ -38,7 +38,7 @@ struct JobSpec {
     Read[] reads;
     Check[] checks;
     Logic[] logic;                  // logic[0] is the root: the job passes if it passes
-    CriteriaMutability mutability;  // who may replace these criteria before `fund`; marketplace jobs are NONE
+    AllowedMutability allowedMutability;  // who may replace these criteria before `fund`; marketplace jobs are NONE
     bytes32 origin;                 // keccak256(abi.encode(marketplace, cardId, cardVersion, principal))
 }
 ```
@@ -71,7 +71,7 @@ is the full CAIP-2 string `"eip155:<id>"`.
 | `PRE_EXECUTION` | the block recorded at `fund`: the chain's tracked height then |
 
 A spec needs at least one POST_EXECUTION read. A change over the job is a POST read against a PRE read of the same
-call (a `NUM` or `PCT` check, below). An unreadable PRE answer counts as answered: the evaluation still starts, the
+call (a `NUMBER` or `PERCENTAGE` check, below). An unreadable PRE answer counts as answered: the evaluation still starts, the
 checks that need it are UNKNOWN, and the evaluator sends it again, at its `fund` block, with the POST reads.
 
 `outputs` describes the return types so the evaluator can find one value in the answer. Codes:
@@ -98,7 +98,7 @@ design's decoder is [`test/8183-tests/helpers/V2Decoder.sol`](../../test/8183-te
 |---|---|
 | uint / int | the number (a uint above `int256.max` is "can't tell") |
 | bool | 0 or 1 |
-| address, bytesN | the raw word (compare with EQ / NEQ) |
+| address, bytesN | the raw word (compare with EQUAL / NOT_EQUAL) |
 | bytes, string | `keccak256` of the content |
 | array | its length |
 
@@ -106,25 +106,25 @@ design's decoder is [`test/8183-tests/helpers/V2Decoder.sol`](../../test/8183-te
 
 ```solidity
 struct Check {
-    uint8[] left;       // indexes into reads, increasing · BOOL: exactly one
-    uint8[] right;      // indexes into reads, increasing, none in `left` · NUM / PCT: at least one · BOOL / CMP: none
-    EvalType evalType;
-    Op op;              // EQ, NEQ, GT, GTE, LT, LTE
+    uint8[] left;       // indexes into reads, increasing · BOOLEAN: exactly one
+    uint8[] right;      // indexes into reads, increasing, none in `left` · NUMBER / PERCENTAGE: at least one · BOOLEAN / COMPARE: none
+    Evaluation evaluation;
+    Operation operation;              // EQUAL, NOT_EQUAL, GREATER_THAN, GREATER_OR_EQUAL, LESS_THAN, LESS_OR_EQUAL
     int256 target;      // in the contract's own units
 }
 ```
 
 Each side is the sum of its reads: L = Σ`left`, R = Σ`right`.
 
-| `EvalType` | Passes when | Sides |
+| `Evaluation` | Passes when | Sides |
 |---|---|---|
-| `BOOL` | `L == target` (`op` must be `EQ`, `target` 0 or 1) | one `left` read, no `right` |
-| `CMP` | `L op target` | `left` only |
-| `NUM` | `(L − R) op target` | both |
-| `PCT` | `(L − R) × 10 000 op target × R`: the change in basis points, compared without dividing; `R ≤ 0` fails | both |
+| `BOOLEAN` | `L == target` (`op` must be `EQUAL`, `target` 0 or 1) | one `left` read, no `right` |
+| `COMPARE` | `L op target` | `left` only |
+| `NUMBER` | `(L − R) op target` | both |
+| `PERCENTAGE` | `(L − R) × 10 000 op target × R`: the change in basis points, compared without dividing; `R ≤ 0` fails | both |
 
 A side with a missing or unreadable read, or a sum that overflows, makes the check UNKNOWN. With a PRE read on the
-right, `NUM` and `PCT` measure the change over the job: `left [after], right [before], NUM, GTE, x` is "grew by at
+right, `NUMBER` and `PERCENTAGE` measure the change over the job: `left [after], right [before], NUMBER, GREATER_OR_EQUAL, x` is "grew by at
 least x". Sums compare totals, for example Aave plus Morpho holdings after the job against the same two before. The
 checks' sides may name at most `MAX_TERMS` (64) reads in total.
 
@@ -144,16 +144,16 @@ a higher index than their parent, so the tree has no cycles and can be evaluated
 Each check comes out PASS, FAIL or UNKNOWN, and the entries combine them in three-valued logic, so a job can be
 decided while some checks are still UNKNOWN.
 
-### `mutability`
+### `allowedMutability`
 
 Who may replace the criteria before the job is funded:
 
-| `CriteriaMutability` | May replace |
+| `AllowedMutability` | May replace |
 |---|---|
 | `BOTH` (the zero value) | the provider in `setBudget`, or the client in `fund` |
 | `NONE` | nobody |
-| `CLIENT_ONLY` | the client, in `fund` |
-| `PROVIDER_ONLY` | the provider, in `setBudget` |
+| `CLIENT` | the client, in `fund` |
+| `PROVIDER` | the provider, in `setBudget` |
 
 The flag in the `createJob` description governs, and a replacement must carry the same flag. The builder always
 writes `NONE`: a marketplace job's criteria are exactly the card's.
@@ -226,8 +226,8 @@ enum TargetSource { FIXED, PRINCIPAL_BPS, PARAM, CEA }
 struct CheckTemplate {
     uint8[] left;        // copied
     uint8[] right;       // copied
-    EvalType evalType;
-    Op op;
+    Evaluation evaluation;
+    Operation operation;
     TargetSource source;
     int256 value;
 }
@@ -268,7 +268,7 @@ step 9 and by both preview views:
 4. **Reads**: copy each read, `at` included; copy its `args` into a fresh buffer; apply each fill. A fill must
    satisfy `32·word + 32 ≤ args.length`, else `FillOutOfBounds(read, fill)`. This bound check is what makes the one
    inline-assembly `mstore` safe.
-5. **Checks**: copy `left`, `right`, `evalType`, `op`; resolve the target. For `PRINCIPAL_BPS`, if
+5. **Checks**: copy `left`, `right`, `evaluation`, `op`; resolve the target. For `PRINCIPAL_BPS`, if
    `principal > type(uint256).max / bps`, revert `TargetOverflow(check)`. Once the product fits, the quotient is at
    most `uint256.max / 10 000`, which always fits in `int256`, so the cast cannot truncate.
 6. **Logic** copied verbatim. `executeBy`, `failFinalAt = executeBy + settleWindow`, `origin`, and
@@ -311,8 +311,8 @@ reads[1]  eip155 / 11155111, 12 confirmations, POST_EXECUTION
           Pool.getReserveData(address)      args = abi.encode(USDC) fills = []
           outputs = [TUPLE 1, TUPLE 15, (TUPLE 1, UINT), UINT×7, ADDRESS×4, UINT×3]
           field = [0, 2]                    (the struct's 3rd field: currentLiquidityRate)
-checks[0] left [0], CMP, GTE, PRINCIPAL_BPS, 9999     "deposited ≥ 99.99% of principal"
-checks[1] left [1], CMP, GTE, FIXED, 0.04e27          "rate ≥ 4% (ray)"
+checks[0] left [0], COMPARE, GREATER_OR_EQUAL, PRINCIPAL_BPS, 9999     "deposited ≥ 99.99% of principal"
+checks[1] left [1], COMPARE, GREATER_OR_EQUAL, FIXED, 0.04e27          "rate ≥ 4% (ray)"
 logic     [ ALL(1, 2), CHECK 0, CHECK 1 ]
 params    []
 ```
@@ -347,12 +347,12 @@ reads[0]  eip155 / 11155111, 3 confirmations, POST_EXECUTION
           WETH.balanceOf(address)   args = 32 zero bytes   fills = [word 0 ← CEA]
           outputs = [TUPLE 1, UINT]  field = [0]
 reads[1]  as reads[0], but PRE_EXECUTION                "the balance at fund"
-checks[0] left [0], right [1], NUM, GTE, PARAM, 0     "balance grew by ≥ params[0]"
+checks[0] left [0], right [1], NUMBER, GREATER_OR_EQUAL, PARAM, 0     "balance grew by ≥ params[0]"
 logic     [ CHECK 0 ]
 params    [ {min: 1, max: 1e30} ]
 ```
 
-A job with `params = [0.38e18]` gets `checks[0].target = 0.38e18`. `NUM` subtracts read 1 (the CEA's WETH at
+A job with `params = [0.38e18]` gets `checks[0].target = 0.38e18`. `NUMBER` subtracts read 1 (the CEA's WETH at
 `fund`) from read 0 (after the provider's execution), so WETH the CEA already held doesn't count. A job with
 `params = [0]` reverts `ParamOutOfRange(0, 0)`; one with no params reverts `ParamCountMismatch(1, 0)`.
 

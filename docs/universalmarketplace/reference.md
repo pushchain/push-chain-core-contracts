@@ -274,7 +274,7 @@ itself. It has no storage.
 [`src/agentic-commerce-8183/hooks/UniversalHook.sol`](../../src/agentic-commerce-8183/hooks/UniversalHook.sol),
 on [`BaseERC8183Hook`](../../src/agentic-commerce-8183/hooks/BaseERC8183Hook.sol). Not part of the marketplace,
 but every marketplace job is created with it. Behind a `TransparentUpgradeableProxy`, initialised in the proxy's
-constructor; storage continues the base at slot 50 (`AGW_FACTORY`, `SESSION_ENGINE`, `rulesOf`, `liveJobOf`,
+constructor; storage continues the base at slot 50 (`AGW_FACTORY`, `SESSION_ENGINE`, `_bindings`, `_lastBoundJob`,
 `EVALUATOR`, then a gap). Deployed together with the UniversalEvaluator by
 [`deployUniversalEvaluator.s.sol`](../../scripts/agentic-commerce-8183/deployUniversalEvaluator.s.sol).
 
@@ -282,11 +282,11 @@ constructor; storage continues the base at slot 50 (`AGW_FACTORY`, `SESSION_ENGI
 |---|---|
 | `initialize(address kernel, address agwFactory, address sessionEngine, address evaluator)` | All non-zero (`ERC8183HookErrors.ZeroAddress()`). Sets `KERNEL`, `AGW_FACTORY`, `SESSION_ENGINE`, `EVALUATOR`. |
 | `beforeAction` / `afterAction` | Kernel only (`CallerIsNotKernel(caller)`). Acts in `beforeAction(fund)` for every job, and in `afterAction` of `setBudget`, `fund` and `submit` for jobs whose evaluator is `EVALUATOR`; every other action passes through. |
-| `beforeAction(fund)` | In order: `fund.optParams` is 32 bytes, `abi.encode(rulesId)`, or at least 128 bytes, `abi.encode(rulesId, expectedSpecHash, newSpec)` (`InvalidOptParams(length)`); the client is a factory AGW (`CallerIsNotAGW(caller)`); `SESSION_ENGINE.isPermissionEnabled(rulesId, client)` (`RulesNotLive(agw, rulesId)`); the AGW has no Funded or Submitted job under this hook (`AGWHasLiveJob(agw, liveJobId)`). Then records `rulesOf[jobId] = {agw, rulesId}`, `liveJobOf[agw] = jobId`, and emits `RulesBound(jobId, agw, rulesId)`. |
-| `afterAction` (evaluated jobs) | The provider may replace the criteria in `setBudget` and the client in `fund`, as the description's `mutability` allows (`SpecChangeNotAllowed(flag)`, `FlagChanged(expected, got)`; emits `SpecReplaced`). At `fund` the final criteria must hash to `expectedSpecHash` (`SpecHashMismatch(expected, actual)`), so the 32-byte form can't fund an evaluated job; the evaluator then freezes them and takes the PRE reads (`startSnapshot`; emits `SpecFrozen`). At `submit` the evaluator fixes the end blocks and sends the POST reads (`verifyFromSubmit`). |
-| `isAGWBusy(address agw)` | Whether the AGW's bound job is Funded or Submitted. |
-| `rulesOf(uint256 jobId)` | `(address agw, bytes32 rulesId)` bound at `fund`. |
-| `liveJobOf(address agw)` | The last job bound for the AGW. |
+| `beforeAction(fund)` | In order: `fund.optParams` is 32 bytes, `abi.encode(rulesId)`, or at least 128 bytes, `abi.encode(rulesId, expectedSpecHash, newSpec)` (`InvalidOptParams(length)`); the client is a factory AGW (`CallerIsNotAGW(caller)`); `SESSION_ENGINE.isPermissionEnabled(rulesId, client)` (`RulesNotLive(agw, rulesId)`); the AGW has no Funded or Submitted job under this hook (`WalletHasActiveJob(agw, jobId)`). Then records the binding (`rulesOfJob`, `agwOfJob`) and the AGW's active job (`activeJobOf`), and emits `RulesBound(jobId, agw, rulesId)`. |
+| `afterAction` (evaluated jobs) | The provider may replace the criteria in `setBudget` and the client in `fund`, as the description's `allowedMutability` allows (`SpecChangeNotAllowed(flag)`, `FlagChanged(expected, got)`; emits `SpecReplaced`). At `fund` the final criteria must hash to `expectedSpecHash` (`SpecHashMismatch(expected, actual)`), so the 32-byte form can't fund an evaluated job; the evaluator then freezes them and takes the PRE reads (`startSnapshot`; emits `SpecFrozen`). At `submit` the evaluator fixes the end blocks and sends the POST reads (`verifyFromSubmit`). |
+| `activeJobOf(address agw)` | The AGW's last bound job while it is Funded or Submitted, else 0. |
+| `rulesOfJob(uint256 jobId)` | The `rulesId` bound at `fund`, or zero. |
+| `agwOfJob(uint256 jobId)` | The AGW bound at `fund`, or zero. |
 | `EVALUATOR()` | The UniversalEvaluator; jobs naming another evaluator get the rules binding only. |
 
 Because the binding runs in `beforeAction`, any revert leaves the job Open with no escrow moved. A wallet is freed
@@ -428,7 +428,7 @@ Same shapes as the AGW's errors of the same name.
 
 | Library | Error |
 |---|---|
-| `UniversalHookErrors` | `InvalidOptParams(uint256 length)`, `CallerIsNotAGW(address caller)`, `RulesNotLive(address agw, bytes32 rulesId)`, `AGWHasLiveJob(address agw, uint256 liveJobId)`, `SpecChangeNotAllowed(CriteriaMutability flag)`, `FlagChanged(CriteriaMutability expected, CriteriaMutability got)`, `SpecHashMismatch(bytes32 expected, bytes32 actual)` |
+| `UniversalHookErrors` | `InvalidOptParams(uint256 length)`, `CallerIsNotAGW(address caller)`, `RulesNotLive(address agw, bytes32 rulesId)`, `WalletHasActiveJob(address agw, uint256 jobId)`, `SpecChangeNotAllowed(AllowedMutability flag)`, `FlagChanged(AllowedMutability expected, AllowedMutability got)`, `SpecHashMismatch(bytes32 expected, bytes32 actual)` |
 | `ERC8183HookErrors` | `CallerIsNotKernel(address caller)`, `ZeroAddress()` |
 
 The evaluator's errors (`UniversalEvaluatorErrors`, `JobSpecErrors`, `EvmReadErrors`) are in the same file.

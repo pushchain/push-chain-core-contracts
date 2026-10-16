@@ -25,7 +25,13 @@ import {UniversalMarketplaceTerms} from "../../src/agentic-commerce-8183/Univers
 import {IUniversalMarketplace} from "../../src/agentic-commerce-8183/interfaces/IUniversalMarketplace.sol";
 import {UniversalMarketplaceErrors} from "../../src/agentic-commerce-8183/libraries/Errors.sol";
 import {JobSpecBuilder} from "../../src/agentic-commerce-8183/libraries/JobSpecBuilder.sol";
-import {EvalType, Op, LogicKind, Logic, JobSpec} from "../../src/agentic-commerce-8183/libraries/JobSpecTypes.sol";
+import {
+    Evaluation,
+    Operation,
+    LogicKind,
+    Logic,
+    JobSpec
+} from "../../src/agentic-commerce-8183/libraries/JobSpecTypes.sol";
 import {
     OwnerIntent,
     OWNER_LANE_FLAG,
@@ -215,8 +221,8 @@ abstract contract MarketplaceFixtures is KernelBase, TemplateParts {
         t.reads[1] =
             _read(SEPOLIA_ID, pool, GET_RESERVE_DATA, abi.encode(usdc), _noFills(), _reserveDataOut(), _f2(0, 2));
         t.checks = new CheckTemplate[](2);
-        t.checks[0] = _chk(0, EvalType.CMP, Op.GTE, TargetSource.PRINCIPAL_BPS, 9999);
-        t.checks[1] = _chk(1, EvalType.CMP, Op.GTE, TargetSource.FIXED, 0.04e27);
+        t.checks[0] = _chk(0, Evaluation.COMPARE, Operation.GREATER_OR_EQUAL, TargetSource.PRINCIPAL_BPS, 9999);
+        t.checks[1] = _chk(1, Evaluation.COMPARE, Operation.GREATER_OR_EQUAL, TargetSource.FIXED, 0.04e27);
         t.logic = new Logic[](3);
         t.logic[0] = _parent(LogicKind.ALL, _kids(1, 2), 0);
         t.logic[1] = _checkLogic(0);
@@ -232,7 +238,7 @@ abstract contract MarketplaceFixtures is KernelBase, TemplateParts {
         t.reads[1] = _preRead(_balanceOfCEA(SEPOLIA_ID, weth));
         t.reads[1].minConfirmations = 3;
         t.checks = new CheckTemplate[](1);
-        t.checks[0] = _pair(0, 1, EvalType.NUM, Op.GTE, TargetSource.PARAM, 0);
+        t.checks[0] = _pair(0, 1, Evaluation.NUMBER, Operation.GREATER_OR_EQUAL, TargetSource.PARAM, 0);
         t.logic = new Logic[](1);
         t.logic[0] = _checkLogic(0);
         t.params = new ParamBounds[](1);

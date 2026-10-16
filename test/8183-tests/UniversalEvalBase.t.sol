@@ -17,10 +17,10 @@ import {
     Read,
     Check,
     Logic,
-    EvalType,
-    Op,
+    Evaluation,
+    Operation,
     LogicKind,
-    CriteriaMutability,
+    AllowedMutability,
     ReadAt,
     T_TUPLE,
     T_UINT,
@@ -237,13 +237,19 @@ abstract contract UniversalEvalBase is KernelBase {
         s.reads[0] = _balanceRead(weth, cea);
         s.reads[SWAP_PRE] = _pre(_balanceRead(weth, cea));
         s.checks = new Check[](1);
-        s.checks[0] = Check({left: _u8(0), right: _u8(1), evalType: EvalType.NUM, op: Op.GTE, target: 0.38e18});
+        s.checks[0] = Check({
+            left: _u8(0),
+            right: _u8(1),
+            evaluation: Evaluation.NUMBER,
+            operation: Operation.GREATER_OR_EQUAL,
+            target: 0.38e18
+        });
         s.logic = new Logic[](1);
         s.logic[0] = _checkLogic(0);
-        s.mutability = CriteriaMutability.NONE;
+        s.allowedMutability = AllowedMutability.NONE;
     }
 
-    /// @notice "Deposited into Aave OR Morpho": two CMP reads under ANY. No snapshot.
+    /// @notice "Deposited into Aave OR Morpho": two COMPARE reads under ANY. No snapshot.
     function _anySpec() internal view returns (JobSpec memory s) {
         s.executeBy = uint64(block.timestamp + 1 hours);
         s.failFinalAt = uint64(block.timestamp + 2 hours);
@@ -251,13 +257,25 @@ abstract contract UniversalEvalBase is KernelBase {
         s.reads[0] = _balanceRead(ausdc, cea);
         s.reads[1] = _balanceRead(morphoVault, cea);
         s.checks = new Check[](2);
-        s.checks[0] = Check({left: _u8(0), right: _none(), evalType: EvalType.CMP, op: Op.GTE, target: 99.99e6});
-        s.checks[1] = Check({left: _u8(1), right: _none(), evalType: EvalType.CMP, op: Op.GTE, target: 99.99e6});
+        s.checks[0] = Check({
+            left: _u8(0),
+            right: _none(),
+            evaluation: Evaluation.COMPARE,
+            operation: Operation.GREATER_OR_EQUAL,
+            target: 99.99e6
+        });
+        s.checks[1] = Check({
+            left: _u8(1),
+            right: _none(),
+            evaluation: Evaluation.COMPARE,
+            operation: Operation.GREATER_OR_EQUAL,
+            target: 99.99e6
+        });
         s.logic = new Logic[](3);
         s.logic[0] = Logic({kind: LogicKind.ANY, check: 0, children: _u8(1, 2), k: 0});
         s.logic[1] = _checkLogic(0);
         s.logic[2] = _checkLogic(1);
-        s.mutability = CriteriaMutability.NONE;
+        s.allowedMutability = AllowedMutability.NONE;
     }
 
     // ───────────── lifecycle helpers ─────────────

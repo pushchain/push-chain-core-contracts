@@ -20,8 +20,9 @@ library ReferenceJudge {
         uint8[] memory checkRes = new uint8[](checks.length);
         for (uint256 i; i < checks.length; ++i) {
             Check memory c = checks[i];
-            checkRes[i] =
-                JobSpecLib.checkResult(c.evalType, c.op, c.target, _sum(c.left, values), _sum(c.right, values));
+            checkRes[i] = JobSpecLib.checkResult(
+                c.evaluation, c.operation, c.target, _sum(c.left, values), _sum(c.right, values)
+            );
         }
 
         uint8[] memory logicRes = new uint8[](logic.length);

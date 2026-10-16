@@ -2,8 +2,8 @@
 pragma solidity 0.8.26;
 
 import {
-    EvalType,
-    Op,
+    Evaluation,
+    Operation,
     LogicKind,
     Logic,
     ReadAt,
@@ -98,21 +98,22 @@ abstract contract TemplateParts {
         return _read(chainId, token, BALANCE_OF, new bytes(32), _ceaFill(0), _uintOut(), _f(0));
     }
 
-    function _chk(uint8 read, EvalType e, Op op, TargetSource src, int256 value)
+    function _chk(uint8 read, Evaluation e, Operation op, TargetSource src, int256 value)
         internal
         pure
         returns (CheckTemplate memory)
     {
-        return CheckTemplate({left: _f(read), right: _none(), evalType: e, op: op, source: src, value: value});
+        return CheckTemplate({left: _f(read), right: _none(), evaluation: e, operation: op, source: src, value: value});
     }
 
-    /// @dev A NUM / PCT check: `left` against `right`.
-    function _pair(uint8 left, uint8 right, EvalType e, Op op, TargetSource src, int256 value)
+    /// @dev A NUMBER / PERCENTAGE check: `left` against `right`.
+    function _pair(uint8 left, uint8 right, Evaluation e, Operation op, TargetSource src, int256 value)
         internal
         pure
         returns (CheckTemplate memory)
     {
-        return CheckTemplate({left: _f(left), right: _f(right), evalType: e, op: op, source: src, value: value});
+        return
+            CheckTemplate({left: _f(left), right: _f(right), evaluation: e, operation: op, source: src, value: value});
     }
 
     function _checkLogic(uint8 check) internal pure returns (Logic memory) {

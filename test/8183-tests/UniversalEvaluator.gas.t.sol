@@ -13,10 +13,10 @@ import {
     Read,
     Check,
     Logic,
-    EvalType,
-    Op,
+    Evaluation,
+    Operation,
     LogicKind,
-    CriteriaMutability,
+    AllowedMutability,
     ReadAt,
     MAX_READS,
     MAX_CHECKS,
@@ -27,7 +27,7 @@ import {Verdict, MAX_DESCRIPTION_LENGTH} from "../../src/agentic-commerce-8183/e
 /// @notice The callbacks must fit Read State's gas limits for the largest spec the rules allow.
 /// @dev Reads are 15-field structs. A spec must also fit MAX_DESCRIPTION_LENGTH (32 KB), which keeps every count from
 ///      being at its maximum at once, so the worst cases are split:
-///      - GAS01, the most logic: 32 entries over 16 NUM checks, each a POST read against a PRE read (8 of each);
+///      - GAS01, the most logic: 32 entries over 16 NUMBER checks, each a POST read against a PRE read (8 of each);
 ///      - GAS03, the most reads and terms: 32 POST reads and MAX_TERMS (64) terms across 16 checks that all wait for
 ///        the last answer.
 ///      A callback that runs out of gas is never retried, so this is a hard ceiling, not an optimisation.
@@ -45,7 +45,11 @@ contract UniversalEvaluatorGasTest is UniversalEvalBase {
             uint8 venue = uint8(i % VENUES);
             // forge-lint: disable-next-line(unsafe-typecast)
             s.checks[i] = Check({
-                left: _u8(venue), right: _u8(venue + uint8(VENUES)), evalType: EvalType.NUM, op: Op.GTE, target: 1
+                left: _u8(venue),
+                right: _u8(venue + uint8(VENUES)),
+                evaluation: Evaluation.NUMBER,
+                operation: Operation.GREATER_OR_EQUAL,
+                target: 1
             });
         }
     }
@@ -64,8 +68,13 @@ contract UniversalEvaluatorGasTest is UniversalEvalBase {
             uint8 b = uint8(16 + (i + 1) % 15);
             if (a > b) (a, b) = (b, a);
             // forge-lint: disable-next-line(unsafe-typecast)
-            s.checks[i] =
-                Check({left: _u8(uint8(i), 31), right: _u8(a, b), evalType: EvalType.NUM, op: Op.GTE, target: 0});
+            s.checks[i] = Check({
+                left: _u8(uint8(i), 31),
+                right: _u8(a, b),
+                evaluation: Evaluation.NUMBER,
+                operation: Operation.GREATER_OR_EQUAL,
+                target: 0
+            });
         }
     }
 
@@ -87,7 +96,7 @@ contract UniversalEvaluatorGasTest is UniversalEvalBase {
             // forge-lint: disable-next-line(unsafe-typecast)
             s.logic[i] = _checkLogic(uint8((i - 1) % MAX_CHECKS));
         }
-        s.mutability = CriteriaMutability.NONE;
+        s.allowedMutability = AllowedMutability.NONE;
     }
 
     /// @dev Aave's `getReserveData` on venue `venue`, its rate (field [0, 2]).
@@ -166,7 +175,7 @@ contract UniversalEvaluatorGasTest is UniversalEvalBase {
         assertEq(uint8(_status(jobId)), uint8(IAgenticCommerce.JobStatus.Completed));
     }
 
-    /// @dev The common case: one read, one NUM check. What a provider's `submit` costs.
+    /// @dev The common case: one read, one NUMBER check. What a provider's `submit` costs.
     function test_GAS02_swap_submitGas() public {
         vm.fee(0);
         uint256 jobId = _createSpec(_swapSpec());

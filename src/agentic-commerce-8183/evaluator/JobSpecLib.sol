@@ -6,8 +6,8 @@ import {
     Read,
     Check,
     Logic,
-    EvalType,
-    Op,
+    Evaluation,
+    Operation,
     LogicKind,
     ReadAt,
     MAX_READS,
@@ -33,9 +33,9 @@ import {JobSpecErrors} from "../libraries/Errors.sol";
 ///      Judging (every check comes out PASS, FAIL or UNKNOWN; the logic combines them; the root is the verdict):
 ///      - Each side is the sum of its reads; a side with a missing or unreadable read, or a sum that overflows, is
 ///        UNKNOWN. With L = Σleft and R = Σright:
-///        BOOL `L == target` · CMP `L op target` · NUM `(L - R) op target` ·
-///        PCT: the difference in basis points, `(L - R) * 10_000 / R op target`, and PCT with `R <= 0` FAILS.
-///      - PCT is compared exactly, as `(L - R) * 10_000 op target * R` (`R > 0` keeps the direction). Dividing
+///        BOOLEAN `L == target` · COMPARE `L op target` · NUMBER `(L - R) op target` ·
+///        PERCENTAGE: the difference in basis points, `(L - R) * 10_000 / R op target`, and PERCENTAGE with `R <= 0` FAILS.
+///      - PERCENTAGE is compared exactly, as `(L - R) * 10_000 op target * R` (`R > 0` keeps the direction). Dividing
 ///        first would round toward zero, so a tiny loss would read as 0 and pass `>= 0`.
 ///      - Never reverts on any answer: an overflow makes the check UNKNOWN.
 ///      - The readable, unpacked reference judge lives in the tests (`helpers/ReferenceJudge.sol`); the suite checks
@@ -89,11 +89,11 @@ library JobSpecLib {
             if (!okL || !okR || (left & right) != 0) revert JobSpecErrors.CheckRead(i);
             uint256 nl = c.left.length;
             uint256 nr = c.right.length;
-            bool sides = c.evalType == EvalType.BOOL ? nl == 1 && nr == 0 : nl != 0 && (nr != 0) == isPair(c.evalType);
+            bool sides = c.evaluation == Evaluation.BOOLEAN ? nl == 1 && nr == 0 : nl != 0 && (nr != 0) == isPair(c.evaluation);
             if (!sides) revert JobSpecErrors.CheckSides(i);
             terms += nl + nr;
-            if (c.evalType == EvalType.BOOL) {
-                if (c.op != Op.EQ) revert JobSpecErrors.CheckOp(i); // BOOL is `left == target`
+            if (c.evaluation == Evaluation.BOOLEAN) {
+                if (c.operation != Operation.EQUAL) revert JobSpecErrors.CheckOp(i); // BOOLEAN is `left == target`
                 if (c.target != 0 && c.target != 1) revert JobSpecErrors.CheckTarget(i);
             }
         }
@@ -147,9 +147,9 @@ library JobSpecLib {
         }
     }
 
-    /// @notice Whether the type compares two sides (NUM / PCT) rather than one side with `target`.
-    function isPair(EvalType e) internal pure returns (bool) {
-        return e == EvalType.NUM || e == EvalType.PCT;
+    /// @notice Whether the type compares two sides (NUMBER / PERCENTAGE) rather than one side with `target`.
+    function isPair(Evaluation e) internal pure returns (bool) {
+        return e == Evaluation.NUMBER || e == Evaluation.PERCENTAGE;
     }
 
     /// @notice A side's reads as a bitmask (bit i: read i). Assumes `validate` passed (indexes below 32).
@@ -180,21 +180,21 @@ library JobSpecLib {
     // ───────────────────────────── judging ─────────────────────────────
 
     /// @notice One check: PASS, FAIL or UNKNOWN. `a` is the `left` side's sum, `b` the `right` side's.
-    function checkResult(EvalType e, Op op, int256 target, Answer memory a, Answer memory b)
+    function checkResult(Evaluation e, Operation op, int256 target, Answer memory a, Answer memory b)
         internal
         pure
         returns (uint8)
     {
         if (!a.ok) return UNKNOWN;
-        if (e == EvalType.BOOL) return a.value == target ? PASS : FAIL;
-        if (e == EvalType.CMP) return _cmp(a.value, op, target) ? PASS : FAIL;
+        if (e == Evaluation.BOOLEAN) return a.value == target ? PASS : FAIL;
+        if (e == Evaluation.COMPARE) return _cmp(a.value, op, target) ? PASS : FAIL;
 
         if (!b.ok) return UNKNOWN;
         (bool ok, int256 delta) = _sub(a.value, b.value);
         if (!ok) return UNKNOWN;
-        if (e == EvalType.NUM) return _cmp(delta, op, target) ? PASS : FAIL;
+        if (e == Evaluation.NUMBER) return _cmp(delta, op, target) ? PASS : FAIL;
 
-        // PCT, in basis points, compared without dividing
+        // PERCENTAGE, in basis points, compared without dividing
         if (b.value <= 0) return FAIL;
         (bool okL, int256 lhs) = _mul(delta, 10_000);
         (bool okR, int256 rhs) = _mul(target, b.value);
@@ -295,12 +295,12 @@ library JobSpecLib {
         }
     }
 
-    function _cmp(int256 x, Op op, int256 y) private pure returns (bool) {
-        if (op == Op.EQ) return x == y;
-        if (op == Op.NEQ) return x != y;
-        if (op == Op.GT) return x > y;
-        if (op == Op.GTE) return x >= y;
-        if (op == Op.LT) return x < y;
+    function _cmp(int256 x, Operation op, int256 y) private pure returns (bool) {
+        if (op == Operation.EQUAL) return x == y;
+        if (op == Operation.NOT_EQUAL) return x != y;
+        if (op == Operation.GREATER_THAN) return x > y;
+        if (op == Operation.GREATER_OR_EQUAL) return x >= y;
+        if (op == Operation.LESS_THAN) return x < y;
         return x <= y;
     }
 }

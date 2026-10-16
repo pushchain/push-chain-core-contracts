@@ -2,7 +2,7 @@
 pragma solidity 0.8.26;
 
 import {AllowedCall, OwnerIntent, Session} from "../interfaces/external/IAGW.sol";
-import {EvalType, Op, Logic, ReadAt} from "./JobSpecTypes.sol";
+import {Evaluation, Operation, Logic, ReadAt} from "./JobSpecTypes.sol";
 
 /// @title Types — the UniversalMarketplace package's structs and enums, file-level.
 /// @dev - Cards, jobs and init: the marketplace (UniversalMarketplace, IUniversalMarketplace).
@@ -161,8 +161,8 @@ enum TargetSource {
 struct CheckTemplate {
     uint8[] left;
     uint8[] right;
-    EvalType evalType;
-    Op op;
+    Evaluation evaluation;
+    Operation operation;
     TargetSource source;
     int256 value;
 }
