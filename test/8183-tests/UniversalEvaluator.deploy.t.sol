@@ -55,9 +55,8 @@ contract UniversalEvaluatorDeployTest is UniversalEvalBase {
     /// @dev `check` refuses a pair that isn't wired together, or a proxy someone else controls.
     function test_UD03_checkRefusesAMismatchedPair() public {
         UniversalEvaluatorDeploy.Deployed memory other = deployed;
-        other.evaluator = new UniversalEvaluator(
-            address(kernel), address(hook), address(readState), address(core), feeRecipient, _config()
-        );
+        other.evaluator =
+            _newEvaluator(address(kernel), address(hook), address(readState), address(core), feeRecipient, _config());
         vm.expectRevert(bytes("hook: evaluator"));
         this.checkWith(params, other);
 

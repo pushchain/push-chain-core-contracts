@@ -470,22 +470,22 @@ contract UniversalEvaluatorTest is UniversalEvalBase {
         assertEq(ue.FEE_RECIPIENT(), feeRecipient);
 
         vm.expectRevert(UniversalEvaluatorErrors.ZeroValue.selector);
-        new UniversalEvaluator(address(0), address(hook), address(readState), address(core), feeRecipient, want);
+        _newEvaluator(address(0), address(hook), address(readState), address(core), feeRecipient, want);
 
         ReadConfig memory bad = _config();
         bad.callbackGasLimit = MAX_CALLBACK_GAS_LIMIT + 1;
         vm.expectRevert(UniversalEvaluatorErrors.ZeroValue.selector);
-        new UniversalEvaluator(address(kernel), address(hook), address(readState), address(core), feeRecipient, bad);
+        _newEvaluator(address(kernel), address(hook), address(readState), address(core), feeRecipient, bad);
 
         bad = _config();
         bad.budgetMultiplier = 0;
         vm.expectRevert(UniversalEvaluatorErrors.ZeroValue.selector);
-        new UniversalEvaluator(address(kernel), address(hook), address(readState), address(core), feeRecipient, bad);
+        _newEvaluator(address(kernel), address(hook), address(readState), address(core), feeRecipient, bad);
 
         bad = _config();
         bad.maxHeightAge = 0; // freshness can't be switched off
         vm.expectRevert(UniversalEvaluatorErrors.ZeroValue.selector);
-        new UniversalEvaluator(address(kernel), address(hook), address(readState), address(core), feeRecipient, bad);
+        _newEvaluator(address(kernel), address(hook), address(readState), address(core), feeRecipient, bad);
     }
 
     // ───────────── retries, heights, domains ─────────────

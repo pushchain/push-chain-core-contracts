@@ -2,6 +2,7 @@
 pragma solidity 0.8.26;
 
 import {ReentrancyGuard} from "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
+import {Initializable} from "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol";
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 
@@ -56,10 +57,9 @@ import {UniversalEvaluatorErrors, JobSpecErrors} from "../libraries/Errors.sol";
 ///      - `JobSpec.executeBy` and `JobSpec.failFinalAt` are not used: a FAIL at fixed blocks is final.
 ///      - `JobSpecLib.validate` runs in a linked library (DELEGATECALL; its address is fixed in this bytecode at
 ///        deployment, and it is stateless). Everything else, `EvmReadLib` included, is compiled in.
-///      - Not upgradeable, with no admin: how this evaluator judges a frozen spec can't change. A rule change is a new
-///        evaluator for new jobs; every job settles through the evaluator recorded in it at `createJob`. The kernel
-///        and the hook stay trust points: both are upgradeable, and the kernel admin can detach a job's hook.
-contract UniversalEvaluator is IUniversalEvaluator, ReentrancyGuard {
+///      - Behind a TransparentUpgradeableProxy: the ProxyAdmin owner can change how jobs are judged, including jobs
+///        already frozen. The kernel and the hook are trust points the same way.
+contract UniversalEvaluator is IUniversalEvaluator, Initializable, ReentrancyGuard {
     using SafeERC20 for IERC20;
 
     /// @notice What the evaluator keeps per job once its spec is frozen.
@@ -124,10 +124,8 @@ contract UniversalEvaluator is IUniversalEvaluator, ReentrancyGuard {
     /// @notice Gas for reading the AGW's checkpoint counter.
     uint256 internal constant CHECKPOINT_GAS = 30_000;
 
-    // ───────── configuration, written once in the constructor ─────────
-    // Plain storage rather than `immutable`: Solidity copies an immutable into the bytecode at every use, which
-    // costs about 1.5 KB here, against EIP-170. Nothing writes these after the constructor (no setter, and the
-    // contract is not upgradeable), so they are as fixed as immutables.
+    // ───────── configuration, written once in `initialize` ─────────
+    // Plain storage: a proxy can't use immutables. Nothing writes these after `initialize` (no setter).
 
     IAgenticCommerce public KERNEL;
     address public HOOK;
@@ -164,18 +162,21 @@ contract UniversalEvaluator is IUniversalEvaluator, ReentrancyGuard {
     mapping(uint256 => uint256[8]) internal _endHeights; // POST reads only, 4 uint64 per word
     mapping(uint256 => RequestRef) internal _requests;
 
-    /// @dev `HOOK` is fixed here, for good: every later hook change must be an upgrade of that same proxy, since a
-    ///      hook deployed at another address can't call this evaluator. The hook needs this address at its
-    ///      `initialize`, so the two are deployed together: predict this address, deploy the hook proxy with it, then
-    ///      deploy this (`scripts/agentic-commerce-8183`).
-    constructor(
+    /// @custom:oz-upgrades-unsafe-allow constructor
+    constructor() {
+        _disableInitializers();
+    }
+
+    /// @dev The hook needs this proxy's address at its own `initialize`, so the two are deployed together: predict
+    ///      this proxy's address, deploy the hook proxy with it, then this (`scripts/agentic-commerce-8183`).
+    function initialize(
         address kernel_,
         address hook_,
         address readState_,
         address universalCore_,
         address feeRecipient_,
         ReadConfig memory config_
-    ) {
+    ) external initializer {
         if (
             kernel_ == address(0) || hook_ == address(0) || readState_ == address(0) || universalCore_ == address(0)
                 || feeRecipient_ == address(0)

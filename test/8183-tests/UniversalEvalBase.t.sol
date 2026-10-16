@@ -49,6 +49,7 @@ abstract contract UniversalEvalBase is KernelBase {
     MockSmartSession internal engine;
     UniversalHook internal hook;
     UniversalEvaluator internal ue;
+    UniversalEvaluator internal ueImpl;
     MockCheckpointAGW internal agw;
 
     address internal owner = makeAddr("owner");
@@ -128,11 +129,26 @@ abstract contract UniversalEvalBase is KernelBase {
         });
     }
 
-    /// @dev The hook and the evaluator each need the other's address. The evaluator is not upgradeable, so its
-    ///      address is predicted from this contract's nonce, the hook proxy is initialised with it in its own
-    ///      constructor, and the evaluator is then deployed at that address.
+    /// @dev An evaluator proxy over `ueImpl`, initialised with these settings.
+    function _newEvaluator(
+        address kernel_,
+        address hook_,
+        address readState_,
+        address core_,
+        address feeRecipient_,
+        ReadConfig memory c
+    ) internal returns (UniversalEvaluator) {
+        bytes memory init =
+            abi.encodeCall(UniversalEvaluator.initialize, (kernel_, hook_, readState_, core_, feeRecipient_, c));
+        return UniversalEvaluator(address(new TransparentUpgradeableProxy(address(ueImpl), proxyAdminOwner, init)));
+    }
+
+    /// @dev The hook and the evaluator each need the other's address: the evaluator proxy's is predicted from this
+    ///      contract's nonce, the hook proxy is initialised with it in its own constructor, then the evaluator proxy
+    ///      is deployed at that address.
     function _deployPair() internal virtual {
         UniversalHook hookImpl = new UniversalHook();
+        ueImpl = new UniversalEvaluator();
         address predictedEvaluator = vm.computeCreateAddress(address(this), vm.getNonce(address(this)) + 1);
 
         bytes memory hookInit = abi.encodeCall(
@@ -140,9 +156,7 @@ abstract contract UniversalEvalBase is KernelBase {
         );
         hook = UniversalHook(address(new TransparentUpgradeableProxy(address(hookImpl), proxyAdminOwner, hookInit)));
 
-        ue = new UniversalEvaluator(
-            address(kernel), address(hook), address(readState), address(core), feeRecipient, _config()
-        );
+        ue = _newEvaluator(address(kernel), address(hook), address(readState), address(core), feeRecipient, _config());
         require(address(ue) == predictedEvaluator, "evaluator address prediction");
     }
 

@@ -32,14 +32,13 @@ contract UniversalHookDesignProofsTest is UniversalEvalBase {
     /// @dev The fixture's pair, with the hook running the design's `_postSubmit`.
     function _deployPair() internal override {
         DesignSubmitHook hookImpl = new DesignSubmitHook();
+        ueImpl = new UniversalEvaluator();
         address predictedEvaluator = vm.computeCreateAddress(address(this), vm.getNonce(address(this)) + 1);
         bytes memory hookInit = abi.encodeCall(
             UniversalHook.initialize, (address(kernel), address(factory), address(engine), predictedEvaluator)
         );
         hook = UniversalHook(address(new TransparentUpgradeableProxy(address(hookImpl), proxyAdminOwner, hookInit)));
-        ue = new UniversalEvaluator(
-            address(kernel), address(hook), address(readState), address(core), feeRecipient, _config()
-        );
+        ue = _newEvaluator(address(kernel), address(hook), address(readState), address(core), feeRecipient, _config());
         require(address(ue) == predictedEvaluator, "evaluator address prediction");
     }
 

@@ -19,13 +19,13 @@ import {
 /// @title UniversalEvaluatorDeploy — deploys the UniversalHook and the UniversalEvaluator together, shared by the
 ///        deploy script and its test
 /// @notice Each needs the other's address, so the evaluator's is predicted from the deployer's nonce:
-///         1. anyone deploys the hook implementation, the hook proxy (initialised in its constructor with the predicted
-///            evaluator, so nobody can initialise it first) and the evaluator, then checks the wiring;
+///         1. anyone deploys both implementations, the hook proxy (initialised in its constructor with the predicted
+///            evaluator proxy, so nobody can initialise it first) and the evaluator proxy, then checks the wiring;
 ///         2. the kernel admin whitelists the hook (`setHookWhitelist`);
 ///         3. the marketplace admin points new jobs at both (`setHook`, `setEvaluator`), but only once the marketplace
 ///            builds the final JobSpec and the SDK sends the new `fund` params (`abi.encode(rulesId, specHash, newSpec)`).
 ///            Before that, every marketplace `fund` would revert.
-/// @dev - Precondition: the JobSpec layout is final. The evaluator is not upgradeable and decodes the layout it was
+/// @dev - Both proxies' ProxyAdmins are owned by `hookAdminOwner`. The evaluator decodes the JobSpec layout it was
 ///        compiled with.
 ///      - Every step checks its inputs and its result and reverts on a mismatch. A wrong prediction reverts in the
 ///        script's simulation, before anything is sent.
@@ -36,7 +36,7 @@ library UniversalEvaluatorDeploy {
         address kernel;
         address agwFactory;
         address sessionEngine;
-        address hookAdminOwner; // owns the hook proxy's ProxyAdmin
+        address hookAdminOwner; // owns both proxies' ProxyAdmins
         address readState; // UniversalCallback proxy
         address universalCore;
         address feeRecipient;
@@ -46,7 +46,8 @@ library UniversalEvaluatorDeploy {
     struct Deployed {
         UniversalHook hook; // the proxy
         UniversalHook hookImpl;
-        UniversalEvaluator evaluator;
+        UniversalEvaluator evaluator; // the proxy
+        UniversalEvaluator evaluatorImpl;
     }
 
     /// @notice Step 1, from `deployer`: the script's broadcaster, or the calling contract in a test.
@@ -54,7 +55,8 @@ library UniversalEvaluatorDeploy {
         require(p.kernel.code.length != 0, "kernel: no code");
         _requireDependencies(p);
         d.hookImpl = new UniversalHook();
-        // The proxy takes the deployer's next nonce, the evaluator the one after.
+        d.evaluatorImpl = new UniversalEvaluator();
+        // The hook proxy takes the deployer's next nonce, the evaluator proxy the one after.
         address predicted = VM.computeCreateAddress(deployer, VM.getNonce(deployer) + 1);
         d.hook = UniversalHook(
             address(
@@ -65,8 +67,18 @@ library UniversalEvaluatorDeploy {
                 )
             )
         );
-        d.evaluator =
-            new UniversalEvaluator(p.kernel, address(d.hook), p.readState, p.universalCore, p.feeRecipient, p.config);
+        d.evaluator = UniversalEvaluator(
+            address(
+                new TransparentUpgradeableProxy(
+                    address(d.evaluatorImpl),
+                    p.hookAdminOwner,
+                    abi.encodeCall(
+                        UniversalEvaluator.initialize,
+                        (p.kernel, address(d.hook), p.readState, p.universalCore, p.feeRecipient, p.config)
+                    )
+                )
+            )
+        );
         require(address(d.evaluator) == predicted, "evaluator address prediction");
         check(p, d);
     }
@@ -82,6 +94,8 @@ library UniversalEvaluatorDeploy {
         require(ProxyAdmin(proxyAdminOf(address(h))).owner() == p.hookAdminOwner, "hook: proxy admin owner");
 
         UniversalEvaluator e = d.evaluator;
+        require(implementationOf(address(e)) == address(d.evaluatorImpl), "evaluator: implementation");
+        require(ProxyAdmin(proxyAdminOf(address(e))).owner() == p.hookAdminOwner, "evaluator: proxy admin owner");
         require(address(e.KERNEL()) == p.kernel, "evaluator: kernel");
         require(e.HOOK() == address(h), "evaluator: hook");
         require(address(e.READ_STATE()) == p.readState, "evaluator: read state");
