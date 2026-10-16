@@ -292,7 +292,7 @@ contract UniversalHookTest is UniversalEvalBase {
         agw.execute(address(kernel), 0, abi.encodeCall(kernel.fund, (jobId, BUDGET, fp)));
     }
 
-    /// @dev An error answer counts as answered but leaves no value; a retry by the client or provider re-reads the
+    /// @dev Only a read never answered (here, an expired request) is sent again, by the client or provider, at the
     ///      SAME block, and `ready` waits for it.
     function test_UH17_snapshotRetry_sameBlock_clientOrProviderOnly() public {
         uint256 jobId = _createSpec(_swapSpec());
@@ -303,10 +303,10 @@ contract UniversalHookTest is UniversalEvalBase {
         vm.expectRevert(abi.encodeWithSelector(UniversalEvaluatorErrors.NothingToSend.selector, jobId));
         ue.retrySnapshot{value: SNAPSHOT_COST}(jobId); // still in flight
 
-        assertTrue(_deliver(first, ""));
-        assertTrue(ue.ready(jobId), "answered, though unreadable");
-        (bool unreadable,) = ue.answerOf(jobId, SWAP_PRE);
-        assertFalse(unreadable);
+        vm.roll(block.number + 301);
+        vm.prank(READ_MODULE);
+        readState.expireExternalRead(first);
+        assertFalse(ue.ready(jobId), "never answered");
 
         vm.prank(stranger);
         vm.expectRevert(abi.encodeWithSelector(UniversalEvaluatorErrors.CallerIsNotClientOrProvider.selector, stranger));
@@ -326,6 +326,26 @@ contract UniversalHookTest is UniversalEvalBase {
         (bool ok, int256 v) = ue.answerOf(jobId, SWAP_PRE);
         assertTrue(ok);
         assertEq(v, 1e18);
+    }
+
+    /// @dev An unreadable answer counts as answered and is never taken back: the client can't re-request it to keep
+    ///      `ready` false and block the evaluation from starting.
+    function test_UH17b_snapshotRetry_neverTakesBackAnAnswer() public {
+        uint256 jobId = _createSpec(_swapSpec());
+        _fund(jobId);
+        uint256 first = ue.requestOf(jobId, SWAP_PRE);
+        assertTrue(_deliver(first, ""));
+        assertTrue(ue.ready(jobId), "answered, though unreadable");
+
+        vm.prank(address(agw)); // the client
+        vm.expectRevert(abi.encodeWithSelector(UniversalEvaluatorErrors.NothingToSend.selector, jobId));
+        ue.retrySnapshot(jobId);
+        vm.prank(provider);
+        vm.expectRevert(abi.encodeWithSelector(UniversalEvaluatorErrors.NothingToSend.selector, jobId));
+        ue.retrySnapshot{value: SNAPSHOT_COST}(jobId);
+
+        assertTrue(ue.ready(jobId));
+        assertEq(ue.requestOf(jobId, SWAP_PRE), first, "not sent again");
     }
 
     function test_UH18_prefundUnknownJob_refused() public {

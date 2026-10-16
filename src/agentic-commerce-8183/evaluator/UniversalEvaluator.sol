@@ -77,7 +77,7 @@ contract UniversalEvaluator is IUniversalEvaluator, ReentrancyGuard {
     struct Snapshot {
         uint8 needed; // PRE_EXECUTION reads
         uint32 pre; // bit i: read i is PRE_EXECUTION
-        uint32 answered; // bit i: PRE read i answered, usable or not, since it was last sent
+        uint32 answered; // bit i: PRE read i answered, usable or not; never cleared
     }
 
     /// @notice The evaluation of a submitted job.
@@ -358,8 +358,10 @@ contract UniversalEvaluator is IUniversalEvaluator, ReentrancyGuard {
         else _start(jobId, s);
     }
 
-    /// @notice Sends again, at the same blocks, every PRE read with no usable value that is not in flight. The job's
-    ///         client or provider only, until the evaluation starts; after that, `sendReads` sends them.
+    /// @notice Sends again, at the same blocks, every PRE read never answered and not in flight (an expired request, a
+    ///         failed callback). The job's client or provider only, until the evaluation starts; after that, `sendReads`.
+    /// @dev Never takes back an answer, usable or not, so neither side can hold `ready` back; the evaluation itself
+    ///      re-reads an unreadable PRE answer.
     function retrySnapshot(uint256 jobId) external payable nonReentrant {
         IAgenticCommerce.Job memory job = KERNEL.getJob(jobId);
         if (msg.sender != job.client && msg.sender != job.provider) {
@@ -374,9 +376,8 @@ contract UniversalEvaluator is IUniversalEvaluator, ReentrancyGuard {
         Snapshot storage sn = _snapshots[jobId];
         uint256 sent;
         for (uint256 i; i < s.reads.length; ++i) {
-            if ((sn.pre >> i) & 1 == 0 || _answers[jobId][i].ok) continue;
+            if ((sn.pre >> i) & 1 == 0 || (sn.answered >> i) & 1 == 1) continue; // never take back an answer
             if (READ_STATE.statusOf(_request[jobId][i]) == RequestStatus.PENDING) continue;
-            sn.answered &= ~(uint32(1) << i); // `ready` waits for the new answer
             _fireSnapshot(jobId, i, s.reads[i], _height(_fundHeights[jobId], i));
             ++sent;
         }
