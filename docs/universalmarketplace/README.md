@@ -8,8 +8,10 @@ code that enforces it, and every assumption the code makes about something else 
 | **This file** | What the marketplace is, its parts, the agent card lifecycle, `openJob` step by step, the rules check, the criteria, admin powers, upgradeability, trust model, limitations, tests, reviewer checklist |
 | [`reference.md`](./reference.md) | Every function, event, error, registration reason, storage slot and constant, one by one |
 | [`criteria.md`](./criteria.md) | The `jobSpecTemplate` format, how a job's `JobSpec` is built from it, and two worked examples |
+| [`../addresses/push_donut_universal_marketplace.md`](../addresses/push_donut_universal_marketplace.md) | The live Push Donut deployment: every proxy, implementation, ProxyAdmin, role and supported chain |
 
-Code as of branch `sdk-iteration-v1`: uncommitted changes on top of `9479aef` (marketplace v2, PRD 12).
+Code as of branch `sdk-iteration-v1`, commit `7cd2d7b` (marketplace v2, PRD 12). Deployed on Push Donut on 2026-10-20
+(§12.5).
 
 ---
 
@@ -36,7 +38,7 @@ Contracts the marketplace works with, but which are **not** part of it:
 | **AGW + AGWFactory** | `push-agentic-wallets` repo (submodule [`lib/push-agentic-wallets`](../../lib/push-agentic-wallets)) | The user's agentic wallet (an ERC-7579 account with SmartSession) and its factory. Verifies the owner's signature. AGW v6 is deployed on Donut. |
 | **UniversalRulesPolicy (URP)** | `push-agentic-wallets` repo | The SmartSession policy that enforces the agent's rules when the agent sends outbound calls through the gateway. |
 | **CEAFactory** | destination chain (`src/cea/CEAFactory.sol` here) | Deploys each user's Chain Executor Account (CEA) on the destination chain. The marketplace only predicts CEA addresses. |
-| UniversalHook, UniversalEvaluator (V2) | not built yet | The intended long-term hook and evaluator. Until they ship, jobs use RulesBindingHook and a Push-controlled evaluator address. |
+| UniversalHook, UniversalEvaluator (V2) | not compatible yet (§12.5) | The intended long-term hook and evaluator. Until they ship, jobs use RulesBindingHook and a Push-controlled evaluator address. |
 
 ---
 
@@ -591,13 +593,57 @@ Interim configuration (until the V2 UniversalHook and UniversalEvaluator ship): 
 - **The marketplace** sits behind a `TransparentUpgradeableProxy`. Its storage is append-only (slots 0–21, slot 14
   reserved, then a 27-slot gap, 22–48; see [`reference.md`](./reference.md#storage-layout)). OZ upgradeable bases
   use ERC-7201 namespaced storage, so they don't occupy these slots. `test_MV09_storageLayout_bySlot` pins every
-  slot by position, and `test_MV10_upgrade_preservesState` upgrades through the ProxyAdmin. Nothing is deployed
-  yet, so there is no migration from v1.
+  slot by position, and `test_MV10_upgrade_preservesState` upgrades through the ProxyAdmin. v1 was never
+  deployed, so there is no migration from it. v2 is live on Donut (§12.5): from now on every upgrade must keep
+  this layout.
 - **The rules helper and JobSpecBuilder** are not upgradeable. A rule change is a new deployment plus a
   marketplace upgrade that points at it. The helper is an `initialize`-time address (`RULES`); the library's
   address is linked into the implementation's bytecode.
 
-### 12.4 Build configuration
+### 12.4 Deploy script
+
+[`scripts/agentic-commerce-8183/DeployUniversalMarketplace.s.sol`](../../scripts/agentic-commerce-8183/DeployUniversalMarketplace.s.sol)
+deploys the whole stack in one run and follows §12.2:
+
+1. `AgenticCommerce` (kernel) proxy, `initialize(pUSDC, treasury, deployer)`.
+2. `RulesBindingHook` proxy, `initialize(kernel, AGW v6 factory, AGW v6 session engine)`, then
+   `kernel.setHookWhitelist(hook, true)`.
+3. `UniversalMarketplaceRules`; the `JobSpecBuilder` library is deployed and linked by Foundry.
+4. `UniversalMarketplace` proxy, `initialize` with the deployer as `admin` and as `evaluator`.
+5. `setCEADeployment` for Ethereum Sepolia, Base Sepolia, Arbitrum Sepolia and BSC Testnet.
+
+Each proxy gets its own ProxyAdmin, owned by the deployer. Fees stay zero. Inputs come from `.env`: `DEPLOYER_KEY`
+(the broadcaster) and `TREASURE_KEY` (its address becomes the kernel's platform treasury); both are accepted with or
+without the `0x` prefix. The script refuses any chain other than Donut (42101).
+
+```bash
+forge script scripts/agentic-commerce-8183/DeployUniversalMarketplace.s.sol \
+  --rpc-url $PUSH_CHAIN_TESTNET_RPC_URL --broadcast --slow
+```
+
+### 12.5 Live deployment (Push Donut)
+
+Full table: [`docs/addresses/push_donut_universal_marketplace.md`](../addresses/push_donut_universal_marketplace.md).
+
+| Contract | Proxy |
+|---|---|
+| UniversalMarketplace | `0x9071ebE01B75123A91e88eB6ec4BF163F3fE9BF4` |
+| AgenticCommerce (kernel, pUSDC `0x7A58048036206bB898008b5bBDA85697DB1e5d66`) | `0x977cf1AC973E9eC4332791d531507575006157Ed` |
+| RulesBindingHook | `0xDe7A94e510b6C571DE7880d441349689F73A32b3` |
+| UniversalMarketplaceRules (not a proxy) | `0x5b98A8E0df5b918DF76cD2BE84bA7995B39dfd44` |
+| JobSpecBuilder (library) | `0x2de1e3F053b0bBa0cE0C6953144534a0b055f59e` |
+
+- **Its own kernel.** The stack does not use the `marketplace_demo` kernel (`0x4F9b…B1E0`) or its UniversalEvaluator
+  (`0x7D62…4Ce3`). That kernel is priced in eUSD, its admin is not ours, its evaluator accepts only jobs created
+  with its own UniversalHook, and that evaluator decodes a different `JobSpec` layout from `JobSpecTypes.sol`.
+- **Evaluator is an EOA.** The deployer `0x1afC81396f1bb36F91f74506284952b81e4bd47c` completes or rejects jobs by
+  hand until a compatible evaluator is set with `setEvaluator` (and, if it needs its own hook, `setHook`).
+- **Moving to another kernel.** `KERNEL` is set once at `initialize` and has no setter. Pointing the marketplace at
+  a different kernel takes a marketplace upgrade or redeploy plus a new RulesBindingHook whitelisted on that kernel.
+  Jobs already opened stay on the old kernel.
+- Contracts are not source-verified on the explorer.
+
+### 12.6 Build configuration
 
 - solc 0.8.26, `via_ir`, EVM `shanghai`.
 - **`UniversalMarketplace.sol` compiles at 1 000 optimizer runs**; every other contract uses 99 999. This is the
@@ -683,7 +729,8 @@ Registration also calls `KERNEL.paymentToken()` and each asset's `SOURCE_CHAIN_N
 | Limitation | Note |
 |---|---|
 | **EVM destinations only** | Cards name `eip155:*` chains, never Push. Solana and native (Push-side) cards are out of scope. |
-| **One payment token** | Until kernel K-12, every card's `paymentToken` must be the kernel's token. |
+| **One payment token** | Until kernel K-12, every card's `paymentToken` must be the kernel's token (pUSDC on the Donut deployment). |
+| **Kernel is fixed** | `KERNEL` has no setter; changing kernels needs an upgrade or redeploy (§12.5). |
 | **Interim hook and evaluator** | RulesBindingHook and a Push-controlled evaluator until the V2 UniversalHook and UniversalEvaluator ship. The `JobSpec` description and its `allowedMutability` are inert to RulesBindingHook. |
 | **No revoke of a previous grant** | `openJob` on an existing wallet grants a new rules set; the previous one is not revoked by the marketplace. |
 | **Rating is a placeholder** | `setAgentRating` / `getAgentRating` store an admin number until VerifiedRatings is wired. |
