@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 pragma solidity 0.8.26;
 
-import {OwnerIntent} from "../../../src/agentic-commerce-8183/interfaces/external/IAGW.sol";
+import {OwnerIntent} from "@push-agw/libraries/Types.sol";
 import {MockAGW} from "./MockAGW.sol";
 
 /// @notice Answers `isWallet` from a settable map, and — for UniversalMarketplace tests — deploys

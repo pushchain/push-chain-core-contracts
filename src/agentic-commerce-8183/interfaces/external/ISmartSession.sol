@@ -3,10 +3,10 @@ pragma solidity 0.8.26;
 
 /// @title ISmartSession
 /// @notice Read-only mirror of the SmartSession engine used by Push AGWs.
-/// @dev - Source: SmartSession fork `7dc20e4`, `SmartSessionBase.sol:444`.
+/// @dev - Source: the SmartSession fork `7dc20e4` vendored by AGW v6 (`push-agentic-wallets` commit `ffd567d`).
 ///      - `PermissionId` is a user-defined `bytes32`; the ABI is plain `bytes32`.
 ///      - The id comes FIRST here, unlike the engine's other views.
-///      - Donut engine: `0x046B2874Fc9F920ad53A317b3cf9d3d1974466f3` (deploy-time input).
+///      - The v6 engine address is a deploy-time input, never a constant.
 interface ISmartSession {
     /// @notice Whether a rules set is live on an account.
     /// @param permissionId The rules set's id (the AGW's `rulesId`; the engine names it `permissionId`).

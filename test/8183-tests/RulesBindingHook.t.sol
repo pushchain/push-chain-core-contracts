@@ -68,7 +68,7 @@ contract RulesBindingHookTest is KernelBase {
     function _assertStillOpenAndUnbound(uint256 jobId, uint256 clientBalBefore) internal view {
         assertEq(uint8(_status(jobId)), uint8(IAgenticCommerce.JobStatus.Open));
         assertEq(token.balanceOf(agw), clientBalBefore);
-        (address a,) = hook.rulesOf(jobId);
+        address a = hook.agwOfJob(jobId);
         assertEq(a, address(0));
     }
 
@@ -81,18 +81,16 @@ contract RulesBindingHookTest is KernelBase {
         vm.prank(agw);
         kernel.fund(jobId, BUDGET, abi.encode(P));
 
-        (address a, bytes32 pid) = hook.rulesOf(jobId);
+        (address a, bytes32 pid) = (hook.agwOfJob(jobId), hook.rulesOfJob(jobId));
         assertEq(a, agw);
         assertEq(pid, P);
-        assertEq(hook.liveJobOf(agw), jobId);
-        assertTrue(hook.isAGWBusy(agw));
+        assertEq(hook.activeJobOf(agw), jobId);
         assertEq(uint8(_status(jobId)), uint8(IAgenticCommerce.JobStatus.Funded));
     }
 
     function test_zeroBudgetJob_bindsNormally() public {
         uint256 jobId = _bind(agw, P, 0);
-        assertEq(hook.liveJobOf(agw), jobId);
-        assertTrue(hook.isAGWBusy(agw));
+        assertEq(hook.activeJobOf(agw), jobId);
     }
 
     // ═════════════════════════ check 1 · optParams length ═════════════════════════
@@ -130,7 +128,7 @@ contract RulesBindingHookTest is KernelBase {
         kernel.fund(jobId, BUDGET, abi.encode(P));
         assertEq(token.balanceOf(c), bal);
         assertEq(uint8(_status(jobId)), uint8(IAgenticCommerce.JobStatus.Open));
-        (address a,) = hook.rulesOf(jobId);
+        address a = hook.agwOfJob(jobId);
         assertEq(a, address(0));
     }
 
@@ -183,7 +181,7 @@ contract RulesBindingHookTest is KernelBase {
         uint256 first = _bind(agw, P, BUDGET);
         vm.prank(provider);
         kernel.submit(first, bytes32(0), "");
-        assertTrue(hook.isAGWBusy(agw));
+        assertEq(hook.activeJobOf(agw), first);
         uint256 second = _open(agw, BUDGET);
         uint256 bal = token.balanceOf(agw);
         vm.prank(agw);
@@ -195,9 +193,9 @@ contract RulesBindingHookTest is KernelBase {
     // ═════════════════════════ freeing the AGW — every path ═════════════════════════
 
     function _assertSecondJobFunds() internal {
-        assertFalse(hook.isAGWBusy(agw));
+        assertEq(hook.activeJobOf(agw), 0);
         uint256 second = _bind(agw, P, BUDGET);
-        assertEq(hook.liveJobOf(agw), second);
+        assertEq(hook.activeJobOf(agw), second);
     }
 
     function test_freed_afterComplete() public {
@@ -229,7 +227,7 @@ contract RulesBindingHookTest is KernelBase {
         ids[0] = first;
         vm.prank(admin);
         kernel.batchDetachHook(ids);
-        assertTrue(hook.isAGWBusy(agw), "detach alone does not end the job");
+        assertTrue(hook.activeJobOf(agw) != 0, "detach alone does not end the job");
         vm.warp(block.timestamp + EXPIRY_OFFSET);
         kernel.claimRefund(first);
         _assertSecondJobFunds();
@@ -247,8 +245,8 @@ contract RulesBindingHookTest is KernelBase {
 
         uint256 a = _bind(agw, P, BUDGET);
         uint256 b = _bind(agw2, P2, BUDGET);
-        assertEq(hook.liveJobOf(agw), a);
-        assertEq(hook.liveJobOf(agw2), b);
+        assertEq(hook.activeJobOf(agw), a);
+        assertEq(hook.activeJobOf(agw2), b);
     }
 
     function test_samePermissionId_differentAGWs_bindIndependently() public {
@@ -261,8 +259,8 @@ contract RulesBindingHookTest is KernelBase {
 
         uint256 a = _bind(agw, P, BUDGET);
         uint256 b = _bind(agw2, P, BUDGET);
-        (address wa, bytes32 pa) = hook.rulesOf(a);
-        (address wb, bytes32 pb) = hook.rulesOf(b);
+        (address wa, bytes32 pa) = (hook.agwOfJob(a), hook.rulesOfJob(a));
+        (address wb, bytes32 pb) = (hook.agwOfJob(b), hook.rulesOfJob(b));
         assertEq(wa, agw);
         assertEq(wb, agw2);
         assertEq(pa, P);
@@ -274,7 +272,7 @@ contract RulesBindingHookTest is KernelBase {
         vm.prank(evaluator);
         kernel.reject(first, bytes32(0), "");
         uint256 second = _bind(agw, P, BUDGET);
-        (, bytes32 pid) = hook.rulesOf(second);
+        bytes32 pid = hook.rulesOfJob(second);
         assertEq(pid, P);
     }
 
@@ -309,10 +307,9 @@ contract RulesBindingHookTest is KernelBase {
         );
         kernel.fund(jobId, BUDGET, abi.encode(P));
 
-        (address a,) = hook.rulesOf(jobId);
+        address a = hook.agwOfJob(jobId);
         assertEq(a, address(0));
-        assertEq(hook.liveJobOf(agw3), 0);
-        assertFalse(hook.isAGWBusy(agw3));
+        assertEq(hook.activeJobOf(agw3), 0);
         assertEq(uint8(_status(jobId)), uint8(IAgenticCommerce.JobStatus.Open));
     }
 
@@ -346,15 +343,29 @@ contract RulesBindingHookTest is KernelBase {
 
     // ═════════════════════════ views ═════════════════════════
 
-    function test_isAGWBusy_neverSeen_false() public {
-        assertFalse(hook.isAGWBusy(makeAddr("never")));
+    function test_activeJobOf_neverSeen_zero() public {
+        assertEq(hook.activeJobOf(makeAddr("never")), 0);
+    }
+
+    function test_activeJobOf_returnsId() public {
+        assertEq(hook.activeJobOf(agw), 0, "before fund");
+        uint256 jobId = _bind(agw, P, BUDGET);
+        assertEq(hook.activeJobOf(agw), jobId, "Funded");
+        vm.prank(provider);
+        kernel.submit(jobId, bytes32(0), "");
+        assertEq(hook.activeJobOf(agw), jobId, "Submitted");
+        vm.prank(evaluator);
+        kernel.complete(jobId, bytes32(0), "");
+        assertEq(hook.activeJobOf(agw), 0, "after complete");
+        assertEq(hook.rulesOfJob(jobId), P, "the binding outlives the job");
+        assertEq(hook.agwOfJob(jobId), agw);
     }
 
     // ═════════════════════════ scope of the rule (D-25) ═════════════════════════
 
     function test_scope_hooklessJob_fundsWhileBusy() public {
         _bind(agw, P, BUDGET);
-        assertTrue(hook.isAGWBusy(agw));
+        assertTrue(hook.activeJobOf(agw) != 0);
         uint256 plain = _budgeted(address(0), BUDGET); // `client` == agw
         vm.prank(agw);
         kernel.fund(plain, BUDGET, "");
@@ -368,8 +379,8 @@ contract RulesBindingHookTest is KernelBase {
         uint256 jobId = _budgeted(address(other), BUDGET);
         vm.prank(agw);
         kernel.fund(jobId, BUDGET, abi.encode(P));
-        assertEq(hook.liveJobOf(agw), 0);
-        (address a,) = hook.rulesOf(jobId);
+        assertEq(hook.activeJobOf(agw), 0);
+        address a = hook.agwOfJob(jobId);
         assertEq(a, address(0));
     }
 
@@ -383,10 +394,10 @@ contract RulesBindingHookTest is KernelBase {
         vm.prank(hookProxyAdminOwner);
         pa.upgradeAndCall(ITransparentUpgradeableProxy(address(hook)), newImpl, "");
 
-        (address a, bytes32 pid) = hook.rulesOf(first);
+        (address a, bytes32 pid) = (hook.agwOfJob(first), hook.rulesOfJob(first));
         assertEq(a, agw);
         assertEq(pid, P);
-        assertEq(hook.liveJobOf(agw), first);
+        assertEq(hook.activeJobOf(agw), first);
 
         uint256 second = _open(agw, BUDGET);
         vm.prank(agw);
@@ -416,6 +427,7 @@ contract RulesBindingHookTest is KernelBase {
         assertEq(address(uint160(uint256(vm.load(h, b)))), agw);
         assertEq(vm.load(h, bytes32(uint256(b) + 1)), P);
 
+        // slots 52 / 53 unchanged: `_bindingOf` (was `rulesOf`), `_liveJobOf` (was `liveJobOf`)
         bytes32 l = keccak256(abi.encode(agw, uint256(53)));
         assertEq(uint256(vm.load(h, l)), jobId);
 

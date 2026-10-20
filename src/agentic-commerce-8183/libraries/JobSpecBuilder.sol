@@ -11,12 +11,12 @@ import {
     TargetSource,
     CheckTemplate,
     ParamBounds,
-    EvaluationTemplate,
+    JobSpecTemplate,
     BuildContext
 } from "./Types.sol";
 
 /// @title JobSpecBuilder
-/// @notice Turns a card's criteria template into one job's `JobSpec` (the `createJob` description).
+/// @notice Turns a card's `jobSpecTemplate` into one job's criteria, a `JobSpec` (the `createJob` description).
 /// @dev - Builds only: it never judges a template. Whether the UniversalEvaluator can run the criteria is the
 ///        provider's responsibility, and the card's verified tag is the review (PRD 09 Z6).
 ///      - Checks only what building needs: the job's params against the template's bounds, every fill inside its
@@ -24,15 +24,16 @@ import {
 ///        (out-of-range index, unsupported CEA chain).
 ///      - External library: deployed once and linked into the marketplace, which DELEGATECALLs it. Inlined, it
 ///        put the marketplace over the size limit (23,821 B even at 1 optimizer run).
-///      - Runs in the caller's context: the CEA comes from the caller's own `expectedCEAOf`.
+///      - Runs in the caller's context: the CEA comes from the caller's own `computeCEA`.
+///      - `logic` and `allowedMutability` are copied verbatim; neither is judged here.
 library JobSpecBuilder {
     uint256 internal constant BPS = 10_000;
 
     /// @notice `abi.encode(JobSpec)` for one job.
-    /// @param evaluation The card's `abi.encode(EvaluationTemplate)`.
+    /// @param jobSpecTemplate The card's `abi.encode(JobSpecTemplate)`.
     /// @param ctx The job's values.
-    function build(bytes memory evaluation, BuildContext memory ctx) public view returns (bytes memory) {
-        EvaluationTemplate memory t = abi.decode(evaluation, (EvaluationTemplate));
+    function build(bytes memory jobSpecTemplate, BuildContext memory ctx) public view returns (bytes memory) {
+        JobSpecTemplate memory t = abi.decode(jobSpecTemplate, (JobSpecTemplate));
         _checkParams(t.params, ctx.params);
         address[] memory cea = _ceas(t, ctx.agw);
 
@@ -40,7 +41,8 @@ library JobSpecBuilder {
         spec.executeBy = uint64(ctx.executeBy);
         spec.failFinalAt = uint64(ctx.executeBy) + ctx.settleWindow;
         spec.origin = ctx.origin;
-        spec.nodes = t.nodes;
+        spec.logic = t.logic;
+        spec.allowedMutability = t.allowedMutability;
         spec.reads = new Read[](t.reads.length);
         for (uint256 i; i < t.reads.length; ++i) {
             spec.reads[i] = _buildRead(t.reads[i], i, ctx.params, cea[i]);
@@ -65,7 +67,7 @@ library JobSpecBuilder {
     }
 
     /// @dev The AGW's CEA for every read that needs one (a CEA fill, or a CEA-target check on it), else zero.
-    function _ceas(EvaluationTemplate memory t, address agw) private view returns (address[] memory cea) {
+    function _ceas(JobSpecTemplate memory t, address agw) private view returns (address[] memory cea) {
         cea = new address[](t.reads.length);
         for (uint256 i; i < t.reads.length; ++i) {
             if (_hasCEAFill(t.reads[i])) cea[i] = _ceaOf(agw, t.reads[i]);
@@ -133,13 +135,13 @@ library JobSpecBuilder {
         } else if (c.source == TargetSource.CEA) {
             target = int256(uint256(uint160(cea[c.read])));
         }
-        return Check({read: c.read, evalType: c.evalType, op: c.op, target: target});
+        return Check({read: c.read, evaluation: c.evaluation, operation: c.operation, target: target});
     }
 
     /// @dev The AGW's CEA on the read's chain, from the caller (the marketplace, under DELEGATECALL). The key is
     ///      keccak256 of the read's CAIP-2 string; an unsupported chain reverts `ChainNotSupported`.
     function _ceaOf(address agw, ReadTemplate memory r) private view returns (address) {
         bytes32 chainHash = keccak256(abi.encodePacked(r.chainNamespace, ":", r.chainId));
-        return IUniversalMarketplace(address(this)).expectedCEAOf(agw, chainHash);
+        return IUniversalMarketplace(address(this)).computeCEA(agw, chainHash);
     }
 }
