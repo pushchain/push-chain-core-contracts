@@ -33,7 +33,7 @@ Contracts the marketplace works with, but which are **not** part of it:
 
 | Contract | Where | Role |
 |---|---|---|
-| **AgenticCommerce** (the "kernel") | [`src/agentic-commerce-8183/AgenticCommerce.sol`](../../src/agentic-commerce-8183/AgenticCommerce.sol) | The ERC-8183 job kernel: jobs, budgets, escrow, payout. The marketplace only creates jobs on it (through the user's wallet). |
+| **AgenticCommerce** (the "kernel") | [`src/agentic-commerce-8183/AgenticCommerce.sol`](../../src/agentic-commerce-8183/AgenticCommerce.sol) | The ERC-8183 job kernel: jobs, budgets, escrow, payout. The marketplace only creates jobs on it (through the user's wallet). On Donut the marketplace uses **its own instance**, deployed with it on pUSDC (`0x977cf1AC973E9eC4332791d531507575006157Ed`), not the `marketplace_demo` kernel (§12.5). |
 | **RulesBindingHook** | [`src/agentic-commerce-8183/hooks/RulesBindingHook.sol`](../../src/agentic-commerce-8183/hooks/RulesBindingHook.sol) | The interim 8183 hook every marketplace job is created with. At `fund` it binds the job to the wallet's live rules set and allows one live job per wallet. |
 | **AGW + AGWFactory** | `push-agentic-wallets` repo (submodule [`lib/push-agentic-wallets`](../../lib/push-agentic-wallets)) | The user's agentic wallet (an ERC-7579 account with SmartSession) and its factory. Verifies the owner's signature. AGW v6 is deployed on Donut. |
 | **UniversalRulesPolicy (URP)** | `push-agentic-wallets` repo | The SmartSession policy that enforces the agent's rules when the agent sends outbound calls through the gateway. |
