@@ -1,13 +1,16 @@
 // SPDX-License-Identifier: MIT
 pragma solidity 0.8.26;
 
-import {OwnerIntent, Session} from "../../../src/agentic-commerce-8183/interfaces/external/IAGW.sol";
+import {OwnerIntent} from "@push-agw/libraries/Types.sol";
+import {Session} from "../../../src/agentic-commerce-8183/interfaces/external/IAGW.sol";
 
 /// @notice An AGW stand-in for UniversalMarketplace unit tests. OBSERVER, NOT ORACLE: it records what
 ///         the marketplace presented and forwards the exec calldata so the REAL kernel runs `createJob`
 ///         with this contract as `msg.sender`. It checks the presenter and hashes like the real wallet,
 ///         and verifies no signature. `mode` lets a test make it misbehave in the ways the
 ///         marketplace must catch.
+/// @dev `grantRulesWithSig` decodes the policy envelope as `(uint16, string, bytes)` exactly as the real wallet's
+///      policy does, so a session in the pre-v6 two-field format fails here the way it fails there (a decode panic).
 contract MockAGW {
     enum Mode {
         Honest,
@@ -28,6 +31,8 @@ contract MockAGW {
     bytes32 public lastExecIntentHash;
     bytes32 public lastExecCalldataHash;
     address public lastGrantCaller;
+    /// @notice The full policy `initData` of the last grant, for tests and the MI07 invariant to decode.
+    bytes public lastPolicyInitData;
 
     bytes32 public constant RULES_ID = keccak256("mock-rules");
 
@@ -48,7 +53,10 @@ contract MockAGW {
         require(msg.sender == intent.executor, "MockAGW: executor");
         require(intent.sessionHash == keccak256(abi.encode(session)), "MockAGW: session hash");
         require(intent.grantNonce == grantNonce, "MockAGW: grant nonce");
+        bytes calldata initData = session.actions[0].actionPolicies[0].initData;
+        abi.decode(initData, (uint16, string, bytes));
         grantNonce++;
+        lastPolicyInitData = initData;
         lastSessionHash = keccak256(abi.encode(session));
         lastGrantIntentHash = keccak256(abi.encode(intent));
         lastGrantCaller = msg.sender;

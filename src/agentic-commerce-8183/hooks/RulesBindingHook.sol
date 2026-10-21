@@ -29,11 +29,10 @@ contract RulesBindingHook is BaseERC8183Hook {
     address public AGW_FACTORY;
     /// @notice SmartSession engine, used to prove the rules set is live. Set once, at initialization.
     address public SESSION_ENGINE;
-    /// @notice Job id → bound rules set.
-    /// @dev - `rulesId` is not globally unique across wallets; always read with `agw`.
-    mapping(uint256 => Binding) public rulesOf;
-    /// @notice AGW → last job bound; live only while that job is Funded or Submitted.
-    mapping(address => uint256) public liveJobOf;
+    /// @dev Job id → bound rules set. `rulesId` is not globally unique across wallets; always read with `agw`.
+    mapping(uint256 => Binding) internal _bindingOf;
+    /// @dev AGW → last job bound; live only while that job is Funded or Submitted. Read through `activeJobOf`.
+    mapping(address => uint256) internal _liveJobOf;
     uint256[50] private __gap;
 
     /// @custom:oz-upgrades-unsafe-allow constructor
@@ -54,18 +53,29 @@ contract RulesBindingHook is BaseERC8183Hook {
         SESSION_ENGINE = sessionEngine_;
     }
 
-    /// @notice Whether an AGW currently holds a live job under this hook.
-    /// @dev - Live = the recorded job is Funded or Submitted in the kernel.
-    /// @param agw The wallet.
-    /// @return True if the AGW cannot fund another job here.
-    function isAGWBusy(address agw) public view returns (bool) {
-        uint256 id = liveJobOf[agw];
-        if (id == 0) return false;
-        IAgenticCommerce.JobStatus s = IAgenticCommerce(KERNEL).getJob(id).status;
-        return s == IAgenticCommerce.JobStatus.Funded || s == IAgenticCommerce.JobStatus.Submitted;
+    /// @notice The rules set bound to `jobId` at fund, or zero.
+    function rulesOfJob(uint256 jobId) external view returns (bytes32) {
+        return _bindingOf[jobId].rulesId;
     }
 
-    /// @dev Checks, in order: optParams length · client is an AGW · rules set live · AGW not busy.
+    /// @notice The AGW bound to `jobId` at fund, or zero.
+    function agwOfJob(uint256 jobId) external view returns (address) {
+        return _bindingOf[jobId].agw;
+    }
+
+    /// @notice The AGW's live job under this hook (Funded or Submitted), or 0.
+    /// @dev Narrower than the marketplace's `activeJobOf`, which also counts an Open, unexpired job: this hook binds
+    ///      at `fund`, the marketplace at `openJob`. Both are intended.
+    /// @param agw The wallet.
+    /// @return The job id, or 0 if the AGW may fund another job here.
+    function activeJobOf(address agw) public view returns (uint256) {
+        uint256 id = _liveJobOf[agw];
+        if (id == 0) return 0;
+        IAgenticCommerce.JobStatus s = IAgenticCommerce(KERNEL).getJob(id).status;
+        return s == IAgenticCommerce.JobStatus.Funded || s == IAgenticCommerce.JobStatus.Submitted ? id : 0;
+    }
+
+    /// @dev Checks, in order: optParams length · client is an AGW · rules set live · AGW has no live job.
     ///      - `caller` is the job's client — the kernel checks it before calling the hook.
     ///      - Runs in `beforeAction`, so any revert leaves the job Open with no escrow moved.
     function _preFund(uint256 jobId, address caller, bytes memory optParams) internal override {
@@ -75,10 +85,11 @@ contract RulesBindingHook is BaseERC8183Hook {
         if (!ISmartSession(SESSION_ENGINE).isPermissionEnabled(rulesId, caller)) {
             revert RulesBindingHookErrors.RulesNotLive(caller, rulesId);
         }
-        if (isAGWBusy(caller)) revert RulesBindingHookErrors.AGWHasLiveJob(caller, liveJobOf[caller]); // 2nd read only on revert
+        uint256 live = activeJobOf(caller);
+        if (live != 0) revert RulesBindingHookErrors.AGWHasLiveJob(caller, live);
 
-        rulesOf[jobId] = Binding({agw: caller, rulesId: rulesId});
-        liveJobOf[caller] = jobId;
+        _bindingOf[jobId] = Binding({agw: caller, rulesId: rulesId});
+        _liveJobOf[caller] = jobId;
         emit RulesBound(jobId, caller, rulesId);
     }
 }

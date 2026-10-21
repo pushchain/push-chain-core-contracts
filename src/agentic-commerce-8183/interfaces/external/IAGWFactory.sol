@@ -1,15 +1,14 @@
 // SPDX-License-Identifier: MIT
 pragma solidity 0.8.26;
 
-import {OwnerIntent} from "./IAGW.sol";
+import {OwnerIntent} from "@push-agw/libraries/Types.sol";
 
 /// @title IAGWFactory
-/// @notice Mirror of the Push Agentic Wallet factory — the functions this repo calls.
-/// @dev - Source: the AGW factory after its naming change (`push-agentic-wallet`, branch
-///        `nomenclature-changes`, `N-nomenclature_prd.md` §2.5): `src/AGWFactory.sol` / `src/interfaces/IAGWFactory.sol`.
+/// @notice The Push Agentic Wallet factory — the functions this repo calls.
+/// @dev - Source: AGW v6, `push-agentic-wallets` commit `ffd567d`, `src/interfaces/IAGWFactory.sol`; every
+///        signature below verified identical.
 ///      - `isWallet` is what RulesBindingHook reads; the rest is what UniversalMarketplace reads.
-///      - Donut v3 proxy: `0x2578041963f692f8b51A137A1c7ddc0c84a8226A`; the marketplace uses the v4
-///        proxy that carries the owner-intent deploy (deploy-time input, never a constant).
+///      - The v6 factory proxy is a deploy-time input, never a constant.
 interface IAGWFactory {
     /// @notice True only for wallets this factory deployed.
     /// @param account Address to test.

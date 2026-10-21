@@ -1,44 +1,22 @@
 // SPDX-License-Identifier: MIT
 pragma solidity 0.8.26;
 
-/// @title IAGW — byte-exact mirrors of the Push Agentic Wallet (AGW) types and functions the marketplace needs.
-/// @dev - Source: the AGW after its naming change (`push-agentic-wallet`, branch `nomenclature-changes`,
-///        `docs-internal/sdk-first-changes/N-nomenclature_prd.md` §2.3 and Appendix B):
-///        `src/libraries/Types.sol` (OwnerIntent, OWNER_LANE_FLAG),
-///        `src/libraries/Types.sol` (`UniversalTerms`, `AllowedCall` — file-level since the AGW nomenclature change),
-///        `lib/smartsessions/contracts/DataTypes.sol` (Session and its parts),
-///        `src/AGW.sol` (the owner-intent doors and two views).
+import {OwnerIntent} from "@push-agw/libraries/Types.sol";
+
+/// @title IAGW — the SmartSession `Session` mirror and the Push Agentic Wallet (AGW) functions the marketplace needs.
+/// @dev - Source: AGW v6, `push-agentic-wallets` commit `ffd567d` (submodule `lib/push-agentic-wallets`).
+///      - The AGW's own types (`OwnerIntent`, `AllowedCall`, `UniversalTerms`, `AssetCap`, `ArgPin`, ...) are
+///        IMPORTED from `@push-agw/libraries/Types.sol`, never copied: a struct change there fails this build.
+///      - `Session` and its parts stay a MIRROR of the vendor SmartSession types
+///        (`lib/smartsessions/contracts/DataTypes.sol` in the AGW repo, fork `7dc20e4`; field order verified
+///        identical): the vendor tree pulls remappings and an EVM target this repo cannot compile. The fork test
+///        (`UniversalMarketplace.fork.t.sol`) pins it — a wrong mirror changes `keccak256(abi.encode(session))`, and
+///        the real wallet's `grantRulesWithSig` reverts `IntentSessionMismatch`.
+///      - `Session.sessionValidator` is `ISessionValidator` upstream; a contract type is `address` in the ABI.
 ///      - `rulesId` is the AGW's name for the engine's `permissionId`; the two are the same value.
-///      - Agent identity (AGW D3, `D3-agent-identity-sender-validator_prd.md` §4.1): a session's
-///        `sessionValidatorInitData` is `abi.encode(address agent)`, exactly 32 bytes.
-///      - UNIVERSAL rules only: the NATIVE rulebook's types are not mirrored (native cards are out of v1).
-///      - MIRRORS, NOT IMPORTS: the AGW repo compiles `cancun` against OZ 5.7 and its engine types pull
-///        five vendor remappings this repo does not have. Field order and types are what matter — the
-///        ABI encoding and every selector derive from them. The AGW repo's E2E suite pins each mirror
-///        against the real type (`test_E2E_12`).
-///      - `Session.sessionValidator` is `ISessionValidator` upstream; a contract type is `address` in
-///        the ABI, so `address` here encodes and selects identically.
-
-// ─────────────────────────────── owner intent ───────────────────────────────
-
-/// @dev Mirror of the AGW `OwnerIntent`. Every field, in order.
-struct OwnerIntent {
-    address owner;
-    address wallet;
-    address executor;
-    uint96 index;
-    bytes32 sessionHash;
-    bytes32 mode;
-    bytes32 execCalldataHash;
-    uint192 nonceKey;
-    uint64 nonceSeq;
-    uint64 grantNonce;
-    uint48 deadline;
-    uint256 signerChainId;
-}
-
-/// @dev Mirror of the AGW `OWNER_LANE_FLAG` — the top bit of a uint192 nonce key.
-uint192 constant OWNER_LANE_FLAG = uint192(1) << 191;
+///      - Agent identity: the AGW's `AgentValidator` requires `sessionValidatorInitData == abi.encode(agent)`,
+///        exactly 32 bytes, agent non-zero.
+///      - `IAGW` below: signatures verified identical to v6 `src/interfaces/IAGW.sol`.
 
 // ─────────────────────────────── SmartSession ───────────────────────────────
 
@@ -71,28 +49,6 @@ struct Session {
     ERC7739Data erc7739Policies;
     ActionData[] actions;
     bool permitERC4337Paymaster;
-}
-
-// ─────────────────────────────── rules wire types (UniversalRulesPolicy) ───────────────────────────────
-
-/// @dev Mirror of the AGW's file-level `AllowedCall` (src/libraries/Types.sol).
-struct AllowedCall {
-    address target;
-    bytes4 selector;
-    uint16 beneficiaryOffset;
-    bool hasBeneficiary;
-    uint256 maxValue;
-}
-
-/// @dev Mirror of the AGW's file-level `UniversalTerms` (src/libraries/Types.sol) — a UNIVERSAL envelope's body.
-struct UniversalTerms {
-    uint48 validUntil;
-    address expectedCEA;
-    address asset;
-    uint256 maxAmountPerCall;
-    uint256 maxAmountTotal;
-    uint256 maxPCPerCall;
-    AllowedCall[] allowedCalls;
 }
 
 // ─────────────────────────────── the wallet ───────────────────────────────
