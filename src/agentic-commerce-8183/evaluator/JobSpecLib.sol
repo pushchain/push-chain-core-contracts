@@ -23,8 +23,6 @@ import {JobSpecErrors} from "../libraries/Errors.sol";
 ///         DELEGATECALLs it (compiled in, it put the evaluator over EIP-170). The rest is internal, compiled in.
 /// @dev Checking (`validate`, run when the spec is frozen inside `fund`, so a refused spec reverts the funding):
 ///      - Structural checks only. Whether the criteria mean what the client wants is not checkable here.
-///      - `executeBy` and `failFinalAt` are not checked: the evaluator does not use them (the end blocks are fixed at
-///        `submit`, and a FAIL there is final).
 ///      - Every rule is one the evaluator relies on, so a funded job can always be judged: indexes are in range,
 ///        the logic forms a graph evaluable from last to first, every read is one the evaluator can encode and
 ///        decodes in bounded work, every logic entry, check and read counts toward the verdict, at least one read is

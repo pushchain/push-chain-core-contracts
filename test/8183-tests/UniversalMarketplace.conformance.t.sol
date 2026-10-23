@@ -169,8 +169,6 @@ contract UniversalMarketplaceConformanceTest is BuilderFixtures {
         returns (JobSpec memory)
     {
         return JobSpec({
-            executeBy: executeBy,
-            failFinalAt: failFinalAt,
             reads: reads,
             checks: checks,
             logic: logic,
@@ -252,8 +250,6 @@ contract UniversalMarketplaceConformanceTest is BuilderFixtures {
     }
 
     function _assertSpecEq(JobSpec memory a, JobSpec memory b) internal pure {
-        assertEq(a.executeBy, b.executeBy, "executeBy");
-        assertEq(a.failFinalAt, b.failFinalAt, "failFinalAt");
         assertEq(a.origin, b.origin, "origin");
         assertEq(a.reads.length, b.reads.length, "reads.length");
         for (uint256 i; i < a.reads.length; ++i) {

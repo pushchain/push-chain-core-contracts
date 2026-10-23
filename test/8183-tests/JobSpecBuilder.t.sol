@@ -250,8 +250,6 @@ contract JobSpecBuilderTest is BuilderFixtures {
     function test_JB03_timingAndOrigin() public view {
         EvaluationTemplate memory t = _nested();
         JobSpec memory s = _build(t, _ctx(100e6, _noParams()));
-        assertEq(s.executeBy, 1_800_000_000);
-        assertEq(s.failFinalAt, 1_800_000_000 + 2 hours);
         assertEq(s.origin, keccak256("origin"));
         assertEq(keccak256(abi.encode(s.logic)), keccak256(abi.encode(t.logic)), "logic verbatim");
         for (uint256 i; i < t.reads.length; ++i) {

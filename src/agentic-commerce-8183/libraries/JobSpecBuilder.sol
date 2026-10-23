@@ -37,8 +37,6 @@ library JobSpecBuilder {
         address[] memory cea = _ceas(t, ctx.agw);
 
         JobSpec memory spec;
-        spec.executeBy = uint64(ctx.executeBy);
-        spec.failFinalAt = uint64(ctx.executeBy) + ctx.settleWindow;
         spec.origin = ctx.origin;
         spec.allowedMutability = AllowedMutability.NONE; // the criteria are exactly the card's; neither side may replace them
         spec.logic = t.logic;

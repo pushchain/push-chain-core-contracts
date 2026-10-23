@@ -52,7 +52,7 @@ import {UniversalEvaluatorErrors, JobSpecErrors} from "../libraries/Errors.sol";
 ///        root is PASS or FAIL no later answer can change it, and reads still out don't hold up payment.
 ///      - The kernel `reason` commits to the spec and to every read's evidence (`evidenceOf`) in index order, zero
 ///        for a read not answered when the root was decided, so it can be re-derived from events.
-///      - `JobSpec.executeBy` and `JobSpec.failFinalAt` are not used: a FAIL at fixed blocks is final.
+///      - A FAIL at the blocks fixed at `submit` is final.
 ///      - `JobSpecLib.validate` runs in a linked library (DELEGATECALL; its address is fixed in this bytecode at
 ///        deployment, and it is stateless). Everything else, `EvmReadLib` included, is compiled in.
 ///      - Not upgradeable, with no admin: how this evaluator judges a frozen spec can't change. A rule change is a new

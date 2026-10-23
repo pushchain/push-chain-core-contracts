@@ -231,8 +231,6 @@ abstract contract UniversalEvalBase is KernelBase {
 
     /// @notice "The CEA receives at least 0.38 WETH": the balance after (read 0) minus before (read 1). Not replaceable.
     function _swapSpec() internal view returns (JobSpec memory s) {
-        s.executeBy = uint64(block.timestamp + 1 hours);
-        s.failFinalAt = uint64(block.timestamp + 2 hours);
         s.reads = new Read[](2);
         s.reads[0] = _balanceRead(weth, cea);
         s.reads[SWAP_PRE] = _pre(_balanceRead(weth, cea));
@@ -251,8 +249,6 @@ abstract contract UniversalEvalBase is KernelBase {
 
     /// @notice "Deposited into Aave OR Morpho": two COMPARE reads under ANY. No snapshot.
     function _anySpec() internal view returns (JobSpec memory s) {
-        s.executeBy = uint64(block.timestamp + 1 hours);
-        s.failFinalAt = uint64(block.timestamp + 2 hours);
         s.reads = new Read[](2);
         s.reads[0] = _balanceRead(ausdc, cea);
         s.reads[1] = _balanceRead(morphoVault, cea);

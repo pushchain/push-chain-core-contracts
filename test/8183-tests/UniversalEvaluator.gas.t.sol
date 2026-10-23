@@ -100,8 +100,6 @@ contract UniversalEvaluatorGasTest is UniversalEvalBase {
     /// @dev `nReads` reads and MAX_CHECKS checks to fill in, and a root ALL over `nLogic - 1` CHECK entries, so every
     ///      entry is reachable and every check used.
     function _frame(uint256 nReads, uint256 nLogic) internal view returns (JobSpec memory s) {
-        s.executeBy = uint64(block.timestamp + 1 hours);
-        s.failFinalAt = uint64(block.timestamp + 2 hours);
         s.reads = new Read[](nReads);
         s.checks = new Check[](MAX_CHECKS);
         s.logic = new Logic[](nLogic);

@@ -371,8 +371,6 @@ contract UniversalEvaluatorCriteriaTest is UniversalEvalBase {
         view
         returns (JobSpec memory s)
     {
-        s.executeBy = uint64(block.timestamp + 1 hours);
-        s.failFinalAt = uint64(block.timestamp + 2 hours);
         s.reads = reads;
         s.checks = checks;
         s.logic = logic;

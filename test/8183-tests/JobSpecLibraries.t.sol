@@ -315,8 +315,6 @@ contract JobSpecLibrariesTest is Test {
 
     /// @dev The balance after (read 0) grew by at least 1 over the balance before (read 1).
     function _spec() internal pure returns (JobSpec memory s) {
-        s.executeBy = 100;
-        s.failFinalAt = 200;
         s.reads = new Read[](2);
         s.reads[0] = _read();
         s.reads[1] = _read();
@@ -582,8 +580,6 @@ contract JobSpecLibrariesTest is Test {
     }
 
     function _twoVenue() internal pure returns (JobSpec memory s) {
-        s.executeBy = 100;
-        s.failFinalAt = 200;
         s.reads = new Read[](2);
         s.reads[0] = _read();
         s.reads[1] = _read();
