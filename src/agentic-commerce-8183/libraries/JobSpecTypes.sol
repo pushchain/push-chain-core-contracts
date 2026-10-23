@@ -86,13 +86,13 @@ struct Logic {
 
 /// @notice A job's criteria. `logic[0]` is the root: the job passes if it passes.
 struct JobSpec {
-    uint64 executeBy; // the provider must execute before this
-    uint64 failFinalAt; // a FAIL only counts from a verify started after this
     Read[] reads;
     Check[] checks;
     Logic[] logic;
     AllowedMutability allowedMutability; // who may replace these criteria before `fund`; marketplace jobs are NONE
     bytes32 origin; // keccak256(abi.encode(marketplace, cardId, cardVersion, principal)); opaque to hook and evaluator
+    uint64 executeBy; // the provider must execute before this
+    uint64 failFinalAt; // a FAIL only counts from a verify started after this
 }
 
 // ─────────────────────────────── return-type codes (`Read.outputs`) ───────────────────────────────
