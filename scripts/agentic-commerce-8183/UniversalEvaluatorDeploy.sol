@@ -12,7 +12,7 @@ import {IAgenticCommerce} from "../../src/agentic-commerce-8183/interfaces/IAgen
 import {IUniversalCallback} from "../../src/interfaces/IUniversalCallback.sol";
 import {
     ReadConfig,
-    IReadStateDomains,
+    IReadStateViews,
     IUniversalCoreHeights
 } from "../../src/agentic-commerce-8183/evaluator/EvaluationTypes.sol";
 
@@ -127,7 +127,7 @@ library UniversalEvaluatorDeploy {
     /// @dev The evaluator is bound to these contracts for good, and calls these views on every job, so each must exist:
     ///      a Read State without `isDomainBlocked` (added 2026-08-03) would make every `fund` revert.
     function _requireDependencies(Params memory p) private view {
-        try IReadStateDomains(p.readState).isDomainBlocked("", "") returns (bool) {}
+        try IReadStateViews(p.readState).isDomainBlocked("", "") returns (bool) {}
         catch {
             revert("read state: no isDomainBlocked");
         }
