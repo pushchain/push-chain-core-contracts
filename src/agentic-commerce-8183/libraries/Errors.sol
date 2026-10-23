@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 pragma solidity 0.8.26;
 
-import {Mutability} from "./JobSpecTypes.sol";
+import {AllowedMutability} from "./JobSpecTypes.sol";
 
 /// @title UniversalMarketplaceErrors
 /// @notice Every error the marketplace, its Terms helper and JobSpecBuilder raise.
@@ -68,19 +68,6 @@ library UniversalMarketplaceErrors {
     error JobMismatch();
 }
 
-/// @title RulesBindingHookErrors
-/// @notice The errors of the interim job hook.
-library RulesBindingHookErrors {
-    /// @notice `fund.optParams` is not exactly 32 bytes.
-    error InvalidOptParams(uint256 length);
-    /// @notice The funding client is not a factory-deployed AGW.
-    error CallerIsNotAGW(address caller);
-    /// @notice The rules set is not enabled on this AGW.
-    error RulesNotLive(address agw, bytes32 rulesId);
-    /// @notice The AGW already has a Funded or Submitted job under this hook.
-    error AGWHasLiveJob(address agw, uint256 liveJobId);
-}
-
 /// @title ERC8183HookErrors
 /// @notice The errors of BaseERC8183Hook, shared by every hook built on it.
 library ERC8183HookErrors {
@@ -99,8 +86,8 @@ library JobSpecErrors {
     error ReadCount(uint256 count);
     /// @notice `checks.length` is 0 or above `MAX_CHECKS`.
     error CheckCount(uint256 count);
-    /// @notice `nodes.length` is 0 or above `MAX_NODES`.
-    error NodeCount(uint256 count);
+    /// @notice `logic.length` is 0 or above `MAX_LOGIC`.
+    error LogicCount(uint256 count);
     /// @notice A read names an empty or too long chain namespace or chain id, or a namespace other than `eip155`.
     error ReadChain(uint256 read);
     /// @notice A read asks for zero confirmations, or more than the evaluator's maximum.
@@ -112,17 +99,23 @@ library JobSpecErrors {
     /// @notice A read's `outputs` / `field` do not name one value of a well-formed return type that fits
     ///         `MAX_RESULT_LENGTH`.
     error ReadShape(uint256 read);
-    /// @notice A check points at a read that does not exist.
+    /// @notice A check side names a read that does not exist or is not in increasing order, or both sides name
+    ///         the same read.
     error CheckRead(uint256 check);
-    /// @notice A BOOL check's target is neither 0 nor 1.
+    /// @notice A check's sides don't fit its type: BOOLEAN one `left` read and no `right` · COMPARE no `right` ·
+    ///         NUMBER / PERCENTAGE both sides.
+    error CheckSides(uint256 check);
+    /// @notice No read is POST_EXECUTION, so the provider's work would never be measured.
+    error NoPostExecutionRead();
+    /// @notice A BOOLEAN check's target is neither 0 nor 1.
     error CheckTarget(uint256 check);
-    /// @notice A BOOL check's operator is not `EQ`.
+    /// @notice A BOOLEAN check's operator is not `EQUAL`.
     error CheckOp(uint256 check);
-    /// @notice A node is malformed: bad check index, children out of order or out of range, or a bad `k`.
-    error NodeShape(uint256 node);
-    /// @notice A node no path from the root reaches.
-    error NodeUnreachable(uint256 node);
-    /// @notice A check no reachable node uses.
+    /// @notice A logic entry is malformed: bad check index, children out of order or out of range, or a bad `k`.
+    error LogicShape(uint256 entry);
+    /// @notice A logic entry no path from the root reaches.
+    error LogicUnreachable(uint256 entry);
+    /// @notice A check no reachable logic entry uses.
     error CheckUnused(uint256 check);
     /// @notice A read no used check reads.
     error ReadUnused(uint256 read);
@@ -138,18 +131,23 @@ library EvmReadErrors {
 }
 
 /// @title UniversalHookErrors
-/// @notice The UniversalHook's spec errors. Its binding errors are `RulesBindingHookErrors`.
+/// @notice The UniversalHook's errors: binding the rules set at `fund`, and replacing and freezing the spec.
 library UniversalHookErrors {
+    /// @notice `fund.optParams` is neither 32 bytes (the rulesId alone) nor long enough to hold
+    ///         `(rulesId, specHash, newSpec)`.
+    error InvalidOptParams(uint256 length);
+    /// @notice The funding client is not a factory-deployed AGW.
+    error CallerIsNotAGW(address caller);
+    /// @notice The rules set is not enabled on this AGW.
+    error RulesNotLive(address agw, bytes32 rulesId);
+    /// @notice The AGW already has a Funded or Submitted job under this hook.
+    error WalletHasActiveJob(address agw, uint256 jobId);
     /// @notice The job's mutability flag does not let this party replace the spec.
-    error SpecChangeNotAllowed(Mutability flag);
+    error SpecChangeNotAllowed(AllowedMutability flag);
     /// @notice A replacement spec tried to change the mutability flag.
-    error FlagChanged(Mutability expected, Mutability got);
+    error FlagChanged(AllowedMutability expected, AllowedMutability got);
     /// @notice The spec being frozen is not the one the client agreed to.
     error SpecHashMismatch(bytes32 expected, bytes32 actual);
-    /// @notice Only the proxy's admin (through `ProxyAdmin.upgradeAndCall`) may run this upgrade step.
-    error CallerIsNotProxyAdmin(address caller);
-    /// @notice The upgrade step is for a proxy with no evaluator yet.
-    error EvaluatorAlreadySet(address evaluator);
 }
 
 /// @title UniversalEvaluatorErrors
@@ -167,7 +165,7 @@ library UniversalEvaluatorErrors {
     error SpecFrozen(uint256 jobId);
     /// @notice The job's PC does not cover a read.
     error PrepaidTooLow(uint256 needed, uint256 available);
-    /// @notice The job's "before" snapshot is not complete yet.
+    /// @notice A PRE_EXECUTION read has no answer yet.
     error SnapshotNotReady(uint256 jobId);
     /// @notice No read to send: every one is answered or still in flight, or the job is decided.
     error NothingToSend(uint256 jobId);
@@ -179,8 +177,6 @@ library UniversalEvaluatorErrors {
     error CallerIsNotHook(address caller);
     /// @notice Caller is not Read State.
     error CallerIsNotReadState(address caller);
-    /// @notice Caller is not the job's provider.
-    error CallerIsNotProvider(address caller);
     /// @notice Caller is neither the job's client nor its provider.
     error CallerIsNotClientOrProvider(address caller);
     /// @notice Only the evaluator itself may call this.

@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 pragma solidity 0.8.26;
 
-import {RulesBindingHookErrors, ERC8183HookErrors} from "../../src/agentic-commerce-8183/libraries/Errors.sol";
+import {UniversalHookErrors, ERC8183HookErrors} from "../../src/agentic-commerce-8183/libraries/Errors.sol";
 import {TransparentUpgradeableProxy} from "@openzeppelin/contracts/proxy/transparent/TransparentUpgradeableProxy.sol";
 import {ITransparentUpgradeableProxy} from "@openzeppelin/contracts/proxy/transparent/TransparentUpgradeableProxy.sol";
 import {ProxyAdmin} from "@openzeppelin/contracts/proxy/transparent/ProxyAdmin.sol";
@@ -10,19 +10,21 @@ import {Initializable} from "@openzeppelin/contracts-upgradeable/proxy/utils/Ini
 import {IERC20Errors} from "@openzeppelin/contracts/interfaces/draft-IERC6093.sol";
 
 import {IAgenticCommerce} from "../../src/agentic-commerce-8183/interfaces/IAgenticCommerce.sol";
-import {RulesBindingHook} from "../../src/agentic-commerce-8183/hooks/RulesBindingHook.sol";
+import {UniversalHook} from "../../src/agentic-commerce-8183/hooks/UniversalHook.sol";
 import {KernelBase} from "./KernelBase.t.sol";
 import {MockAGWFactory} from "./mocks/MockAGWFactory.sol";
 import {MockSmartSession} from "./mocks/MockSmartSession.sol";
 import {RecordingHook} from "./mocks/RecordingHook.sol";
 
-/// @notice Phase 5 — mandate binding and one live job per AGW, driven through the real kernel.
-contract RulesBindingHookTest is KernelBase {
-    RulesBindingHook internal hook;
-    RulesBindingHook internal hookImpl;
+/// @notice The UniversalHook's rules binding and one live job per AGW, driven through the real kernel. The jobs here
+///         name another evaluator than the hook's, so the hook only binds rules for them.
+contract UniversalHookBindingTest is KernelBase {
+    UniversalHook internal hook;
+    UniversalHook internal hookImpl;
     MockAGWFactory internal factory;
     MockSmartSession internal engine;
     address internal hookProxyAdminOwner = makeAddr("hookProxyAdminOwner");
+    address internal universalEvaluator = makeAddr("universalEvaluator"); // not the jobs' `evaluator`
 
     /// @dev `client` from KernelBase acts as the AGW.
     address internal agw;
@@ -34,8 +36,8 @@ contract RulesBindingHookTest is KernelBase {
         agw = client;
         factory = new MockAGWFactory();
         engine = new MockSmartSession();
-        hookImpl = new RulesBindingHook();
-        hook = RulesBindingHook(_deployHook(address(kernel), address(factory), address(engine)));
+        hookImpl = new UniversalHook();
+        hook = UniversalHook(_deployHook(address(kernel), address(factory), address(engine), universalEvaluator));
         vm.prank(admin);
         kernel.setHookWhitelist(address(hook), true);
 
@@ -43,10 +45,10 @@ contract RulesBindingHookTest is KernelBase {
         engine.setPermission(P, agw, true);
     }
 
-    function _deployHook(address k, address f, address e) internal returns (address) {
+    function _deployHook(address k, address f, address e, address ev) internal returns (address) {
         return address(
             new TransparentUpgradeableProxy(
-                address(hookImpl), hookProxyAdminOwner, abi.encodeCall(RulesBindingHook.initialize, (k, f, e))
+                address(hookImpl), hookProxyAdminOwner, abi.encodeCall(UniversalHook.initialize, (k, f, e, ev))
             )
         );
     }
@@ -68,8 +70,7 @@ contract RulesBindingHookTest is KernelBase {
     function _assertStillOpenAndUnbound(uint256 jobId, uint256 clientBalBefore) internal view {
         assertEq(uint8(_status(jobId)), uint8(IAgenticCommerce.JobStatus.Open));
         assertEq(token.balanceOf(agw), clientBalBefore);
-        (address a,) = hook.rulesOf(jobId);
-        assertEq(a, address(0));
+        assertEq(hook.agwOfJob(jobId), address(0));
     }
 
     // ═════════════════════════ happy path ═════════════════════════
@@ -77,22 +78,19 @@ contract RulesBindingHookTest is KernelBase {
     function test_fund_bindsRules() public {
         uint256 jobId = _open(agw, BUDGET);
         vm.expectEmit(address(hook));
-        emit RulesBindingHook.RulesBound(jobId, agw, P);
+        emit UniversalHook.RulesBound(jobId, agw, P);
         vm.prank(agw);
         kernel.fund(jobId, BUDGET, abi.encode(P));
 
-        (address a, bytes32 pid) = hook.rulesOf(jobId);
-        assertEq(a, agw);
-        assertEq(pid, P);
-        assertEq(hook.liveJobOf(agw), jobId);
-        assertTrue(hook.isAGWBusy(agw));
+        assertEq(hook.agwOfJob(jobId), agw);
+        assertEq(hook.rulesOfJob(jobId), P);
+        assertEq(hook.activeJobOf(agw), jobId);
         assertEq(uint8(_status(jobId)), uint8(IAgenticCommerce.JobStatus.Funded));
     }
 
     function test_zeroBudgetJob_bindsNormally() public {
         uint256 jobId = _bind(agw, P, 0);
-        assertEq(hook.liveJobOf(agw), jobId);
-        assertTrue(hook.isAGWBusy(agw));
+        assertEq(hook.activeJobOf(agw), jobId);
     }
 
     // ═════════════════════════ check 1 · optParams length ═════════════════════════
@@ -103,7 +101,7 @@ contract RulesBindingHookTest is KernelBase {
             uint256 jobId = _open(agw, BUDGET);
             uint256 bal = token.balanceOf(agw);
             vm.prank(agw);
-            vm.expectRevert(abi.encodeWithSelector(RulesBindingHookErrors.InvalidOptParams.selector, lens[i]));
+            vm.expectRevert(abi.encodeWithSelector(UniversalHookErrors.InvalidOptParams.selector, lens[i]));
             kernel.fund(jobId, BUDGET, new bytes(lens[i]));
             _assertStillOpenAndUnbound(jobId, bal);
         }
@@ -116,7 +114,7 @@ contract RulesBindingHookTest is KernelBase {
         engine.setPermission(P, eoa, true);
         uint256 jobId = _open(eoa, BUDGET);
         vm.prank(eoa);
-        vm.expectRevert(abi.encodeWithSelector(RulesBindingHookErrors.CallerIsNotAGW.selector, eoa));
+        vm.expectRevert(abi.encodeWithSelector(UniversalHookErrors.CallerIsNotAGW.selector, eoa));
         kernel.fund(jobId, BUDGET, abi.encode(P));
         assertEq(uint8(_status(jobId)), uint8(IAgenticCommerce.JobStatus.Open));
     }
@@ -126,12 +124,11 @@ contract RulesBindingHookTest is KernelBase {
         uint256 jobId = _open(c, BUDGET);
         uint256 bal = token.balanceOf(c);
         vm.prank(c);
-        vm.expectRevert(abi.encodeWithSelector(RulesBindingHookErrors.CallerIsNotAGW.selector, c));
+        vm.expectRevert(abi.encodeWithSelector(UniversalHookErrors.CallerIsNotAGW.selector, c));
         kernel.fund(jobId, BUDGET, abi.encode(P));
         assertEq(token.balanceOf(c), bal);
         assertEq(uint8(_status(jobId)), uint8(IAgenticCommerce.JobStatus.Open));
-        (address a,) = hook.rulesOf(jobId);
-        assertEq(a, address(0));
+        assertEq(hook.agwOfJob(jobId), address(0));
     }
 
     // ═════════════════════════ check 3 · mandate live ═════════════════════════
@@ -140,7 +137,7 @@ contract RulesBindingHookTest is KernelBase {
         uint256 jobId = _open(agw, BUDGET);
         uint256 bal = token.balanceOf(agw);
         vm.prank(agw);
-        vm.expectRevert(abi.encodeWithSelector(RulesBindingHookErrors.RulesNotLive.selector, agw, P2));
+        vm.expectRevert(abi.encodeWithSelector(UniversalHookErrors.RulesNotLive.selector, agw, P2));
         kernel.fund(jobId, BUDGET, abi.encode(P2));
         _assertStillOpenAndUnbound(jobId, bal);
     }
@@ -150,7 +147,7 @@ contract RulesBindingHookTest is KernelBase {
         uint256 jobId = _open(agw, BUDGET);
         uint256 bal = token.balanceOf(agw);
         vm.prank(agw);
-        vm.expectRevert(abi.encodeWithSelector(RulesBindingHookErrors.RulesNotLive.selector, agw, P));
+        vm.expectRevert(abi.encodeWithSelector(UniversalHookErrors.RulesNotLive.selector, agw, P));
         kernel.fund(jobId, BUDGET, abi.encode(P));
         _assertStillOpenAndUnbound(jobId, bal);
     }
@@ -162,7 +159,7 @@ contract RulesBindingHookTest is KernelBase {
         uint256 jobId = _open(agw, BUDGET);
         uint256 bal = token.balanceOf(agw);
         vm.prank(agw);
-        vm.expectRevert(abi.encodeWithSelector(RulesBindingHookErrors.RulesNotLive.selector, agw, P2));
+        vm.expectRevert(abi.encodeWithSelector(UniversalHookErrors.RulesNotLive.selector, agw, P2));
         kernel.fund(jobId, BUDGET, abi.encode(P2));
         _assertStillOpenAndUnbound(jobId, bal);
     }
@@ -174,7 +171,7 @@ contract RulesBindingHookTest is KernelBase {
         uint256 second = _open(agw, BUDGET);
         uint256 bal = token.balanceOf(agw);
         vm.prank(agw);
-        vm.expectRevert(abi.encodeWithSelector(RulesBindingHookErrors.AGWHasLiveJob.selector, agw, first));
+        vm.expectRevert(abi.encodeWithSelector(UniversalHookErrors.WalletHasActiveJob.selector, agw, first));
         kernel.fund(second, BUDGET, abi.encode(P));
         _assertStillOpenAndUnbound(second, bal);
     }
@@ -183,11 +180,11 @@ contract RulesBindingHookTest is KernelBase {
         uint256 first = _bind(agw, P, BUDGET);
         vm.prank(provider);
         kernel.submit(first, bytes32(0), "");
-        assertTrue(hook.isAGWBusy(agw));
+        assertEq(hook.activeJobOf(agw), first);
         uint256 second = _open(agw, BUDGET);
         uint256 bal = token.balanceOf(agw);
         vm.prank(agw);
-        vm.expectRevert(abi.encodeWithSelector(RulesBindingHookErrors.AGWHasLiveJob.selector, agw, first));
+        vm.expectRevert(abi.encodeWithSelector(UniversalHookErrors.WalletHasActiveJob.selector, agw, first));
         kernel.fund(second, BUDGET, abi.encode(P));
         _assertStillOpenAndUnbound(second, bal);
     }
@@ -195,9 +192,9 @@ contract RulesBindingHookTest is KernelBase {
     // ═════════════════════════ freeing the AGW — every path ═════════════════════════
 
     function _assertSecondJobFunds() internal {
-        assertFalse(hook.isAGWBusy(agw));
+        assertEq(hook.activeJobOf(agw), 0);
         uint256 second = _bind(agw, P, BUDGET);
-        assertEq(hook.liveJobOf(agw), second);
+        assertEq(hook.activeJobOf(agw), second);
     }
 
     function test_freed_afterComplete() public {
@@ -229,7 +226,7 @@ contract RulesBindingHookTest is KernelBase {
         ids[0] = first;
         vm.prank(admin);
         kernel.batchDetachHook(ids);
-        assertTrue(hook.isAGWBusy(agw), "detach alone does not end the job");
+        assertEq(hook.activeJobOf(agw), first, "detach alone does not end the job");
         vm.warp(block.timestamp + EXPIRY_OFFSET);
         kernel.claimRefund(first);
         _assertSecondJobFunds();
@@ -247,8 +244,8 @@ contract RulesBindingHookTest is KernelBase {
 
         uint256 a = _bind(agw, P, BUDGET);
         uint256 b = _bind(agw2, P2, BUDGET);
-        assertEq(hook.liveJobOf(agw), a);
-        assertEq(hook.liveJobOf(agw2), b);
+        assertEq(hook.activeJobOf(agw), a);
+        assertEq(hook.activeJobOf(agw2), b);
     }
 
     function test_samePermissionId_differentAGWs_bindIndependently() public {
@@ -261,12 +258,10 @@ contract RulesBindingHookTest is KernelBase {
 
         uint256 a = _bind(agw, P, BUDGET);
         uint256 b = _bind(agw2, P, BUDGET);
-        (address wa, bytes32 pa) = hook.rulesOf(a);
-        (address wb, bytes32 pb) = hook.rulesOf(b);
-        assertEq(wa, agw);
-        assertEq(wb, agw2);
-        assertEq(pa, P);
-        assertEq(pb, P);
+        assertEq(hook.agwOfJob(a), agw);
+        assertEq(hook.agwOfJob(b), agw2);
+        assertEq(hook.rulesOfJob(a), P);
+        assertEq(hook.rulesOfJob(b), P);
     }
 
     function test_sameRules_sequentialJobs_allowed() public {
@@ -274,8 +269,7 @@ contract RulesBindingHookTest is KernelBase {
         vm.prank(evaluator);
         kernel.reject(first, bytes32(0), "");
         uint256 second = _bind(agw, P, BUDGET);
-        (, bytes32 pid) = hook.rulesOf(second);
-        assertEq(pid, P);
+        assertEq(hook.rulesOfJob(second), P);
     }
 
     // ═════════════════════════ caller auth ═════════════════════════
@@ -309,10 +303,8 @@ contract RulesBindingHookTest is KernelBase {
         );
         kernel.fund(jobId, BUDGET, abi.encode(P));
 
-        (address a,) = hook.rulesOf(jobId);
-        assertEq(a, address(0));
-        assertEq(hook.liveJobOf(agw3), 0);
-        assertFalse(hook.isAGWBusy(agw3));
+        assertEq(hook.agwOfJob(jobId), address(0));
+        assertEq(hook.activeJobOf(agw3), 0);
         assertEq(uint8(_status(jobId)), uint8(IAgenticCommerce.JobStatus.Open));
     }
 
@@ -322,39 +314,45 @@ contract RulesBindingHookTest is KernelBase {
         assertEq(hook.KERNEL(), address(kernel));
         assertEq(hook.AGW_FACTORY(), address(factory));
         assertEq(hook.SESSION_ENGINE(), address(engine));
+        assertEq(hook.EVALUATOR(), universalEvaluator);
     }
 
     function test_initialize_zeroKernel_reverts() public {
         vm.expectRevert(ERC8183HookErrors.ZeroAddress.selector);
-        _deployHook(address(0), address(factory), address(engine));
+        _deployHook(address(0), address(factory), address(engine), universalEvaluator);
     }
 
     function test_initialize_zeroFactory_reverts() public {
         vm.expectRevert(ERC8183HookErrors.ZeroAddress.selector);
-        _deployHook(address(kernel), address(0), address(engine));
+        _deployHook(address(kernel), address(0), address(engine), universalEvaluator);
     }
 
     function test_initialize_zeroEngine_reverts() public {
         vm.expectRevert(ERC8183HookErrors.ZeroAddress.selector);
-        _deployHook(address(kernel), address(factory), address(0));
+        _deployHook(address(kernel), address(factory), address(0), universalEvaluator);
+    }
+
+    function test_initialize_zeroEvaluator_reverts() public {
+        vm.expectRevert(ERC8183HookErrors.ZeroAddress.selector);
+        _deployHook(address(kernel), address(factory), address(engine), address(0));
     }
 
     function test_initialize_twice_reverts() public {
         vm.expectRevert(Initializable.InvalidInitialization.selector);
-        hook.initialize(address(kernel), address(factory), address(engine));
+        hook.initialize(address(kernel), address(factory), address(engine), universalEvaluator);
     }
 
     // ═════════════════════════ views ═════════════════════════
 
-    function test_isAGWBusy_neverSeen_false() public {
-        assertFalse(hook.isAGWBusy(makeAddr("never")));
+    function test_activeJobOf_neverSeen_zero() public {
+        assertEq(hook.activeJobOf(makeAddr("never")), 0);
     }
 
     // ═════════════════════════ scope of the rule (D-25) ═════════════════════════
 
     function test_scope_hooklessJob_fundsWhileBusy() public {
-        _bind(agw, P, BUDGET);
-        assertTrue(hook.isAGWBusy(agw));
+        uint256 bound = _bind(agw, P, BUDGET);
+        assertEq(hook.activeJobOf(agw), bound);
         uint256 plain = _budgeted(address(0), BUDGET); // `client` == agw
         vm.prank(agw);
         kernel.fund(plain, BUDGET, "");
@@ -368,9 +366,8 @@ contract RulesBindingHookTest is KernelBase {
         uint256 jobId = _budgeted(address(other), BUDGET);
         vm.prank(agw);
         kernel.fund(jobId, BUDGET, abi.encode(P));
-        assertEq(hook.liveJobOf(agw), 0);
-        (address a,) = hook.rulesOf(jobId);
-        assertEq(a, address(0));
+        assertEq(hook.activeJobOf(agw), 0);
+        assertEq(hook.agwOfJob(jobId), address(0));
     }
 
     // ═════════════════════════ upgrade + layout ═════════════════════════
@@ -379,24 +376,23 @@ contract RulesBindingHookTest is KernelBase {
         uint256 first = _bind(agw, P, BUDGET);
         ProxyAdmin pa = ProxyAdmin(_proxyAdmin(address(hook)));
         assertEq(pa.owner(), hookProxyAdminOwner);
-        address newImpl = address(new RulesBindingHook());
+        address newImpl = address(new UniversalHook());
         vm.prank(hookProxyAdminOwner);
         pa.upgradeAndCall(ITransparentUpgradeableProxy(address(hook)), newImpl, "");
 
-        (address a, bytes32 pid) = hook.rulesOf(first);
-        assertEq(a, agw);
-        assertEq(pid, P);
-        assertEq(hook.liveJobOf(agw), first);
+        assertEq(hook.agwOfJob(first), agw);
+        assertEq(hook.rulesOfJob(first), P);
+        assertEq(hook.activeJobOf(agw), first);
 
         uint256 second = _open(agw, BUDGET);
         vm.prank(agw);
-        vm.expectRevert(abi.encodeWithSelector(RulesBindingHookErrors.AGWHasLiveJob.selector, agw, first));
+        vm.expectRevert(abi.encodeWithSelector(UniversalHookErrors.WalletHasActiveJob.selector, agw, first));
         kernel.fund(second, BUDGET, abi.encode(P));
     }
 
     function test_upgrade_byNonOwner_reverts() public {
         ProxyAdmin pa = ProxyAdmin(_proxyAdmin(address(hook)));
-        address impl = address(new RulesBindingHook());
+        address impl = address(new UniversalHook());
         vm.prank(admin);
         vm.expectRevert(abi.encodeWithSelector(Ownable.OwnableUnauthorizedAccount.selector, admin));
         pa.upgradeAndCall(ITransparentUpgradeableProxy(address(hook)), impl, "");
@@ -419,7 +415,8 @@ contract RulesBindingHookTest is KernelBase {
         bytes32 l = keccak256(abi.encode(agw, uint256(53)));
         assertEq(uint256(vm.load(h, l)), jobId);
 
-        for (uint256 i = 54; i <= 103; i++) {
+        assertEq(address(uint160(uint256(vm.load(h, bytes32(uint256(54)))))), universalEvaluator);
+        for (uint256 i = 55; i <= 103; i++) {
             assertEq(vm.load(h, bytes32(i)), bytes32(0), "hook gap");
         }
     }

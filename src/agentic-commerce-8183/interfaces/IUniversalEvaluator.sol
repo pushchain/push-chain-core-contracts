@@ -10,10 +10,10 @@ interface IUniversalEvaluator {
     /// @notice The stored replacement spec, or empty if none.
     function currentSpec(uint256 jobId) external view returns (bytes memory);
 
-    /// @notice Freeze this spec and fire the "before" reads from the client's prepaid PC.
+    /// @notice Freeze this spec and fire the PRE_EXECUTION reads from the client's prepaid PC.
     function startSnapshot(uint256 jobId, bytes calldata spec) external;
 
-    /// @notice Fix the end blocks and send the "after" reads from prepaid PC (called from submit). Reverts if the
-    ///         end blocks can't be fixed; a failure to send the reads is caught inside.
+    /// @notice Fix the end blocks and send the POST_EXECUTION reads from prepaid PC (called from submit). Reverts
+    ///         if the end blocks can't be fixed; a failure to send the reads is caught inside.
     function verifyFromSubmit(uint256 jobId) external;
 }

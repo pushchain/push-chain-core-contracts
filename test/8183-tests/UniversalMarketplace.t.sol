@@ -19,13 +19,19 @@ import {MockAGW} from "./mocks/MockAGW.sol";
 import {MockSmartSession} from "./mocks/MockSmartSession.sol";
 import {MockPRC20Source} from "./mocks/MockPRC20Source.sol";
 import {IAgenticCommerce} from "../../src/agentic-commerce-8183/interfaces/IAgenticCommerce.sol";
-import {RulesBindingHook} from "../../src/agentic-commerce-8183/hooks/RulesBindingHook.sol";
+import {UniversalHook} from "../../src/agentic-commerce-8183/hooks/UniversalHook.sol";
 import {UniversalMarketplace} from "../../src/agentic-commerce-8183/UniversalMarketplace.sol";
 import {UniversalMarketplaceTerms} from "../../src/agentic-commerce-8183/UniversalMarketplaceTerms.sol";
 import {IUniversalMarketplace} from "../../src/agentic-commerce-8183/interfaces/IUniversalMarketplace.sol";
 import {UniversalMarketplaceErrors} from "../../src/agentic-commerce-8183/libraries/Errors.sol";
 import {JobSpecBuilder} from "../../src/agentic-commerce-8183/libraries/JobSpecBuilder.sol";
-import {EvalType, Op, NodeKind, Node, JobSpec} from "../../src/agentic-commerce-8183/libraries/JobSpecTypes.sol";
+import {
+    Evaluation,
+    Operation,
+    LogicKind,
+    Logic,
+    JobSpec
+} from "../../src/agentic-commerce-8183/libraries/JobSpecTypes.sol";
 import {
     OwnerIntent,
     OWNER_LANE_FLAG,
@@ -74,14 +80,14 @@ contract MarketJobSpecBuilder {
 }
 
 /// @title MarketplaceFixtures — shared setup and builders for the marketplace unit and invariant suites.
-/// @notice Real kernel, real RulesBindingHook (the interim hook, PRD 09 P8), real Terms helper and JobSpecBuilder
-///         library, real CEAFactory. The AGW factory and wallet are mocks that enforce the rules the marketplace relies
-///         on and verify no signature; the AGW repo's E2E suite runs the real wallet stack.
+/// @notice Real kernel, real UniversalHook (binding rules only: its evaluator isn't the jobs'), real Terms helper and
+///         JobSpecBuilder library, real CEAFactory. The AGW factory and wallet are mocks that enforce the rules the
+///         marketplace relies on and verify no signature; the AGW repo's E2E suite runs the real wallet stack.
 abstract contract MarketplaceFixtures is KernelBase, TemplateParts {
     UniversalMarketplace internal mkt;
     UniversalMarketplaceTerms internal terms;
     MarketJobSpecBuilder internal expectedBuilder;
-    RulesBindingHook internal hook;
+    UniversalHook internal hook;
     MockAGWFactory internal factory;
     MockSmartSession internal engine;
     CEAFactory internal ceaFactory;
@@ -117,13 +123,16 @@ abstract contract MarketplaceFixtures is KernelBase, TemplateParts {
         super.setUp();
         factory = new MockAGWFactory();
         engine = new MockSmartSession();
-        RulesBindingHook hookImpl = new RulesBindingHook();
-        hook = RulesBindingHook(
+        UniversalHook hookImpl = new UniversalHook();
+        hook = UniversalHook(
             address(
                 new TransparentUpgradeableProxy(
                     address(hookImpl),
                     makeAddr("hookAdmin"),
-                    abi.encodeCall(RulesBindingHook.initialize, (address(kernel), address(factory), address(engine)))
+                    abi.encodeCall(
+                        UniversalHook.initialize,
+                        (address(kernel), address(factory), address(engine), makeAddr("hookEvaluator"))
+                    )
                 )
             )
         );
@@ -212,24 +221,26 @@ abstract contract MarketplaceFixtures is KernelBase, TemplateParts {
         t.reads[1] =
             _read(SEPOLIA_ID, pool, GET_RESERVE_DATA, abi.encode(usdc), _noFills(), _reserveDataOut(), _f2(0, 2));
         t.checks = new CheckTemplate[](2);
-        t.checks[0] = _chk(0, EvalType.CMP, Op.GTE, TargetSource.PRINCIPAL_BPS, 9999);
-        t.checks[1] = _chk(1, EvalType.CMP, Op.GTE, TargetSource.FIXED, 0.04e27);
-        t.nodes = new Node[](3);
-        t.nodes[0] = _parent(NodeKind.ALL, _kids(1, 2), 0);
-        t.nodes[1] = _checkNode(0);
-        t.nodes[2] = _checkNode(1);
+        t.checks[0] = _chk(0, Evaluation.COMPARE, Operation.GREATER_OR_EQUAL, TargetSource.PRINCIPAL_BPS, 9999);
+        t.checks[1] = _chk(1, Evaluation.COMPARE, Operation.GREATER_OR_EQUAL, TargetSource.FIXED, 0.04e27);
+        t.logic = new Logic[](3);
+        t.logic[0] = _parent(LogicKind.ALL, _kids(1, 2), 0);
+        t.logic[1] = _checkLogic(0);
+        t.logic[2] = _checkLogic(1);
         t.params = new ParamBounds[](0);
     }
 
     /// @dev The V2 doc's swap criteria on Sepolia: the CEA's WETH grows by at least `minOut`, the job's param 0.
     function _swapTemplate() internal view returns (EvaluationTemplate memory t) {
-        t.reads = new ReadTemplate[](1);
+        t.reads = new ReadTemplate[](2);
         t.reads[0] = _balanceOfCEA(SEPOLIA_ID, weth);
         t.reads[0].minConfirmations = 3;
+        t.reads[1] = _preRead(_balanceOfCEA(SEPOLIA_ID, weth));
+        t.reads[1].minConfirmations = 3;
         t.checks = new CheckTemplate[](1);
-        t.checks[0] = _chk(0, EvalType.NUM, Op.GTE, TargetSource.PARAM, 0);
-        t.nodes = new Node[](1);
-        t.nodes[0] = _checkNode(0);
+        t.checks[0] = _pair(0, 1, Evaluation.NUMBER, Operation.GREATER_OR_EQUAL, TargetSource.PARAM, 0);
+        t.logic = new Logic[](1);
+        t.logic[0] = _checkLogic(0);
         t.params = new ParamBounds[](1);
         t.params[0] = ParamBounds({min: 1, max: 1e30});
     }
@@ -1332,11 +1343,12 @@ contract UniversalMarketplaceTest is MarketplaceFixtures {
         assertEq(kernel.getJob(jobId).budget, fee);
     }
 
-    /// @dev Ceilings = measured + 10%, rounded up to 10k (PRD 09 §8.5). Measured 2026-10-02 with the mock wallet
-    ///      and factory: registerCard 2,231,229 · startJob fresh 3,172,694 · startJob existing 1,891,132.
-    uint256 internal constant REGISTER_GAS_CEILING = 2_460_000;
-    uint256 internal constant START_FRESH_GAS_CEILING = 3_490_000;
-    uint256 internal constant START_EXISTING_GAS_CEILING = 2_090_000;
+    /// @dev Ceilings = measured + 10%, rounded up to 10k (PRD 09 §8.5). Measured 2026-10-13 with the mock wallet
+    ///      and factory, after the criteria gained read timing and summed check sides (a longer description):
+    ///      registerCard 2,363,247 · startJob fresh 3,402,542 · startJob existing 2,125,822.
+    uint256 internal constant REGISTER_GAS_CEILING = 2_600_000;
+    uint256 internal constant START_FRESH_GAS_CEILING = 3_750_000;
+    uint256 internal constant START_EXISTING_GAS_CEILING = 2_340_000;
 
     function test_MS18_gasCeilings() public {
         AgentCard memory c = _card();

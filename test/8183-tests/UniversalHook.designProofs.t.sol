@@ -45,11 +45,11 @@ contract UniversalHookDesignProofsTest is UniversalEvalBase {
 
     /// @dev With the try/catch, a provider that sends just enough gas makes the evaluator call run out inside `submit`;
     ///      the catch swallows it and `submit` succeeds: the job is Submitted with no end blocks. The design then let
-    ///      the provider fix them later, at a moment of its choosing (`sendReads`), so "fixed at submit" didn't hold.
+    ///      the provider fix them later, at a moment of its choosing (`retryEvaluation`), so "fixed at submit" didn't hold.
     function test_DP01_designTryCatch_letsStarvedSubmitThroughWithoutEndBlocks() public {
         uint256 jobId = _createSpec(_swapSpec());
         _fund(jobId);
-        _answerSnapshot(jobId, 0, 0);
+        _answerSnapshot(jobId, SWAP_PRE, 0);
         _advance();
         bytes memory submitCall = abi.encodeCall(kernel.submit, (jobId, keccak256("done"), bytes("")));
 

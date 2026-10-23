@@ -174,7 +174,7 @@ library EvmReadLib {
         if (leaf == T_INT) return (true, int256(w));
         if (leaf == T_BOOL) return w > 1 ? (false, int256(0)) : (true, int256(w));
         if (leaf == T_ADDRESS) return w >> 160 != 0 ? (false, int256(0)) : (true, int256(w));
-        return (true, int256(w)); // T_BYTESN: raw, for EQ / NEQ
+        return (true, int256(w)); // T_BYTESN: raw, for EQUAL / NOT_EQUAL
     }
 
     // ───────────────────────────── shape check ─────────────────────────────
