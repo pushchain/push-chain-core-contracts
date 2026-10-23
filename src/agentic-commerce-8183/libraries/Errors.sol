@@ -177,8 +177,6 @@ library UniversalEvaluatorErrors {
     error CallerIsNotHook(address caller);
     /// @notice Caller is not Read State.
     error CallerIsNotReadState(address caller);
-    /// @notice Caller is not the job's provider.
-    error CallerIsNotProvider(address caller);
     /// @notice Caller is neither the job's client nor its provider.
     error CallerIsNotClientOrProvider(address caller);
     /// @notice Only the evaluator itself may call this.

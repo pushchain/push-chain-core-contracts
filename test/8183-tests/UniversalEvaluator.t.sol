@@ -88,21 +88,21 @@ contract UniversalEvaluatorTest is UniversalEvalBase {
 
     // ───────────── retries: provider only, same block, no limit ─────────────
 
-    function test_UE05_errorAnswer_providerRetriesSameBlock_noLimit() public {
+    function test_UE05_errorAnswer_partiesRetrySameBlock_noLimit() public {
         uint256 jobId = _submittedSwap(0);
         uint64 fixedBlock = ue.endHeightOf(jobId, 0);
         _answer(jobId, 0, "");
         assertEq(uint8(ue.evaluationOf(jobId).verdict), uint8(Verdict.INCONCLUSIVE));
 
         vm.prank(stranger);
-        vm.expectRevert(abi.encodeWithSelector(UniversalEvaluatorErrors.CallerIsNotProvider.selector, stranger));
-        ue.sendReads{value: READ_COST}(jobId);
+        vm.expectRevert(abi.encodeWithSelector(UniversalEvaluatorErrors.CallerIsNotClientOrProvider.selector, stranger));
+        ue.retryEvaluation{value: READ_COST}(jobId);
 
         core.setChainHeight(BASE_KEY, START_HEIGHT + 5000); // the chain moves on; the retry must not follow
         for (uint256 i; i < 5; ++i) {
             vm.recordLogs();
-            vm.prank(provider);
-            ue.sendReads{value: READ_COST}(jobId);
+            vm.prank(i % 2 == 0 ? provider : client); // either party may retry
+            ue.retryEvaluation{value: READ_COST}(jobId);
             assertEq(_readSpecFromLogs(ue.requestOf(jobId, 0)).blockNumber, fixedBlock);
             if (i < 4) _answer(jobId, 0, "");
         }
@@ -116,13 +116,13 @@ contract UniversalEvaluatorTest is UniversalEvalBase {
 
         vm.prank(provider);
         vm.expectRevert(abi.encodeWithSelector(UniversalEvaluatorErrors.NothingToSend.selector, jobId));
-        ue.sendReads(jobId); // still in flight
+        ue.retryEvaluation(jobId); // still in flight
 
         vm.roll(block.number + 301);
         vm.prank(READ_MODULE);
         readState.expireExternalRead(first);
         vm.prank(provider);
-        ue.sendReads{value: READ_COST}(jobId);
+        ue.retryEvaluation{value: READ_COST}(jobId);
         assertTrue(ue.requestOf(jobId, 0) != first);
         _answer(jobId, 0, abi.encode(uint256(0.4e18)));
         assertEq(uint8(_status(jobId)), uint8(IAgenticCommerce.JobStatus.Completed));
@@ -174,13 +174,13 @@ contract UniversalEvaluatorTest is UniversalEvalBase {
         assertEq(ue.endHeightOf(jobId, 0), START_HEIGHT + 120);
 
         vm.prank(stranger);
-        vm.expectRevert(abi.encodeWithSelector(UniversalEvaluatorErrors.CallerIsNotProvider.selector, stranger));
-        ue.sendReads{value: READ_COST}(jobId);
+        vm.expectRevert(abi.encodeWithSelector(UniversalEvaluatorErrors.CallerIsNotClientOrProvider.selector, stranger));
+        ue.retryEvaluation{value: READ_COST}(jobId);
 
         core.setChainHeight(BASE_KEY, START_HEIGHT + 9000);
         vm.recordLogs();
         vm.prank(provider);
-        ue.sendReads{value: READ_COST}(jobId);
+        ue.retryEvaluation{value: READ_COST}(jobId);
         assertEq(_readSpecFromLogs(ue.requestOf(jobId, 0)).blockNumber, START_HEIGHT + 120);
 
         _answer(jobId, 0, abi.encode(uint256(0.4e18)));
@@ -202,12 +202,12 @@ contract UniversalEvaluatorTest is UniversalEvalBase {
         vm.prank(readAdmin);
         readState.unpause();
         vm.prank(provider);
-        ue.sendReads(jobId); // the prepaid PC is still there
+        ue.retryEvaluation(jobId); // the prepaid PC is still there
         assertTrue(ue.evaluationOf(jobId).started);
 
         vm.prank(provider);
         vm.expectRevert(abi.encodeWithSelector(UniversalEvaluatorErrors.NothingToSend.selector, jobId));
-        ue.sendReads(jobId); // every read is in flight
+        ue.retryEvaluation(jobId); // every read is in flight
     }
 
     /// @dev Submitted before the snapshot was in: the end blocks are fixed at submit anyway; once the snapshot lands
@@ -222,13 +222,13 @@ contract UniversalEvaluatorTest is UniversalEvalBase {
 
         vm.prank(provider);
         vm.expectRevert(abi.encodeWithSelector(UniversalEvaluatorErrors.SnapshotNotReady.selector, jobId));
-        ue.sendReads(jobId);
+        ue.retryEvaluation(jobId);
 
         _answerSnapshot(jobId, SWAP_PRE, 0);
         core.setChainHeight(BASE_KEY, START_HEIGHT + 900);
         vm.recordLogs();
         vm.prank(provider);
-        ue.sendReads(jobId);
+        ue.retryEvaluation(jobId);
         assertEq(_readSpecFromLogs(ue.requestOf(jobId, 0)).blockNumber, START_HEIGHT + 50);
     }
 
@@ -340,7 +340,7 @@ contract UniversalEvaluatorTest is UniversalEvalBase {
 
         uint256[] memory three = new uint256[](3);
         vm.prank(provider);
-        ue.sendReads{value: READ_COST}(jobId);
+        ue.retryEvaluation{value: READ_COST}(jobId);
         _answer(jobId, 0, abi.encode(three));
         (bool ok2, int256 v) = ue.answerOf(jobId, 0);
         assertTrue(ok2);
@@ -502,7 +502,7 @@ contract UniversalEvaluatorTest is UniversalEvalBase {
         uint256 left = ue.prepaidOf(jobId);
         vm.prank(provider);
         vm.expectRevert(abi.encodeWithSelector(UniversalEvaluatorErrors.WrongStatus.selector, jobId));
-        ue.sendReads(jobId);
+        ue.retryEvaluation(jobId);
         assertEq(ue.prepaidOf(jobId), left, "client PC untouched");
     }
 
@@ -560,7 +560,7 @@ contract UniversalEvaluatorTest is UniversalEvalBase {
         assertTrue(ue.evaluationOf(jobId).started, "reads sent inside submit");
     }
 
-    /// @dev At no gas level does `submit` succeed without fixing the end blocks, and `sendReads` never fixes them,
+    /// @dev At no gas level does `submit` succeed without fixing the end blocks, and `retryEvaluation` never fixes them,
     ///      so the provider can't choose when the job is measured. `UniversalHook.designProofs.t.sol` shows the
     ///      earlier try/catch in the hook let a gas-starved `submit` through with no end blocks.
     function test_UE26_submitNeverSucceedsWithoutEndBlocks() public {
@@ -589,9 +589,9 @@ contract UniversalEvaluatorTest is UniversalEvalBase {
         assertTrue(firstOk != 0 && okCount > 100, "the scan reached gas levels where submit succeeds");
     }
 
-    /// @dev `sendReads` only sends at blocks fixed in `submit`. The one way a Submitted job has none: the kernel admin
+    /// @dev `retryEvaluation` only sends at blocks fixed in `submit`. The one way a Submitted job has none: the kernel admin
     ///      detached its hook before `submit`, so the hook never called the evaluator.
-    function test_UE32_sendReads_requiresEndBlocksFixedInSubmit() public {
+    function test_UE32_retryEvaluation_requiresEndBlocksFixedInSubmit() public {
         uint256 jobId = _createSpec(_swapSpec());
         _fund(jobId);
         _answerSnapshot(jobId, SWAP_PRE, 0);
@@ -605,7 +605,7 @@ contract UniversalEvaluatorTest is UniversalEvalBase {
 
         vm.prank(provider);
         vm.expectRevert(abi.encodeWithSelector(UniversalEvaluatorErrors.EndBlocksNotFixed.selector, jobId));
-        ue.sendReads(jobId);
+        ue.retryEvaluation(jobId);
     }
 
     /// @dev Preflight only (the admin can still block the chain later): a read Read State would refuse fails `fund`.
@@ -685,7 +685,7 @@ contract UniversalEvaluatorTest is UniversalEvalBase {
 
         vm.prank(provider);
         vm.expectRevert(abi.encodeWithSelector(UniversalEvaluatorErrors.NothingToSend.selector, jobId));
-        ue.sendReads{value: READ_COST}(jobId);
+        ue.retryEvaluation{value: READ_COST}(jobId);
 
         vm.expectRevert(PausableUpgradeable.EnforcedPause.selector);
         ue.settle(jobId);
@@ -818,7 +818,7 @@ contract UniversalEvaluatorTest is UniversalEvalBase {
         assertFalse(ue.evaluationOf(jobId).started);
 
         vm.prank(provider);
-        ue.sendReads{value: READ_COST}(jobId);
+        ue.retryEvaluation{value: READ_COST}(jobId);
         _answer(jobId, 2, abi.encode(uint256(1e6))); // below 99.99: ALL fails whatever Aave's check says
         assertEq(uint8(_status(jobId)), uint8(IAgenticCommerce.JobStatus.Rejected));
     }

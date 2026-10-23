@@ -153,7 +153,7 @@ contract UniversalHook is BaseERC8183Hook {
 
     /// @dev Not in try/catch: if the evaluator can't fix the end blocks (a stale or unmoved height, or too little
     ///      gas), `submit` reverts and the provider submits again later. A catch here would let a provider send
-    ///      just enough gas for the evaluator call to fail, then pick its own end blocks with `sendReads`.
+    ///      just enough gas for the evaluator call to fail, then pick its own end blocks with `retryEvaluation`.
     ///      Sending the reads stays best effort: the evaluator catches that part itself, after fixing the blocks.
     ///      `virtual` as every handler in BaseERC8183Hook is; the tests replay the earlier try/catch with it.
     function _postSubmit(uint256 jobId, address, bytes32, bytes memory) internal virtual override {

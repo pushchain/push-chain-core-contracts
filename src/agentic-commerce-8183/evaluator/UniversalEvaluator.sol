@@ -36,16 +36,15 @@ import {UniversalEvaluatorErrors, JobSpecErrors} from "../libraries/Errors.sol";
 ///         - the callback that delivers the last answer works out the verdict and applies it: PASS completes,
 ///           FAIL rejects.
 /// @dev - The end blocks are recorded before the reads are sent, and sending runs in its own guarded call, so a
-///        failure to send (PC short, Read State paused) never loses them; the provider sends later (`sendReads`) at
-///        the same blocks.
+///        failure to send (PC short, Read State paused) never loses them; the provider sends later
+///        (`retryEvaluation`) at the same blocks.
 ///      - Every tracked height used (at `fund` and at `submit`) must be at most `MAX_HEIGHT_AGE` old.
 ///      - The end blocks are fixed only inside `submit`: the hook calls `verifyFromSubmit` without try/catch, so if
 ///        they can't be fixed (a stale or unmoved height, too little gas) `submit` reverts and is sent again later.
 ///      - An unreadable answer counts as answered, PRE or POST: the checks that need it stay UNKNOWN and the rest may
 ///        still decide the root. Once the evaluation starts, an unreadable PRE read is sent again with the POST reads.
-///      - Retries re-read the same blocks; there is no attempt limit. Only the provider spends PC on reads after
-///        `submit` (`sendReads`), and only while the job is Submitted and undecided; snapshot retries
-///        (`retrySnapshot`, until the evaluation starts) are the client's or the provider's.
+///      - Retries re-read the same blocks; there is no attempt limit. Only the job's client or provider retries:
+///        `retrySnapshot` until the evaluation starts, then `retryEvaluation` while the job is Submitted and undecided.
 ///      - A job with no verdict ends through the kernel: after `expiredAt + EVALUATOR_GRACE_PERIOD` anyone may call
 ///        `claimRefund`, which refunds the client and frees the wallet.
 ///      - Answers longer than `MAX_RESULT_LENGTH` are unreadable. Read State itself does not cap answers yet.
@@ -338,16 +337,18 @@ contract UniversalEvaluator is IUniversalEvaluator, ReentrancyGuard {
     // ═════════════════════════════════ provider / client recovery ═════════════════════════════════
 
     /// @notice Sends the job's reads for evaluation: POST reads at the blocks fixed at `submit`, PRE reads again at
-    ///         their `fund` blocks. Provider only, and only while the job is Submitted: once it has ended, its PC is
-    ///         the client's to claim. `msg.value` is added to the job's PC.
+    ///         their `fund` blocks. Client or provider only, and only while the job is Submitted: once it has
+    ///         ended, its PC is the client's to claim. `msg.value` is added to the job's PC.
     ///         - If they did not go out inside `submit` (PC short, snapshot not ready, Read State paused): every POST
     ///           read, and every PRE read with no usable value.
     ///         - Once sent: every read with no usable answer that is not in flight (an error answer, an undecodable
     ///           or oversized one, an expired request, a failed callback). There is no attempt limit.
-    /// @dev Never fixes the blocks, so the provider can't choose when the job is measured.
-    function sendReads(uint256 jobId) external payable nonReentrant {
+    /// @dev Never fixes the blocks, so neither side can choose when the job is measured.
+    function retryEvaluation(uint256 jobId) external payable nonReentrant {
         IAgenticCommerce.Job memory job = KERNEL.getJob(jobId);
-        if (msg.sender != job.provider) revert UniversalEvaluatorErrors.CallerIsNotProvider(msg.sender);
+        if (msg.sender != job.client && msg.sender != job.provider) {
+            revert UniversalEvaluatorErrors.CallerIsNotClientOrProvider(msg.sender);
+        }
         if (job.status != IAgenticCommerce.JobStatus.Submitted) revert UniversalEvaluatorErrors.WrongStatus(jobId);
         Evaluation storage e = _evals[jobId];
         if (!e.endFixed) revert UniversalEvaluatorErrors.EndBlocksNotFixed(jobId);
@@ -359,7 +360,8 @@ contract UniversalEvaluator is IUniversalEvaluator, ReentrancyGuard {
     }
 
     /// @notice Sends again, at the same blocks, every PRE read never answered and not in flight (an expired request, a
-    ///         failed callback). The job's client or provider only, until the evaluation starts; after that, `sendReads`.
+    ///         failed callback). The job's client or provider only, until the evaluation starts; after that,
+    ///         `retryEvaluation`.
     /// @dev Never takes back an answer, usable or not, so neither side can hold `ready` back; the evaluation itself
     ///      re-reads an unreadable PRE answer.
     function retrySnapshot(uint256 jobId) external payable nonReentrant {

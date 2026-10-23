@@ -271,7 +271,7 @@ contract UniversalEvaluatorCriteriaTest is UniversalEvalBase {
         assertEq(uint8(_status(jobId)), uint8(SUBMITTED));
 
         vm.prank(provider);
-        ue.sendReads{value: READ_COST}(jobId);
+        ue.retryEvaluation{value: READ_COST}(jobId);
         _answer(jobId, 0, _u(100e6));
         assertEq(uint8(_status(jobId)), uint8(COMPLETED));
     }
