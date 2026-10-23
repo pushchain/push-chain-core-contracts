@@ -2,6 +2,7 @@
 pragma solidity 0.8.26;
 
 import {Evaluation, Operation} from "../libraries/JobSpecTypes.sol";
+import {PendingRead} from "../../libraries/ReadTypes.sol";
 
 /// @title EvaluationTypes — values, limits and outside views of the UniversalEvaluator
 /// @dev - Not part of the `JobSpec` wire format; changing these never changes a job's description.
@@ -104,10 +105,15 @@ interface IUniversalCoreHeights {
     function timestampObservedAtByChainNamespace(string memory chainNamespace) external view returns (uint256);
 }
 
-/// @title IReadStateDomains
-/// @notice The one UniversalCallback view the evaluator reads that `IUniversalCallback` does not declare.
-/// @dev Source: `src/UniversalCallback.sol` (`isDomainBlocked`), set by its admin with `updateBlockedDomain`. A blocked
-///      domain makes `requestExternalReadSelf` revert `DomainBlocked`.
-interface IReadStateDomains {
+/// @title IReadStateViews
+/// @notice The UniversalCallback views the evaluator reads that `IUniversalCallback` does not declare.
+/// @dev Source: `src/UniversalCallback.sol`.
+///      - `isDomainBlocked`, set by its admin with `updateBlockedDomain`: a blocked domain makes
+///        `requestExternalReadSelf` revert `DomainBlocked`.
+///      - `getPendingRead`: a request's `expiryHeight`. From that Push block on, the chain refuses votes on it, so it
+///        can only be expired (budget refunded), never answered.
+interface IReadStateViews {
     function isDomainBlocked(string calldata chainNamespace, string calldata chainId) external view returns (bool);
+
+    function getPendingRead(uint256 requestId) external view returns (PendingRead memory);
 }

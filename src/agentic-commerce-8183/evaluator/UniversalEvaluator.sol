@@ -21,7 +21,7 @@ import {
     MAX_DESCRIPTION_LENGTH,
     IAGWCheckpoints,
     IUniversalCoreHeights,
-    IReadStateDomains
+    IReadStateViews
 } from "./EvaluationTypes.sol";
 import {JobSpecLib} from "./JobSpecLib.sol";
 import {EvmReadLib, FireParams} from "./EvmReadLib.sol";
@@ -253,7 +253,7 @@ contract UniversalEvaluator is IUniversalEvaluator, ReentrancyGuard {
         for (uint256 i; i < s.reads.length; ++i) {
             Read memory r = s.reads[i];
             // Preflight only: Read State's admin can still block the domain after `fund`.
-            if (IReadStateDomains(address(READ_STATE)).isDomainBlocked(r.chainNamespace, r.chainId)) {
+            if (IReadStateViews(address(READ_STATE)).isDomainBlocked(r.chainNamespace, r.chainId)) {
                 revert UniversalEvaluatorErrors.ReadDomainBlocked(i);
             }
             uint64 h = EvmReadLib.latestHeight(UNIVERSAL_CORE, r, MAX_HEIGHT_AGE);
@@ -342,7 +342,7 @@ contract UniversalEvaluator is IUniversalEvaluator, ReentrancyGuard {
     ///         - If they did not go out inside `submit` (PC short, snapshot not ready, Read State paused): every POST
     ///           read, and every PRE read with no usable value.
     ///         - Once sent: every read with no usable answer that is not in flight (an error answer, an undecodable
-    ///           or oversized one, an expired request, a failed callback). There is no attempt limit.
+    ///           or oversized one, a request past its expiry height, a failed callback). There is no attempt limit.
     /// @dev Never fixes the blocks, so neither side can choose when the job is measured.
     function retryEvaluation(uint256 jobId) external payable nonReentrant {
         IAgenticCommerce.Job memory job = KERNEL.getJob(jobId);
@@ -359,8 +359,8 @@ contract UniversalEvaluator is IUniversalEvaluator, ReentrancyGuard {
         else _start(jobId, s);
     }
 
-    /// @notice Sends again, at the same blocks, every PRE read never answered and not in flight (an expired request, a
-    ///         failed callback). The job's client or provider only, until the evaluation starts; after that,
+    /// @notice Sends again, at the same blocks, every PRE read never answered and not in flight (a request past its
+    ///         expiry height, a failed callback). The job's client or provider only, until the evaluation starts; after that,
     ///         `retryEvaluation`.
     /// @dev Never takes back an answer, usable or not, so neither side can hold `ready` back; the evaluation itself
     ///      re-reads an unreadable PRE answer.
@@ -379,7 +379,7 @@ contract UniversalEvaluator is IUniversalEvaluator, ReentrancyGuard {
         uint256 sent;
         for (uint256 i; i < s.reads.length; ++i) {
             if ((sn.pre >> i) & 1 == 0 || (sn.answered >> i) & 1 == 1) continue; // never take back an answer
-            if (READ_STATE.statusOf(_request[jobId][i]) == RequestStatus.PENDING) continue;
+            if (_inFlight(_request[jobId][i])) continue;
             _fireSnapshot(jobId, i, s.reads[i], _height(_fundHeights[jobId], i));
             ++sent;
         }
@@ -607,7 +607,7 @@ contract UniversalEvaluator is IUniversalEvaluator, ReentrancyGuard {
             bool answered = (e.answered >> i) & 1 == 1;
             if (answered && _answers[jobId][i].ok) continue;
             uint256 req = _request[jobId][i];
-            if (req != 0 && READ_STATE.statusOf(req) == RequestStatus.PENDING) continue;
+            if (req != 0 && _inFlight(req)) continue;
             if (answered) {
                 // forge-lint: disable-next-line(unsafe-typecast)
                 e.answered = uint32(uint256(e.answered) & ~(uint256(1) << i)); // safe: clears one bit of a uint32
@@ -620,6 +620,13 @@ contract UniversalEvaluator is IUniversalEvaluator, ReentrancyGuard {
         e.done = false;
         e.verdict = Verdict.NONE;
         emit ReadsSent(jobId, sent, paid);
+    }
+
+    /// @dev Can still be answered: PENDING and below its expiry height. Past it the chain refuses votes, so the request
+    ///      can only be expired, whether or not the sweeper has done so yet.
+    function _inFlight(uint256 requestId) internal view returns (bool) {
+        return READ_STATE.statusOf(requestId) == RequestStatus.PENDING
+            && block.number < IReadStateViews(address(READ_STATE)).getPendingRead(requestId).expiryHeight;
     }
 
     function _fireRead(uint256 jobId, uint256 read, Read memory r) internal returns (uint256 value) {

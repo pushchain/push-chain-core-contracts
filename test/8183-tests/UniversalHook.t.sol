@@ -328,6 +328,22 @@ contract UniversalHookTest is UniversalEvalBase {
         assertEq(v, 1e18);
     }
 
+    /// @dev A PRE request past its expiry height is sent again though still PENDING (never swept).
+    function test_UH17c_snapshotRetry_pastExpiryNotSwept() public {
+        uint256 jobId = _createSpec(_swapSpec());
+        _fund(jobId);
+        uint256 first = ue.requestOf(jobId, SWAP_PRE);
+        vm.roll(readState.getPendingRead(first).expiryHeight);
+        assertEq(uint8(readState.statusOf(first)), uint8(RequestStatus.PENDING), "not swept");
+
+        vm.prank(provider);
+        ue.retrySnapshot{value: SNAPSHOT_COST}(jobId);
+        uint256 second = ue.requestOf(jobId, SWAP_PRE);
+        assertTrue(second != first);
+        assertTrue(_deliver(second, abi.encode(uint256(1e18))));
+        assertTrue(ue.ready(jobId));
+    }
+
     /// @dev An unreadable answer counts as answered and is never taken back: the client can't re-request it to keep
     ///      `ready` false and block the evaluation from starting.
     function test_UH17b_snapshotRetry_neverTakesBackAnAnswer() public {

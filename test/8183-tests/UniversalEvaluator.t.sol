@@ -101,7 +101,7 @@ contract UniversalEvaluatorTest is UniversalEvalBase {
         core.setChainHeight(BASE_KEY, START_HEIGHT + 5000); // the chain moves on; the retry must not follow
         for (uint256 i; i < 5; ++i) {
             vm.recordLogs();
-            vm.prank(i % 2 == 0 ? provider : client); // either party may retry
+            vm.prank(i % 2 == 0 ? provider : address(agw)); // either party may retry
             ue.retryEvaluation{value: READ_COST}(jobId);
             assertEq(_readSpecFromLogs(ue.requestOf(jobId, 0)).blockNumber, fixedBlock);
             if (i < 4) _answer(jobId, 0, "");
@@ -124,6 +124,31 @@ contract UniversalEvaluatorTest is UniversalEvalBase {
         vm.prank(provider);
         ue.retryEvaluation{value: READ_COST}(jobId);
         assertTrue(ue.requestOf(jobId, 0) != first);
+        _answer(jobId, 0, abi.encode(uint256(0.4e18)));
+        assertEq(uint8(_status(jobId)), uint8(IAgenticCommerce.JobStatus.Completed));
+    }
+
+    /// @dev Past its expiry height a request can't be answered (the chain refuses votes), so it is sent again even
+    ///      while still PENDING, before the sweeper expires it. The sweep later refunds the old budget.
+    function test_UE06b_pastExpiryNotSwept_retry() public {
+        uint256 jobId = _submittedSwap(0);
+        uint256 first = ue.requestOf(jobId, 0);
+        uint64 expiry = readState.getPendingRead(first).expiryHeight;
+
+        vm.roll(expiry - 1);
+        vm.prank(address(agw)); // the client
+        vm.expectRevert(abi.encodeWithSelector(UniversalEvaluatorErrors.NothingToSend.selector, jobId));
+        ue.retryEvaluation(jobId); // one block before expiry: still in flight
+
+        vm.roll(expiry);
+        assertEq(uint8(readState.statusOf(first)), uint8(RequestStatus.PENDING), "not swept");
+        vm.prank(address(agw)); // the client
+        ue.retryEvaluation{value: READ_COST}(jobId);
+        uint256 second = ue.requestOf(jobId, 0);
+        assertTrue(second != first);
+
+        vm.prank(READ_MODULE);
+        readState.expireExternalRead(first); // the late sweep still works
         _answer(jobId, 0, abi.encode(uint256(0.4e18)));
         assertEq(uint8(_status(jobId)), uint8(IAgenticCommerce.JobStatus.Completed));
     }
