@@ -133,6 +133,8 @@ library EvmReadErrors {
 /// @title UniversalHookErrors
 /// @notice The UniversalHook's errors: binding the rules set at `fund`, and replacing and freezing the spec.
 library UniversalHookErrors {
+    /// @notice `setAgwContracts` was not called by the proxy's admin.
+    error CallerIsNotProxyAdmin(address caller);
     /// @notice `fund.optParams` is neither 32 bytes (the rulesId alone) nor long enough to hold
     ///         `(rulesId, specHash, newSpec)`.
     error InvalidOptParams(uint256 length);

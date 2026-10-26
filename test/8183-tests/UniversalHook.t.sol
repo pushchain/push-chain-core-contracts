@@ -2,13 +2,18 @@
 pragma solidity 0.8.26;
 
 import {Vm} from "forge-std/Vm.sol";
+import {ProxyAdmin} from "@openzeppelin/contracts/proxy/transparent/ProxyAdmin.sol";
+import {ITransparentUpgradeableProxy} from "@openzeppelin/contracts/proxy/transparent/TransparentUpgradeableProxy.sol";
+import {ERC1967Utils} from "@openzeppelin/contracts/proxy/ERC1967/ERC1967Utils.sol";
 
 import {UniversalEvalBase} from "./UniversalEvalBase.t.sol";
 import {UniversalEvaluator} from "../../src/agentic-commerce-8183/evaluator/UniversalEvaluator.sol";
+import {UniversalHook} from "../../src/agentic-commerce-8183/hooks/UniversalHook.sol";
 import {JobSpec, AllowedMutability} from "../../src/agentic-commerce-8183/libraries/JobSpecTypes.sol";
 import {EvmQueryEnvelope} from "../../src/agentic-commerce-8183/evaluator/EvmReadLib.sol";
 import {OwnerCheck} from "../../src/agentic-commerce-8183/evaluator/EvaluationTypes.sol";
 import {
+    ERC8183HookErrors,
     UniversalHookErrors,
     UniversalEvaluatorErrors,
     JobSpecErrors,
@@ -375,5 +380,57 @@ contract UniversalHookTest is UniversalEvalBase {
         _prefund(jobId, 1 ether);
         _fundWith(jobId, abi.encode(RULES, keccak256(byClient), byClient));
         assertEq(ue.specHashOf(jobId), keccak256(byClient), "the client's replacement is frozen");
+    }
+
+    // ───────────── AGW contracts (setAgwContracts) ─────────────
+
+    /// @dev Upgrades the hook proxy to `impl` and calls `setAgwContracts` in the same call, as the ProxyAdmin's owner.
+    function _setAgwContracts(address impl, address factory_, address engine_) internal {
+        ProxyAdmin pa = ProxyAdmin(address(uint160(uint256(vm.load(address(hook), ERC1967Utils.ADMIN_SLOT)))));
+        vm.prank(proxyAdminOwner);
+        pa.upgradeAndCall(
+            ITransparentUpgradeableProxy(address(hook)),
+            impl,
+            abi.encodeCall(UniversalHook.setAgwContracts, (factory_, engine_))
+        );
+    }
+
+    /// @notice Inside `upgradeAndCall` it writes the two addresses and nothing else: bindings stay, and so does the
+    ///         Initializable version.
+    function test_UH21_setAgwContracts_inUpgrade_writesOnlyTheTwoAddresses() public {
+        uint256 jobId = _createSpec(_swapSpec());
+        _fund(jobId);
+        bytes32 initialized = vm.load(address(hook), 0xf0c57e16840df040f15088dc2f81fe391c3923bec73e23a9662efc9c229c6a00);
+        address newFactory = makeAddr("newFactory");
+        address newEngine = makeAddr("newEngine");
+        address impl = address(new UniversalHook());
+
+        vm.expectEmit(address(hook));
+        emit UniversalHook.AgwSet(newFactory, newEngine);
+        _setAgwContracts(impl, newFactory, newEngine);
+
+        assertEq(hook.AGW_FACTORY(), newFactory);
+        assertEq(hook.SESSION_ENGINE(), newEngine);
+        assertEq(hook.KERNEL(), address(kernel));
+        assertEq(hook.EVALUATOR(), address(ue));
+        assertEq(hook.agwOfJob(jobId), address(agw));
+        assertEq(hook.rulesOfJob(jobId), RULES);
+        assertEq(vm.load(address(hook), 0xf0c57e16840df040f15088dc2f81fe391c3923bec73e23a9662efc9c229c6a00), initialized);
+    }
+
+    /// @notice Only the proxy's admin may call it, so only through `upgradeAndCall`; zero addresses are refused.
+    function test_UH22_setAgwContracts_refusals() public {
+        vm.prank(stranger);
+        vm.expectRevert(abi.encodeWithSelector(UniversalHookErrors.CallerIsNotProxyAdmin.selector, stranger));
+        hook.setAgwContracts(stranger, stranger);
+
+        // The ProxyAdmin's owner is not the proxy's admin: the ProxyAdmin contract is.
+        vm.prank(proxyAdminOwner);
+        vm.expectRevert(abi.encodeWithSelector(UniversalHookErrors.CallerIsNotProxyAdmin.selector, proxyAdminOwner));
+        hook.setAgwContracts(stranger, stranger);
+
+        address impl = address(new UniversalHook());
+        vm.expectRevert(ERC8183HookErrors.ZeroAddress.selector);
+        _setAgwContracts(impl, address(0), stranger);
     }
 }

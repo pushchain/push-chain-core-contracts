@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: MIT
 pragma solidity 0.8.26;
 
+import {ERC1967Utils} from "@openzeppelin/contracts/proxy/ERC1967/ERC1967Utils.sol";
 import {BaseERC8183Hook} from "./BaseERC8183Hook.sol";
 import {IAgenticCommerce} from "../interfaces/IAgenticCommerce.sol";
 import {IAGWFactory} from "../interfaces/external/IAGWFactory.sol";
@@ -30,6 +31,8 @@ contract UniversalHook is BaseERC8183Hook {
     event RulesBound(uint256 indexed jobId, address indexed agw, bytes32 indexed rulesId);
     /// @notice The spec was replaced (by the provider in setBudget, or the client in fund).
     event SpecReplaced(uint256 indexed jobId, bool byProvider, bytes32 specHash);
+    /// @notice The AGW factory and session engine the hook checks clients against were set by `setAgwContracts`.
+    event AgwSet(address agwFactory, address sessionEngine);
     /// @notice The spec was frozen at `fund` and handed to the evaluator.
     event SpecFrozen(uint256 indexed jobId, bytes32 specHash);
 
@@ -63,6 +66,21 @@ contract UniversalHook is BaseERC8183Hook {
         AGW_FACTORY = agwFactory_;
         SESSION_ENGINE = sessionEngine_;
         EVALUATOR = evaluator_;
+    }
+
+    /// @notice Points the hook at another AGW factory and session engine.
+    /// @dev - Only the proxy's admin may call it. A TransparentUpgradeableProxy lets its admin reach the
+    ///        implementation only through `upgradeToAndCall`, so this runs inside `ProxyAdmin.upgradeAndCall`, in the
+    ///        same transaction as the upgrade: nobody can set the addresses first.
+    ///      - Not an initializer, so the Initializable version stays 1 and a rollback restores storage exactly
+    ///        (call it again with the previous addresses, then point the proxy back at the previous implementation).
+    ///      - Writes slots 50 and 51 only. Bindings, active jobs, the kernel and the evaluator are untouched.
+    function setAgwContracts(address agwFactory_, address sessionEngine_) external {
+        if (msg.sender != ERC1967Utils.getAdmin()) revert UniversalHookErrors.CallerIsNotProxyAdmin(msg.sender);
+        if (agwFactory_ == address(0) || sessionEngine_ == address(0)) revert ERC8183HookErrors.ZeroAddress();
+        AGW_FACTORY = agwFactory_;
+        SESSION_ENGINE = sessionEngine_;
+        emit AgwSet(agwFactory_, sessionEngine_);
     }
 
     /// @notice The AGW's active job under this hook, or 0 if it has none.
