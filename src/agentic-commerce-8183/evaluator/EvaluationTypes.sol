@@ -24,6 +24,7 @@ enum Verdict {
 
 /// @notice Whether the client's wallet was used by its owner between `fund` and the verdict. Recorded only.
 ///         UNKNOWN: the wallet's counter could not be read.
+///         TOUCHED: any owner call through the wallet after `fund`, the client's own retries included.
 enum OwnerCheck {
     UNKNOWN,
     CLEAN,
