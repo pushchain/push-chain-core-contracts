@@ -16,13 +16,15 @@ import {
     JobSpec,
     Read,
     Check,
-    Node,
-    EvalType,
-    Op,
-    NodeKind,
-    Mutability,
+    Logic,
+    Evaluation,
+    Operation,
+    LogicKind,
+    AllowedMutability,
+    ReadAt,
     T_TUPLE,
-    T_UINT
+    T_UINT,
+    T_ADDRESS
 } from "../../src/agentic-commerce-8183/libraries/JobSpecTypes.sol";
 import {ReadConfig} from "../../src/agentic-commerce-8183/evaluator/EvaluationTypes.sol";
 import {MockAGWFactory} from "./mocks/MockAGWFactory.sol";
@@ -33,8 +35,8 @@ import {MockVaultPC} from "../mocks/MockVaultPC.sol";
 
 /// @notice Shared fixture: the real kernel and the real Read State contract, the UniversalHook and the
 ///         UniversalEvaluator behind Transparent proxies, a wallet with the AGW's checkpoint counter, and helpers
-///         that drive a job from creation to verdict. The snapshot is taken inside `fund`; the "after" reads are
-///         sent by `submit`.
+///         that drive a job from creation to verdict. PRE_EXECUTION reads are sent inside `fund`, POST_EXECUTION
+///         reads by `submit`.
 /// @dev - `_deliver` plays the node: it refuses a request whose callback budget does not cover
 ///        `callbackGasLimit × base fee` (`x/ucallback/keeper/evm.go`, `CanAffordCallback`), then calls
 ///        `fulfillExternalCallback` as the Read State module.
@@ -60,6 +62,8 @@ abstract contract UniversalEvalBase is KernelBase {
 
     address internal constant READ_MODULE = 0x07a0258D367A4A4cd9d6E4b7eEE8E7eF491CC519;
     bytes32 internal constant RULES = keccak256("rules");
+    /// @dev The swap spec's PRE_EXECUTION read; its POST_EXECUTION read is 0.
+    uint256 internal constant SWAP_PRE = 1;
 
     string internal constant NS = "eip155";
     string internal constant BASE = "8453";
@@ -67,7 +71,7 @@ abstract contract UniversalEvalBase is KernelBase {
     uint256 internal constant READ_FEE = 0.01 ether;
     uint256 internal constant BASE_FEE = 1 gwei;
     uint64 internal constant START_HEIGHT = 30_000_000;
-    /// @dev One "after" read's price: protocol fee + 1M callback gas × base fee × 3.
+    /// @dev One evaluation read's price: protocol fee + 1M callback gas × base fee × 3.
     uint256 internal constant READ_COST = READ_FEE + 1_000_000 * BASE_FEE * 3;
     /// @dev One snapshot read's price: protocol fee + 300k callback gas × base fee × 3.
     uint256 internal constant SNAPSHOT_COST = READ_FEE + 300_000 * BASE_FEE * 3;
@@ -164,42 +168,110 @@ abstract contract UniversalEvalBase is KernelBase {
             selector: IERC20.balanceOf.selector,
             args: abi.encode(account),
             outputs: abi.encodePacked(T_TUPLE, uint8(1), T_UINT),
-            field: _u8(0)
+            field: _u8(0),
+            at: ReadAt.POST_EXECUTION
         });
     }
 
-    function _checkNode(uint8 check) internal pure returns (Node memory) {
-        return Node({kind: NodeKind.CHECK, check: check, children: new uint8[](0), k: 0});
+    /// @dev An empty check side.
+    function _none() internal pure returns (uint8[] memory) {}
+
+    function _pre(Read memory r) internal pure returns (Read memory) {
+        r.at = ReadAt.PRE_EXECUTION;
+        return r;
     }
 
-    /// @notice "The CEA receives at least 0.38 WETH": one read, one NUM check. Not replaceable.
+    function _single(Read memory r) internal pure returns (Read[] memory x) {
+        x = new Read[](1);
+        x[0] = r;
+    }
+
+    /// @dev Moves a read to another chain, in place.
+    function _on(Read memory r, string memory chainId) internal pure returns (Read memory) {
+        r.chainId = chainId;
+        return r;
+    }
+
+    /// @dev Aave v3 `getReserveData`-shaped return: one struct of 15 static fields.
+    function _reserveOutputs() internal pure returns (bytes memory) {
+        return abi.encodePacked(
+            T_TUPLE,
+            uint8(1),
+            T_TUPLE,
+            uint8(15),
+            T_TUPLE,
+            uint8(1),
+            T_UINT,
+            T_UINT,
+            T_UINT,
+            T_UINT,
+            T_UINT,
+            T_UINT,
+            T_UINT,
+            T_UINT,
+            T_ADDRESS,
+            T_ADDRESS,
+            T_ADDRESS,
+            T_ADDRESS,
+            T_UINT,
+            T_UINT,
+            T_UINT
+        );
+    }
+
+    function _reserveAnswer(uint256 rate) internal pure returns (bytes memory) {
+        uint256[15] memory w;
+        w[2] = rate;
+        return abi.encode(w);
+    }
+
+    function _checkLogic(uint8 check) internal pure returns (Logic memory) {
+        return Logic({kind: LogicKind.CHECK, check: check, children: new uint8[](0), k: 0});
+    }
+
+    /// @notice "The CEA receives at least 0.38 WETH": the balance after (read 0) minus before (read 1). Not replaceable.
     function _swapSpec() internal view returns (JobSpec memory s) {
-        s.executeBy = uint64(block.timestamp + 1 hours);
-        s.failFinalAt = uint64(block.timestamp + 2 hours);
-        s.reads = new Read[](1);
+        s.reads = new Read[](2);
         s.reads[0] = _balanceRead(weth, cea);
+        s.reads[SWAP_PRE] = _pre(_balanceRead(weth, cea));
         s.checks = new Check[](1);
-        s.checks[0] = Check({read: 0, evalType: EvalType.NUM, op: Op.GTE, target: 0.38e18});
-        s.nodes = new Node[](1);
-        s.nodes[0] = _checkNode(0);
-        s.mutability = Mutability.NONE;
+        s.checks[0] = Check({
+            left: _u8(0),
+            right: _u8(1),
+            evaluation: Evaluation.NUMBER,
+            operation: Operation.GREATER_OR_EQUAL,
+            target: 0.38e18
+        });
+        s.logic = new Logic[](1);
+        s.logic[0] = _checkLogic(0);
+        s.allowedMutability = AllowedMutability.NONE;
     }
 
-    /// @notice "Deposited into Aave OR Morpho": two CMP reads under ANY. No snapshot.
+    /// @notice "Deposited into Aave OR Morpho": two COMPARE reads under ANY. No snapshot.
     function _anySpec() internal view returns (JobSpec memory s) {
-        s.executeBy = uint64(block.timestamp + 1 hours);
-        s.failFinalAt = uint64(block.timestamp + 2 hours);
         s.reads = new Read[](2);
         s.reads[0] = _balanceRead(ausdc, cea);
         s.reads[1] = _balanceRead(morphoVault, cea);
         s.checks = new Check[](2);
-        s.checks[0] = Check({read: 0, evalType: EvalType.CMP, op: Op.GTE, target: 99.99e6});
-        s.checks[1] = Check({read: 1, evalType: EvalType.CMP, op: Op.GTE, target: 99.99e6});
-        s.nodes = new Node[](3);
-        s.nodes[0] = Node({kind: NodeKind.ANY, check: 0, children: _u8(1, 2), k: 0});
-        s.nodes[1] = _checkNode(0);
-        s.nodes[2] = _checkNode(1);
-        s.mutability = Mutability.NONE;
+        s.checks[0] = Check({
+            left: _u8(0),
+            right: _none(),
+            evaluation: Evaluation.COMPARE,
+            operation: Operation.GREATER_OR_EQUAL,
+            target: 99.99e6
+        });
+        s.checks[1] = Check({
+            left: _u8(1),
+            right: _none(),
+            evaluation: Evaluation.COMPARE,
+            operation: Operation.GREATER_OR_EQUAL,
+            target: 99.99e6
+        });
+        s.logic = new Logic[](3);
+        s.logic[0] = Logic({kind: LogicKind.ANY, check: 0, children: _u8(1, 2), k: 0});
+        s.logic[1] = _checkLogic(0);
+        s.logic[2] = _checkLogic(1);
+        s.allowedMutability = AllowedMutability.NONE;
     }
 
     // ───────────── lifecycle helpers ─────────────
@@ -236,7 +308,7 @@ abstract contract UniversalEvalBase is KernelBase {
         agw.execute(address(kernel), 0, abi.encodeCall(kernel.fund, (jobId, BUDGET, optParams)));
     }
 
-    /// @notice The funding batch: prepay the snapshot and one round of "after" reads, then fund.
+    /// @notice The funding batch: prepay the snapshot and one round of POST reads, then fund.
     function _fund(uint256 jobId) internal {
         (uint256 snap, uint256 eval_) = ue.prefundCost(jobId);
         _prefund(jobId, snap + eval_);
@@ -260,7 +332,7 @@ abstract contract UniversalEvalBase is KernelBase {
     }
 
     function _answerSnapshot(uint256 jobId, uint256 read, uint256 value) internal {
-        assertTrue(_deliver(ue.snapshotRequestOf(jobId, read), abi.encode(value)), "snapshot not delivered");
+        assertTrue(_deliver(ue.requestOf(jobId, read), abi.encode(value)), "snapshot not delivered");
     }
 
     function _answer(uint256 jobId, uint256 read, bytes memory result) internal {
@@ -271,9 +343,21 @@ abstract contract UniversalEvalBase is KernelBase {
     function _submittedSwap(uint256 before) internal returns (uint256 jobId) {
         jobId = _createSpec(_swapSpec());
         _fund(jobId);
-        _answerSnapshot(jobId, 0, before);
+        _answerSnapshot(jobId, SWAP_PRE, before);
         _advance();
         _submit(jobId);
+    }
+
+    /// @notice Tracks `chainId` next to Base: same start height and read fee.
+    function _track(string memory chainId) internal {
+        core.setReadBaseFee(NS, chainId, READ_FEE);
+        core.setChainHeight(string.concat(NS, ":", chainId), START_HEIGHT);
+    }
+
+    /// @notice Moves `chainId`'s tracked height on by 120 blocks, observed now.
+    function _move(string memory chainId) internal {
+        string memory key = string.concat(NS, ":", chainId);
+        core.setChainHeight(key, core.chainHeightByChainNamespace(key) + 120);
     }
 
     /// @notice The chain moves on by 120 blocks, observed now: the provider's work lands after `fund`. Every real

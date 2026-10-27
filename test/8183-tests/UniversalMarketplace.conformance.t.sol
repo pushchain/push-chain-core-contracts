@@ -2,14 +2,15 @@
 pragma solidity 0.8.26;
 
 import {
-    EvalType,
-    Op,
-    NodeKind,
-    Node,
+    Evaluation,
+    Operation,
+    LogicKind,
+    Logic,
     Read,
     Check,
     JobSpec,
-    Mutability,
+    AllowedMutability,
+    ReadAt,
     T_UINT,
     T_ADDRESS,
     T_TUPLE
@@ -45,28 +46,48 @@ contract UniversalMarketplaceConformanceTest is BuilderFixtures {
         reads[1] =
             _docRead("1", 12, AAVE_POOL_ETH, GET_RESERVE_DATA, abi.encode(USDC_ETH), _docReserveOutputs(), _f2(0, 2));
         Check[] memory checks = new Check[](2);
-        checks[0] = Check({read: 0, evalType: EvalType.CMP, op: Op.GTE, target: 99.99e6});
-        checks[1] = Check({read: 1, evalType: EvalType.CMP, op: Op.GTE, target: 0.04e27});
-        Node[] memory nodes = new Node[](3);
-        nodes[0] = Node({kind: NodeKind.ALL, check: 0, children: _kids(1, 2), k: 0});
-        nodes[1] = Node({kind: NodeKind.CHECK, check: 0, children: new uint8[](0), k: 0});
-        nodes[2] = Node({kind: NodeKind.CHECK, check: 1, children: new uint8[](0), k: 0});
+        checks[0] = Check({
+            left: _f(0),
+            right: _none(),
+            evaluation: Evaluation.COMPARE,
+            operation: Operation.GREATER_OR_EQUAL,
+            target: 99.99e6
+        });
+        checks[1] = Check({
+            left: _f(1),
+            right: _none(),
+            evaluation: Evaluation.COMPARE,
+            operation: Operation.GREATER_OR_EQUAL,
+            target: 0.04e27
+        });
+        Logic[] memory logic = new Logic[](3);
+        logic[0] = Logic({kind: LogicKind.ALL, check: 0, children: _kids(1, 2), k: 0});
+        logic[1] = Logic({kind: LogicKind.CHECK, check: 0, children: new uint8[](0), k: 0});
+        logic[2] = Logic({kind: LogicKind.CHECK, check: 1, children: new uint8[](0), k: 0});
 
-        _assertSpecEq(built, _docSpec(reads, checks, nodes));
+        _assertSpecEq(built, _docSpec(reads, checks, logic));
     }
 
     function test_MC02_swapExample_equalsV2Doc() public view {
         JobSpec memory built = _build(_swap(), _docCtx(0, _oneParam(0.38e18)));
         address cea = builder.ceaFor(AGW, BASE_HASH);
 
-        Read[] memory reads = new Read[](1);
+        Read[] memory reads = new Read[](2);
         reads[0] = _docRead("8453", 3, WETH_BASE, BALANCE_OF, abi.encode(cea), _docUintOutputs(), _f(0));
+        reads[1] = _docRead("8453", 3, WETH_BASE, BALANCE_OF, abi.encode(cea), _docUintOutputs(), _f(0));
+        reads[1].at = ReadAt.PRE_EXECUTION;
         Check[] memory checks = new Check[](1);
-        checks[0] = Check({read: 0, evalType: EvalType.NUM, op: Op.GTE, target: 0.38e18});
-        Node[] memory nodes = new Node[](1);
-        nodes[0] = Node({kind: NodeKind.CHECK, check: 0, children: new uint8[](0), k: 0});
+        checks[0] = Check({
+            left: _f(0),
+            right: _f(1),
+            evaluation: Evaluation.NUMBER,
+            operation: Operation.GREATER_OR_EQUAL,
+            target: 0.38e18
+        });
+        Logic[] memory logic = new Logic[](1);
+        logic[0] = Logic({kind: LogicKind.CHECK, check: 0, children: new uint8[](0), k: 0});
 
-        _assertSpecEq(built, _docSpec(reads, checks, nodes));
+        _assertSpecEq(built, _docSpec(reads, checks, logic));
     }
 
     function test_MC03_orAndAtLeastExamples() public view {
@@ -78,34 +99,46 @@ contract UniversalMarketplaceConformanceTest is BuilderFixtures {
         reads[0] = _docRead("1", 12, AUSDC_ETH, BALANCE_OF, abi.encode(cea), _docUintOutputs(), _f(0));
         reads[1] = _docRead("1", 12, MORPHO_VAULT, MAX_WITHDRAW, abi.encode(cea), _docUintOutputs(), _f(0));
         Check[] memory checks = new Check[](2);
-        checks[0] = Check({read: 0, evalType: EvalType.CMP, op: Op.GTE, target: 99.99e6});
-        checks[1] = Check({read: 1, evalType: EvalType.CMP, op: Op.GTE, target: 99.99e6});
-        Node[] memory nodes = new Node[](3);
-        nodes[0] = Node({kind: NodeKind.ANY, check: 0, children: _kids(1, 2), k: 0});
-        nodes[1] = Node({kind: NodeKind.CHECK, check: 0, children: new uint8[](0), k: 0});
-        nodes[2] = Node({kind: NodeKind.CHECK, check: 1, children: new uint8[](0), k: 0});
-        _assertSpecEq(either, _docSpec(reads, checks, nodes));
+        checks[0] = Check({
+            left: _f(0),
+            right: _none(),
+            evaluation: Evaluation.COMPARE,
+            operation: Operation.GREATER_OR_EQUAL,
+            target: 99.99e6
+        });
+        checks[1] = Check({
+            left: _f(1),
+            right: _none(),
+            evaluation: Evaluation.COMPARE,
+            operation: Operation.GREATER_OR_EQUAL,
+            target: 99.99e6
+        });
+        Logic[] memory logic = new Logic[](3);
+        logic[0] = Logic({kind: LogicKind.ANY, check: 0, children: _kids(1, 2), k: 0});
+        logic[1] = Logic({kind: LogicKind.CHECK, check: 0, children: new uint8[](0), k: 0});
+        logic[2] = Logic({kind: LogicKind.CHECK, check: 1, children: new uint8[](0), k: 0});
+        _assertSpecEq(either, _docSpec(reads, checks, logic));
 
         // Nested: the doc draws the tree only. ANY(ALL(3,4), ALL(5,6)), CHECK i on checks[i].
         JobSpec memory nested = _build(_nested(), _docCtx(100e6, _noParams()));
-        Node[] memory tree = new Node[](7);
-        tree[0] = Node({kind: NodeKind.ANY, check: 0, children: _kids(1, 2), k: 0});
-        tree[1] = Node({kind: NodeKind.ALL, check: 0, children: _kids(3, 4), k: 0});
-        tree[2] = Node({kind: NodeKind.ALL, check: 0, children: _kids(5, 6), k: 0});
+        Logic[] memory tree = new Logic[](7);
+        tree[0] = Logic({kind: LogicKind.ANY, check: 0, children: _kids(1, 2), k: 0});
+        tree[1] = Logic({kind: LogicKind.ALL, check: 0, children: _kids(3, 4), k: 0});
+        tree[2] = Logic({kind: LogicKind.ALL, check: 0, children: _kids(5, 6), k: 0});
         for (uint8 i; i < 4; ++i) {
-            tree[3 + i] = Node({kind: NodeKind.CHECK, check: i, children: new uint8[](0), k: 0});
+            tree[3 + i] = Logic({kind: LogicKind.CHECK, check: i, children: new uint8[](0), k: 0});
         }
-        _assertNodesEq(nested.nodes, tree);
+        _assertLogicEq(nested.logic, tree);
 
         // AT_LEAST: "at least 2 of 3", each ≥ 99.99 USDC.
         JobSpec memory twoOfThree = _build(_twoOfThree(), _docCtx(300e6, _noParams()));
-        Node[] memory atLeast = new Node[](4);
-        atLeast[0] = Node({kind: NodeKind.AT_LEAST, check: 0, children: _kids3(1, 2, 3), k: 2});
+        Logic[] memory atLeast = new Logic[](4);
+        atLeast[0] = Logic({kind: LogicKind.AT_LEAST, check: 0, children: _kids3(1, 2, 3), k: 2});
         for (uint8 i; i < 3; ++i) {
-            atLeast[1 + i] = Node({kind: NodeKind.CHECK, check: i, children: new uint8[](0), k: 0});
+            atLeast[1 + i] = Logic({kind: LogicKind.CHECK, check: i, children: new uint8[](0), k: 0});
             assertEq(twoOfThree.checks[i].target, 99.99e6, "AT_LEAST: target");
         }
-        _assertNodesEq(twoOfThree.nodes, atLeast);
+        _assertLogicEq(twoOfThree.logic, atLeast);
     }
 
     // ═════════════════════════════ the reference decoder reads what the builder writes ═════════════════════════════
@@ -130,19 +163,17 @@ contract UniversalMarketplaceConformanceTest is BuilderFixtures {
         ctx.settleWindow = uint32(failFinalAt - executeBy); // 1 h
     }
 
-    function _docSpec(Read[] memory reads, Check[] memory checks, Node[] memory nodes)
+    function _docSpec(Read[] memory reads, Check[] memory checks, Logic[] memory logic)
         internal
         view
         returns (JobSpec memory)
     {
         return JobSpec({
-            executeBy: executeBy,
-            failFinalAt: failFinalAt,
             reads: reads,
             checks: checks,
-            nodes: nodes,
+            logic: logic,
             origin: keccak256("origin"),
-            mutability: Mutability.NONE
+            allowedMutability: AllowedMutability.NONE
         });
     }
 
@@ -163,7 +194,8 @@ contract UniversalMarketplaceConformanceTest is BuilderFixtures {
             selector: selector,
             args: args,
             outputs: outputs,
-            field: field
+            field: field,
+            at: ReadAt.POST_EXECUTION
         });
     }
 
@@ -218,8 +250,6 @@ contract UniversalMarketplaceConformanceTest is BuilderFixtures {
     }
 
     function _assertSpecEq(JobSpec memory a, JobSpec memory b) internal pure {
-        assertEq(a.executeBy, b.executeBy, "executeBy");
-        assertEq(a.failFinalAt, b.failFinalAt, "failFinalAt");
         assertEq(a.origin, b.origin, "origin");
         assertEq(a.reads.length, b.reads.length, "reads.length");
         for (uint256 i; i < a.reads.length; ++i) {
@@ -227,12 +257,13 @@ contract UniversalMarketplaceConformanceTest is BuilderFixtures {
         }
         assertEq(a.checks.length, b.checks.length, "checks.length");
         for (uint256 i; i < a.checks.length; ++i) {
-            assertEq(a.checks[i].read, b.checks[i].read, "check.read");
-            assertEq(uint8(a.checks[i].evalType), uint8(b.checks[i].evalType), "check.evalType");
-            assertEq(uint8(a.checks[i].op), uint8(b.checks[i].op), "check.op");
+            _assertBytesEq(a.checks[i].left, b.checks[i].left, "check.left");
+            _assertBytesEq(a.checks[i].right, b.checks[i].right, "check.right");
+            assertEq(uint8(a.checks[i].evaluation), uint8(b.checks[i].evaluation), "check.evaluation");
+            assertEq(uint8(a.checks[i].operation), uint8(b.checks[i].operation), "check.operation");
             assertEq(a.checks[i].target, b.checks[i].target, "check.target");
         }
-        _assertNodesEq(a.nodes, b.nodes);
+        _assertLogicEq(a.logic, b.logic);
         assertEq(abi.encode(a), abi.encode(b), "description bytes");
     }
 
@@ -245,15 +276,16 @@ contract UniversalMarketplaceConformanceTest is BuilderFixtures {
         assertEq(a.args, b.args, "read.args");
         assertEq(a.outputs, b.outputs, "read.outputs");
         _assertBytesEq(a.field, b.field, "read.field");
+        assertEq(uint8(a.at), uint8(b.at), "read.at");
     }
 
-    function _assertNodesEq(Node[] memory a, Node[] memory b) internal pure {
-        assertEq(a.length, b.length, "nodes.length");
+    function _assertLogicEq(Logic[] memory a, Logic[] memory b) internal pure {
+        assertEq(a.length, b.length, "logic.length");
         for (uint256 i; i < a.length; ++i) {
-            assertEq(uint8(a[i].kind), uint8(b[i].kind), "node.kind");
-            assertEq(a[i].check, b[i].check, "node.check");
-            assertEq(a[i].k, b[i].k, "node.k");
-            _assertBytesEq(a[i].children, b[i].children, "node.children");
+            assertEq(uint8(a[i].kind), uint8(b[i].kind), "logic.kind");
+            assertEq(a[i].check, b[i].check, "logic.check");
+            assertEq(a[i].k, b[i].k, "logic.k");
+            _assertBytesEq(a[i].children, b[i].children, "logic.children");
         }
     }
 

@@ -19,9 +19,9 @@ import {
     JobSpec,
     Read,
     Check,
-    EvalType,
-    Op,
-    NodeKind,
+    Evaluation,
+    Operation,
+    LogicKind,
     T_TUPLE,
     T_BYTES,
     T_ARRAY,
@@ -29,7 +29,7 @@ import {
 } from "../../src/agentic-commerce-8183/libraries/JobSpecTypes.sol";
 
 /// @notice The UniversalEvaluator end to end through the UniversalHook, against the real kernel and the real Read
-///         State contract. The snapshot is taken inside `fund`; the "after" reads are sent by `submit`.
+///         State contract. PRE_EXECUTION reads are sent inside `fund`, POST_EXECUTION reads by `submit`.
 contract UniversalEvaluatorTest is UniversalEvalBase {
     // ───────────── happy path ─────────────
 
@@ -41,7 +41,7 @@ contract UniversalEvaluatorTest is UniversalEvalBase {
         UniversalEvaluator.Evaluation memory e = ue.evaluationOf(jobId);
         assertTrue(e.endFixed && e.started, "submit fixed the blocks and sent the reads");
         assertEq(ue.endHeightOf(jobId, 0), START_HEIGHT + 120, "end block = tracked height at submit");
-        assertEq(ue.fundHeightOf(jobId, 0), START_HEIGHT, "snapshot block = tracked height at fund");
+        assertEq(ue.fundHeightOf(jobId, SWAP_PRE), START_HEIGHT, "PRE block = tracked height at fund");
 
         _answer(jobId, 0, abi.encode(uint256(0.3905e18)));
 
@@ -61,7 +61,7 @@ contract UniversalEvaluatorTest is UniversalEvalBase {
     function test_UE03_readAtFixedBlock_andPaid() public {
         uint256 jobId = _createSpec(_swapSpec());
         _fund(jobId);
-        _answerSnapshot(jobId, 0, 0);
+        _answerSnapshot(jobId, SWAP_PRE, 0);
         core.setChainHeight(BASE_KEY, START_HEIGHT + 77);
         uint256 before = ue.prepaidOf(jobId);
         vm.recordLogs();
@@ -75,7 +75,7 @@ contract UniversalEvaluatorTest is UniversalEvalBase {
 
     // ───────────── FAIL is final ─────────────
 
-    /// @dev NUM measures the change: WETH already in the CEA does not count, and the FAIL rejects at once.
+    /// @dev NUMBER measures the change: WETH already in the CEA does not count, and the FAIL rejects at once.
     function test_UE04_failRejectsAtOnce_andRefundsClient() public {
         uint256 jobId = _submittedSwap(5e18);
         uint256 clientBefore = token.balanceOf(address(agw));
@@ -88,21 +88,21 @@ contract UniversalEvaluatorTest is UniversalEvalBase {
 
     // ───────────── retries: provider only, same block, no limit ─────────────
 
-    function test_UE05_errorAnswer_providerRetriesSameBlock_noLimit() public {
+    function test_UE05_errorAnswer_partiesRetrySameBlock_noLimit() public {
         uint256 jobId = _submittedSwap(0);
         uint64 fixedBlock = ue.endHeightOf(jobId, 0);
         _answer(jobId, 0, "");
         assertEq(uint8(ue.evaluationOf(jobId).verdict), uint8(Verdict.INCONCLUSIVE));
 
         vm.prank(stranger);
-        vm.expectRevert(abi.encodeWithSelector(UniversalEvaluatorErrors.CallerIsNotProvider.selector, stranger));
-        ue.sendReads{value: READ_COST}(jobId);
+        vm.expectRevert(abi.encodeWithSelector(UniversalEvaluatorErrors.CallerIsNotClientOrProvider.selector, stranger));
+        ue.retryEvaluation{value: READ_COST}(jobId);
 
         core.setChainHeight(BASE_KEY, START_HEIGHT + 5000); // the chain moves on; the retry must not follow
         for (uint256 i; i < 5; ++i) {
             vm.recordLogs();
-            vm.prank(provider);
-            ue.sendReads{value: READ_COST}(jobId);
+            vm.prank(i % 2 == 0 ? provider : address(agw)); // either party may retry
+            ue.retryEvaluation{value: READ_COST}(jobId);
             assertEq(_readSpecFromLogs(ue.requestOf(jobId, 0)).blockNumber, fixedBlock);
             if (i < 4) _answer(jobId, 0, "");
         }
@@ -116,14 +116,39 @@ contract UniversalEvaluatorTest is UniversalEvalBase {
 
         vm.prank(provider);
         vm.expectRevert(abi.encodeWithSelector(UniversalEvaluatorErrors.NothingToSend.selector, jobId));
-        ue.sendReads(jobId); // still in flight
+        ue.retryEvaluation(jobId); // still in flight
 
         vm.roll(block.number + 301);
         vm.prank(READ_MODULE);
         readState.expireExternalRead(first);
         vm.prank(provider);
-        ue.sendReads{value: READ_COST}(jobId);
+        ue.retryEvaluation{value: READ_COST}(jobId);
         assertTrue(ue.requestOf(jobId, 0) != first);
+        _answer(jobId, 0, abi.encode(uint256(0.4e18)));
+        assertEq(uint8(_status(jobId)), uint8(IAgenticCommerce.JobStatus.Completed));
+    }
+
+    /// @dev Past its expiry height a request can't be answered (the chain refuses votes), so it is sent again even
+    ///      while still PENDING, before the sweeper expires it. The sweep later refunds the old budget.
+    function test_UE06b_pastExpiryNotSwept_retry() public {
+        uint256 jobId = _submittedSwap(0);
+        uint256 first = ue.requestOf(jobId, 0);
+        uint64 expiry = readState.getPendingRead(first).expiryHeight;
+
+        vm.roll(expiry - 1);
+        vm.prank(address(agw)); // the client
+        vm.expectRevert(abi.encodeWithSelector(UniversalEvaluatorErrors.NothingToSend.selector, jobId));
+        ue.retryEvaluation(jobId); // one block before expiry: still in flight
+
+        vm.roll(expiry);
+        assertEq(uint8(readState.statusOf(first)), uint8(RequestStatus.PENDING), "not swept");
+        vm.prank(address(agw)); // the client
+        ue.retryEvaluation{value: READ_COST}(jobId);
+        uint256 second = ue.requestOf(jobId, 0);
+        assertTrue(second != first);
+
+        vm.prank(READ_MODULE);
+        readState.expireExternalRead(first); // the late sweep still works
         _answer(jobId, 0, abi.encode(uint256(0.4e18)));
         assertEq(uint8(_status(jobId)), uint8(IAgenticCommerce.JobStatus.Completed));
     }
@@ -133,21 +158,21 @@ contract UniversalEvaluatorTest is UniversalEvalBase {
     function test_UE07_stuckJob_endsThroughClaimRefund() public {
         uint256 jobId = _submittedSwap(0);
         _answer(jobId, 0, "");
-        assertTrue(hook.isAGWBusy(address(agw)));
+        assertEq(hook.activeJobOf(address(agw)), jobId);
 
         vm.warp(kernel.getJob(jobId).expiredAt + kernel.EVALUATOR_GRACE_PERIOD());
-        assertTrue(hook.isAGWBusy(address(agw)), "eligible is not expired: someone must call claimRefund");
+        assertEq(hook.activeJobOf(address(agw)), jobId, "eligible is not expired: someone must call claimRefund");
         uint256 clientBefore = token.balanceOf(address(agw));
         vm.prank(stranger);
         kernel.claimRefund(jobId);
         assertEq(token.balanceOf(address(agw)) - clientBefore, BUDGET);
-        assertFalse(hook.isAGWBusy(address(agw)));
+        assertEq(hook.activeJobOf(address(agw)), 0);
     }
 
     /// @dev ANY: one venue passes, the other answers with an error. One pass is enough.
     function test_UE08_anyPassesDespiteUnreadableBranch() public {
         uint256 jobId = _createSpec(_anySpec());
-        _fund(jobId); // CMP only: nothing to snapshot
+        _fund(jobId); // COMPARE only: nothing to snapshot
         assertTrue(ue.ready(jobId));
         _advance();
         _submit(jobId);
@@ -164,7 +189,7 @@ contract UniversalEvaluatorTest is UniversalEvalBase {
         (uint256 snap,) = ue.prefundCost(jobId);
         _prefund(jobId, snap); // the snapshot only
         _fundWith(jobId, _fundParams(jobId));
-        _answerSnapshot(jobId, 0, 0);
+        _answerSnapshot(jobId, SWAP_PRE, 0);
         core.setChainHeight(BASE_KEY, START_HEIGHT + 120);
         _submit(jobId);
 
@@ -174,13 +199,13 @@ contract UniversalEvaluatorTest is UniversalEvalBase {
         assertEq(ue.endHeightOf(jobId, 0), START_HEIGHT + 120);
 
         vm.prank(stranger);
-        vm.expectRevert(abi.encodeWithSelector(UniversalEvaluatorErrors.CallerIsNotProvider.selector, stranger));
-        ue.sendReads{value: READ_COST}(jobId);
+        vm.expectRevert(abi.encodeWithSelector(UniversalEvaluatorErrors.CallerIsNotClientOrProvider.selector, stranger));
+        ue.retryEvaluation{value: READ_COST}(jobId);
 
         core.setChainHeight(BASE_KEY, START_HEIGHT + 9000);
         vm.recordLogs();
         vm.prank(provider);
-        ue.sendReads{value: READ_COST}(jobId);
+        ue.retryEvaluation{value: READ_COST}(jobId);
         assertEq(_readSpecFromLogs(ue.requestOf(jobId, 0)).blockNumber, START_HEIGHT + 120);
 
         _answer(jobId, 0, abi.encode(uint256(0.4e18)));
@@ -191,7 +216,7 @@ contract UniversalEvaluatorTest is UniversalEvalBase {
     function test_UE10_readStatePaused_submitSucceeds() public {
         uint256 jobId = _createSpec(_swapSpec());
         _fund(jobId);
-        _answerSnapshot(jobId, 0, 0);
+        _answerSnapshot(jobId, SWAP_PRE, 0);
         vm.prank(readAdmin);
         readState.pause();
         _advance();
@@ -202,12 +227,12 @@ contract UniversalEvaluatorTest is UniversalEvalBase {
         vm.prank(readAdmin);
         readState.unpause();
         vm.prank(provider);
-        ue.sendReads(jobId); // the prepaid PC is still there
+        ue.retryEvaluation(jobId); // the prepaid PC is still there
         assertTrue(ue.evaluationOf(jobId).started);
 
         vm.prank(provider);
         vm.expectRevert(abi.encodeWithSelector(UniversalEvaluatorErrors.NothingToSend.selector, jobId));
-        ue.sendReads(jobId); // every read is in flight
+        ue.retryEvaluation(jobId); // every read is in flight
     }
 
     /// @dev Submitted before the snapshot was in: the end blocks are fixed at submit anyway; once the snapshot lands
@@ -222,13 +247,13 @@ contract UniversalEvaluatorTest is UniversalEvalBase {
 
         vm.prank(provider);
         vm.expectRevert(abi.encodeWithSelector(UniversalEvaluatorErrors.SnapshotNotReady.selector, jobId));
-        ue.sendReads(jobId);
+        ue.retryEvaluation(jobId);
 
-        _answerSnapshot(jobId, 0, 0);
+        _answerSnapshot(jobId, SWAP_PRE, 0);
         core.setChainHeight(BASE_KEY, START_HEIGHT + 900);
         vm.recordLogs();
         vm.prank(provider);
-        ue.sendReads(jobId);
+        ue.retryEvaluation(jobId);
         assertEq(_readSpecFromLogs(ue.requestOf(jobId, 0)).blockNumber, START_HEIGHT + 50);
     }
 
@@ -284,11 +309,18 @@ contract UniversalEvaluatorTest is UniversalEvalBase {
         assertEq(answer.length, 4096);
 
         JobSpec memory s = _swapSpec();
+        s.reads = _single(s.reads[0]);
         s.reads[0].outputs = abi.encodePacked(T_TUPLE, uint8(1), T_BYTES);
-        s.checks[0] = Check({read: 0, evalType: EvalType.CMP, op: Op.EQ, target: int256(uint256(keccak256(payload)))});
+        s.checks[0] = Check({
+            left: _u8(0),
+            right: _none(),
+            evaluation: Evaluation.COMPARE,
+            operation: Operation.EQUAL,
+            target: int256(uint256(keccak256(payload)))
+        });
 
         uint256 over = _createSpec(s);
-        _fund(over); // CMP only: nothing to snapshot
+        _fund(over); // COMPARE only: nothing to snapshot
         _advance();
         _submit(over);
         _answer(over, 0, bytes.concat(answer, hex"00")); // 4,097 bytes
@@ -312,8 +344,15 @@ contract UniversalEvaluatorTest is UniversalEvalBase {
     /// @dev "how many elements": a length word not backed by elements is not a value.
     function test_UE15_forgedArrayLength_unreadable() public {
         JobSpec memory s = _swapSpec();
+        s.reads = _single(s.reads[0]);
         s.reads[0].outputs = abi.encodePacked(T_TUPLE, uint8(1), T_ARRAY, T_UINT);
-        s.checks[0] = Check({read: 0, evalType: EvalType.CMP, op: Op.GTE, target: 2});
+        s.checks[0] = Check({
+            left: _u8(0),
+            right: _none(),
+            evaluation: Evaluation.COMPARE,
+            operation: Operation.GREATER_OR_EQUAL,
+            target: 2
+        });
         uint256 jobId = _createSpec(s);
         _fund(jobId);
         _advance();
@@ -326,7 +365,7 @@ contract UniversalEvaluatorTest is UniversalEvalBase {
 
         uint256[] memory three = new uint256[](3);
         vm.prank(provider);
-        ue.sendReads{value: READ_COST}(jobId);
+        ue.retryEvaluation{value: READ_COST}(jobId);
         _answer(jobId, 0, abi.encode(three));
         (bool ok2, int256 v) = ue.answerOf(jobId, 0);
         assertTrue(ok2);
@@ -350,18 +389,16 @@ contract UniversalEvaluatorTest is UniversalEvalBase {
         _answer(jobId, 1, a1); // out of order on purpose
         _answer(jobId, 0, a0);
 
-        (bytes32 leaf0,) = ue.evidenceOf(jobId, 0);
-        (bytes32 leaf1,) = ue.evidenceOf(jobId, 1);
+        bytes32 leaf0 = ue.evidenceOf(jobId, 0);
+        bytes32 leaf1 = ue.evidenceOf(jobId, 1);
         uint64 h = ue.endHeightOf(jobId, 0);
         assertEq(leaf0, keccak256(abi.encode(uint8(0), r0, h, keccak256(a0), true, int256(100e6))));
         assertEq(leaf1, keccak256(abi.encode(uint8(1), r1, h, keccak256(a1), true, int256(5e6))));
 
-        bytes32[] memory afters = new bytes32[](2);
-        afters[0] = leaf0;
-        afters[1] = leaf1;
-        bytes32[] memory befores = new bytes32[](2);
-        bytes32 expected =
-            keccak256(abi.encode(jobId, ue.specHashOf(jobId), befores, afters, Verdict.PASS, OwnerCheck.CLEAN));
+        bytes32[] memory leaves = new bytes32[](2);
+        leaves[0] = leaf0;
+        leaves[1] = leaf1;
+        bytes32 expected = keccak256(abi.encode(jobId, ue.specHashOf(jobId), leaves, Verdict.PASS, OwnerCheck.CLEAN));
         assertEq(ue.specHashOf(jobId), keccak256(bytes(kernel.getJob(jobId).description)));
         assertEq(_reasonFromLogs(), expected);
     }
@@ -386,7 +423,7 @@ contract UniversalEvaluatorTest is UniversalEvalBase {
         vm.expectRevert(abi.encodeWithSelector(UniversalEvaluatorErrors.JobStillLive.selector, jobId));
         ue.claimPrepaid(jobId);
 
-        _answerSnapshot(jobId, 0, 0);
+        _answerSnapshot(jobId, SWAP_PRE, 0);
         _advance();
         _submit(jobId);
         _answer(jobId, 0, abi.encode(uint256(0.4e18)));
@@ -490,13 +527,13 @@ contract UniversalEvaluatorTest is UniversalEvalBase {
         uint256 left = ue.prepaidOf(jobId);
         vm.prank(provider);
         vm.expectRevert(abi.encodeWithSelector(UniversalEvaluatorErrors.WrongStatus.selector, jobId));
-        ue.sendReads(jobId);
+        ue.retryEvaluation(jobId);
         assertEq(ue.prepaidOf(jobId), left, "client PC untouched");
     }
 
     /// @dev Every read's tracked height must be fresh at `fund`, not only the snapshot reads'.
     function test_UE24_staleHeightAtFund_refused() public {
-        uint256 jobId = _createSpec(_anySpec()); // CMP only: no snapshot read
+        uint256 jobId = _createSpec(_anySpec()); // COMPARE only: no snapshot read
         (uint256 snap, uint256 eval_) = ue.prefundCost(jobId);
         _prefund(jobId, snap + eval_);
         uint256 seen = core.timestampObservedAtByChainNamespace(BASE_KEY);
@@ -511,7 +548,7 @@ contract UniversalEvaluatorTest is UniversalEvalBase {
     function test_UE25_endHeightMustBeAboveFundHeight() public {
         uint256 jobId = _createSpec(_swapSpec());
         _fund(jobId);
-        _answerSnapshot(jobId, 0, 0);
+        _answerSnapshot(jobId, SWAP_PRE, 0);
         vm.prank(provider); // the tracked height is still the one recorded at fund
         vm.expectRevert(
             abi.encodeWithSelector(
@@ -533,7 +570,7 @@ contract UniversalEvaluatorTest is UniversalEvalBase {
     function test_UE28_staleHeightAtSubmit_reverts() public {
         uint256 jobId = _createSpec(_swapSpec());
         _fund(jobId);
-        _answerSnapshot(jobId, 0, 0);
+        _answerSnapshot(jobId, SWAP_PRE, 0);
         _advance(); // the swap lands; observed now
         uint256 seen = core.timestampObservedAtByChainNamespace(BASE_KEY);
         vm.warp(seen + _config().maxHeightAge + 1); // and not observed since
@@ -548,13 +585,13 @@ contract UniversalEvaluatorTest is UniversalEvalBase {
         assertTrue(ue.evaluationOf(jobId).started, "reads sent inside submit");
     }
 
-    /// @dev At no gas level does `submit` succeed without fixing the end blocks, and `sendReads` never fixes them,
+    /// @dev At no gas level does `submit` succeed without fixing the end blocks, and `retryEvaluation` never fixes them,
     ///      so the provider can't choose when the job is measured. `UniversalHook.designProofs.t.sol` shows the
     ///      earlier try/catch in the hook let a gas-starved `submit` through with no end blocks.
     function test_UE26_submitNeverSucceedsWithoutEndBlocks() public {
         uint256 jobId = _createSpec(_swapSpec());
         _fund(jobId);
-        _answerSnapshot(jobId, 0, 0);
+        _answerSnapshot(jobId, SWAP_PRE, 0);
         _advance();
         bytes memory submitCall = abi.encodeCall(kernel.submit, (jobId, keccak256("done"), bytes("")));
 
@@ -577,12 +614,12 @@ contract UniversalEvaluatorTest is UniversalEvalBase {
         assertTrue(firstOk != 0 && okCount > 100, "the scan reached gas levels where submit succeeds");
     }
 
-    /// @dev `sendReads` only sends at blocks fixed in `submit`. The one way a Submitted job has none: the kernel admin
+    /// @dev `retryEvaluation` only sends at blocks fixed in `submit`. The one way a Submitted job has none: the kernel admin
     ///      detached its hook before `submit`, so the hook never called the evaluator.
-    function test_UE32_sendReads_requiresEndBlocksFixedInSubmit() public {
+    function test_UE32_retryEvaluation_requiresEndBlocksFixedInSubmit() public {
         uint256 jobId = _createSpec(_swapSpec());
         _fund(jobId);
-        _answerSnapshot(jobId, 0, 0);
+        _answerSnapshot(jobId, SWAP_PRE, 0);
         uint256[] memory ids = new uint256[](1);
         ids[0] = jobId;
         vm.prank(admin);
@@ -593,12 +630,12 @@ contract UniversalEvaluatorTest is UniversalEvalBase {
 
         vm.prank(provider);
         vm.expectRevert(abi.encodeWithSelector(UniversalEvaluatorErrors.EndBlocksNotFixed.selector, jobId));
-        ue.sendReads(jobId);
+        ue.retryEvaluation(jobId);
     }
 
     /// @dev Preflight only (the admin can still block the chain later): a read Read State would refuse fails `fund`.
     function test_UE27_blockedDomainAtFund_refused() public {
-        uint256 jobId = _createSpec(_anySpec()); // CMP only: no snapshot read would reach Read State at fund
+        uint256 jobId = _createSpec(_anySpec()); // COMPARE only: no snapshot read would reach Read State at fund
         (uint256 snap, uint256 eval_) = ue.prefundCost(jobId);
         _prefund(jobId, snap + eval_);
         vm.prank(readAdmin);
@@ -631,7 +668,7 @@ contract UniversalEvaluatorTest is UniversalEvalBase {
     /// @dev "All of these": the first FAIL decides, and the job is rejected at once.
     function test_UE30_allFailsOnFirstFail() public {
         JobSpec memory s = _anySpec();
-        s.nodes[0].kind = NodeKind.ALL;
+        s.logic[0].kind = LogicKind.ALL;
         uint256 jobId = _createSpec(s);
         _fund(jobId);
         _advance();
@@ -657,7 +694,7 @@ contract UniversalEvaluatorTest is UniversalEvalBase {
     ///      kernel can apply it.
     function test_UE33_decidedVerdict_noResend_settlePassesKernelRevert() public {
         JobSpec memory s = _anySpec();
-        s.nodes[0].kind = NodeKind.ALL;
+        s.logic[0].kind = LogicKind.ALL;
         uint256 jobId = _createSpec(s);
         _fund(jobId);
         _advance();
@@ -673,7 +710,7 @@ contract UniversalEvaluatorTest is UniversalEvalBase {
 
         vm.prank(provider);
         vm.expectRevert(abi.encodeWithSelector(UniversalEvaluatorErrors.NothingToSend.selector, jobId));
-        ue.sendReads{value: READ_COST}(jobId);
+        ue.retryEvaluation{value: READ_COST}(jobId);
 
         vm.expectRevert(PausableUpgradeable.EnforcedPause.selector);
         ue.settle(jobId);
@@ -684,5 +721,165 @@ contract UniversalEvaluatorTest is UniversalEvalBase {
         ue.settle(jobId);
         assertTrue(ue.evaluationOf(jobId).applied);
         assertEq(uint8(_status(jobId)), uint8(IAgenticCommerce.JobStatus.Rejected));
+    }
+
+    // ───────────── comparing reads: chain against chain, before against before ─────────────
+
+    /// @dev "b on Base > a on Ethereum AND b > c on Arbitrum, after the job": two NUMBER checks on POST reads across
+    ///      three chains. Each check waits for both of its reads.
+    function test_UE34_crossChainPairs_allMustHold() public {
+        _track("1");
+        _track("42161");
+        JobSpec memory s = _anySpec();
+        s.reads = new Read[](3);
+        s.reads[0] = _balanceRead(weth, cea); // b on Base
+        s.reads[1] = _on(_balanceRead(weth, cea), "1"); // a on Ethereum
+        s.reads[2] = _on(_balanceRead(weth, cea), "42161"); // c on Arbitrum
+        s.checks[0] = Check({
+            left: _u8(0), right: _u8(1), evaluation: Evaluation.NUMBER, operation: Operation.GREATER_THAN, target: 0
+        });
+        s.checks[1] = Check({
+            left: _u8(0), right: _u8(2), evaluation: Evaluation.NUMBER, operation: Operation.GREATER_THAN, target: 0
+        });
+        s.logic[0].kind = LogicKind.ALL;
+        uint256 jobId = _createSpec(s);
+        _fund(jobId);
+        _advance();
+        _move("1");
+        _move("42161");
+        _submit(jobId);
+
+        _answer(jobId, 0, abi.encode(uint256(5e18)));
+        _answer(jobId, 1, abi.encode(uint256(4e18))); // b > a; b against c still open
+        assertEq(uint8(_status(jobId)), uint8(IAgenticCommerce.JobStatus.Submitted));
+        _answer(jobId, 2, abi.encode(uint256(3e18)));
+        assertEq(uint8(_status(jobId)), uint8(IAgenticCommerce.JobStatus.Completed));
+    }
+
+    /// @dev A check on two PRE reads is judged when the evaluation starts: here it fails, so the first usable answer
+    ///      rejects the job.
+    function test_UE35_prePair_failsAtStart() public {
+        uint256 jobId = _createSpec(_overtakeSpec());
+        _fund(jobId);
+        _answerSnapshot(jobId, 2, 3e18); // a before
+        _answerSnapshot(jobId, 3, 2e18); // b before: not ahead
+        _advance();
+        _submit(jobId);
+        _answer(jobId, 0, abi.encode(uint256(9e18))); // a after: ahead, but the root already failed
+        assertEq(uint8(_status(jobId)), uint8(IAgenticCommerce.JobStatus.Rejected));
+    }
+
+    function test_UE36_preAndPostPairs_pass() public {
+        uint256 jobId = _createSpec(_overtakeSpec());
+        _fund(jobId);
+        _answerSnapshot(jobId, 2, 1e18);
+        _answerSnapshot(jobId, 3, 2e18); // b ahead before
+        _advance();
+        _submit(jobId);
+        _answer(jobId, 0, abi.encode(uint256(5e18)));
+        assertEq(uint8(_status(jobId)), uint8(IAgenticCommerce.JobStatus.Submitted), "b after is still out");
+        _answer(jobId, 1, abi.encode(uint256(4e18))); // a ahead after
+        assertEq(uint8(_status(jobId)), uint8(IAgenticCommerce.JobStatus.Completed));
+    }
+
+    // ───────────── an unreadable PRE answer ─────────────
+
+    /// @dev It counts as answered: the evaluation starts, and the other branch passes the job without it.
+    function test_UE37_unreadablePre_otherBranchPasses() public {
+        uint256 jobId = _createSpec(_depositSpec());
+        _fund(jobId);
+        _answer(jobId, 1, "");
+        assertTrue(ue.ready(jobId));
+        (bool ok,) = ue.answerOf(jobId, 1);
+        assertFalse(ok);
+
+        _prefund(jobId, READ_COST); // read 1 goes out again with the POST reads
+        _advance();
+        _submit(jobId);
+        assertTrue(ue.evaluationOf(jobId).started);
+        _answer(jobId, 2, abi.encode(uint256(100e6))); // Morpho holds it: ANY passes, Aave's check still UNKNOWN
+        assertEq(uint8(_status(jobId)), uint8(IAgenticCommerce.JobStatus.Completed));
+    }
+
+    /// @dev Once the evaluation starts it is read again at its `fund` block, by the evaluation, and that answer
+    ///      decides the check it feeds. `retrySnapshot` is closed from then on.
+    function test_UE38_unreadablePre_resentAtFundBlock_decides() public {
+        uint256 jobId = _createSpec(_depositSpec());
+        _fund(jobId);
+        uint256 first = ue.requestOf(jobId, 1);
+        _answer(jobId, 1, "");
+        _prefund(jobId, READ_COST);
+        _advance();
+        vm.recordLogs();
+        _submit(jobId);
+        uint256 again = ue.requestOf(jobId, 1);
+        assertTrue(again != first);
+        assertEq(_readSpecFromLogs(again).blockNumber, START_HEIGHT, "the fund block");
+
+        vm.prank(provider);
+        vm.expectRevert(abi.encodeWithSelector(UniversalEvaluatorErrors.NothingToSend.selector, jobId));
+        ue.retrySnapshot{value: SNAPSHOT_COST}(jobId);
+
+        _answer(jobId, 0, abi.encode(uint256(150e6)));
+        _answer(jobId, 2, abi.encode(uint256(0))); // Morpho fails; ANY waits on Aave's check
+        assertEq(uint8(_status(jobId)), uint8(IAgenticCommerce.JobStatus.Submitted));
+        bytes memory before = abi.encode(uint256(50e6));
+        _answer(jobId, 1, before); // 150 - 50 >= 99.99
+        assertEq(uint8(_status(jobId)), uint8(IAgenticCommerce.JobStatus.Completed));
+        bytes32 leaf = keccak256(abi.encode(uint8(1), again, START_HEIGHT, keccak256(before), true, int256(50e6)));
+        assertEq(ue.evidenceOf(jobId, 1), leaf, "evidence at the fund block");
+    }
+
+    /// @dev Under ALL a failing branch rejects without it. Prepaid for one round only, `submit` can't also re-send
+    ///      it, so nothing goes out until the provider tops up.
+    function test_UE39_unreadablePre_otherBranchFails() public {
+        JobSpec memory s = _depositSpec();
+        s.logic[0].kind = LogicKind.ALL;
+        uint256 jobId = _createSpec(s);
+        _fund(jobId);
+        _answer(jobId, 1, "");
+        _advance();
+        _submit(jobId);
+        assertFalse(ue.evaluationOf(jobId).started);
+
+        vm.prank(provider);
+        ue.retryEvaluation{value: READ_COST}(jobId);
+        _answer(jobId, 2, abi.encode(uint256(1e6))); // below 99.99: ALL fails whatever Aave's check says
+        assertEq(uint8(_status(jobId)), uint8(IAgenticCommerce.JobStatus.Rejected));
+    }
+
+    /// @dev "Deposited into Aave during the job, OR Morpho holds it". Reads: 0 aUSDC after, 1 aUSDC before,
+    ///      2 Morpho after.
+    function _depositSpec() internal view returns (JobSpec memory s) {
+        s = _anySpec();
+        s.reads = new Read[](3);
+        s.reads[0] = _balanceRead(ausdc, cea);
+        s.reads[1] = _pre(_balanceRead(ausdc, cea));
+        s.reads[2] = _balanceRead(morphoVault, cea);
+        s.checks[0] = Check({
+            left: _u8(0),
+            right: _u8(1),
+            evaluation: Evaluation.NUMBER,
+            operation: Operation.GREATER_OR_EQUAL,
+            target: 99.99e6
+        });
+        s.checks[1].left = _u8(2);
+    }
+
+    /// @dev "b was ahead before the job, a is ahead after it". Reads: 0 a after, 1 b after, 2 a before, 3 b before.
+    function _overtakeSpec() internal view returns (JobSpec memory s) {
+        s = _anySpec();
+        s.reads = new Read[](4);
+        s.reads[0] = _balanceRead(ausdc, cea);
+        s.reads[1] = _balanceRead(morphoVault, cea);
+        s.reads[2] = _pre(_balanceRead(ausdc, cea));
+        s.reads[3] = _pre(_balanceRead(morphoVault, cea));
+        s.checks[0] = Check({
+            left: _u8(3), right: _u8(2), evaluation: Evaluation.NUMBER, operation: Operation.GREATER_THAN, target: 0
+        });
+        s.checks[1] = Check({
+            left: _u8(0), right: _u8(1), evaluation: Evaluation.NUMBER, operation: Operation.GREATER_THAN, target: 0
+        });
+        s.logic[0].kind = LogicKind.ALL;
     }
 }

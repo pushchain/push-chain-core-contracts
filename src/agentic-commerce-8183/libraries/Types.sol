@@ -2,7 +2,7 @@
 pragma solidity 0.8.26;
 
 import {AllowedCall, OwnerIntent, Session} from "../interfaces/external/IAGW.sol";
-import {EvalType, Op, Node} from "./JobSpecTypes.sol";
+import {Evaluation, Operation, Logic, ReadAt} from "./JobSpecTypes.sol";
 
 /// @title Types — the UniversalMarketplace package's structs and enums, file-level.
 /// @dev - Cards, jobs and init: the marketplace (UniversalMarketplace, IUniversalMarketplace).
@@ -145,6 +145,7 @@ struct ReadTemplate {
     Fill[] fills;
     bytes outputs;
     uint8[] field;
+    ReadAt at;
 }
 
 /// @notice Where a check's target comes from.
@@ -156,11 +157,12 @@ enum TargetSource {
 }
 
 /// @notice A `Check` whose target is a source. `value`: FIXED the target · PRINCIPAL_BPS bps of principal ·
-///         PARAM a param index · CEA unused (the CEA of the check's read chain).
+///         PARAM a param index · CEA unused (the CEA on the chain of `left`'s first read).
 struct CheckTemplate {
-    uint8 read;
-    EvalType evalType;
-    Op op;
+    uint8[] left;
+    uint8[] right;
+    Evaluation evaluation;
+    Operation operation;
     TargetSource source;
     int256 value;
 }
@@ -171,11 +173,11 @@ struct ParamBounds {
     int256 max;
 }
 
-/// @notice The whole template, stored on the card as `abi.encode(EvaluationTemplate)`. `nodes` is copied verbatim.
+/// @notice The whole template, stored on the card as `abi.encode(EvaluationTemplate)`. `logic` is copied verbatim.
 struct EvaluationTemplate {
     ReadTemplate[] reads;
     CheckTemplate[] checks;
-    Node[] nodes;
+    Logic[] logic;
     ParamBounds[] params;
 }
 

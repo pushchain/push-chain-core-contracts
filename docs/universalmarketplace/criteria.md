@@ -23,9 +23,9 @@ in the whole flow, see [`README.md`](./README.md) §7.
 | Read by | the marketplace, at `startJob` / previews | the hook (at `fund`) and the evaluator (at verify) |
 | Defined in | [`libraries/Types.sol`](../../src/agentic-commerce-8183/libraries/Types.sol) | [`libraries/JobSpecTypes.sol`](../../src/agentic-commerce-8183/libraries/JobSpecTypes.sol) |
 
-The `JobSpec` is the format of the Universal Evaluator V2 design, plus one field, `origin`. JobSpecTypes is the one
-definition shared by everything that writes or reads a job's criteria. Its field order is ABI: reordering or
-inserting a field changes every description.
+JobSpecTypes is the one definition shared by everything that writes or reads a job's criteria: the marketplace
+builds a `JobSpec`, the UniversalHook freezes it at `fund`, and the UniversalEvaluator judges it. Its field order is
+ABI: reordering or inserting a field changes every description.
 
 ---
 
@@ -33,12 +33,13 @@ inserting a field changes every description.
 
 ```solidity
 struct JobSpec {
-    uint64 executeBy;   // the provider must execute before this
-    uint64 failFinalAt; // a FAIL only counts from a verify started after this
+    uint64 executeBy;               // the provider must execute before this
+    uint64 failFinalAt;             // a FAIL only counts from a verify started after this
     Read[] reads;
     Check[] checks;
-    Node[] nodes;       // nodes[0] is the root: the job passes if it passes
-    bytes32 origin;     // keccak256(abi.encode(marketplace, cardId, cardVersion, principal))
+    Logic[] logic;                  // logic[0] is the root: the job passes if it passes
+    AllowedMutability allowedMutability;  // who may replace these criteria before `fund`; marketplace jobs are NONE
+    bytes32 origin;                 // keccak256(abi.encode(marketplace, cardId, cardVersion, principal))
 }
 ```
 
@@ -54,12 +55,24 @@ struct Read {
     bytes args;               // abi-encoded arguments
     bytes outputs;            // the function's return types, as type codes
     uint8[] field;            // which returned value, by ABI position
+    ReadAt at;                // POST_EXECUTION (the zero value) or PRE_EXECUTION
 }
 ```
 
-A read is one view call on one chain. **`chainNamespace` here is the namespace only** (`"eip155"`), with
-`chainId` separate: the Read State split of the V2 design. That differs from `AgentCard.chainNamespace`, which is
-the full CAIP-2 string `"eip155:<id>"`.
+A read is one view call on one chain, at one moment. **`chainNamespace` here is the namespace only** (`"eip155"`),
+with `chainId` separate: the Read State split of the V2 design. That differs from `AgentCard.chainNamespace`, which
+is the full CAIP-2 string `"eip155:<id>"`.
+
+`at` says when the read is taken:
+
+| `at` | Read at |
+|---|---|
+| `POST_EXECUTION` (the zero value) | its end block: the chain's tracked height, fixed inside `submit` |
+| `PRE_EXECUTION` | the block recorded at `fund`: the chain's tracked height then |
+
+A spec needs at least one POST_EXECUTION read. A change over the job is a POST read against a PRE read of the same
+call (a `NUMBER` or `PERCENTAGE` check, below). An unreadable PRE answer counts as answered: the evaluation still starts, the
+checks that need it are UNKNOWN, and the evaluator sends it again, at its `fund` block, with the POST reads.
 
 `outputs` describes the return types so the evaluator can find one value in the answer. Codes:
 
@@ -77,14 +90,15 @@ The top level is always a tuple of the return values. For example, `balanceOf(ad
 `field` is the path to the value: at a tuple, the field index; at an array, the element index. `[0]` is the first
 return value; `[0, 2]` is the first return value's third field.
 
-How the evaluator turns the selected value into a number (from the V2 design; a test-only copy of its decoder is
-[`test/8183-tests/helpers/V2Decoder.sol`](../../test/8183-tests/helpers/V2Decoder.sol)):
+How the evaluator turns the selected value into a number
+([`EvmReadLib.decode`](../../src/agentic-commerce-8183/evaluator/EvmReadLib.sol); a test-only copy of the V2
+design's decoder is [`test/8183-tests/helpers/V2Decoder.sol`](../../test/8183-tests/helpers/V2Decoder.sol)):
 
 | Leaf | Value compared |
 |---|---|
 | uint / int | the number (a uint above `int256.max` is "can't tell") |
 | bool | 0 or 1 |
-| address, bytesN | the raw word (compare with EQ / NEQ) |
+| address, bytesN | the raw word (compare with EQUAL / NOT_EQUAL) |
 | bytes, string | `keccak256` of the content |
 | array | its length |
 
@@ -92,33 +106,56 @@ How the evaluator turns the selected value into a number (from the V2 design; a 
 
 ```solidity
 struct Check {
-    uint8 read;       // index into reads
-    EvalType evalType;
-    Op op;            // EQ, NEQ, GT, GTE, LT, LTE
-    int256 target;    // in the contract's own units
+    uint8[] left;       // indexes into reads, increasing · BOOLEAN: exactly one
+    uint8[] right;      // indexes into reads, increasing, none in `left` · NUMBER / PERCENTAGE: at least one · BOOLEAN / COMPARE: none
+    Evaluation evaluation;
+    Operation operation;              // EQUAL, NOT_EQUAL, GREATER_THAN, GREATER_OR_EQUAL, LESS_THAN, LESS_OR_EQUAL
+    int256 target;      // in the contract's own units
 }
 ```
 
-| `EvalType` | Compares |
-|---|---|
-| `BOOL` | the value now, as a bool |
-| `CMP` | the value now |
-| `NUM` | the change since the snapshot the hook takes at `fund` (V2 UniversalHook) |
-| `PCT` | the percentage change since that snapshot |
+Each side is the sum of its reads: L = Σ`left`, R = Σ`right`.
 
-### Nodes: the pass logic
+| `Evaluation` | Passes when | Sides |
+|---|---|---|
+| `BOOLEAN` | `L == target` (`op` must be `EQUAL`, `target` 0 or 1) | one `left` read, no `right` |
+| `COMPARE` | `L op target` | `left` only |
+| `NUMBER` | `(L − R) op target` | both |
+| `PERCENTAGE` | `(L − R) × 10 000 op target × R`: the change in basis points, compared without dividing; `R ≤ 0` fails | both |
+
+A side with a missing or unreadable read, or a sum that overflows, makes the check UNKNOWN. With a PRE read on the
+right, `NUMBER` and `PERCENTAGE` measure the change over the job: `left [after], right [before], NUMBER, GREATER_OR_EQUAL, x` is "grew by at
+least x". Sums compare totals, for example Aave plus Morpho holdings after the job against the same two before.
+
+### Logic: the pass logic
 
 ```solidity
-struct Node {
-    NodeKind kind;      // CHECK, ALL, ANY, AT_LEAST
+struct Logic {
+    LogicKind kind;     // CHECK, ALL, ANY, AT_LEAST
     uint8 check;        // CHECK only: index into checks
-    uint8[] children;   // ALL / ANY / AT_LEAST: indexes into nodes, each greater than this node's own
+    uint8[] children;   // ALL / ANY / AT_LEAST: indexes into logic, each greater than this entry's own
     uint8 k;            // AT_LEAST only: how many children must pass
 }
 ```
 
-`nodes[0]` is the root. `ALL` is AND, `ANY` is OR, `AT_LEAST k` is any `k` of the children. Children always have
-a higher index than their parent, so the tree has no cycles and can be evaluated from the last node to the first.
+`logic[0]` is the root. `ALL` is AND, `ANY` is OR, `AT_LEAST k` is any `k` of the children. Children always have
+a higher index than their parent, so the tree has no cycles and can be evaluated from the last entry to the first.
+Each check comes out PASS, FAIL or UNKNOWN, and the entries combine them in three-valued logic, so a job can be
+decided while some checks are still UNKNOWN.
+
+### `allowedMutability`
+
+Who may replace the criteria before the job is funded:
+
+| `AllowedMutability` | May replace |
+|---|---|
+| `BOTH` (the zero value) | the provider in `setBudget`, or the client in `fund` |
+| `NONE` | nobody |
+| `CLIENT` | the client, in `fund` |
+| `PROVIDER` | the provider, in `setBudget` |
+
+The flag in the `createJob` description governs, and a replacement must carry the same flag. The builder always
+writes `NONE`: a marketplace job's criteria are exactly the card's.
 
 ### Timing
 
@@ -142,7 +179,7 @@ unusable on another: the version is inside the signed calldata.
 struct EvaluationTemplate {
     ReadTemplate[] reads;
     CheckTemplate[] checks;
-    Node[] nodes;          // copied verbatim
+    Logic[] logic;         // copied verbatim
     ParamBounds[] params;  // one entry per per-job number the user supplies
 }
 ```
@@ -160,6 +197,7 @@ struct ReadTemplate {
     Fill[] fills;            // what to write into args per job
     bytes outputs;
     uint8[] field;
+    ReadAt at;               // copied
 }
 
 enum FillSource { CEA, PARAM }
@@ -185,9 +223,10 @@ The CEA is derived per read chain, so one template can read two chains, each wit
 enum TargetSource { FIXED, PRINCIPAL_BPS, PARAM, CEA }
 
 struct CheckTemplate {
-    uint8 read;
-    EvalType evalType;
-    Op op;
+    uint8[] left;        // copied
+    uint8[] right;       // copied
+    Evaluation evaluation;
+    Operation operation;
     TargetSource source;
     int256 value;
 }
@@ -198,7 +237,7 @@ struct CheckTemplate {
 | `FIXED` | the target | `value` |
 | `PRINCIPAL_BPS` | basis points of the principal | `principal × value / 10 000`, rounded down |
 | `PARAM` | an index into the job's params | `params[value]` |
-| `CEA` | unused | the AGW's CEA on the check's read chain, as `int256(uint160(cea))` |
+| `CEA` | unused | the AGW's CEA on the chain of the check's first `left` read, as `int256(uint160(cea))` |
 
 `PRINCIPAL_BPS` is how criteria scale with the job's size ("at least 99.99% of the principal arrived").
 
@@ -222,24 +261,28 @@ step 9 and by both preview views:
 1. **Decode** the template. Undecodable bytes revert in `abi.decode`.
 2. **Params**: `params.length == template.params.length`, else `ParamCountMismatch(expected, actual)`; each
    `min ≤ params[i] ≤ max`, else `ParamOutOfRange(i, value)`.
-3. **CEAs**: for each read with a CEA fill, and each read a `CEA`-target check names, get
+3. **CEAs**: for each read with a CEA fill, and the first `left` read of each `CEA`-target check, get
    `expectedCEAOf(agw, keccak256(namespace ":" chainId))` from the marketplace, once per read. A chain without a
    CEA deployment reverts `ChainNotSupported(chainHash)`.
-4. **Reads**: copy each read; copy its `args` into a fresh buffer; apply each fill. A fill must satisfy
-   `32·word + 32 ≤ args.length`, else `FillOutOfBounds(read, fill)`. This bound check is what makes the one
+4. **Reads**: copy each read, `at` included; copy its `args` into a fresh buffer; apply each fill. A fill must
+   satisfy `32·word + 32 ≤ args.length`, else `FillOutOfBounds(read, fill)`. This bound check is what makes the one
    inline-assembly `mstore` safe.
-5. **Checks**: copy `read`, `evalType`, `op`; resolve the target. For `PRINCIPAL_BPS`, if
+5. **Checks**: copy `left`, `right`, `evaluation`, `op`; resolve the target. For `PRINCIPAL_BPS`, if
    `principal > type(uint256).max / bps`, revert `TargetOverflow(check)`. Once the product fits, the quotient is at
    most `uint256.max / 10 000`, which always fits in `int256`, so the cast cannot truncate.
-6. **Nodes** copied verbatim. `executeBy`, `failFinalAt = executeBy + settleWindow`, `origin`.
+6. **Logic** copied verbatim. `executeBy`, `failFinalAt = executeBy + settleWindow`, `origin`, and
+   `mutability = NONE`.
 7. Return `abi.encode(spec)`.
 
-**Not checked:** whether the criteria make sense or can be run. That covers caps on the number of reads, checks
-or nodes; outputs that are not valid type codes; fields that point nowhere; reads no check uses; unreachable
-nodes; and trivially true criteria. All of these build as given (`test_JB08_doesNotJudgeTheTemplate`). The caps
-`MAX_READS` (16), `MAX_CHECKS` (16) and `MAX_NODES` (32) in JobSpecTypes are the evaluator's, not enforced here.
-An out-of-range index (a check's `read`, a fill's `param`, a `PARAM` target) panics. Anything that reverts here
-makes `startJob` and both previews of that card revert.
+**Not checked:** whether the criteria make sense or can be run. That covers caps on the number of reads, checks,
+logic entries or side terms; check sides that don't fit their type, point past the reads, are out of order or
+overlap; outputs that are not valid type codes; fields that point nowhere; reads no check uses; unreachable logic
+entries; and trivially true criteria. All of these build as given (`test_JB08_doesNotJudgeTheTemplate`), except
+where building needs an index: an empty `left` panics, as does an out-of-range fill `param`, `PARAM` target, or
+first `left` read of a `CEA`-target check. The caps `MAX_READS` (32), `MAX_CHECKS` (16) and `MAX_LOGIC` (32)
+in JobSpecTypes are the evaluator's, not enforced here: `JobSpecLib.validate` refuses a spec that
+breaks them, or any rule above, when the UniversalEvaluator freezes it at `fund` (`JobSpecErrors`). Anything that
+reverts here makes `startJob` and both previews of that card revert.
 
 The result is deterministic for a given card version, job inputs and CEA configuration
 (`testFuzz_JB11_deterministic`).
@@ -260,16 +303,16 @@ beneficiary (`onBehalfOf`) pinned at offset 68; one approval, USDC → Pool, `ca
 **Template:**
 
 ```
-reads[0]  eip155 / 11155111, 12 confirmations
+reads[0]  eip155 / 11155111, 12 confirmations, POST_EXECUTION
           aUSDC.balanceOf(address)          args = 32 zero bytes   fills = [word 0 ← CEA]
           outputs = [TUPLE 1, UINT]         field = [0]
-reads[1]  eip155 / 11155111, 12 confirmations
+reads[1]  eip155 / 11155111, 12 confirmations, POST_EXECUTION
           Pool.getReserveData(address)      args = abi.encode(USDC) fills = []
           outputs = [TUPLE 1, TUPLE 15, (TUPLE 1, UINT), UINT×7, ADDRESS×4, UINT×3]
           field = [0, 2]                    (the struct's 3rd field: currentLiquidityRate)
-checks[0] read 0, CMP, GTE, PRINCIPAL_BPS, 9999     "deposited ≥ 99.99% of principal"
-checks[1] read 1, CMP, GTE, FIXED, 0.04e27          "rate ≥ 4% (ray)"
-nodes     [ ALL(1, 2), CHECK 0, CHECK 1 ]
+checks[0] left [0], COMPARE, GREATER_OR_EQUAL, PRINCIPAL_BPS, 9999     "deposited ≥ 99.99% of principal"
+checks[1] left [1], COMPARE, GREATER_OR_EQUAL, FIXED, 0.04e27          "rate ≥ 4% (ray)"
+logic     [ ALL(1, 2), CHECK 0, CHECK 1 ]
 params    []
 ```
 
@@ -278,17 +321,18 @@ params    []
 **Built JobSpec:**
 
 ```
-reads[0].args   = abi.encode(CEA(agw, "eip155:11155111"))
+reads[0].args    = abi.encode(CEA(agw, "eip155:11155111"))
 checks[0].target = 500e6 × 9999 / 10 000 = 499 950 000
 checks[1].target = 0.04e27
-nodes           = [ ALL(1, 2), CHECK 0, CHECK 1 ]
-executeBy       = now + 1 h
-failFinalAt     = now + 3 h
-origin          = keccak256(abi.encode(marketplace, cardId, 1, 500e6))
+logic            = [ ALL(1, 2), CHECK 0, CHECK 1 ]
+mutability       = NONE
+executeBy        = now + 1 h
+failFinalAt      = now + 3 h
+origin           = keccak256(abi.encode(marketplace, cardId, 1, 500e6))
 ```
 
-The evaluator later passes the job if both checks pass: the CEA's aUSDC balance is at least 499.95 USDC, and
-Aave's current supply rate is at least 4%.
+The evaluator later passes the job if both checks pass at the end blocks fixed at `submit`: the CEA's aUSDC
+balance is at least 499.95 USDC, and Aave's current supply rate is at least 4%.
 
 `test_MC01_lendingExample_equalsV2Doc` builds the same template on Ethereum (the design doc's chain) and compares
 the result, field by field, with the V2 design doc's hand-written JobSpec.
@@ -298,18 +342,18 @@ the result, field by field, with the V2 design doc's hand-written JobSpec.
 "The CEA receives at least `minOut` WETH." `minOut` is chosen by the user per job.
 
 ```
-reads[0]  eip155 / 11155111, 3 confirmations
+reads[0]  eip155 / 11155111, 3 confirmations, POST_EXECUTION
           WETH.balanceOf(address)   args = 32 zero bytes   fills = [word 0 ← CEA]
           outputs = [TUPLE 1, UINT]  field = [0]
-checks[0] read 0, NUM, GTE, PARAM, 0       "balance grew by ≥ params[0]"
-nodes     [ CHECK 0 ]
+reads[1]  as reads[0], but PRE_EXECUTION                "the balance at fund"
+checks[0] left [0], right [1], NUMBER, GREATER_OR_EQUAL, PARAM, 0     "balance grew by ≥ params[0]"
+logic     [ CHECK 0 ]
 params    [ {min: 1, max: 1e30} ]
 ```
 
-A job with `params = [0.38e18]` gets `checks[0].target = 0.38e18`. `NUM` compares the change since the snapshot
-the V2 UniversalHook takes at `fund`, so WETH the CEA already held doesn't count. (The interim RulesBindingHook
-takes no snapshot; `NUM` and `PCT` checks need the V2 hook.) A job with `params = [0]` reverts
-`ParamOutOfRange(0, 0)`; one with no params reverts `ParamCountMismatch(1, 0)`.
+A job with `params = [0.38e18]` gets `checks[0].target = 0.38e18`. `NUMBER` subtracts read 1 (the CEA's WETH at
+`fund`) from read 0 (after the provider's execution), so WETH the CEA already held doesn't count. A job with
+`params = [0]` reverts `ParamOutOfRange(0, 0)`; one with no params reverts `ParamCountMismatch(1, 0)`.
 
 ---
 

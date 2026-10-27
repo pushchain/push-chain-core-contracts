@@ -1,6 +1,9 @@
 // SPDX-License-Identifier: MIT
 pragma solidity 0.8.26;
 
+import {Evaluation, Operation} from "../libraries/JobSpecTypes.sol";
+import {PendingRead} from "../../libraries/ReadTypes.sol";
+
 /// @title EvaluationTypes — values, limits and outside views of the UniversalEvaluator
 /// @dev - Not part of the `JobSpec` wire format; changing these never changes a job's description.
 
@@ -21,10 +24,20 @@ enum Verdict {
 
 /// @notice Whether the client's wallet was used by its owner between `fund` and the verdict. Recorded only.
 ///         UNKNOWN: the wallet's counter could not be read.
+///         TOUCHED: any owner call through the wallet after `fund`, the client's own retries included.
 enum OwnerCheck {
     UNKNOWN,
     CLEAN,
     TOUCHED
+}
+
+/// @notice A check as the evaluator keeps it: each side's reads as a bitmask (bit i: read i).
+struct PackedCheck {
+    uint32 left;
+    uint32 right;
+    Evaluation evaluation;
+    Operation operation;
+    int256 target;
 }
 
 /// @notice The decode instructions for one read, kept so a callback never decodes the whole spec.
@@ -36,9 +49,9 @@ struct ReadPlan {
 /// @notice How the evaluator sends Read State requests. Fixed at deployment.
 /// @param readTtl                  Push blocks before an unanswered request may be expired. Must leave validators
 ///                                 time to wait for the read's confirmations.
-/// @param callbackGasLimit         Gas an "after" read's callback declares; the last one applies the verdict.
-///                                 At most Read State's 1,000,000.
-/// @param snapshotCallbackGasLimit Gas a "before" (snapshot) read's callback declares; it only stores a value.
+/// @param callbackGasLimit         Gas an evaluation read's callback declares; the one that decides the root
+///                                 applies the verdict. At most Read State's 1,000,000.
+/// @param snapshotCallbackGasLimit Gas a snapshot (PRE_EXECUTION) read's callback declares; it only stores a value.
 /// @param budgetMultiplier         Callback budget = `gas limit × base fee × budgetMultiplier`, so a base fee that
 ///                                 rises before delivery still clears the node's check. Unspent budget is refunded.
 /// @param maxHeightAge             Seconds a tracked height may be old when used, at `fund` and at `submit`. Non-zero.
@@ -93,10 +106,15 @@ interface IUniversalCoreHeights {
     function timestampObservedAtByChainNamespace(string memory chainNamespace) external view returns (uint256);
 }
 
-/// @title IReadStateDomains
-/// @notice The one UniversalCallback view the evaluator reads that `IUniversalCallback` does not declare.
-/// @dev Source: `src/UniversalCallback.sol` (`isDomainBlocked`), set by its admin with `updateBlockedDomain`. A blocked
-///      domain makes `requestExternalReadSelf` revert `DomainBlocked`.
-interface IReadStateDomains {
+/// @title IReadStateViews
+/// @notice The UniversalCallback views the evaluator reads that `IUniversalCallback` does not declare.
+/// @dev Source: `src/UniversalCallback.sol`.
+///      - `isDomainBlocked`, set by its admin with `updateBlockedDomain`: a blocked domain makes
+///        `requestExternalReadSelf` revert `DomainBlocked`.
+///      - `getPendingRead`: a request's `expiryHeight`. From that Push block on, the chain refuses votes on it, so it
+///        can only be expired (budget refunded), never answered.
+interface IReadStateViews {
     function isDomainBlocked(string calldata chainNamespace, string calldata chainId) external view returns (bool);
+
+    function getPendingRead(uint256 requestId) external view returns (PendingRead memory);
 }
