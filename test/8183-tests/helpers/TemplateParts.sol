@@ -117,7 +117,7 @@ abstract contract TemplateParts {
     }
 
     function _checkLogic(uint8 check) internal pure returns (Logic memory) {
-        return Logic({kind: LogicKind.CHECK, check: check, children: new uint8[](0), k: 0});
+        return Logic({kind: LogicKind.COMPARE, check: check, children: new uint8[](0), k: 0});
     }
 
     function _parent(LogicKind kind, uint8[] memory children, uint8 k) internal pure returns (Logic memory) {

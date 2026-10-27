@@ -226,7 +226,7 @@ abstract contract UniversalEvalBase is KernelBase {
     }
 
     function _checkLogic(uint8 check) internal pure returns (Logic memory) {
-        return Logic({kind: LogicKind.CHECK, check: check, children: new uint8[](0), k: 0});
+        return Logic({kind: LogicKind.COMPARE, check: check, children: new uint8[](0), k: 0});
     }
 
     /// @notice "The CEA receives at least 0.38 WETH": the balance after (read 0) minus before (read 1). Not replaceable.

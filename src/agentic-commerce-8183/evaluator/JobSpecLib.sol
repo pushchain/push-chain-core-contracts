@@ -112,7 +112,7 @@ library JobSpecLib {
     }
 
     /// @dev Everything counts toward the verdict: every logic entry is reachable from the root, every check is used by
-    ///      a reachable CHECK entry, every read by a used check. Nothing is paid for or shown without affecting payment.
+    ///      a reachable COMPARE entry, every read by a used check. Nothing is paid for or shown without affecting payment.
     ///      Children come after their parents (`_logicOk`), so one forward pass finds every reachable entry. An entry
     ///      may have several parents; that changes nothing in the verdict.
     function _requireAllUsed(JobSpec memory s) private pure {
@@ -121,7 +121,7 @@ library JobSpecLib {
         for (uint256 i; i < s.logic.length; ++i) {
             if ((reached >> i) & 1 == 0) revert JobSpecErrors.LogicUnreachable(i);
             Logic memory n = s.logic[i];
-            if (n.kind == LogicKind.CHECK) {
+            if (n.kind == LogicKind.COMPARE) {
                 usedChecks |= uint256(1) << n.check;
             } else {
                 for (uint256 j; j < n.children.length; ++j) {
@@ -152,12 +152,12 @@ library JobSpecLib {
         }
     }
 
-    /// @dev - CHECK: a check in range, no children.
+    /// @dev - COMPARE: a check in range, no children.
     ///      - ALL / ANY / AT_LEAST: one or more children, strictly increasing, each after this entry and in range,
     ///        so the tree is acyclic and no child is counted twice.
     ///      - AT_LEAST: `1 <= k <= children`.
     function _logicOk(Logic memory n, uint256 i, uint256 nLogic, uint256 nChecks) private pure returns (bool) {
-        if (n.kind == LogicKind.CHECK) return n.check < nChecks && n.children.length == 0;
+        if (n.kind == LogicKind.COMPARE) return n.check < nChecks && n.children.length == 0;
         uint256 len = n.children.length;
         if (len == 0) return false;
         uint256 prev = i;
@@ -241,7 +241,7 @@ library JobSpecLib {
             // forge-lint: disable-next-line(unsafe-typecast)
             uint8 kind = uint8(packed);
             uint8 r;
-            if (kind == uint8(LogicKind.CHECK)) {
+            if (kind == uint8(LogicKind.COMPARE)) {
                 // forge-lint: disable-next-line(unsafe-typecast)
                 r = uint8((uint256(checkRes) >> (2 * uint8(packed >> 8))) & 3);
             } else {
