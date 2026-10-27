@@ -49,7 +49,7 @@ library ReferenceJudge {
 
     /// @dev One logic entry's result, from its already-decided children.
     function _entry(Logic memory n, uint8[] memory logicRes, uint8[] memory checkRes) private pure returns (uint8) {
-        if (n.kind == LogicKind.CHECK) return checkRes[n.check];
+        if (n.kind == LogicKind.COMPARE) return checkRes[n.check];
 
         uint256 total = n.children.length;
         uint256 pass;

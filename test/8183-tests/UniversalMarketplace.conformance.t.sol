@@ -62,8 +62,8 @@ contract UniversalMarketplaceConformanceTest is BuilderFixtures {
         });
         Logic[] memory logic = new Logic[](3);
         logic[0] = Logic({kind: LogicKind.ALL, check: 0, children: _kids(1, 2), k: 0});
-        logic[1] = Logic({kind: LogicKind.CHECK, check: 0, children: new uint8[](0), k: 0});
-        logic[2] = Logic({kind: LogicKind.CHECK, check: 1, children: new uint8[](0), k: 0});
+        logic[1] = Logic({kind: LogicKind.COMPARE, check: 0, children: new uint8[](0), k: 0});
+        logic[2] = Logic({kind: LogicKind.COMPARE, check: 1, children: new uint8[](0), k: 0});
 
         _assertSpecEq(built, _docSpec(reads, checks, logic));
     }
@@ -85,7 +85,7 @@ contract UniversalMarketplaceConformanceTest is BuilderFixtures {
             target: 0.38e18
         });
         Logic[] memory logic = new Logic[](1);
-        logic[0] = Logic({kind: LogicKind.CHECK, check: 0, children: new uint8[](0), k: 0});
+        logic[0] = Logic({kind: LogicKind.COMPARE, check: 0, children: new uint8[](0), k: 0});
 
         _assertSpecEq(built, _docSpec(reads, checks, logic));
     }
@@ -115,18 +115,18 @@ contract UniversalMarketplaceConformanceTest is BuilderFixtures {
         });
         Logic[] memory logic = new Logic[](3);
         logic[0] = Logic({kind: LogicKind.ANY, check: 0, children: _kids(1, 2), k: 0});
-        logic[1] = Logic({kind: LogicKind.CHECK, check: 0, children: new uint8[](0), k: 0});
-        logic[2] = Logic({kind: LogicKind.CHECK, check: 1, children: new uint8[](0), k: 0});
+        logic[1] = Logic({kind: LogicKind.COMPARE, check: 0, children: new uint8[](0), k: 0});
+        logic[2] = Logic({kind: LogicKind.COMPARE, check: 1, children: new uint8[](0), k: 0});
         _assertSpecEq(either, _docSpec(reads, checks, logic));
 
-        // Nested: the doc draws the tree only. ANY(ALL(3,4), ALL(5,6)), CHECK i on checks[i].
+        // Nested: the doc draws the tree only. ANY(ALL(3,4), ALL(5,6)), COMPARE i on checks[i].
         JobSpec memory nested = _build(_nested(), _docCtx(100e6, _noParams()));
         Logic[] memory tree = new Logic[](7);
         tree[0] = Logic({kind: LogicKind.ANY, check: 0, children: _kids(1, 2), k: 0});
         tree[1] = Logic({kind: LogicKind.ALL, check: 0, children: _kids(3, 4), k: 0});
         tree[2] = Logic({kind: LogicKind.ALL, check: 0, children: _kids(5, 6), k: 0});
         for (uint8 i; i < 4; ++i) {
-            tree[3 + i] = Logic({kind: LogicKind.CHECK, check: i, children: new uint8[](0), k: 0});
+            tree[3 + i] = Logic({kind: LogicKind.COMPARE, check: i, children: new uint8[](0), k: 0});
         }
         _assertLogicEq(nested.logic, tree);
 
@@ -135,7 +135,7 @@ contract UniversalMarketplaceConformanceTest is BuilderFixtures {
         Logic[] memory atLeast = new Logic[](4);
         atLeast[0] = Logic({kind: LogicKind.AT_LEAST, check: 0, children: _kids3(1, 2, 3), k: 2});
         for (uint8 i; i < 3; ++i) {
-            atLeast[1 + i] = Logic({kind: LogicKind.CHECK, check: i, children: new uint8[](0), k: 0});
+            atLeast[1 + i] = Logic({kind: LogicKind.COMPARE, check: i, children: new uint8[](0), k: 0});
             assertEq(twoOfThree.checks[i].target, 99.99e6, "AT_LEAST: target");
         }
         _assertLogicEq(twoOfThree.logic, atLeast);

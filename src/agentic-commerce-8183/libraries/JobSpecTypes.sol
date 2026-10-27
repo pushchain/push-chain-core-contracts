@@ -27,9 +27,9 @@ enum Operation {
     LESS_OR_EQUAL
 }
 
-/// @notice One step of the pass logic. CHECK: one check · ALL / ANY / AT_LEAST: combine children.
+/// @notice One step of the pass logic. COMPARE: one check · ALL / ANY / AT_LEAST: combine children.
 enum LogicKind {
-    CHECK,
+    COMPARE,
     ALL,
     ANY,
     AT_LEAST
@@ -79,7 +79,7 @@ struct Check {
 /// @notice One step of the pass logic. Children always have a higher index than their parent.
 struct Logic {
     LogicKind kind;
-    uint8 check; // CHECK only: index into checks
+    uint8 check; // COMPARE only: index into checks
     uint8[] children; // ALL / ANY / AT_LEAST: indexes into logic, each greater than this entry's own
     uint8 k; // AT_LEAST only: how many children must pass
 }

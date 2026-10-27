@@ -131,8 +131,8 @@ least x". Sums compare totals, for example Aave plus Morpho holdings after the j
 
 ```solidity
 struct Logic {
-    LogicKind kind;     // CHECK, ALL, ANY, AT_LEAST
-    uint8 check;        // CHECK only: index into checks
+    LogicKind kind;     // COMPARE, ALL, ANY, AT_LEAST
+    uint8 check;        // COMPARE only: index into checks
     uint8[] children;   // ALL / ANY / AT_LEAST: indexes into logic, each greater than this entry's own
     uint8 k;            // AT_LEAST only: how many children must pass
 }
@@ -312,7 +312,7 @@ reads[1]  eip155 / 11155111, 12 confirmations, POST_EXECUTION
           field = [0, 2]                    (the struct's 3rd field: currentLiquidityRate)
 checks[0] left [0], COMPARE, GREATER_OR_EQUAL, PRINCIPAL_BPS, 9999     "deposited ≥ 99.99% of principal"
 checks[1] left [1], COMPARE, GREATER_OR_EQUAL, FIXED, 0.04e27          "rate ≥ 4% (ray)"
-logic     [ ALL(1, 2), CHECK 0, CHECK 1 ]
+logic     [ ALL(1, 2), COMPARE 0, COMPARE 1 ]
 params    []
 ```
 
@@ -324,7 +324,7 @@ params    []
 reads[0].args    = abi.encode(CEA(agw, "eip155:11155111"))
 checks[0].target = 500e6 × 9999 / 10 000 = 499 950 000
 checks[1].target = 0.04e27
-logic            = [ ALL(1, 2), CHECK 0, CHECK 1 ]
+logic            = [ ALL(1, 2), COMPARE 0, COMPARE 1 ]
 mutability       = NONE
 executeBy        = now + 1 h
 failFinalAt      = now + 3 h
@@ -347,7 +347,7 @@ reads[0]  eip155 / 11155111, 3 confirmations, POST_EXECUTION
           outputs = [TUPLE 1, UINT]  field = [0]
 reads[1]  as reads[0], but PRE_EXECUTION                "the balance at fund"
 checks[0] left [0], right [1], NUMBER, GREATER_OR_EQUAL, PARAM, 0     "balance grew by ≥ params[0]"
-logic     [ CHECK 0 ]
+logic     [ COMPARE 0 ]
 params    [ {min: 1, max: 1e30} ]
 ```
 

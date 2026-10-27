@@ -324,7 +324,7 @@ contract JobSpecLibrariesTest is Test {
             left: _f(0), right: _f(1), evaluation: Evaluation.NUMBER, operation: Operation.GREATER_OR_EQUAL, target: 1
         });
         s.logic = new Logic[](1);
-        s.logic[0] = Logic({kind: LogicKind.CHECK, check: 0, children: new uint8[](0), k: 0});
+        s.logic[0] = Logic({kind: LogicKind.COMPARE, check: 0, children: new uint8[](0), k: 0});
     }
 
     /// @dev A valid spec passes; one with no POST_EXECUTION read is refused, as the work would never be measured.
@@ -428,7 +428,7 @@ contract JobSpecLibrariesTest is Test {
         lib.validate(s);
 
         s = _twoVenue();
-        s.logic[0] = Logic({kind: LogicKind.CHECK, check: 0, children: new uint8[](0), k: 0}); // 1 and 2 cut off
+        s.logic[0] = Logic({kind: LogicKind.COMPARE, check: 0, children: new uint8[](0), k: 0}); // 1 and 2 cut off
         vm.expectRevert(abi.encodeWithSelector(JobSpecErrors.LogicUnreachable.selector, 1));
         lib.validate(s);
 
@@ -447,8 +447,8 @@ contract JobSpecLibrariesTest is Test {
         s.logic[0] = Logic({kind: LogicKind.ALL, check: 0, children: _f(1, 2), k: 0});
         s.logic[1] = Logic({kind: LogicKind.ANY, check: 0, children: _f(3), k: 0});
         s.logic[2] = Logic({kind: LogicKind.ANY, check: 0, children: _f(3, 4), k: 0});
-        s.logic[3] = Logic({kind: LogicKind.CHECK, check: 0, children: new uint8[](0), k: 0});
-        s.logic[4] = Logic({kind: LogicKind.CHECK, check: 1, children: new uint8[](0), k: 0});
+        s.logic[3] = Logic({kind: LogicKind.COMPARE, check: 0, children: new uint8[](0), k: 0});
+        s.logic[4] = Logic({kind: LogicKind.COMPARE, check: 1, children: new uint8[](0), k: 0});
         lib.validate(s);
     }
 
@@ -528,7 +528,7 @@ contract JobSpecLibrariesTest is Test {
                 target: 0
             });
             // forge-lint: disable-next-line(unsafe-typecast)
-            s.logic[1 + i] = Logic({kind: LogicKind.CHECK, check: uint8(i), children: new uint8[](0), k: 0});
+            s.logic[1 + i] = Logic({kind: LogicKind.COMPARE, check: uint8(i), children: new uint8[](0), k: 0});
             // forge-lint: disable-next-line(unsafe-typecast)
             kids[i] = uint8(1 + i);
         }
@@ -572,7 +572,7 @@ contract JobSpecLibrariesTest is Test {
                 target: 1
             });
             // forge-lint: disable-next-line(unsafe-typecast)
-            s.logic[1 + i] = Logic({kind: LogicKind.CHECK, check: uint8(i), children: new uint8[](0), k: 0});
+            s.logic[1 + i] = Logic({kind: LogicKind.COMPARE, check: uint8(i), children: new uint8[](0), k: 0});
             // forge-lint: disable-next-line(unsafe-typecast)
             kids[i] = uint8(1 + i);
         }
@@ -600,18 +600,18 @@ contract JobSpecLibrariesTest is Test {
         });
         s.logic = new Logic[](3);
         s.logic[0] = Logic({kind: LogicKind.ANY, check: 0, children: _f(1, 2), k: 0});
-        s.logic[1] = Logic({kind: LogicKind.CHECK, check: 0, children: new uint8[](0), k: 0});
-        s.logic[2] = Logic({kind: LogicKind.CHECK, check: 1, children: new uint8[](0), k: 0});
+        s.logic[1] = Logic({kind: LogicKind.COMPARE, check: 0, children: new uint8[](0), k: 0});
+        s.logic[2] = Logic({kind: LogicKind.COMPARE, check: 1, children: new uint8[](0), k: 0});
     }
 
     // ───────────── judge ─────────────
 
-    /// @dev One check under a CHECK root, `left` as read 0 and `right` as read 1.
+    /// @dev One check under a COMPARE root, `left` as read 0 and `right` as read 1.
     function _one(Check memory c, Answer memory left, Answer memory right) internal view returns (Verdict) {
         Check[] memory cs = new Check[](1);
         cs[0] = c;
         Logic[] memory n = new Logic[](1);
-        n[0] = Logic({kind: LogicKind.CHECK, check: 0, children: new uint8[](0), k: 0});
+        n[0] = Logic({kind: LogicKind.COMPARE, check: 0, children: new uint8[](0), k: 0});
         Answer[] memory v = new Answer[](2);
         v[0] = left;
         v[1] = right;
@@ -776,7 +776,7 @@ contract JobSpecLibrariesTest is Test {
             }
             if (kids == 0) {
                 // forge-lint: disable-next-line(unsafe-typecast)
-                logic[i] = Logic({kind: LogicKind.CHECK, check: uint8(r % nChecks), children: new uint8[](0), k: 0});
+                logic[i] = Logic({kind: LogicKind.COMPARE, check: uint8(r % nChecks), children: new uint8[](0), k: 0});
             } else {
                 uint8[] memory ch = new uint8[](kids);
                 for (uint256 j; j < kids; ++j) {
@@ -882,7 +882,7 @@ contract JobSpecLibrariesTest is Test {
                 left: _f(i), right: _none(), evaluation: Evaluation.COMPARE, operation: Operation.EQUAL, target: 1
             });
             values[i] = Answer(results[i] != JobSpecLib.UNKNOWN, results[i] == JobSpecLib.PASS ? int256(1) : int256(0));
-            logic[1 + i] = Logic({kind: LogicKind.CHECK, check: i, children: new uint8[](0), k: 0});
+            logic[1 + i] = Logic({kind: LogicKind.COMPARE, check: i, children: new uint8[](0), k: 0});
             kids[i] = 1 + i;
         }
         logic[0] = Logic({kind: kind, check: 0, children: kids, k: k});
@@ -980,12 +980,12 @@ contract JobSpecLibrariesTest is Test {
         );
     }
 
-    /// @dev One check under a CHECK root over `values`, through both judges.
+    /// @dev One check under a COMPARE root over `values`, through both judges.
     function _judged(Check memory c, Answer[] memory values, Verdict want) internal view {
         Check[] memory cs = new Check[](1);
         cs[0] = c;
         Logic[] memory n = new Logic[](1);
-        n[0] = Logic({kind: LogicKind.CHECK, check: 0, children: new uint8[](0), k: 0});
+        n[0] = Logic({kind: LogicKind.COMPARE, check: 0, children: new uint8[](0), k: 0});
         assertEq(uint8(lib.verdict(cs, n, values)), uint8(want), "reference");
         assertEq(uint8(lib.verdictPacked(cs, n, values)), uint8(want), "packed");
     }
