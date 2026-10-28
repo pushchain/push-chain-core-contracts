@@ -88,6 +88,8 @@ library JobSpecErrors {
     error CheckCount(uint256 count);
     /// @notice `logic.length` is 0 or above `MAX_LOGIC`.
     error LogicCount(uint256 count);
+    /// @notice Read `read` is `POST_AT_VERIFY` where nothing reads it inside `verify` (a job on Push's kernel).
+    error ReadAtVerify(uint256 read);
     /// @notice A read names an empty or too long chain namespace or chain id, or a namespace other than `eip155`.
     error ReadChain(uint256 read);
     /// @notice A read asks for zero confirmations, or more than the evaluator's maximum.

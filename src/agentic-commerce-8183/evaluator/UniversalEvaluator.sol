@@ -53,6 +53,8 @@ import {UniversalEvaluatorErrors, JobSpecErrors} from "../libraries/Errors.sol";
 ///      - The kernel `reason` commits to the spec and to every read's evidence (`evidenceOf`) in index order, zero
 ///        for a read not answered when the root was decided, so it can be re-derived from events.
 ///      - A FAIL at the blocks fixed at `submit` is final.
+///      - Every read is read through Read State: a job on Push's kernel has no gateway to read on its behalf, so
+///        `POST_AT_VERIFY` reads are refused at `fund`.
 ///      - `JobSpecLib.validate` runs in a linked library (DELEGATECALL; its address is fixed in this bytecode at
 ///        deployment, and it is stateless). Everything else, `EvmReadLib` included, is compiled in.
 ///      - Not upgradeable, with no admin: how this evaluator judges a frozen spec can't change. A rule change is a new
@@ -234,7 +236,7 @@ contract UniversalEvaluator is IUniversalEvaluator, ReentrancyGuard {
         if (spec.length > MAX_DESCRIPTION_LENGTH) revert JobSpecErrors.SpecTooLong(spec.length);
 
         JobSpec memory s = _decodeSpec(spec); // reverts if `spec` is not an encoded JobSpec
-        JobSpecLib.validate(s, MAX_CONFIRMATIONS); // reverts with the JobSpecErrors reason
+        JobSpecLib.validate(s, MAX_CONFIRMATIONS, false); // reverts with the JobSpecErrors reason; no POST_AT_VERIFY
 
         bytes32 specHash = keccak256(spec);
         if (specHash == keccak256(bytes(job.description))) delete _replacement[jobId];

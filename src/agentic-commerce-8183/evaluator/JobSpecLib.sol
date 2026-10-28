@@ -48,7 +48,9 @@ library JobSpecLib {
     /// @notice Reverts with a `JobSpecErrors` error unless `s` can be judged.
     /// @param s                The criteria.
     /// @param maxConfirmations The evaluator's ceiling on `Read.minConfirmations`, so every read can be answered.
-    function validate(JobSpec memory s, uint256 maxConfirmations) public pure {
+    /// @param atVerify         Whether `POST_AT_VERIFY` reads are allowed: only where a gateway reads them, for a job
+    ///                         on a kernel on another chain. They count as POST reads.
+    function validate(JobSpec memory s, uint256 maxConfirmations, bool atVerify) public pure {
         uint256 nReads = s.reads.length;
         uint256 nChecks = s.checks.length;
         uint256 nLogic = s.logic.length;
@@ -59,7 +61,8 @@ library JobSpecLib {
         bool anyPost;
         for (uint256 i; i < nReads; ++i) {
             Read memory r = s.reads[i];
-            if (r.at == ReadAt.POST_EXECUTION) anyPost = true;
+            if (r.at == ReadAt.POST_AT_VERIFY && !atVerify) revert JobSpecErrors.ReadAtVerify(i);
+            if (r.at != ReadAt.PRE_EXECUTION) anyPost = true;
             uint256 nsLen = bytes(r.chainNamespace).length;
             uint256 idLen = bytes(r.chainId).length;
             if (nsLen == 0 || idLen == 0 || nsLen > MAX_CHAIN_STRING_LENGTH || idLen > MAX_CHAIN_STRING_LENGTH) {

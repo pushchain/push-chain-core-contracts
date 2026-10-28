@@ -22,6 +22,7 @@ import {
     Evaluation,
     Operation,
     LogicKind,
+    ReadAt,
     T_TUPLE,
     T_BYTES,
     T_ARRAY,
@@ -686,6 +687,18 @@ contract UniversalEvaluatorTest is UniversalEvalBase {
         _prefund(jobId, snap + eval_);
         bytes memory fp = _fundParams(jobId);
         vm.expectRevert(abi.encodeWithSelector(JobSpecErrors.ReadConfirmations.selector, 1));
+        _fundWith(jobId, fp);
+    }
+
+    /// @dev A read taken inside a remote gateway's `verify` has nothing to read it on Push's kernel: `fund` refuses.
+    function test_UE41_readAtVerify_refusedAtFund() public {
+        JobSpec memory s = _anySpec();
+        s.reads[1].at = ReadAt.POST_AT_VERIFY;
+        uint256 jobId = _createSpec(s);
+        (uint256 snap, uint256 eval_) = ue.prefundCost(jobId);
+        _prefund(jobId, snap + eval_);
+        bytes memory fp = _fundParams(jobId);
+        vm.expectRevert(abi.encodeWithSelector(JobSpecErrors.ReadAtVerify.selector, 1));
         _fundWith(jobId, fp);
     }
 

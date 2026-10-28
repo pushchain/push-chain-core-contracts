@@ -50,7 +50,12 @@ contract LibHarness {
     uint256 internal constant MAX_CONFIRMATIONS = 64;
 
     function validate(JobSpec memory s) external pure {
-        JobSpecLib.validate(s, MAX_CONFIRMATIONS);
+        JobSpecLib.validate(s, MAX_CONFIRMATIONS, false);
+    }
+
+    /// @dev As the evaluation gateway and the RemoteEvaluator call it: `POST_AT_VERIFY` reads allowed.
+    function validateAtVerify(JobSpec memory s) external pure {
+        JobSpecLib.validate(s, MAX_CONFIRMATIONS, true);
     }
 
     function verdict(Check[] memory checks, Logic[] memory logic, Answer[] memory values)
@@ -336,6 +341,15 @@ contract JobSpecLibrariesTest is Test {
         s.reads[0].at = ReadAt.PRE_EXECUTION;
         vm.expectRevert(JobSpecErrors.NoPostExecutionRead.selector);
         lib.validate(s);
+    }
+
+    /// @dev A read taken inside the gateway's `verify` is a POST read, allowed only where a gateway reads it.
+    function test_RUL01b_postAtVerify_onlyWhereAllowed() public {
+        JobSpec memory s = _spec();
+        s.reads[0].at = ReadAt.POST_AT_VERIFY; // the only POST read
+        vm.expectRevert(abi.encodeWithSelector(JobSpecErrors.ReadAtVerify.selector, 0));
+        lib.validate(s);
+        lib.validateAtVerify(s); // counts as the POST read
     }
 
     function test_RUL02_refusals() public {

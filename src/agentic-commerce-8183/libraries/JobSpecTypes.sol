@@ -46,9 +46,14 @@ enum AllowedMutability {
 }
 
 /// @notice When a read is taken: after the provider's execution (at `submit`) or before it (at `fund`).
+///         `POST_AT_VERIFY` is for a job on a kernel on another chain only: an after-value on the kernel's own chain
+///         that the evaluation gateway reads itself, inside the provider's `verify`. The client picks it for values
+///         only she can move (her own balances, with no power over them given to the provider); the provider can't
+///         change them inside his own transaction, and she can't act inside it.
 enum ReadAt {
     POST_EXECUTION,
-    PRE_EXECUTION
+    PRE_EXECUTION,
+    POST_AT_VERIFY
 }
 
 /// @notice One contract call on one chain, at one moment, and which value in its answer to use.
@@ -63,7 +68,7 @@ struct Read {
     bytes args; // abi-encoded arguments
     bytes outputs; // the function's return types, as T_* codes
     uint8[] field; // which returned value, by ABI position: [0] = 1st return value, [0, 2] = its 3rd field
-    ReadAt at; // read at the block recorded at `fund` (PRE) or fixed at `submit` (POST)
+    ReadAt at; // read at the block recorded at `fund` (PRE), fixed at `submit` (POST), or inside `verify`
 }
 
 /// @notice One comparison. Each side is the sum of its reads. BOOLEAN `left == target` · COMPARE `Σleft op target` ·
