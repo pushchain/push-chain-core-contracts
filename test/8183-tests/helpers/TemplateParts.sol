@@ -6,6 +6,7 @@ import {
     Operation,
     LogicKind,
     Logic,
+    ReadAt,
     T_UINT,
     T_ADDRESS,
     T_TUPLE
@@ -80,36 +81,63 @@ abstract contract TemplateParts {
             args: args,
             fills: fills,
             outputs: outputs,
-            field: field
+            field: field,
+            at: ReadAt.POST_EXECUTION
         });
     }
 
-    /// @dev `token.balanceOf(CEA)` on `chainId`: args are one zero word the CEA fill overwrites.
+    /// @dev `token.balanceOf(CEA)` on `chainId`, read after execution: args are one zero word the CEA fill overwrites.
     function _balanceOfCEA(string memory chainId, address token) internal pure returns (ReadTemplate memory) {
         return _read(chainId, token, BALANCE_OF, new bytes(32), _ceaFill(0), _uintOut(), _f(0));
     }
 
+    /// @dev `r`, read at `fund` (the baseline side of a NUMBER / PERCENTAGE check).
+    function _pre(ReadTemplate memory r) internal pure returns (ReadTemplate memory) {
+        r.at = ReadAt.PRE_EXECUTION;
+        return r;
+    }
+
+    /// @dev A one-sided check (BOOLEAN / COMPARE) on read `read`.
     function _chk(uint8 read, Evaluation e, Operation op, TargetSource src, int256 value)
         internal
         pure
         returns (CheckTemplate memory)
     {
-        return CheckTemplate({read: read, evaluation: e, operation: op, source: src, value: value});
+        return _chkSides(_one(read), _none(), e, op, src, value);
     }
 
-    /// @dev One logic step over `checks` and child steps `children`; `k` for AT_LEAST only.
-    function _step(LogicKind kind, uint8[] memory checks, uint8[] memory children, uint8 k)
-        internal
-        pure
-        returns (Logic memory)
-    {
-        return Logic({kind: kind, checks: checks, children: children, k: k});
+    function _chkSides(
+        uint8[] memory left,
+        uint8[] memory right,
+        Evaluation e,
+        Operation op,
+        TargetSource src,
+        int256 value
+    ) internal pure returns (CheckTemplate memory) {
+        return CheckTemplate({left: left, right: right, evaluation: e, operation: op, source: src, value: value});
     }
 
-    /// @dev A one-step tree: `kind` over `checks`, no children.
+    /// @dev A CHECK leaf on check `check`.
+    function _leaf(uint8 check) internal pure returns (Logic memory) {
+        return Logic({kind: LogicKind.CHECK, check: check, children: new uint8[](0), k: 0});
+    }
+
+    /// @dev An ALL / ANY / AT_LEAST entry over `children`; `k` for AT_LEAST only.
+    function _node(LogicKind kind, uint8[] memory children, uint8 k) internal pure returns (Logic memory) {
+        return Logic({kind: kind, check: 0, children: children, k: k});
+    }
+
+    /// @dev `kind` over `checks` as leaves: `[ {kind, children [1..n]}, {CHECK checks[0]}, … ]`.
     function _rootOf(LogicKind kind, uint8[] memory checks) internal pure returns (Logic[] memory logic) {
-        logic = new Logic[](1);
-        logic[0] = _step(kind, checks, new uint8[](0), 0);
+        uint256 n = checks.length;
+        logic = new Logic[](n + 1);
+        uint8[] memory children = new uint8[](n);
+        for (uint256 i; i < n; ++i) {
+            // forge-lint: disable-next-line(unsafe-typecast)
+            children[i] = uint8(i + 1); // tests use at most a handful of checks
+            logic[i + 1] = _leaf(checks[i]);
+        }
+        logic[0] = _node(kind, children, 0);
     }
 
     function _none() internal pure returns (uint8[] memory) {

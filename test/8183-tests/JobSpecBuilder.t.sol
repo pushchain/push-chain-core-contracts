@@ -12,6 +12,7 @@ import {
     LogicKind,
     Logic,
     AllowedMutability,
+    ReadAt,
     JobSpec,
     T_TUPLE,
     T_ADDRESS
@@ -87,13 +88,16 @@ abstract contract BuilderFixtures is Test, TemplateParts {
         t.params = new ParamBounds[](0);
     }
 
-    /// @dev "The CEA receives at least minOut WETH on Base": one NUM check, `minOut` is the user's param 0.
+    /// @dev "The CEA receives at least minOut WETH on Base": one NUMBER check, after (read 0) minus before (read 1,
+    ///      taken at fund); `minOut` is the user's param 0.
     function _swap() internal view returns (JobSpecTemplate memory t) {
-        t.reads = new ReadTemplate[](1);
+        t.reads = new ReadTemplate[](2);
         t.reads[0] = _balanceOfCEA("8453", WETH_BASE);
         t.reads[0].minConfirmations = 3;
+        t.reads[1] = _pre(_balanceOfCEA("8453", WETH_BASE));
+        t.reads[1].minConfirmations = 3;
         t.checks = new CheckTemplate[](1);
-        t.checks[0] = _chk(0, Evaluation.NUMBER, Operation.GREATER_OR_EQUAL, TargetSource.PARAM, 0);
+        t.checks[0] = _chkSides(_one(0), _one(1), Evaluation.NUMBER, Operation.GREATER_OR_EQUAL, TargetSource.PARAM, 0);
         t.logic = _rootOf(LogicKind.ALL, _one(0));
         t.params = new ParamBounds[](1);
         t.params[0] = ParamBounds({min: 1, max: 1e30});
@@ -121,8 +125,11 @@ abstract contract BuilderFixtures is Test, TemplateParts {
         for (uint8 i; i < 3; ++i) {
             t.checks[i] = _chk(i, Evaluation.COMPARE, Operation.GREATER_OR_EQUAL, TargetSource.FIXED, 99.99e6);
         }
-        t.logic = new Logic[](1);
-        t.logic[0] = _step(LogicKind.AT_LEAST, _kids3(0, 1, 2), _none(), 2);
+        t.logic = new Logic[](4);
+        t.logic[0] = _node(LogicKind.AT_LEAST, _kids3(1, 2, 3), 2);
+        for (uint8 i; i < 3; ++i) {
+            t.logic[i + 1] = _leaf(i);
+        }
         t.params = new ParamBounds[](0);
     }
 
@@ -139,24 +146,20 @@ abstract contract BuilderFixtures is Test, TemplateParts {
         t.checks[1] = _chk(1, Evaluation.COMPARE, Operation.GREATER_OR_EQUAL, TargetSource.FIXED, 0.04e27);
         t.checks[2] = _chk(2, Evaluation.COMPARE, Operation.GREATER_OR_EQUAL, TargetSource.FIXED, 99.99e6);
         t.checks[3] = _chk(3, Evaluation.COMPARE, Operation.GREATER_OR_EQUAL, TargetSource.FIXED, 0.04e18);
-        t.logic = new Logic[](3);
-        t.logic[0] = _step(LogicKind.ANY, _none(), _kids(1, 2), 0);
-        t.logic[1] = _step(LogicKind.ALL, _kids(0, 1), _none(), 0);
-        t.logic[2] = _step(LogicKind.ALL, _kids(2, 3), _none(), 0);
+        t.logic = new Logic[](7);
+        t.logic[0] = _node(LogicKind.ANY, _kids(1, 2), 0);
+        t.logic[1] = _node(LogicKind.ALL, _kids(3, 4), 0);
+        t.logic[2] = _node(LogicKind.ALL, _kids(5, 6), 0);
+        for (uint8 i; i < 4; ++i) {
+            t.logic[i + 3] = _leaf(i);
+        }
         t.params = new ParamBounds[](0);
     }
 
     // ───────── building ─────────
 
     function _ctx(uint256 principal, int256[] memory params) internal view returns (BuildContext memory) {
-        return BuildContext({
-            agw: AGW,
-            principal: principal,
-            executeBy: 1_800_000_000,
-            settleWindow: 2 hours,
-            params: params,
-            origin: keccak256("origin")
-        });
+        return BuildContext({agw: AGW, principal: principal, params: params, origin: keccak256("origin")});
     }
 
     function _build(JobSpecTemplate memory t, BuildContext memory ctx) internal view returns (JobSpec memory) {
@@ -230,14 +233,11 @@ contract JobSpecBuilderTest is BuilderFixtures {
         assertEq(s.reads[0].args, abi.encode(uint256(1234)), "a read without fills is copied as is");
     }
 
-    function test_JB03_timingAndOrigin() public view {
+    function test_JB03_originAndVerbatimCopy() public view {
         JobSpecTemplate memory t = _nested();
         JobSpec memory s = _build(t, _ctx(100e6, _noParams()));
-        assertEq(s.executeBy, 1_800_000_000);
-        assertEq(s.failFinalAt, 1_800_000_000 + 2 hours);
         assertEq(s.origin, keccak256("origin"));
         assertEq(keccak256(abi.encode(s.logic)), keccak256(abi.encode(t.logic)), "logic verbatim");
-        assertEq(uint8(s.allowedMutability), uint8(t.allowedMutability), "mutability verbatim");
         for (uint256 i; i < t.reads.length; ++i) {
             assertEq(s.reads[i].chainNamespace, t.reads[i].chainNamespace);
             assertEq(s.reads[i].chainId, t.reads[i].chainId);
@@ -246,9 +246,11 @@ contract JobSpecBuilderTest is BuilderFixtures {
             assertEq(s.reads[i].selector, t.reads[i].selector);
             assertEq(s.reads[i].outputs, t.reads[i].outputs);
             assertEq(keccak256(abi.encode(s.reads[i].field)), keccak256(abi.encode(t.reads[i].field)));
+            assertEq(uint8(s.reads[i].at), uint8(t.reads[i].at));
         }
         for (uint256 i; i < t.checks.length; ++i) {
-            assertEq(s.checks[i].read, t.checks[i].read);
+            assertEq(keccak256(abi.encode(s.checks[i].left)), keccak256(abi.encode(t.checks[i].left)));
+            assertEq(keccak256(abi.encode(s.checks[i].right)), keccak256(abi.encode(t.checks[i].right)));
             assertEq(uint8(s.checks[i].evaluation), uint8(t.checks[i].evaluation));
             assertEq(uint8(s.checks[i].operation), uint8(t.checks[i].operation));
         }
@@ -333,14 +335,14 @@ contract JobSpecBuilderTest is BuilderFixtures {
         (reads[0], reads[1]) = (t.reads[0], t.reads[1]);
         reads[2] = _read("1", SPARK, BALANCE_OF, "", _noFills(), hex"ff00", new uint8[](0));
         t.reads = reads;
-        Logic[] memory logic = new Logic[](2);
-        logic[0] = t.logic[0];
-        logic[1] = _step(LogicKind.ALL, _one(1), _none(), 0); // reached by nobody
+        Logic[] memory logic = new Logic[](4);
+        (logic[0], logic[1], logic[2]) = (t.logic[0], t.logic[1], t.logic[2]);
+        logic[3] = _leaf(1); // reached by nobody
         t.logic = logic;
         JobSpec memory s = _build(t, _ctx(100e6, _noParams()));
         assertEq(s.reads.length, 3);
         assertEq(s.reads[2].outputs, hex"ff00");
-        assertEq(s.logic.length, 2);
+        assertEq(s.logic.length, 4);
     }
 
     function test_JB09_malformedTemplate_reverts() public {
@@ -350,14 +352,62 @@ contract JobSpecBuilderTest is BuilderFixtures {
         builder.build(hex"deadbeef", _ctx(1, _noParams()));
     }
 
-    function test_JB12_copiesLogicAndMutability() public view {
+    /// @dev The template has no mutability: every built spec is NONE, whatever else the template says, and its logic
+    ///      is copied byte for byte. (NONE is 1 in the evaluator's enum; BOTH, the zero value, would let either side
+    ///      replace the criteria.)
+    function test_JB12_mutabilityAlwaysNone_logicCopied() public view {
         JobSpecTemplate memory t = _nested();
-        t.allowedMutability = AllowedMutability.PROVIDER;
         JobSpec memory s = _build(t, _ctx(100e6, _noParams()));
         assertEq(abi.encode(s.logic), abi.encode(t.logic), "two-level logic, byte-identical");
-        assertEq(s.logic.length, 3);
-        assertEq(s.logic[0].children.length, 2, "root has two child steps");
-        assertEq(uint8(s.allowedMutability), uint8(AllowedMutability.PROVIDER));
+        assertEq(s.logic.length, 7);
+        assertEq(s.logic[0].children.length, 2, "root has two child entries");
+        assertEq(uint8(s.allowedMutability), uint8(AllowedMutability.NONE));
+        assertEq(uint8(AllowedMutability.NONE), 1);
+        assertEq(uint8(_build(_swap(), _ctx(1, _oneParam(1))).allowedMutability), uint8(AllowedMutability.NONE));
+    }
+
+    /// @dev PRE and POST reads keep their moment, and a CEA fill lands in both.
+    function test_JB13_copiesReadAt() public view {
+        JobSpec memory s = _build(_swap(), _ctx(1, _oneParam(1)));
+        assertEq(uint8(s.reads[0].at), uint8(ReadAt.POST_EXECUTION));
+        assertEq(uint8(s.reads[1].at), uint8(ReadAt.PRE_EXECUTION));
+        bytes memory cea = abi.encode(builder.ceaFor(AGW, BASE_HASH));
+        assertEq(s.reads[0].args, cea, "post read filled");
+        assertEq(s.reads[1].args, cea, "pre read filled");
+    }
+
+    /// @dev Both sides of every check come through verbatim, including sides of several reads.
+    function test_JB14_copiesCheckSides() public view {
+        JobSpecTemplate memory t = _twoOfThree();
+        t.checks[0] =
+            _chkSides(_kids(0, 2), _one(1), Evaluation.PERCENTAGE, Operation.GREATER_OR_EQUAL, TargetSource.FIXED, 50);
+        JobSpec memory s = _build(t, _ctx(1, _noParams()));
+        assertEq(abi.encode(s.checks[0].left), abi.encode(_kids(0, 2)));
+        assertEq(abi.encode(s.checks[0].right), abi.encode(_one(1)));
+        assertEq(abi.encode(s.checks[1].left), abi.encode(_one(1)));
+        assertEq(s.checks[1].right.length, 0);
+    }
+
+    /// @dev A CEA-target check takes the CEA on the chain of its `left[0]` read, even with more reads on its left.
+    function test_JB15_ceaTargetUsesLeftFirstRead() public view {
+        JobSpecTemplate memory t = _ownerIsCEA();
+        ReadTemplate[] memory reads = new ReadTemplate[](2);
+        reads[0] = t.reads[0];
+        reads[0].chainId = "8453"; // the CEA-target read is on Base
+        reads[1] = t.reads[0]; // a second left read on Ethereum
+        t.reads = reads;
+        t.checks[0].left = _kids(0, 1);
+        JobSpec memory s = _build(t, _ctx(1, _noParams()));
+        assertEq(s.checks[0].target, int256(uint256(uint160(builder.ceaFor(AGW, BASE_HASH)))), "Base CEA");
+    }
+
+    /// @dev The builder does not judge: a check with an empty `left` and a non-CEA source builds.
+    function test_JB16_emptyLeftNonCeaSource_builds() public view {
+        JobSpecTemplate memory t = _lending();
+        t.checks[1].left = _none();
+        JobSpec memory s = _build(t, _ctx(100e6, _noParams()));
+        assertEq(s.checks[1].left.length, 0);
+        assertEq(s.checks[1].target, 0.04e27);
     }
 
     // ═════════════════════════════ fuzz ═════════════════════════════
@@ -386,12 +436,15 @@ contract JobSpecBuilderTest is BuilderFixtures {
     /// @dev The structural rules the evaluator relies on, checked on the BUILT spec of a well-formed template.
     function _assertStructural(JobSpec memory s) internal pure {
         for (uint256 i; i < s.checks.length; ++i) {
-            assertLt(s.checks[i].read, s.reads.length);
+            for (uint256 j; j < s.checks[i].left.length; ++j) {
+                assertLt(s.checks[i].left[j], s.reads.length);
+            }
+            for (uint256 j; j < s.checks[i].right.length; ++j) {
+                assertLt(s.checks[i].right[j], s.reads.length);
+            }
         }
         for (uint256 i; i < s.logic.length; ++i) {
-            for (uint256 j; j < s.logic[i].checks.length; ++j) {
-                assertLt(s.logic[i].checks[j], s.checks.length);
-            }
+            if (s.logic[i].kind == LogicKind.CHECK) assertLt(s.logic[i].check, s.checks.length);
             for (uint256 j; j < s.logic[i].children.length; ++j) {
                 assertGt(s.logic[i].children[j], i);
                 assertLt(s.logic[i].children[j], s.logic.length);

@@ -9,6 +9,7 @@ import {PausableUpgradeable} from "@openzeppelin/contracts-upgradeable/utils/Pau
 import {ReentrancyGuardUpgradeable} from "@openzeppelin/contracts-upgradeable/utils/ReentrancyGuardUpgradeable.sol";
 
 import {OwnerIntent, OWNER_LANE_FLAG} from "@push-agw/libraries/Types.sol";
+import {Execution} from "@push-agw/libraries/ExecutionLib.sol";
 import {IPRC20} from "../Interfaces/IPRC20.sol";
 import {IUniversalMarketplace} from "./interfaces/IUniversalMarketplace.sol";
 import {UniversalMarketplaceErrors} from "./libraries/Errors.sol";
@@ -21,17 +22,20 @@ import {
     IntentRequest,
     InitParams,
     SessionContext,
-    BuildContext
+    BuildContext,
+    MAX_RULES
 } from "./libraries/Types.sol";
 import {IAgenticCommerce} from "./interfaces/IAgenticCommerce.sol";
 import {IUniversalMarketplaceRules} from "./interfaces/IUniversalMarketplaceRules.sol";
 import {JobSpecBuilder} from "./libraries/JobSpecBuilder.sol";
 import {IAGWFactory} from "./interfaces/external/IAGWFactory.sol";
 import {IAGW, Session} from "./interfaces/external/IAGW.sol";
+import {ISmartSession} from "./interfaces/external/ISmartSession.sol";
 
 /// @title UniversalMarketplace
 /// @notice Agent cards, and `openJob`: one relayed call that, on one owner-signed OwnerIntent, deploys the
-///         user's AGW if needed, grants it the card's rules, and creates the ERC-8183 job with the AGW as client.
+///         user's AGW if needed, grants it the card's rules (one rules set per destination chain), and creates the
+///         ERC-8183 job with the AGW as client.
 /// @dev - Moves no funds. Wallet funding and 8183 `setBudget` / `fund` happen elsewhere.
 ///      - Never owns anything: it presents the owner's intent to the factory and wallet, which verify the
 ///        signature themselves and accept it only from the intent's `executor` (this contract).
@@ -42,6 +46,8 @@ import {IAGW, Session} from "./interfaces/external/IAGW.sol";
 ///      - The card's content lives on-chain. The rules side is checked by `RULES`, a stateless helper split out
 ///        for EIP-170.
 ///      - One card per provider.
+///      - Grants and `createJob` run as ONE owner-signed `executeWithSig` batch: the wallet self-calls `grantRules`
+///        per rule (owner authority, `onlyOwnerOrSelf`), then calls the kernel. One signature for any rule count.
 ///      - Deployed behind `TransparentUpgradeableProxy`. Storage is append-only from this layout.
 contract UniversalMarketplace is
     Initializable,
@@ -55,9 +61,10 @@ contract UniversalMarketplace is
     uint192 public constant OPENJOB_LANE = OWNER_LANE_FLAG;
     /// @notice ERC-7579 single call, default exec type: all four mode components are zero.
     bytes32 public constant MODE_SINGLE = bytes32(0);
+    /// @notice ERC-7579 batch, default exec type (AGW `ModeLib.encodeSimpleBatch()`): the mode `openJob` signs.
+    bytes32 public constant MODE_BATCH = bytes32(bytes1(0x01));
 
     uint32 internal constant MIN_DURATION = 1 hours;
-    bytes7 internal constant EVM_PREFIX = "eip155:";
 
     // ───────── storage: append-only ─────────
 
@@ -80,17 +87,19 @@ contract UniversalMarketplace is
     /// @notice Disabled by the admin. Permanent: the provider cannot reactivate the card.
     mapping(uint256 => bool) public isAgentCardDisabled;
     mapping(bytes32 => CEADeployment) public ceaDeployment;
-    /// @dev Slot 14: the removed per-chain pause. Reserved, always zero.
-    uint256 private __reserved14;
     /// @dev AGW → the last job opened here for it. Read through `activeJobOf`.
     mapping(address => uint256) internal _lastJobOf;
     mapping(uint256 => uint256) public cardOfJob;
     mapping(uint256 => address) public agwOfJob;
-    mapping(uint256 => bytes32) public rulesOfJob;
+    mapping(uint256 => bytes32[]) internal _rulesOfJob;
     /// @notice Provider → their card id; 0 for none. Never cleared, so a disabled provider cannot register again.
     mapping(address => uint256) public agentCardOf;
     mapping(uint256 => uint256) public cardVersionOfJob;
     mapping(address => uint256) internal _agentRating;
+    /// @notice The live cap on rules per card, 1..MAX_RULES. Applies at register and update.
+    uint8 public maxRulesPerCard;
+    /// @dev Card → each rule's `keccak256(chainNamespace)`, in rule order. Written at register and update.
+    mapping(uint256 => bytes32[]) internal _cardChainHashes;
     uint256[27] private __gap;
 
     /// @custom:oz-upgrades-unsafe-allow constructor
@@ -114,6 +123,7 @@ contract UniversalMarketplace is
         PUSH_CHAIN_HASH = keccak256(abi.encodePacked("eip155:", Strings.toString(block.chainid)));
         _setHook(p.hook);
         _setEvaluator(p.evaluator);
+        _setMaxRulesPerCard(1);
         _grantRole(DEFAULT_ADMIN_ROLE, p.admin);
         _grantRole(ADMIN_ROLE, p.admin);
     }
@@ -151,6 +161,13 @@ contract UniversalMarketplace is
             ceaDeployment[chainHash] = CEADeployment({ceaFactory: ceaFactory, ceaProxyImpl: ceaProxyImpl});
         }
         emit CEADeploymentSet(chainHash, ceaFactory, ceaProxyImpl);
+    }
+
+    /// @inheritdoc IUniversalMarketplace
+    /// @dev Raise only once the job hook binds every rules set of a job at `fund` (until then, 1). Cards already
+    ///      registered keep their rules.
+    function setMaxRulesPerCard(uint8 n) external onlyRole(ADMIN_ROLE) {
+        _setMaxRulesPerCard(n);
     }
 
     /// @inheritdoc IUniversalMarketplace
@@ -209,7 +226,7 @@ contract UniversalMarketplace is
         returns (uint256 cardId)
     {
         if (agentCardOf[msg.sender] != 0) revert UniversalMarketplaceErrors.AgentCardAlreadyRegistered(msg.sender);
-        _validateCard(c, rules);
+        bytes32[] memory chainHashes = _validateCard(c, rules);
 
         cardId = ++agentCardCount;
         _cards[cardId] = c;
@@ -217,6 +234,7 @@ contract UniversalMarketplace is
         stored.provider = msg.sender;
         stored.active = true;
         _agentCardRules[cardId] = rules;
+        _cardChainHashes[cardId] = chainHashes;
         _jobSpecTemplates[cardId] = jobSpecTemplate;
         agentCardVersion[cardId] = 1;
         agentCardOf[msg.sender] = cardId;
@@ -225,7 +243,6 @@ contract UniversalMarketplace is
             cardId,
             msg.sender,
             c.jobType,
-            c.chainNamespace,
             keccak256(rules),
             keccak256(jobSpecTemplate),
             c.metadataHash,
@@ -235,7 +252,7 @@ contract UniversalMarketplace is
 
     /// @inheritdoc IUniversalMarketplace
     /// @dev - Provider only; refused for a disabled card and while paused.
-    ///      - `chainNamespace` identifies the card: another chain is another card. `provider` and `active` stay.
+    ///      - The rules (and so the chains) may change; `provider` and `active` stay.
     ///      - The version is part of every job's criteria (`origin`), so an intent signed against the old
     ///        version fails `openJob`. Jobs already opened are untouched.
     function updateAgentCard(uint256 cardId, AgentCard calldata c, bytes calldata rules, bytes calldata jobSpecTemplate)
@@ -247,23 +264,17 @@ contract UniversalMarketplace is
             revert UniversalMarketplaceErrors.CallerIsNotProvider();
         }
         if (isAgentCardDisabled[cardId]) revert UniversalMarketplaceErrors.AgentCardDisabled(cardId);
-        if (keccak256(bytes(c.chainNamespace)) != keccak256(bytes(stored.chainNamespace))) {
-            revert UniversalMarketplaceErrors.AgentCardIdentityImmutable();
-        }
-        _validateCard(c, rules);
+        bytes32[] memory chainHashes = _validateCard(c, rules);
 
         stored.jobType = c.jobType;
         stored.metadataURI = c.metadataURI;
         stored.metadataHash = c.metadataHash;
         stored.providerFee = c.providerFee;
         stored.paymentToken = c.paymentToken;
-        stored.principalMin = c.principalMin;
-        stored.principalMax = c.principalMax;
         stored.minDuration = c.minDuration;
         stored.maxDuration = c.maxDuration;
-        stored.minExecuteWindow = c.minExecuteWindow;
-        stored.settleWindow = c.settleWindow;
         _agentCardRules[cardId] = rules;
+        _cardChainHashes[cardId] = chainHashes;
         _jobSpecTemplates[cardId] = jobSpecTemplate;
 
         uint256 newVersion = ++agentCardVersion[cardId];
@@ -299,34 +310,38 @@ contract UniversalMarketplace is
 
     /// @inheritdoc IUniversalMarketplace
     /// @dev Normative order, every check before the first state change:
-    ///      1-6 card, version, ranges, evaluator · 7 wallet · 8 no active job · 9-10 build the job · 11 bind the intent ·
-    ///      12 rules = card · ── 13 deploy or check owner · 14 grant · 15 create, verified · 16 record.
+    ///      1-4 card, version, principal, expiry, evaluator · 5 wallet · 6 no active job · 7 build the batch ·
+    ///      8 bind the intent · 9 rules = card · ── 10 deploy or check owner · 11 run the batch (grants, then
+    ///      createJob), verify the job · 12 rules ids, each enabled · 13 record.
+    ///      Binding before rules = card names a tampered input as unsigned (`IntentExecMismatch`), not as a rules
+    ///      mismatch: every signed input is inside the batch.
     function openJob(OpenJobParams calldata p)
         external
         whenNotPaused
         nonReentrant
-        returns (uint256 jobId, address agw, bytes32 rulesId)
+        returns (uint256 jobId, address agw, bytes32[] memory rulesIds)
     {
         AgentCard storage c = _cards[p.cardId];
-        bytes32 chainHash = _checkCardAndJob(c, p);
+        _checkCardAndJob(c, p);
         bool deployed;
         (agw, deployed) = _resolveWallet(p);
         uint256 active = activeJobOf(agw);
         if (active != 0) revert UniversalMarketplaceErrors.WalletHasActiveJob(agw, active);
-        (bytes32 mode, bytes memory execCalldata) = _buildCreateJob(p.cardId, agw, p.job);
-        _bindIntent(p, mode, execCalldata);
-        _checkRules(c, p, agw, chainHash);
+        bytes memory execCalldata = _buildBatch(p.cardId, agw, p.job, p.sessions);
+        _bindIntent(p.intent, execCalldata);
+        _checkRules(c, p, agw);
+        uint256 grantNonce = deployed ? IAGW(agw).grantNonce() : 0;
 
         _deployOrCheckOwner(p, agw, deployed);
-        rulesId = IAGW(agw).grantRulesWithSig(p.session, p.intent, p.sig);
-        jobId = _createJob(c, agw, mode, execCalldata, p.intent, p.sig);
+        jobId = _createJob(c, agw, execCalldata, p.intent, p.sig);
+        rulesIds = _grantedRulesIds(agw, p.sessions, grantNonce);
 
         _lastJobOf[agw] = jobId;
         cardOfJob[jobId] = p.cardId;
         agwOfJob[jobId] = agw;
-        rulesOfJob[jobId] = rulesId;
+        _rulesOfJob[jobId] = rulesIds;
         cardVersionOfJob[jobId] = p.cardVersion;
-        emit JobOpened(p.cardId, p.intent.owner, agw, jobId, rulesId, p.job.principal, p.cardVersion);
+        emit JobOpened(p.cardId, p.intent.owner, agw, jobId, rulesIds, p.job.principal, p.cardVersion);
     }
 
     // ═════════════════════════════════ views ═════════════════════════════════
@@ -355,39 +370,49 @@ contract UniversalMarketplace is
     }
 
     /// @inheritdoc IUniversalMarketplace
+    function rulesOfJob(uint256 jobId) external view returns (bytes32[] memory) {
+        return _rulesOfJob[jobId];
+    }
+
+    /// @inheritdoc IUniversalMarketplace
     function getAgentRating(address agent) external view returns (uint256) {
         return _agentRating[agent];
     }
 
     /// @inheritdoc IUniversalMarketplace
     function version() external pure returns (string memory) {
-        return "2.0.0";
+        return "2.1.0";
     }
 
     /// @inheritdoc IUniversalMarketplace
-    function buildCreateJobCalldata(uint256 cardId, address owner, uint96 index, JobInputs calldata job)
-        external
-        view
-        returns (bytes32 mode, bytes memory executionCalldata)
-    {
+    function buildCreateJobCalldata(
+        uint256 cardId,
+        address owner,
+        uint96 index,
+        JobInputs calldata job,
+        Session[] calldata sessions
+    ) external view returns (bytes32 mode, bytes memory executionCalldata) {
         _requireCard(cardId);
         (address agw,) = AGW_FACTORY.predictWallet(owner, index);
-        return _buildCreateJob(cardId, agw, job);
+        return (MODE_BATCH, _buildBatch(cardId, agw, job, sessions));
     }
 
     /// @inheritdoc IUniversalMarketplace
-    /// @dev The SDK signs exactly what this returns. Nonces are 0 for a wallet not yet deployed.
-    function previewIntent(IntentRequest calldata r, Session calldata s) external view returns (OwnerIntent memory i) {
+    /// @dev The SDK signs exactly what this returns. `sessionHash` is 0: the rules are granted inside the batch,
+    ///      not through the grant door. Nonces are 0 for a wallet not yet deployed.
+    function previewIntent(IntentRequest calldata r, Session[] calldata sessions)
+        external
+        view
+        returns (OwnerIntent memory i)
+    {
         _requireCard(r.cardId);
         (address wallet, bool deployed) = AGW_FACTORY.predictWallet(r.owner, r.index);
-        (bytes32 mode, bytes memory cd) = _buildCreateJob(r.cardId, wallet, r.job);
         i.owner = r.owner;
         i.wallet = wallet;
         i.executor = address(this);
         i.index = r.index;
-        i.sessionHash = keccak256(abi.encode(s));
-        i.mode = mode;
-        i.execCalldataHash = keccak256(cd);
+        i.mode = MODE_BATCH;
+        i.execCalldataHash = keccak256(_buildBatch(r.cardId, wallet, r.job, sessions));
         i.nonceKey = OPENJOB_LANE;
         i.nonceSeq = deployed ? IAGW(wallet).getNonce(OPENJOB_LANE) : 0;
         i.grantNonce = deployed ? IAGW(wallet).grantNonce() : 0;
@@ -410,6 +435,12 @@ contract UniversalMarketplace is
         emit EvaluatorUpdated(evaluator_);
     }
 
+    function _setMaxRulesPerCard(uint8 n) internal {
+        if (n == 0 || n > MAX_RULES) revert UniversalMarketplaceErrors.InvalidMaxRules(n);
+        maxRulesPerCard = n;
+        emit MaxRulesPerCardUpdated(n);
+    }
+
     /// @dev `AgentCardInactive` for a card that was never registered.
     function _requireCard(uint256 cardId) internal view {
         if (_cards[cardId].provider == address(0)) revert UniversalMarketplaceErrors.AgentCardInactive();
@@ -423,46 +454,34 @@ contract UniversalMarketplace is
     }
 
     /// @dev Registration and update checks, in order. The caller is the provider. The `jobSpecTemplate` is stored
-    ///      as given.
-    function _validateCard(AgentCard calldata c, bytes calldata rules) internal view {
+    ///      as given. Returns each rule's chain hash, in rule order.
+    function _validateCard(AgentCard calldata c, bytes calldata rules) internal view returns (bytes32[] memory) {
         if (c.jobType == bytes32(0)) revert UniversalMarketplaceErrors.InvalidAgentCard("job type zero");
         if (bytes(c.metadataURI).length == 0) revert UniversalMarketplaceErrors.InvalidAgentCard("metadata uri empty");
         if (c.metadataHash == bytes32(0)) revert UniversalMarketplaceErrors.InvalidAgentCard("metadata hash zero");
-        bytes calldata ns = bytes(c.chainNamespace);
-        if (ns.length <= EVM_PREFIX.length || bytes7(ns[:7]) != EVM_PREFIX) {
-            revert UniversalMarketplaceErrors.InvalidAgentCard("chain namespace");
-        }
-        bytes32 chainHash = keccak256(ns);
-        if (chainHash == PUSH_CHAIN_HASH || ceaDeployment[chainHash].ceaFactory == address(0)) {
-            revert UniversalMarketplaceErrors.ChainNotSupported(chainHash);
-        }
         // Until the kernel's K-12, every job is paid in the kernel's token; a card may not advertise another.
         if (c.paymentToken != address(KERNEL.paymentToken())) {
             revert UniversalMarketplaceErrors.InvalidAgentCard("payment token");
         }
-        _validateWindows(c);
-        address[] memory tokens = RULES.validateAgentCardRules(rules);
-        for (uint256 i; i < tokens.length; ++i) {
-            _requireAssetOnChain(tokens[i], chainHash);
-        }
-    }
-
-    /// @dev The provider is not the evaluator, and the principal and time windows are coherent.
-    function _validateWindows(AgentCard calldata c) internal view {
         if (msg.sender == evaluator) revert UniversalMarketplaceErrors.InvalidAgentCard("provider is evaluator");
-        if (c.principalMax == 0 || c.principalMin > c.principalMax) {
-            revert UniversalMarketplaceErrors.InvalidAgentCard("principal range");
-        }
         if (c.minDuration < MIN_DURATION || c.minDuration > c.maxDuration) {
             revert UniversalMarketplaceErrors.InvalidAgentCard("duration range");
         }
-        if (c.settleWindow == 0) revert UniversalMarketplaceErrors.InvalidAgentCard("settle window");
-        if (uint256(c.minExecuteWindow) + c.settleWindow > c.maxDuration) {
-            revert UniversalMarketplaceErrors.InvalidAgentCard("execute window");
+        (bytes32[] memory chainHashes, address[] memory tokens, bytes32[] memory tokenChains) =
+            RULES.validateAgentCardRules(rules, maxRulesPerCard);
+        for (uint256 i; i < chainHashes.length; ++i) {
+            bytes32 h = chainHashes[i];
+            if (h == PUSH_CHAIN_HASH || ceaDeployment[h].ceaFactory == address(0)) {
+                revert UniversalMarketplaceErrors.ChainNotSupported(h);
+            }
         }
+        for (uint256 k; k < tokens.length; ++k) {
+            _requireAssetOnChain(tokens[k], tokenChains[k]);
+        }
+        return chainHashes;
     }
 
-    /// @dev The asset is a PRC20 of the card's chain. A raw staticcall, not try/catch: a non-string answer must
+    /// @dev The asset is a PRC20 of its rule's chain. A raw staticcall, not try/catch: a non-string answer must
     ///      fail as "asset", and a try clause cannot catch its own return-data decoding. A codeless asset answers
     ///      empty, so it fails the length check.
     function _requireAssetOnChain(address asset, bytes32 chainHash) internal view {
@@ -477,34 +496,23 @@ contract UniversalMarketplace is
 
     // ═════════════════════════════════ internal: openJob ═════════════════════════════════
 
-    /// @dev Steps 1-6. Returns the card's chain hash.
-    function _checkCardAndJob(AgentCard storage c, OpenJobParams calldata p) internal view returns (bytes32) {
+    /// @dev Steps 1-4: active card at the signed version, a non-zero principal, the expiry inside the card's
+    ///      duration bounds, and a provider that is not the evaluator.
+    function _checkCardAndJob(AgentCard storage c, OpenJobParams calldata p) internal view {
         if (!c.active) revert UniversalMarketplaceErrors.AgentCardInactive();
         uint256 current = agentCardVersion[p.cardId];
         if (p.cardVersion != current) {
             revert UniversalMarketplaceErrors.AgentCardVersionMismatch(p.cardVersion, current);
         }
-        _checkJobWindows(c, p.job);
-        if (c.provider == evaluator) revert UniversalMarketplaceErrors.ProviderIsEvaluator();
-        return keccak256(bytes(c.chainNamespace));
-    }
-
-    /// @dev Steps 3-5: principal, expiry and executeBy inside the card's windows.
-    function _checkJobWindows(AgentCard storage c, JobInputs calldata job) internal view {
-        if (job.principal < c.principalMin || job.principal > c.principalMax) {
-            revert UniversalMarketplaceErrors.PrincipalOutOfRange();
-        }
-        uint256 expiredAt = job.expiredAt;
+        if (p.job.principal == 0) revert UniversalMarketplaceErrors.ZeroPrincipal();
+        uint256 expiredAt = p.job.expiredAt;
         if (expiredAt < block.timestamp + c.minDuration || expiredAt > block.timestamp + c.maxDuration) {
             revert UniversalMarketplaceErrors.ExpiryOutOfRange();
         }
-        uint256 executeBy = job.executeBy;
-        if (executeBy < block.timestamp + c.minExecuteWindow || executeBy + c.settleWindow > expiredAt) {
-            revert UniversalMarketplaceErrors.ExecuteByOutOfRange();
-        }
+        if (c.provider == evaluator) revert UniversalMarketplaceErrors.ProviderIsEvaluator();
     }
 
-    /// @dev Step 7: the intent names the wallet derived from its owner and index, and this executor.
+    /// @dev Step 5: the intent names the wallet derived from its owner and index, and this executor.
     function _resolveWallet(OpenJobParams calldata p) internal view returns (address agw, bool deployed) {
         (agw, deployed) = AGW_FACTORY.predictWallet(p.intent.owner, p.intent.index);
         if (p.intent.wallet != agw) revert UniversalMarketplaceErrors.IntentWalletMismatch(agw, p.intent.wallet);
@@ -513,13 +521,29 @@ contract UniversalMarketplace is
         }
     }
 
-    /// @dev Steps 9-10: the job's criteria, built from the card's template, inside `createJob` as an ERC-7579
-    ///      single execution. Everything the owner signs per job (principal, times, params, card version and
-    ///      the wallet, through its CEA) is in this calldata, so the intent's calldata hash binds all of it.
-    function _buildCreateJob(uint256 cardId, address agw, JobInputs calldata job)
+    /// @dev Step 9: each signed session is its card rule with the markers filled for this job, for the card's
+    ///      agent, bound to this job and to the AGW's CEA on that rule's chain.
+    function _checkRules(AgentCard storage c, OpenJobParams calldata p, address agw) internal view {
+        bytes32[] storage chains = _cardChainHashes[p.cardId];
+        address[] memory ceas = new address[](chains.length);
+        for (uint256 i; i < ceas.length; ++i) {
+            ceas[i] = computeCEA(agw, chains[i]);
+        }
+        RULES.checkRulesMatchCard(
+            _agentCardRules[p.cardId],
+            p.sessions,
+            SessionContext({agent: c.provider, principal: p.job.principal, expiredAt: p.job.expiredAt, expectedCEAs: ceas})
+        );
+    }
+
+    /// @dev Step 7: the ERC-7579 batch the AGW runs: `grantRules(sessions[i])` on itself for every rule, then
+    ///      `createJob` on the kernel with the criteria built from the card's template. Everything the owner signs
+    ///      per job (sessions, principal, expiry, params, card version and the wallet, through its CEA) is in this
+    ///      calldata, so the intent's calldata hash binds all of it.
+    function _buildBatch(uint256 cardId, address agw, JobInputs calldata job, Session[] calldata sessions)
         internal
         view
-        returns (bytes32 mode, bytes memory executionCalldata)
+        returns (bytes memory)
     {
         AgentCard storage c = _cards[cardId];
         bytes memory description = JobSpecBuilder.build(
@@ -527,50 +551,36 @@ contract UniversalMarketplace is
             BuildContext({
                 agw: agw,
                 principal: job.principal,
-                executeBy: job.executeBy,
-                settleWindow: c.settleWindow,
                 params: job.params,
                 origin: keccak256(abi.encode(address(this), cardId, agentCardVersion[cardId], job.principal))
             })
         );
-        bytes memory call = abi.encodeCall(
-            IAgenticCommerce.createJob, (c.provider, evaluator, uint256(job.expiredAt), string(description), hook)
-        );
-        mode = MODE_SINGLE;
-        executionCalldata = abi.encodePacked(address(KERNEL), uint256(0), call);
+        uint256 n = sessions.length;
+        Execution[] memory execs = new Execution[](n + 1);
+        for (uint256 i; i < n; ++i) {
+            execs[i] = Execution({target: agw, value: 0, callData: abi.encodeCall(IAGW.grantRules, (sessions[i]))});
+        }
+        execs[n] = Execution({
+            target: address(KERNEL),
+            value: 0,
+            callData: abi.encodeCall(
+                IAgenticCommerce.createJob, (c.provider, evaluator, uint256(job.expiredAt), string(description), hook)
+            )
+        });
+        return abi.encode(execs);
     }
 
-    /// @dev Step 11: the intent's exec fields name exactly this createJob, on the openJob lane, and its
-    ///      session hash is this session. The wallet re-checks both; this names the error before state moves.
-    function _bindIntent(OpenJobParams calldata p, bytes32 mode, bytes memory execCalldata) internal pure {
+    /// @dev Step 8: the intent's exec fields name exactly this batch, on the openJob lane, and it asks for no grant
+    ///      through the grant door. The wallet re-checks the exec fields; this names the error before state moves.
+    function _bindIntent(OwnerIntent calldata intent, bytes memory execCalldata) internal pure {
         bytes32 cdHash = keccak256(execCalldata);
-        if (p.intent.mode != mode || p.intent.execCalldataHash != cdHash || p.intent.nonceKey != OPENJOB_LANE) {
+        if (intent.mode != MODE_BATCH || intent.execCalldataHash != cdHash || intent.nonceKey != OPENJOB_LANE) {
             revert UniversalMarketplaceErrors.IntentExecMismatch(cdHash);
         }
-        bytes32 sessionHash = keccak256(abi.encode(p.session));
-        if (p.intent.sessionHash != sessionHash) revert UniversalMarketplaceErrors.IntentSessionMismatch(sessionHash);
+        if (intent.sessionHash != bytes32(0)) revert UniversalMarketplaceErrors.IntentSessionMismatch(bytes32(0));
     }
 
-    /// @dev Step 12: the signed session is the card's rules with its markers filled for this job, for the card's
-    ///      agent, bound to this job and CEA.
-    function _checkRules(AgentCard storage c, OpenJobParams calldata p, address agw, bytes32 chainHash)
-        internal
-        view
-    {
-        RULES.checkRulesMatchCard(
-            _agentCardRules[p.cardId],
-            p.session,
-            SessionContext({
-                agent: c.provider,
-                chainHash: chainHash,
-                principal: p.job.principal,
-                expiredAt: p.job.expiredAt,
-                expectedCEA: computeCEA(agw, chainHash)
-            })
-        );
-    }
-
-    /// @dev Step 13: deploy the predicted wallet, or check the factory's owner of the existing one.
+    /// @dev Step 10: deploy the predicted wallet, or check the factory's owner of the existing one.
     function _deployOrCheckOwner(OpenJobParams calldata p, address agw, bool deployed) internal {
         if (!deployed) {
             address d = AGW_FACTORY.deployWalletWithSig(p.intent, p.sig, p.label);
@@ -581,23 +591,43 @@ contract UniversalMarketplace is
         if (owner != p.intent.owner) revert UniversalMarketplaceErrors.WalletOwnerMismatch(p.intent.owner, owner);
     }
 
-    /// @dev Step 15: the AGW creates the job; exactly one job appeared, with this AGW as client and the card's
-    ///      provider, this hook and this evaluator.
+    /// @dev Step 11: the AGW runs the batch (grants, then `createJob`); exactly one job appeared, with this AGW as
+    ///      client and the card's provider, this hook and this evaluator.
     function _createJob(
         AgentCard storage c,
         address agw,
-        bytes32 mode,
         bytes memory execCalldata,
         OwnerIntent calldata intent,
         bytes calldata sig
     ) internal returns (uint256 jobId) {
         uint256 before = KERNEL.jobCounter();
-        IAGW(agw).executeWithSig(mode, execCalldata, intent, sig);
+        IAGW(agw).executeWithSig(MODE_BATCH, execCalldata, intent, sig);
         jobId = KERNEL.jobCounter();
         if (jobId != before + 1) revert UniversalMarketplaceErrors.UnexpectedJobCount(before, jobId);
         IAgenticCommerce.Job memory j = KERNEL.getJob(jobId);
         if (j.client != agw || j.provider != c.provider || j.hook != hook || j.evaluator != evaluator) {
             revert UniversalMarketplaceErrors.JobMismatch();
+        }
+    }
+
+    /// @dev Step 12: the rules ids the batch granted, each enabled on the wallet's engine. The AGW overwrites a
+    ///      session's salt with its grant nonce before enabling it (v6 `_grantRules`), and the engine's id is
+    ///      `keccak256(abi.encode(validator, validatorInitData, salt))` (SmartSession `IdLib.toPermissionId`), so
+    ///      grant `i` of this batch has salt `grantNonce + i`.
+    function _grantedRulesIds(address agw, Session[] calldata sessions, uint256 grantNonce)
+        internal
+        view
+        returns (bytes32[] memory ids)
+    {
+        ISmartSession engine = ISmartSession(IAGW(agw).SESSION_ENGINE());
+        ids = new bytes32[](sessions.length);
+        for (uint256 i; i < ids.length; ++i) {
+            ids[i] = keccak256(
+                abi.encode(
+                    sessions[i].sessionValidator, sessions[i].sessionValidatorInitData, bytes32(grantNonce + i)
+                )
+            );
+            if (!engine.isPermissionEnabled(ids[i], agw)) revert UniversalMarketplaceErrors.RulesNotGranted(i);
         }
     }
 }

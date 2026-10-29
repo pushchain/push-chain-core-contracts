@@ -10,7 +10,8 @@ import {AgentCard, AgentCardView, JobInputs, OpenJobParams, IntentRequest} from 
 
 /// @title IUniversalMarketplace
 /// @notice Agent cards, and `openJob`: one relayed call that deploys the user's AGW (if needed), grants it the
-///         card's rules, and creates the ERC-8183 job with the AGW as client. Moves no funds.
+///         card's rules (one rules set per destination chain), and creates the ERC-8183 job with the AGW as client.
+///         Moves no funds.
 /// @dev Errors live in `UniversalMarketplaceErrors` (`libraries/Errors.sol`); types in `libraries/Types.sol`.
 interface IUniversalMarketplace {
     // ═══ UM_1: EVENTS ═══
@@ -20,7 +21,6 @@ interface IUniversalMarketplace {
         uint256 indexed cardId,
         address indexed provider,
         bytes32 indexed jobType,
-        string chainNamespace,
         bytes32 rulesHash,
         bytes32 jobSpecHash,
         bytes32 metadataHash,
@@ -49,6 +49,8 @@ interface IUniversalMarketplace {
     event HookUpdated(address hook);
     /// @notice New jobs get this evaluator.
     event EvaluatorUpdated(address evaluator);
+    /// @notice The live cap on rules per card changed.
+    event MaxRulesPerCardUpdated(uint8 n);
     /// @notice A chain's CEA deployment was set, or cleared (both zero).
     event CEADeploymentSet(bytes32 indexed chainHash, address ceaFactory, address ceaProxyImpl);
     /// @notice `openJob` deployed (if needed) and granted the AGW, and created `jobId`.
@@ -57,7 +59,7 @@ interface IUniversalMarketplace {
         address indexed owner,
         address indexed agw,
         uint256 jobId,
-        bytes32 rulesId,
+        bytes32[] rulesIds,
         uint256 principal,
         uint256 cardVersion
     );
@@ -73,6 +75,9 @@ interface IUniversalMarketplace {
     /// @notice Sets a destination chain's CEA deployment; `(chainHash, 0, 0)` clears it. A chain without one cannot
     ///         carry cards or jobs.
     function setCEADeployment(bytes32 chainHash, address ceaFactory, address ceaProxyImpl) external;
+
+    /// @notice Sets the live cap on rules per card, 1..MAX_RULES. Applies at register and update only.
+    function setMaxRulesPerCard(uint8 n) external;
 
     /// @notice Sets an agent's rating. No validation; placeholder until VerifiedRatings is wired.
     function setAgentRating(address agent, uint256 rating) external;
@@ -96,7 +101,7 @@ interface IUniversalMarketplace {
 
     /// @notice Registers the caller's one card, with its content. The caller becomes its provider.
     /// @param c The card; `provider` and `active` are ignored.
-    /// @param rules `abi.encode(AgentCardRules)`.
+    /// @param rules `abi.encode(CardRule[])`: 1..`maxRulesPerCard` rules, one per destination chain.
     /// @param jobSpecTemplate `abi.encode(JobSpecTemplate)`.
     function registerAgentCard(AgentCard calldata c, bytes calldata rules, bytes calldata jobSpecTemplate)
         external
@@ -111,11 +116,14 @@ interface IUniversalMarketplace {
 
     // ═══ UM_4: JOBS ═══
 
-    /// @notice Deploys the AGW if needed, grants the card's rules, and creates the job. Moves no funds.
+    /// @notice Deploys the AGW if needed, grants the card's rules, and creates the job, on one owner signature.
+    ///         Moves no funds.
     /// @return jobId The kernel job.
     /// @return agw The AGW, the job's client.
-    /// @return rulesId The granted rules (the engine's permissionId).
-    function openJob(OpenJobParams calldata p) external returns (uint256 jobId, address agw, bytes32 rulesId);
+    /// @return rulesIds The granted rules sets (the engine's permissionIds), one per card rule, in rule order.
+    function openJob(OpenJobParams calldata p)
+        external
+        returns (uint256 jobId, address agw, bytes32[] memory rulesIds);
 
     // ═══ UM_5: VIEWS ═══
 
@@ -151,8 +159,11 @@ interface IUniversalMarketplace {
     /// @notice The AGW a job was opened for.
     function agwOfJob(uint256 jobId) external view returns (address);
 
-    /// @notice The rules set granted for a job.
-    function rulesOfJob(uint256 jobId) external view returns (bytes32);
+    /// @notice The rules sets granted for a job, one per card rule, in rule order.
+    function rulesOfJob(uint256 jobId) external view returns (bytes32[] memory);
+
+    /// @notice The live cap on rules per card.
+    function maxRulesPerCard() external view returns (uint8);
 
     /// @notice The card version a job was opened against.
     function cardVersionOfJob(uint256 jobId) external view returns (uint256);
@@ -160,14 +171,21 @@ interface IUniversalMarketplace {
     /// @notice The AGW's CEA on `chainHash`. Reverts `ChainNotSupported` for a chain without a CEA deployment.
     function computeCEA(address agw, bytes32 chainHash) external view returns (address);
 
-    /// @notice The ERC-7579 single execution `openJob` makes the AGW run: `createJob` on the kernel.
-    function buildCreateJobCalldata(uint256 cardId, address owner, uint96 index, JobInputs calldata job)
+    /// @notice The ERC-7579 batch `openJob` makes the AGW run: `grantRules(sessions[i])` on itself per card rule,
+    ///         then `createJob` on the kernel.
+    function buildCreateJobCalldata(
+        uint256 cardId,
+        address owner,
+        uint96 index,
+        JobInputs calldata job,
+        Session[] calldata sessions
+    ) external view returns (bytes32 mode, bytes memory executionCalldata);
+
+    /// @notice The OwnerIntent the owner signs for `openJob`: batch mode, the batch's hash, no grant-door session.
+    function previewIntent(IntentRequest calldata r, Session[] calldata sessions)
         external
         view
-        returns (bytes32 mode, bytes memory executionCalldata);
-
-    /// @notice The OwnerIntent the owner signs for `openJob`.
-    function previewIntent(IntentRequest calldata r, Session calldata s) external view returns (OwnerIntent memory);
+        returns (OwnerIntent memory);
 
     /// @notice A chain's CEA factory and proxy implementation; zero when unsupported.
     function ceaDeployment(bytes32 chainHash) external view returns (address ceaFactory, address ceaProxyImpl);
@@ -190,6 +208,6 @@ interface IUniversalMarketplace {
     /// @notice The evaluator new jobs get.
     function evaluator() external view returns (address);
 
-    /// @notice The contract's version, "2.0.0".
+    /// @notice The contract's version, "2.1.0".
     function version() external pure returns (string memory);
 }

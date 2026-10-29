@@ -10,8 +10,8 @@ import {OwnerIntent} from "@push-agw/libraries/Types.sol";
 ///      - `Session` and its parts stay a MIRROR of the vendor SmartSession types
 ///        (`lib/smartsessions/contracts/DataTypes.sol` in the AGW repo, fork `7dc20e4`; field order verified
 ///        identical): the vendor tree pulls remappings and an EVM target this repo cannot compile. The fork test
-///        (`UniversalMarketplace.fork.t.sol`) pins it — a wrong mirror changes `keccak256(abi.encode(session))`, and
-///        the real wallet's `grantRulesWithSig` reverts `IntentSessionMismatch`.
+///        (`UniversalMarketplace.fork.t.sol`) pins it: a wrong mirror encodes `grantRules(Session)` calldata the
+///        real wallet cannot decode, and the rules ids the marketplace derives would not be the engine's.
 ///      - `Session.sessionValidator` is `ISessionValidator` upstream; a contract type is `address` in the ABI.
 ///      - `rulesId` is the AGW's name for the engine's `permissionId`; the two are the same value.
 ///      - Agent identity: the AGW's `AgentValidator` requires `sessionValidatorInitData == abi.encode(agent)`,
@@ -55,10 +55,9 @@ struct Session {
 
 /// @title IAGW — the wallet functions the marketplace calls.
 interface IAGW {
-    /// @notice `grantRules`, authorised by the owner's signed OwnerIntent.
-    function grantRulesWithSig(Session calldata session, OwnerIntent calldata intent, bytes calldata sig)
-        external
-        returns (bytes32 rulesId);
+    /// @notice Grants a rules set. Owner or the wallet itself; `openJob` reaches it as a self-call inside the
+    ///         owner-signed `executeWithSig` batch. The wallet overwrites `session.salt` with its grant nonce.
+    function grantRules(Session calldata session) external returns (bytes32 rulesId);
 
     /// @notice The owner door, authorised by the owner's signed OwnerIntent.
     function executeWithSig(
@@ -73,4 +72,7 @@ interface IAGW {
 
     /// @notice The grant nonce the next grant will consume.
     function grantNonce() external view returns (uint64);
+
+    /// @notice The SmartSession engine this wallet enables its rules on.
+    function SESSION_ENGINE() external view returns (address);
 }

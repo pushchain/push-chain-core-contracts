@@ -14,12 +14,13 @@ import {
     MAX_ALLOWED_CALL_PINS
 } from "@push-agw/libraries/Types.sol";
 import {UniversalMarketplaceErrors} from "./libraries/Errors.sol";
-import {AgentCardRules, SessionContext, MARKER_WALLET, MARKER_PRINCIPAL} from "./libraries/Types.sol";
+import {CardRule, SessionContext, MARKER_WALLET, MARKER_PRINCIPAL} from "./libraries/Types.sol";
 import {IUniversalMarketplaceRules} from "./interfaces/IUniversalMarketplaceRules.sol";
 import {Session} from "./interfaces/external/IAGW.sol";
 
 /// @title UniversalMarketplaceRules
-/// @notice The rules side of an agent card: registration guards, and rules = card at `openJob`.
+/// @notice The rules side of an agent card: registration guards on its `CardRule[]` (one rule per destination
+///         chain), and rules = card at `openJob` (one signed session per card rule).
 /// @dev - EVM universal only. Pure logic, no storage, no admin; split out of the marketplace for EIP-170.
 ///      - Reverts with `UniversalMarketplaceErrors`: a revert here bubbles through the marketplace unchanged.
 ///      - Not upgradeable. A rule change is a new deployment plus a marketplace upgrade that points at it.
@@ -36,6 +37,8 @@ contract UniversalMarketplaceRules is IUniversalMarketplaceRules {
     /// @dev Not on OZ 5's IERC20.
     bytes4 internal constant ERC20_INCREASE_ALLOWANCE = bytes4(keccak256("increaseAllowance(address,uint256)"));
 
+    bytes7 internal constant EVM_PREFIX = "eip155:";
+
     /// @dev Calldata offsets of an ERC-20 call's first and second argument words.
     uint16 internal constant ARG0 = 4;
     uint16 internal constant ARG1 = 36;
@@ -43,86 +46,111 @@ contract UniversalMarketplaceRules is IUniversalMarketplaceRules {
     // ═════════════════════════════════ rules = card ═════════════════════════════════
 
     /// @inheritdoc IUniversalMarketplaceRules
-    /// @dev - Order C1-C14; the first failure reverts.
+    /// @dev - One session per card rule, same order; each pair runs C1-C14 and every error names the pair.
     ///      - The session never carries a marker: C8 and C12 compare against the filled-in value.
-    ///      - Never compared: the card's `principalAsset` (an index, not a rule), and the session's validator,
-    ///        policy address, action target and selector, userOp and ERC-7739 lists, paymaster flag and salt. The
-    ///        AGW pins every one of those itself at `grantRules` (v6 `_grantRules`).
-    function checkRulesMatchCard(bytes calldata cardRules, Session calldata session, SessionContext calldata ctx)
+    ///      - Never compared: the session's validator, policy address, action target and selector, userOp and
+    ///        ERC-7739 lists, paymaster flag and salt. The AGW pins every one of those itself at `grantRules`
+    ///        (v6 `_grantRules`), and overwrites the salt with its grant nonce.
+    function checkRulesMatchCard(bytes calldata cardRules, Session[] calldata sessions, SessionContext calldata ctx)
         external
         pure
     {
-        if (keccak256(session.sessionValidatorInitData) != keccak256(abi.encode(ctx.agent))) {
-            revert UniversalMarketplaceErrors.AgentMismatch();
+        CardRule[] memory rules = abi.decode(cardRules, (CardRule[]));
+        uint256 n = rules.length;
+        if (sessions.length != n) revert UniversalMarketplaceErrors.SessionCountMismatch(n, sessions.length);
+        // The marketplace builds one CEA per rule; a mismatch is a bug there, not a caller error.
+        assert(ctx.expectedCEAs.length == n);
+        for (uint256 i; i < n; ++i) {
+            _checkRule(rules[i], sessions[i], ctx, i);
         }
-        if (session.actions.length != 1) revert UniversalMarketplaceErrors.ActionCount();
-        if (session.actions[0].actionPolicies.length != 1) revert UniversalMarketplaceErrors.PolicyShape(0);
+    }
 
-        UniversalTerms memory t = _decodeEnvelope(session.actions[0].actionPolicies[0].initData, ctx.chainHash);
-        AgentCardRules memory c = abi.decode(cardRules, (AgentCardRules));
-        _matchAssets(c, t, ctx.principal);
-        if (t.maxGasPerCall != c.maxGasPerCall) revert UniversalMarketplaceErrors.GasCapMismatch();
-        _matchCalls(c.allowedCalls, t.allowedCalls, ctx);
-        if (t.validUntil != ctx.expiredAt) revert UniversalMarketplaceErrors.ExpiryMismatch();
-        if (t.expectedCEA != ctx.expectedCEA) {
-            revert UniversalMarketplaceErrors.ExpectedCEAMismatch(ctx.expectedCEA, t.expectedCEA);
+    /// @dev C1-C14 for card rule `i` and its session.
+    function _checkRule(CardRule memory c, Session calldata session, SessionContext calldata ctx, uint256 i)
+        internal
+        pure
+    {
+        if (keccak256(session.sessionValidatorInitData) != keccak256(abi.encode(ctx.agent))) {
+            revert UniversalMarketplaceErrors.AgentMismatch(i);
         }
+        if (session.actions.length != 1) revert UniversalMarketplaceErrors.ActionCount(i);
+        if (session.actions[0].actionPolicies.length != 1) revert UniversalMarketplaceErrors.PolicyShape(i);
+
+        UniversalTerms memory t = _decodeEnvelope(
+            session.actions[0].actionPolicies[0].initData, keccak256(bytes(c.chainNamespace)), i
+        );
+        _matchAssets(c.terms.assets, t.assets, ctx.principal, i);
+        if (t.maxGasPerCall != c.terms.maxGasPerCall) revert UniversalMarketplaceErrors.GasCapMismatch(i);
+        address cea = ctx.expectedCEAs[i];
+        _matchCalls(c.terms.allowedCalls, t.allowedCalls, cea, ctx.principal, i);
+        if (t.validUntil != ctx.expiredAt) revert UniversalMarketplaceErrors.ExpiryMismatch(i);
+        if (t.expectedCEA != cea) revert UniversalMarketplaceErrors.ExpectedCEAMismatch(i, cea, t.expectedCEA);
     }
 
     /// @dev C4-C5. The version is read from the first word BEFORE any decode, as URP does, so a pre-v6
     ///      two-field envelope (first word 64, its string offset) is named instead of panicking the decoder.
-    function _decodeEnvelope(bytes calldata d, bytes32 chainHash) internal pure returns (UniversalTerms memory) {
+    function _decodeEnvelope(bytes calldata d, bytes32 chainHash, uint256 i)
+        internal
+        pure
+        returns (UniversalTerms memory)
+    {
         uint256 version = d.length < 32 ? 0 : uint256(bytes32(d[:32]));
-        if (version != ENVELOPE_VERSION) revert UniversalMarketplaceErrors.EnvelopeVersionMismatch(version);
+        if (version != ENVELOPE_VERSION) revert UniversalMarketplaceErrors.EnvelopeVersionMismatch(i, version);
         (, string memory chainNamespace, bytes memory body) = abi.decode(d, (uint16, string, bytes));
-        if (keccak256(bytes(chainNamespace)) != chainHash) revert UniversalMarketplaceErrors.ChainMismatch(0);
+        if (keccak256(bytes(chainNamespace)) != chainHash) revert UniversalMarketplaceErrors.ChainMismatch(i);
         return abi.decode(body, (UniversalTerms));
     }
 
     /// @dev C6-C9: same tokens in the same order; the principal asset's caps filled with the principal (D3); every
     ///      other asset's caps copied exactly.
-    function _matchAssets(AgentCardRules memory c, UniversalTerms memory t, uint256 principal) internal pure {
-        uint256 n = c.assets.length;
-        if (t.assets.length != n) revert UniversalMarketplaceErrors.AssetCountMismatch(n, t.assets.length);
-        for (uint256 i; i < n; ++i) {
-            if (t.assets[i].token != c.assets[i].token) revert UniversalMarketplaceErrors.AssetMismatch(i);
+    function _matchAssets(AssetCap[] memory card, AssetCap[] memory signed, uint256 principal, uint256 rule)
+        internal
+        pure
+    {
+        uint256 n = card.length;
+        if (signed.length != n) revert UniversalMarketplaceErrors.AssetCountMismatch(rule, n, signed.length);
+        for (uint256 j; j < n; ++j) {
+            if (signed[j].token != card[j].token) revert UniversalMarketplaceErrors.AssetMismatch(rule, j);
         }
-        AssetCap memory card = c.assets[c.principalAsset];
-        AssetCap memory signed = t.assets[c.principalAsset];
-        uint256 perCall = card.maxPerCall == uint256(MARKER_PRINCIPAL) ? principal : card.maxPerCall;
-        if (signed.maxTotal != principal || signed.maxPerCall != perCall) {
-            revert UniversalMarketplaceErrors.PrincipalCapMismatch();
-        }
-        for (uint256 i; i < n; ++i) {
-            if (i == c.principalAsset) continue;
-            if (t.assets[i].maxPerCall != c.assets[i].maxPerCall || t.assets[i].maxTotal != c.assets[i].maxTotal) {
-                revert UniversalMarketplaceErrors.AssetMismatch(i);
+        for (uint256 j; j < n; ++j) {
+            AssetCap memory a = card[j];
+            uint256 total = a.maxTotal;
+            uint256 perCall = a.maxPerCall;
+            if (total == uint256(MARKER_PRINCIPAL)) {
+                total = principal;
+                if (perCall == uint256(MARKER_PRINCIPAL)) perCall = principal;
+            }
+            if (signed[j].maxTotal != total || signed[j].maxPerCall != perCall) {
+                revert UniversalMarketplaceErrors.AssetMismatch(rule, j);
             }
         }
     }
 
     /// @dev C11-C12, one loop: every field of every call equal, every pin's offset and op equal, then its value
-    ///      equal with markers filled in.
-    function _matchCalls(AllowedCall[] memory card, AllowedCall[] memory signed, SessionContext calldata ctx)
-        internal
-        pure
-    {
-        if (signed.length != card.length) revert UniversalMarketplaceErrors.ActionsMismatch();
-        bytes32 wallet = bytes32(uint256(uint160(ctx.expectedCEA)));
-        bytes32 principal = bytes32(ctx.principal);
-        for (uint256 i; i < card.length; ++i) {
-            AllowedCall memory a = card[i];
-            AllowedCall memory b = signed[i];
+    ///      equal with markers filled in (`MARKER_WALLET` = this rule's CEA).
+    function _matchCalls(
+        AllowedCall[] memory card,
+        AllowedCall[] memory signed,
+        address cea,
+        uint256 principalAmount,
+        uint256 rule
+    ) internal pure {
+        if (signed.length != card.length) revert UniversalMarketplaceErrors.ActionsMismatch(rule);
+        bytes32 wallet = bytes32(uint256(uint160(cea)));
+        bytes32 principal = bytes32(principalAmount);
+        for (uint256 k; k < card.length; ++k) {
+            AllowedCall memory a = card[k];
+            AllowedCall memory b = signed[k];
             if (
                 a.target != b.target || a.selector != b.selector || a.beneficiaryOffset != b.beneficiaryOffset
                     || a.hasBeneficiary != b.hasBeneficiary || a.maxValue != b.maxValue || a.pins.length != b.pins.length
-            ) revert UniversalMarketplaceErrors.ActionsMismatch();
-            for (uint256 k; k < a.pins.length; ++k) {
-                ArgPin memory p = a.pins[k];
-                ArgPin memory q = b.pins[k];
-                if (p.offset != q.offset || p.op != q.op) revert UniversalMarketplaceErrors.ActionsMismatch();
+            ) revert UniversalMarketplaceErrors.ActionsMismatch(rule);
+            for (uint256 m; m < a.pins.length; ++m) {
+                ArgPin memory p = a.pins[m];
+                ArgPin memory q = b.pins[m];
+                if (p.offset != q.offset || p.op != q.op) revert UniversalMarketplaceErrors.ActionsMismatch(rule);
                 bytes32 want = p.value == MARKER_WALLET ? wallet : p.value == MARKER_PRINCIPAL ? principal : p.value;
-                if (q.value != want) revert UniversalMarketplaceErrors.PinMismatch(i, k);
+                if (q.value != want) revert UniversalMarketplaceErrors.PinMismatch(rule, k, m);
             }
         }
     }
@@ -130,24 +158,61 @@ contract UniversalMarketplaceRules is IUniversalMarketplaceRules {
     // ═════════════════════════════════ registration guards ═════════════════════════════════
 
     /// @inheritdoc IUniversalMarketplaceRules
-    /// @dev Order R1-R17; the first failure reverts. Malformed bytes revert in the decoder, without data.
-    function validateAgentCardRules(bytes calldata rules) external pure returns (address[] memory tokens) {
-        AgentCardRules memory r = abi.decode(rules, (AgentCardRules));
-        _validateAssets(r.assets, r.principalAsset);
-        _validateCallShape(r.allowedCalls);
-        _validateDuplicates(r.allowedCalls);
-        _validateErc20(r.allowedCalls);
-        tokens = new address[](r.assets.length);
-        for (uint256 i; i < tokens.length; ++i) {
-            tokens[i] = r.assets[i].token;
+    /// @dev Order: count · per rule (chain namespace, duplicate chain, blank per-job fields, R1-R17) · the principal
+    ///      across all rules. The first failure reverts. Malformed bytes revert in the decoder, without data.
+    function validateAgentCardRules(bytes calldata rules, uint256 maxRules)
+        external
+        pure
+        returns (bytes32[] memory chainHashes, address[] memory tokens, bytes32[] memory tokenChains)
+    {
+        CardRule[] memory rs = abi.decode(rules, (CardRule[]));
+        uint256 n = rs.length;
+        if (n == 0) revert UniversalMarketplaceErrors.RulesEmpty();
+        if (n > maxRules) revert UniversalMarketplaceErrors.TooManyRules(n, maxRules);
+
+        chainHashes = new bytes32[](n);
+        uint256 nTokens;
+        for (uint256 i; i < n; ++i) {
+            chainHashes[i] = _validateRuleChain(rs[i], chainHashes, i);
+            UniversalTerms memory t = rs[i].terms;
+            if (t.validUntil != 0 || t.expectedCEA != address(0)) revert UniversalMarketplaceErrors.RuleHasAgent(i);
+            _validateAssets(t.assets);
+            _validateCallShape(t.allowedCalls);
+            _validateDuplicates(t.allowedCalls);
+            _validateErc20(t.allowedCalls, i);
+            nTokens += t.assets.length;
+        }
+        _validatePrincipal(rs);
+
+        tokens = new address[](nTokens);
+        tokenChains = new bytes32[](nTokens);
+        uint256 k;
+        for (uint256 i; i < n; ++i) {
+            AssetCap[] memory assets = rs[i].terms.assets;
+            for (uint256 j; j < assets.length; ++j) {
+                tokens[k] = assets[j].token;
+                tokenChains[k] = chainHashes[i];
+                ++k;
+            }
         }
     }
 
-    /// @dev R1-R7.
-    function _validateAssets(AssetCap[] memory assets, uint8 principalAsset) internal pure {
+    /// @dev An EVM CAIP-2 namespace no earlier rule names. Returns its hash.
+    function _validateRuleChain(CardRule memory r, bytes32[] memory seen, uint256 i) internal pure returns (bytes32 h) {
+        bytes memory ns = bytes(r.chainNamespace);
+        if (ns.length <= EVM_PREFIX.length || bytes7(ns) != EVM_PREFIX) {
+            revert UniversalMarketplaceErrors.InvalidAgentCard("chain namespace");
+        }
+        h = keccak256(ns);
+        for (uint256 j; j < i; ++j) {
+            if (seen[j] == h) revert UniversalMarketplaceErrors.DuplicateChain(i);
+        }
+    }
+
+    /// @dev R1-R4, per rule: 1..MAX_ASSETS assets, no zero token, no token twice.
+    function _validateAssets(AssetCap[] memory assets) internal pure {
         uint256 n = assets.length;
         if (n == 0 || n > MAX_ASSETS) revert UniversalMarketplaceErrors.InvalidAgentCard("asset count");
-        if (principalAsset >= n) revert UniversalMarketplaceErrors.InvalidAgentCard("principal asset");
         for (uint256 i; i < n; ++i) {
             if (assets[i].token == address(0)) revert UniversalMarketplaceErrors.InvalidAgentCard("asset zero");
         }
@@ -158,17 +223,27 @@ contract UniversalMarketplaceRules is IUniversalMarketplaceRules {
                 }
             }
         }
-        AssetCap memory p = assets[principalAsset];
-        if (p.maxTotal != uint256(MARKER_PRINCIPAL)) {
-            revert UniversalMarketplaceErrors.InvalidAgentCard("principal total not marker");
-        }
-        if (p.maxPerCall == 0) revert UniversalMarketplaceErrors.InvalidAgentCard("principal per-call zero");
-        for (uint256 i; i < n; ++i) {
-            if (i == principalAsset) continue;
-            if (assets[i].maxPerCall == uint256(MARKER_PRINCIPAL) || assets[i].maxTotal == uint256(MARKER_PRINCIPAL)) {
-                revert UniversalMarketplaceErrors.InvalidAgentCard("marker off principal asset");
+    }
+
+    /// @dev R5-R7, across all rules: exactly one asset has `maxTotal == MARKER_PRINCIPAL` (the principal); its
+    ///      per-call cap is non-zero; no other asset carries the marker in either cap.
+    function _validatePrincipal(CardRule[] memory rs) internal pure {
+        uint256 count;
+        for (uint256 i; i < rs.length; ++i) {
+            AssetCap[] memory assets = rs[i].terms.assets;
+            for (uint256 j; j < assets.length; ++j) {
+                if (assets[j].maxTotal == uint256(MARKER_PRINCIPAL)) {
+                    ++count;
+                    if (assets[j].maxPerCall == 0) {
+                        revert UniversalMarketplaceErrors.InvalidAgentCard("principal per-call zero");
+                    }
+                } else if (assets[j].maxPerCall == uint256(MARKER_PRINCIPAL)) {
+                    revert UniversalMarketplaceErrors.InvalidAgentCard("marker off principal asset");
+                }
             }
         }
+        if (count == 0) revert UniversalMarketplaceErrors.NoPrincipal();
+        if (count > 1) revert UniversalMarketplaceErrors.ManyPrincipals();
     }
 
     /// @dev R8-R10: 1-32 calls; at most MAX_PINS pins per call and MAX_ALLOWED_CALL_PINS in all; `MARKER_WALLET`
@@ -216,12 +291,13 @@ contract UniversalMarketplaceRules is IUniversalMarketplaceRules {
         }
     }
 
-    /// @dev R13-R17, each over every call before the next (D1: the agent approves, but only under pins).
+    /// @dev R13-R17 for rule `rule`, each over every call before the next (D1: the agent approves, but only under
+    ///      pins).
     ///      - approve: spender pinned EQ to a clean, non-zero address word (which excludes both markers: their
     ///        high 96 bits are non-zero), and amount capped by a MAX pin (a literal or `MARKER_PRINCIPAL`).
     ///      - transfer / transferFrom: recipient bound to the user's account, by the beneficiary field or by an EQ
     ///        `MARKER_WALLET` pin.
-    function _validateErc20(AllowedCall[] memory calls) internal pure {
+    function _validateErc20(AllowedCall[] memory calls, uint256 rule) internal pure {
         for (uint256 i; i < calls.length; ++i) {
             if (calls[i].selector == ERC20_INCREASE_ALLOWANCE) {
                 revert UniversalMarketplaceErrors.InvalidAgentCard("increaseAllowance");
@@ -229,7 +305,7 @@ contract UniversalMarketplaceRules is IUniversalMarketplaceRules {
         }
         for (uint256 i; i < calls.length; ++i) {
             if (calls[i].selector == ERC20_APPROVE && !_hasSpenderPin(calls[i].pins)) {
-                revert UniversalMarketplaceErrors.InvalidAgentCard("approve spender not pinned");
+                revert UniversalMarketplaceErrors.UnpinnedApprove(rule, i);
             }
         }
         for (uint256 i; i < calls.length; ++i) {
@@ -239,12 +315,12 @@ contract UniversalMarketplaceRules is IUniversalMarketplaceRules {
         }
         for (uint256 i; i < calls.length; ++i) {
             if (calls[i].selector == ERC20_TRANSFER && !_recipientIsWallet(calls[i], ARG0)) {
-                revert UniversalMarketplaceErrors.InvalidAgentCard("erc20 transfer recipient");
+                revert UniversalMarketplaceErrors.UnpinnedTransfer(rule, i);
             }
         }
         for (uint256 i; i < calls.length; ++i) {
             if (calls[i].selector == ERC20_TRANSFER_FROM && !_recipientIsWallet(calls[i], ARG1)) {
-                revert UniversalMarketplaceErrors.InvalidAgentCard("erc20 transferFrom recipient");
+                revert UniversalMarketplaceErrors.UnpinnedTransfer(rule, i);
             }
         }
     }

@@ -25,9 +25,20 @@ Self-contained stack: its own 8183 kernel on pUSDC, bound to AGW v6. Fees are ze
 
 ## Supported card chains (`setCEADeployment`)
 
+Each factory is the one Push actually uses on that chain: the vault's `CEAFactory()` and the gateway's
+`CEA_FACTORY()` both return it, and Push's address registry (push.org/agents/contract-addresses.json) lists it.
+The address docs also list retired factories; do not take a factory from them.
+
 | Chain | Namespace | CEAFactory (proxy) | CEA proxy implementation |
 |---|---|---|---|
-| Ethereum Sepolia | `eip155:11155111` | `0x8ED594A83301FEc545fC6c19fc12cF7111777029` | `0x0a4F7be62B56830070266be81114edB93e68DA09` |
-| Base Sepolia | `eip155:84532` | `0x0A75ca7736b488Eb41675ADc3b3156BACF659F55` | `0x6c9Cfef12155bEE91ecD6d0C8f516cABA2890656` |
-| Arbitrum Sepolia | `eip155:421614` | `0x88DC189275078Cf509E4Cc773F089c8ad07b7EA2` | `0x512d1B8C185a0Fd533a69f8973A3DD6513233009` |
+| Ethereum Sepolia | `eip155:11155111` | `0x5E191fbBe22F8866C5e4250557664fCE760e8870` | `0x425291f35BA1A94Bd2dcC2dC097c2B55700A1fB6` |
+| Base Sepolia | `eip155:84532` | `0x7e8CeeDA043ED1460540616103dD57581a66C856` | `0xe816b67B73c47e51E4B263c9149675b589E8e741` |
+| Arbitrum Sepolia | `eip155:421614` | `0x65572FFa81c230360a8a53C1682C7f0Ee321E5E7` | `0xe27c8f93b4e01C9557b41C702Fa2634B9e5728CE` |
 | BSC Testnet | `eip155:97` | `0x3f1B16e0B072d472951C4563d29d3da6a3EE3Ce8` | `0x0ff5d8b7d9Ac3ee2Ad420e9b70Ed6Dc465f593e9` |
+
+### Change log
+
+| Date | Change | Transactions |
+|---|---|---|
+| 2026-10-20 | Initial deploy. Sepolia, Base and Arbitrum were registered with retired factories (`0x8ED5…7029`, `0x0A75…9F55`, `0x88DC…7EA2`), so `computeCEA` returned addresses Push never uses | see `broadcast/` |
+| 2026-10-26 | Re-registered Sepolia, Base and Arbitrum with the live factories above. Verified: `computeCEA` equals each live factory's `getCEAForPushAccount` on all four chains | `0x7a5cffee…bf68`, `0x97743a1b…ed76`, `0xb8d26064…236e` |

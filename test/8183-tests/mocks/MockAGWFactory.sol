@@ -15,6 +15,8 @@ contract MockAGWFactory {
     mapping(address => address) public ownerOf;
     /// @notice Misbehaviour switch: deploy at another salt, i.e. not at the address `predictWallet` gave.
     bool public misdeploy;
+    /// @notice The SmartSession engine its wallets enable rules on (`MockAGW.SESSION_ENGINE`).
+    address public engine;
 
     error IndexMismatch(uint96 expected, uint96 provided);
     error IntentWalletMismatch(address expected, address provided);
@@ -22,6 +24,10 @@ contract MockAGWFactory {
 
     function setWallet(address account, bool status) external {
         isWallet[account] = status;
+    }
+
+    function setEngine(address engine_) external {
+        engine = engine_;
     }
 
     function setMisdeploy(bool on) external {
