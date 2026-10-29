@@ -129,23 +129,24 @@ of the same call in `right`.
 ### Logic: the pass logic
 
 ```solidity
-enum LogicKind { CHECK, ALL, ANY, AT_LEAST }
+enum LogicKind { COMPARE, ALL, ANY, AT_LEAST }
 
 struct Logic {
     LogicKind kind;
-    uint8 check;        // CHECK only: index into checks
+    uint8 check;        // COMPARE only: index into checks
     uint8[] children;   // ALL / ANY / AT_LEAST: indexes into logic, each greater than this entry's own
     uint8 k;            // AT_LEAST only: how many children must pass
 }
 ```
 
-`logic[0]` is the root. A `CHECK` entry is a leaf naming one check; `ALL` (AND), `ANY` (OR) and `AT_LEAST k`
-combine child entries. **Every check enters the tree through a `CHECK` leaf**: an `ALL` over checks 0 and 1 is
-`[ {ALL, children [1, 2]}, {CHECK 0}, {CHECK 1} ]`. Children always have a higher index than their parent, so the
-tree has no cycles. A single-check job may use `[ {CHECK 0} ]` as its whole tree.
+`logic[0]` is the root. A `COMPARE` entry is a leaf naming one check; `ALL` (AND), `ANY` (OR) and `AT_LEAST k`
+combine child entries. **Every check enters the tree through a `COMPARE` leaf**: an `ALL` over checks 0 and 1 is
+`[ {ALL, children [1, 2]}, {COMPARE 0}, {COMPARE 1} ]`. Children always have a higher index than their parent, so the
+tree has no cycles. A single-check job may use `[ {COMPARE 0} ]` as its whole tree.
 
-The ordinals are the evaluator's: `CHECK` 0, `ALL` 1, `ANY` 2, `AT_LEAST` 3. `LogicKind.CHECK` is the evaluator's
-name; renaming it waits for the evaluator to rename first (D15).
+The ordinals are the evaluator's: `COMPARE` 0, `ALL` 1, `ANY` 2, `AT_LEAST` 3. The evaluator's source (`8666c2a`)
+still names ordinal 0 `LogicKind.CHECK`; the encoding is the same, only the name differs. `LogicKind.COMPARE` (a
+logic leaf) is unrelated to `Evaluation.COMPARE` (how a check compares its value).
 
 **The marketplace never evaluates `logic`.** It copies the template's array verbatim; the semantics above are
 the evaluator's, stated here so a card can be read.
@@ -308,9 +309,9 @@ From `JobSpecLib.validate` at `8666c2a`, in this order (the first failure revert
 | Check sides | each side's indexes strictly increasing and `< nReads`; `left` and `right` share no read | `CheckRead(check)` |
 | Check type | `BOOLEAN`: 1 left, 0 right · `COMPARE`: ≥ 1 left, 0 right · `NUMBER` / `PERCENTAGE`: ≥ 1 left, ≥ 1 right | `CheckSides(check)` |
 | `BOOLEAN` | operation `EQUAL`; target 0 or 1 | `CheckOp(check)` / `CheckTarget(check)` |
-| `Logic` `CHECK` | `check < nChecks`, no children | `LogicShape(entry)` |
+| `Logic` `COMPARE` | `check < nChecks`, no children | `LogicShape(entry)` |
 | `Logic` `ALL` / `ANY` / `AT_LEAST` | ≥ 1 child; children strictly increasing, each `>` the entry's own index and `< nLogic`; `AT_LEAST`: `1 ≤ k ≤ children` | `LogicShape(entry)` |
-| Everything used | every logic entry reachable from `logic[0]`; every check used by a reachable `CHECK`; every read used by some check | `LogicUnreachable` / `CheckUnused` / `ReadUnused` |
+| Everything used | every logic entry reachable from `logic[0]`; every check used by a reachable `COMPARE`; every read used by some check | `LogicUnreachable` / `CheckUnused` / `ReadUnused` |
 | Size | the description ≤ 32 768 bytes (`MAX_DESCRIPTION_LENGTH`; the evaluator checks it before `validate`, in `setSpec` and `startSnapshot`, `UniversalEvaluator.sol:215, 234` at `8666c2a`) | `SpecTooLong(length)` |
 
 The conformance suite holds every built example to a test-only copy of this function,
@@ -358,7 +359,7 @@ reads[1]  eip155 / 11155111, 12 confirmations, POST
           field = [0, 2]                    (the struct's 3rd field: currentLiquidityRate)
 checks[0] left [0], right [], COMPARE, GREATER_OR_EQUAL, PRINCIPAL_BPS 9999   "aUSDC ≥ 99.99% of principal"
 checks[1] left [1], right [], COMPARE, GREATER_OR_EQUAL, FIXED 0.04e27        "rate ≥ 4% (ray)"
-logic     [ {ALL, children [1, 2]}, {CHECK 0}, {CHECK 1} ]
+logic     [ {ALL, children [1, 2]}, {COMPARE 0}, {COMPARE 1} ]
 params    []
 ```
 
@@ -371,7 +372,7 @@ reads[0].args     = abi.encode(CEA(agw, "eip155:11155111"))
 reads[*].at       = POST_EXECUTION
 checks[0].target  = 500e6 × 9999 / 10 000 = 499 950 000
 checks[1].target  = 0.04e27
-logic             = [ {ALL, children [1, 2]}, {CHECK 0}, {CHECK 1} ]
+logic             = [ {ALL, children [1, 2]}, {COMPARE 0}, {COMPARE 1} ]
 allowedMutability = NONE
 origin            = keccak256(abi.encode(marketplace, cardId, 1, 500e6))
 ```
@@ -397,13 +398,13 @@ reads[0]  eip155 / 11155111, 3 confirmations, POST
           outputs = [TUPLE 1, UINT]  field = [0]
 reads[1]  the same call, PRE
 checks[0] left [0], right [1], NUMBER, GREATER_OR_EQUAL, PARAM 0     "post − pre ≥ params[0]"
-logic     [ {ALL, children [1]}, {CHECK 0} ]
+logic     [ {ALL, children [1]}, {COMPARE 0} ]
 params    [ {min: 1, max: 1e30} ]
 ```
 
 A job with `params = [0.38e18]` gets `checks[0].target = 0.38e18`; both reads get the CEA in their args
 (`test_MC02_swapExample_equalsV2Doc`). Because the `right` side is a `PRE_EXECUTION` read taken at `fund`, WETH the
-CEA already held doesn't count. A one-entry tree `[ {CHECK 0} ]` would be equally valid. A job with
+CEA already held doesn't count. A one-entry tree `[ {COMPARE 0} ]` would be equally valid. A job with
 `params = [0]` reverts `ParamOutOfRange(0, 0)`; one with no params reverts `ParamCountMismatch(1, 0)`.
 
 ## Two-rule cards and logic trees
@@ -416,10 +417,10 @@ CEA already held doesn't count. A one-entry tree `[ {CHECK 0} ]` would be equall
   (`test_JB15_ceaTargetUsesLeftFirstRead`).
 
 **Logic trees** (`test_MC03_orAndAtLeastExamples`):
-- Aave OR Morpho: `[ {ANY, [1, 2]}, {CHECK 0}, {CHECK 1} ]`
+- Aave OR Morpho: `[ {ANY, [1, 2]}, {COMPARE 0}, {COMPARE 1} ]`
 - (Aave deposited AND Aave ≥ 4%) OR (Morpho deposited AND Morpho ≥ 4%):
-  `[ {ANY, [1, 2]}, {ALL, [3, 4]}, {ALL, [5, 6]}, {CHECK 0}, {CHECK 1}, {CHECK 2}, {CHECK 3} ]`
-- at least 2 of Aave, Morpho, Spark: `[ {AT_LEAST, [1, 2, 3], k 2}, {CHECK 0}, {CHECK 1}, {CHECK 2} ]`
+  `[ {ANY, [1, 2]}, {ALL, [3, 4]}, {ALL, [5, 6]}, {COMPARE 0}, {COMPARE 1}, {COMPARE 2}, {COMPARE 3} ]`
+- at least 2 of Aave, Morpho, Spark: `[ {AT_LEAST, [1, 2, 3], k 2}, {COMPARE 0}, {COMPARE 1}, {COMPARE 2} ]`
 
 ---
 
@@ -429,7 +430,7 @@ CEA already held doesn't count. A one-entry tree `[ {CHECK 0} ]` would be equall
   fills where the CEA appears in the arguments, and `at` per read.
 - **Write checks with explicit sides**: `left` / `right` instead of a single read. A "change since funding"
   check needs a `PRE_EXECUTION` read of the same call in `right`.
-- **Write the logic as a tree of `CHECK` leaves**: every check is a `CHECK` entry (kind 0); `ALL` = 1, `ANY` = 2,
+- **Write the logic as a tree of `COMPARE` leaves**: every check is a `COMPARE` entry (kind 0); `ALL` = 1, `ANY` = 2,
   `AT_LEAST` = 3.
 - **Validate the template against [What the evaluator accepts](#what-the-evaluator-accepts) before registering.**
   The marketplace doesn't, and a spec the evaluator refuses can be opened but never funded.

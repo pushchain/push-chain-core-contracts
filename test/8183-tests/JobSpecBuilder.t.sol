@@ -444,7 +444,7 @@ contract JobSpecBuilderTest is BuilderFixtures {
             }
         }
         for (uint256 i; i < s.logic.length; ++i) {
-            if (s.logic[i].kind == LogicKind.CHECK) assertLt(s.logic[i].check, s.checks.length);
+            if (s.logic[i].kind == LogicKind.COMPARE) assertLt(s.logic[i].check, s.checks.length);
             for (uint256 j; j < s.logic[i].children.length; ++j) {
                 assertGt(s.logic[i].children[j], i);
                 assertLt(s.logic[i].children[j], s.logic.length);

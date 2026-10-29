@@ -117,9 +117,9 @@ abstract contract TemplateParts {
         return CheckTemplate({left: left, right: right, evaluation: e, operation: op, source: src, value: value});
     }
 
-    /// @dev A CHECK leaf on check `check`.
+    /// @dev A COMPARE leaf on check `check`.
     function _leaf(uint8 check) internal pure returns (Logic memory) {
-        return Logic({kind: LogicKind.CHECK, check: check, children: new uint8[](0), k: 0});
+        return Logic({kind: LogicKind.COMPARE, check: check, children: new uint8[](0), k: 0});
     }
 
     /// @dev An ALL / ANY / AT_LEAST entry over `children`; `k` for AT_LEAST only.
@@ -127,7 +127,7 @@ abstract contract TemplateParts {
         return Logic({kind: kind, check: 0, children: children, k: k});
     }
 
-    /// @dev `kind` over `checks` as leaves: `[ {kind, children [1..n]}, {CHECK checks[0]}, … ]`.
+    /// @dev `kind` over `checks` as leaves: `[ {kind, children [1..n]}, {COMPARE checks[0]}, … ]`.
     function _rootOf(LogicKind kind, uint8[] memory checks) internal pure returns (Logic[] memory logic) {
         uint256 n = checks.length;
         logic = new Logic[](n + 1);

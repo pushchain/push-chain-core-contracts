@@ -167,6 +167,15 @@ contract UniversalMarketplaceConformanceTest is BuilderFixtures {
         evaluatorCheck.validate(spec, MAX_CONFIRMATIONS);
     }
 
+    /// @dev The evaluator matches logic kinds by ordinal. Our `COMPARE` is the evaluator's `LogicKind.CHECK` at
+    ///      8666c2a: the names differ, the ordinals must not.
+    function test_MC08_logicKindOrdinals() public pure {
+        assertEq(uint8(LogicKind.COMPARE), 0, "COMPARE (evaluator: CHECK)");
+        assertEq(uint8(LogicKind.ALL), 1, "ALL");
+        assertEq(uint8(LogicKind.ANY), 2, "ANY");
+        assertEq(uint8(LogicKind.AT_LEAST), 3, "AT_LEAST");
+    }
+
     function _word(bytes memory b, uint256 i) internal pure returns (uint256 w) {
         assembly ("memory-safe") {
             w := mload(add(add(b, 0x20), mul(i, 0x20)))

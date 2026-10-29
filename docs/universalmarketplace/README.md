@@ -92,7 +92,7 @@ The marketplace never holds tokens or native PC. Tests `test_MS02_movesNoFunds` 
 | **OwnerIntent** | The single owner-signed message (AGW type, imported). One signature authorises the wallet deploy and one batch execution: every rules grant, then `createJob`. |
 | **`jobSpecTemplate`** | `abi.encode(JobSpecTemplate)`: the `JobSpec` with holes. Stored on the card. Also called the criteria template. |
 | **JobSpec** | The built criteria for one job, in the evaluator's format: reads (each POST or PRE execution), checks (a `left` and a `right` side), the `logic` tree, `allowedMutability` (always `NONE`), `origin`. No timing. `abi.encode(JobSpec)` is the 8183 job's `description`. |
-| **`logic`** | The job's pass logic: `Logic` entries, `CHECK` leaves combined with `ALL`, `ANY` or `AT_LEAST k`. Copied verbatim; its semantics are evaluator-owned. |
+| **`logic`** | The job's pass logic: `Logic` entries, `COMPARE` leaves combined with `ALL`, `ANY` or `AT_LEAST k`. Copied verbatim; its semantics are evaluator-owned. |
 | **Card version** | 1 at registration, +1 per update. Bound into every job's criteria, so an intent signed against one version can't open a job on another. Recorded per job (`cardVersionOfJob`). |
 | **Verified tag** | An admin label: "this card, at this version, was reviewed". A tag, not a gate. |
 | **chainHash** | `keccak256` of a CAIP-2 string such as `"eip155:11155111"`. The key for chain configuration. |
