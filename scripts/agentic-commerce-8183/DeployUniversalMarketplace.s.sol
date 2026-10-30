@@ -26,10 +26,10 @@ interface ICEAFactoryImpl {
 ///         existing kernel and wired to a UniversalHook and UniversalEvaluator already deployed against that kernel:
 ///         UniversalMarketplaceRules → UniversalMarketplace (JobSpecBuilder linked), then the CEA deployment of each
 ///         supported chain. `maxRulesPerCard` stays 1 until the hook binds every rules set of a job.
-/// @dev - Reuses the kernel (env KERNEL, default the live pUSDC kernel); deploys no kernel and no hook.
+/// @dev - Uses an existing kernel (env KERNEL, default the evaluator team's eUSD kernel); deploys no kernel and no hook.
 ///      - The hook (env UNIVERSAL_HOOK) must already be whitelisted on that kernel; the evaluator is env
-///        UNIVERSAL_EVALUATOR. Both come from the evaluator's own deploy script (`feat/universal-evaluator-pre-post-reads`
-///        @ 8666c2a, run against KERNEL).
+///        UNIVERSAL_EVALUATOR. The evaluator team deploys and owns all three; on Donut, see
+///        `docs/addresses/push_donut_universal_marketplace.md`.
 ///      - The broadcaster is the marketplace admin and the owner of its ProxyAdmin.
 ///      - CEA factories are read live from each chain's vault (`CEAFactory()`), checked against its gateway
 ///        (`CEA_FACTORY()`), never hard-coded: the address docs list retired factories too.
@@ -40,8 +40,8 @@ interface ICEAFactoryImpl {
 ///      - Re-sync an existing marketplace's CEA config: same command plus
 ///             --sig "syncCEADeployments(address)" <marketplace>
 contract DeployUniversalMarketplace is Script {
-    /// @dev The live kernel on pUSDC (deployed 2026-10-20); reused, not redeployed.
-    address internal constant LIVE_KERNEL = 0x977cf1AC973E9eC4332791d531507575006157Ed;
+    /// @dev The evaluator team's kernel on eUSD, which 2.1.0 was deployed on (2026-10-30).
+    address internal constant LIVE_KERNEL = 0x449C11cAFe57d8d9079058FeEef8e9E7E1DCBcE0;
     address internal constant AGW_V6_FACTORY = 0xFBBEB6a365178fAaA81A9789a5f64b300c37e5bc;
     uint256 internal constant DONUT_CHAIN_ID = 42101;
 

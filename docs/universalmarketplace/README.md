@@ -636,9 +636,9 @@ does not change the AGW.
 
 ### 12.2 Wiring
 
-1. Keep the kernel. Deploy a UniversalHook and UniversalEvaluator from the evaluator branch at `8666c2a` against
-   it, and whitelist the hook on the kernel (`setHookWhitelist(hook, true)`). This happens outside this package
-   (D4).
+1. A kernel with a UniversalHook and UniversalEvaluator deployed against it, and the hook whitelisted on the
+   kernel (`setHookWhitelist(hook, true)`). The evaluator team deploys and owns these (D4); on Donut they are
+   listed in §12.5.
 2. Deploy `UniversalMarketplaceRules` (no constructor arguments).
 3. Deploy the `JobSpecBuilder` library and link it into `UniversalMarketplace`. Foundry links it automatically in
    tests and scripts.
@@ -669,7 +669,7 @@ does, but it does not validate or freeze the `JobSpec`.
 deploys a fresh 2.1.0 marketplace on the existing kernel and follows §12.2 steps 2–6. It deploys no kernel and no
 hook:
 
-1. Reads the kernel (env `KERNEL`, default the live pUSDC kernel `0x977cf1AC973E9eC4332791d531507575006157Ed`), the
+1. Reads the kernel (env `KERNEL`, default the evaluator team's eUSD kernel `0x449C11cAFe57d8d9079058FeEef8e9E7E1DCBcE0`), the
    hook (`UNIVERSAL_HOOK`) and the evaluator (`UNIVERSAL_EVALUATOR`), and stops unless
    `KERNEL.whitelistedHooks(hook)`.
 2. Forks each destination chain and reads the CEA factory from its vault (`CEAFactory()`), requires the gateway's
@@ -686,7 +686,7 @@ The proxy gets its own ProxyAdmin, owned by the deployer, who is also the market
 for the CEA reads. The script refuses any chain other than Donut (42101).
 
 ```bash
-# fresh 2.1.0 deploy on the existing kernel
+# fresh 2.1.0 deploy (as run on 2026-10-30)
 forge script scripts/agentic-commerce-8183/DeployUniversalMarketplace.s.sol \
   --rpc-url $PUSH_CHAIN_TESTNET_RPC_URL --broadcast --slow
 
@@ -698,34 +698,36 @@ forge script scripts/agentic-commerce-8183/DeployUniversalMarketplace.s.sol \
 
 ### 12.5 Live deployment (Push Donut)
 
-> **Being replaced.** The addresses below are the 2.0.0 deployment of 2026-10-20. A fresh 2.1.0 deployment (same
-> kernel, a new marketplace proxy, rules helper and library, wired to a UniversalHook and UniversalEvaluator) will
-> replace them; its addresses are TBD. The 2.0.0 marketplace, its cards and the jobs it opened stay where they
-> are; it is not upgraded.
+2.1.0 was deployed on 2026-10-30, on the evaluator team's kernel, UniversalHook and UniversalEvaluator. Full table,
+transactions and the retired 2.0.0 set:
+[`docs/addresses/push_donut_universal_marketplace.md`](../addresses/push_donut_universal_marketplace.md).
 
-Full table: [`docs/addresses/push_donut_universal_marketplace.md`](../addresses/push_donut_universal_marketplace.md).
-
-| Contract (2.0.0) | Proxy |
+| Contract (2.1.0) | Address |
 |---|---|
-| UniversalMarketplace | `0x9071ebE01B75123A91e88eB6ec4BF163F3fE9BF4` |
-| AgenticCommerce (kernel, pUSDC `0x7A58048036206bB898008b5bBDA85697DB1e5d66`) — kept for 2.1.0 | `0x977cf1AC973E9eC4332791d531507575006157Ed` |
-| RulesBindingHook | `0xDe7A94e510b6C571DE7880d441349689F73A32b3` |
-| UniversalMarketplaceRules (not a proxy) | `0x5b98A8E0df5b918DF76cD2BE84bA7995B39dfd44` |
-| JobSpecBuilder (library) | `0x2de1e3F053b0bBa0cE0C6953144534a0b055f59e` |
+| UniversalMarketplace (proxy) | `0x940744d96b14Bc030163C6084d602d57CE42ba48` |
+| UniversalMarketplaceRules (not a proxy) | `0x323FDBF1EC07e56a19225d836566155C93463CcD` |
+| JobSpecBuilder (library) | `0xC84C0056310CBCD89C366E1A339AA7bD91B5d0ba` |
+| AgenticCommerce (kernel; the evaluator team's) | `0x449C11cAFe57d8d9079058FeEef8e9E7E1DCBcE0` |
+| UniversalHook (the evaluator team's) | `0xbee0B01773Dc742887f04bED58BD1B5Aa457ED96` |
+| UniversalEvaluator (the evaluator team's) | `0x2a73944D79E052bAF553F59fA1c7C23f3491845c` |
 
-- **Its own kernel.** The stack does not use the `marketplace_demo` kernel (`0x4F9b…B1E0`) or its UniversalEvaluator
-  (`0x7D62…4Ce3`). That kernel is priced in eUSD, its admin is not ours, and its evaluator accepts only jobs created
-  with its own UniversalHook. 2.1.0 instead gets its own UniversalHook and UniversalEvaluator, deployed against
-  this kernel.
-- **2.0.0's evaluator is an EOA.** The deployer `0x1afC81396f1bb36F91f74506284952b81e4bd47c` completes or rejects
-  2.0.0 jobs by hand.
+- **Payment token: eUSD** (`0x8E1eD40770cd197c80048cB3a86D3c8173cd560D`, 6 decimals), the kernel's token. Every
+  card's `paymentToken` must be it. Kernel fees are zero.
+- **Two admins.** The marketplace admin and its ProxyAdmin owner is our deployer
+  `0x1afC81396f1bb36F91f74506284952b81e4bd47c`. The kernel, hook and evaluator are upgradeable by the evaluator
+  team's `0x5496c7e4f5cE04c7c18fe443cD8cA0931099d97D`, which is also the kernel treasury and the evaluator's
+  `FEE_RECIPIENT`. A change to their job format would stop this marketplace's jobs from funding, so format changes
+  must be coordinated.
+- **Checked on 2026-10-30:** `version()` = `"2.1.0"`, `maxRulesPerCard` = 1, every wired address, the four CEA
+  deployments (`computeCEA` equals each chain's live `getCEAForPushAccount`), and every example spec the
+  marketplace builds passes the live evaluator's `JobSpecLib.validate`.
+- **2.0.0 is retired, not upgraded.** `0x9071ebE01B75123A91e88eB6ec4BF163F3fE9BF4`, its own pUSDC kernel
+  `0x977cf1AC973E9eC4332791d531507575006157Ed` and RulesBindingHook `0xDe7A94e510b6C571DE7880d441349689F73A32b3` stay
+  where they are, with their cards and jobs; the deployer still completes or rejects 2.0.0 jobs by hand.
 - **Moving to another kernel.** `KERNEL` is set once at `initialize` and has no setter. Pointing the marketplace at
   a different kernel takes a marketplace upgrade or redeploy plus a hook whitelisted on that kernel. Jobs already
   opened stay on the old kernel.
-- **CEA factories corrected on 2026-10-26.** The first deploy registered retired factories for Sepolia, Base and
-  Arbitrum, so `computeCEA` returned addresses Push never uses. They were re-registered with the live ones; the
-  address doc has the change log. The 2.1.0 deploy script reads the live factories itself (§12.4).
-- Contracts are not source-verified on the explorer.
+- The marketplace contracts and the evaluator team's implementations are not source-verified on the explorer.
 
 ### 12.6 Build configuration
 
@@ -821,7 +823,7 @@ Registration also calls `KERNEL.paymentToken()`, `RULES.validateAgentCardRules` 
 |---|---|
 | **One rule per card, for now** | `maxRulesPerCard` stays 1 until the job hook binds **every** rules id of a job at `fund`. Today both the UniversalHook and RulesBindingHook bind one (`rulesIds[0]`). The marketplace is built for up to `MAX_RULES` (4) rules: the rules helper is tested with four (`MT12`), `openJob` with four (`MS26`) and two (`MS23`, `MI08`, the fork test against the live AGW). Raising the cap is one admin call. |
 | **EVM destinations only** | Rules name `eip155:*` chains, never Push. Solana and native (Push-side) cards are out of scope. |
-| **One payment token** | Until kernel K-12, every card's `paymentToken` must be the kernel's token (pUSDC on Donut). |
+| **One payment token** | Until kernel K-12, every card's `paymentToken` must be the kernel's token (eUSD on Donut). |
 | **Kernel is fixed** | `KERNEL` has no setter; changing kernels needs an upgrade or redeploy (§12.5). |
 | **Templates not judged on-chain** | The marketplace builds any template (D5). One the evaluator refuses gives jobs that open but cannot be funded (§13.2 item 5). |
 | **Stricter ERC-20 rules than the one-card proposal** | `increaseAllowance` refused; `approve` needs spender and amount pins; `transfer` / `transferFrom` only to the user's wallet (D11). Loosening them is an open question for the team. |
