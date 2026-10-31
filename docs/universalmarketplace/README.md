@@ -85,7 +85,7 @@ The marketplace never holds tokens or native PC. Tests `test_MS02_movesNoFunds` 
 | **CEA** | Chain Executor Account: the AGW's account on a destination chain, at an address derived from the AGW and the chain (`computeCEA`). It is where the agent's outbound calls execute and where the criteria read balances. One per chain. |
 | **Agent card** | `AgentCard` (the listing) plus two blobs: `rules` and `jobSpecTemplate`. |
 | **Rules** | On the card: `abi.encode(CardRule[])`, one `CardRule{chainNamespace, UniversalTerms terms}` per destination chain, with `terms.validUntil` and `terms.expectedCEA` blank. At `openJob`: one SmartSession `Session` per rule, granted to the agent, whose one policy carries the AGW v6 envelope `abi.encode(uint16 ENVELOPE_VERSION, string chain, bytes body)` with `UniversalTerms` as body. Each rules set's id (`rulesId`) is the engine's `permissionId`. |
-| **`maxRulesPerCard`** | The admin's live cap on rules per card, 1 to `MAX_RULES` (4). Initialized to 1 (§13.4). |
+| **`maxRulesPerCard`** | The admin's live cap on rules per card, 1 to `MAX_RULES` (4). Initialized to 1 (§13.4); 4 on Donut since 2026-10-31. |
 | **Principal** | The amount the job is about. The **principal asset** is the one asset, across all of a card's rules, whose `maxTotal` is `MARKER_PRINCIPAL`. |
 | **Pin** | An AGW v6 `ArgPin{offset, op, value}` on an allowed call: the calldata word at `offset` must equal (`EQ`) or not exceed (`MAX`) `value`. |
 | **Markers** | Two published `bytes32` constants a card may hold where a per-job value goes: `MARKER_WALLET` (the user's CEA on that rule's chain, EQ pins only) and `MARKER_PRINCIPAL` (this job's principal, in pins and in the principal asset's caps). The signed sessions hold the filled values, never a marker (D2, D3). |
@@ -612,7 +612,8 @@ provider, evaluator, hook and description at creation), and cannot re-enable a d
 
 The admin **can** influence future jobs: the evaluator decides completion, and the hook gates funding. Both are
 trust points of the deployment. Raising `maxRulesPerCard` above 1 before the hook binds every rules set of a job
-would let multi-rule cards open jobs whose extra rules sets the hook never binds (§13.4).
+would let multi-rule cards open jobs whose extra rules sets the hook never binds (§13.4). On Donut it was raised to 4
+on 2026-10-31 for multi-chain cards, accepting this.
 
 ---
 
@@ -718,7 +719,7 @@ transactions and the retired 2.0.0 set:
   team's `0x5496c7e4f5cE04c7c18fe443cD8cA0931099d97D`, which is also the kernel treasury and the evaluator's
   `FEE_RECIPIENT`. A change to their job format would stop this marketplace's jobs from funding, so format changes
   must be coordinated.
-- **Checked on 2026-10-30:** `version()` = `"2.1.0"`, `maxRulesPerCard` = 1, every wired address, the four CEA
+- **Checked on 2026-10-30:** `version()` = `"2.1.0"`, `maxRulesPerCard` = 1 (raised to 4 on 2026-10-31), every wired address, the four CEA
   deployments (`computeCEA` equals each chain's live `getCEAForPushAccount`), and every example spec the
   marketplace builds passes the live evaluator's `JobSpecLib.validate`.
 - **2.0.0 is retired, not upgraded.** `0x9071ebE01B75123A91e88eB6ec4BF163F3fE9BF4`, its own pUSDC kernel
@@ -821,7 +822,7 @@ Registration also calls `KERNEL.paymentToken()`, `RULES.validateAgentCardRules` 
 
 | Limitation | Note |
 |---|---|
-| **One rule per card, for now** | `maxRulesPerCard` stays 1 until the job hook binds **every** rules id of a job at `fund`. Today both the UniversalHook and RulesBindingHook bind one (`rulesIds[0]`). The marketplace is built for up to `MAX_RULES` (4) rules: the rules helper is tested with four (`MT12`), `openJob` with four (`MS26`) and two (`MS23`, `MI08`, the fork test against the live AGW). Raising the cap is one admin call. |
+| **Only the first rule is bound** | On Donut `maxRulesPerCard` is 4 (raised 2026-10-31 for multi-chain cards such as the Diversifier), but the job hook binds only `rulesIds[0]` at `fund`. Rules 2–N are granted by `openJob` and enforced by the AGW, but the hook does not check they are live at `fund`, and they are not tied to the job (they stay granted after a cancel until they expire). Today both the UniversalHook and RulesBindingHook bind one (`rulesIds[0]`). The marketplace is built for up to `MAX_RULES` (4) rules: the rules helper is tested with four (`MT12`), `openJob` with four (`MS26`) and two (`MS23`, `MI08`, the fork test against the live AGW). Raising the cap is one admin call. |
 | **EVM destinations only** | Rules name `eip155:*` chains, never Push. Solana and native (Push-side) cards are out of scope. |
 | **One payment token** | Until kernel K-12, every card's `paymentToken` must be the kernel's token (eUSD on Donut). |
 | **Kernel is fixed** | `KERNEL` has no setter; changing kernels needs an upgrade or redeploy (§12.5). |

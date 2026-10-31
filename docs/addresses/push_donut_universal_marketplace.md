@@ -14,7 +14,7 @@ Deployed 2026-10-30 with `scripts/agentic-commerce-8183/DeployUniversalMarketpla
 | JobSpecBuilder (linked library) | `0xC84C0056310CBCD89C366E1A339AA7bD91B5d0ba` | | |
 
 The marketplace admin (`DEFAULT_ADMIN_ROLE`, `ADMIN_ROLE`) and the owner of its ProxyAdmin is the deployer
-`0x1afC81396f1bb36F91f74506284952b81e4bd47c`. `maxRulesPerCard` = 1.
+`0x1afC81396f1bb36F91f74506284952b81e4bd47c`. `maxRulesPerCard` = 4 (raised from 1 on 2026-10-31; the hook still binds only `rulesIds[0]`).
 
 ### Kernel, hook and evaluator (the evaluator team's; not ours)
 
@@ -92,3 +92,4 @@ zero.
 | 2026-10-20 | 2.0.0 deployed. Sepolia, Base and Arbitrum were registered with retired factories (`0x8ED5…7029`, `0x0A75…9F55`, `0x88DC…7EA2`), so `computeCEA` returned addresses Push never uses | see `broadcast/` |
 | 2026-10-26 | 2.0.0: re-registered Sepolia, Base and Arbitrum with the live factories. Verified: `computeCEA` equals each live factory's `getCEAForPushAccount` on all four chains | `0x7a5cffee…bf68`, `0x97743a1b…ed76`, `0xb8d26064…236e` |
 | 2026-10-30 | 2.1.0 deployed on the evaluator team's kernel, hook and evaluator; 2.0.0 retired | above |
+| 2026-10-31 | 2.1.0: `setMaxRulesPerCard(4)`, so multi-chain cards (e.g. the Diversifier, one rule per chain) can register. The UniversalHook still binds only `rulesIds[0]` at `fund` | `0x77ff5f601c76a4ef4c23f84eb77d7725bdc27e9c0b7633f144ae5374147c4395` |
