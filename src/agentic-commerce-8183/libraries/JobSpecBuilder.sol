@@ -3,7 +3,7 @@ pragma solidity 0.8.26;
 
 import {IUniversalMarketplace} from "../interfaces/IUniversalMarketplace.sol";
 import {UniversalMarketplaceErrors} from "./Errors.sol";
-import {Read, Check, JobSpec} from "./JobSpecTypes.sol";
+import {Read, Check, JobSpec, AllowedMutability} from "./JobSpecTypes.sol";
 import {
     FillSource,
     Fill,
@@ -25,7 +25,9 @@ import {
 ///      - External library: deployed once and linked into the marketplace, which DELEGATECALLs it. Inlined, it
 ///        put the marketplace over the size limit (23,821 B even at 1 optimizer run).
 ///      - Runs in the caller's context: the CEA comes from the caller's own `computeCEA`.
-///      - `logic` and `allowedMutability` are copied verbatim; neither is judged here.
+///      - `logic`, every check's `left` / `right` and every read's `at` are copied verbatim; `allowedMutability` is
+///        always `NONE` (the owner signs these criteria, so nobody replaces them); no timing. Nothing here judges
+///        whether the evaluator can run the result.
 library JobSpecBuilder {
     uint256 internal constant BPS = 10_000;
 
@@ -38,11 +40,9 @@ library JobSpecBuilder {
         address[] memory cea = _ceas(t, ctx.agw);
 
         JobSpec memory spec;
-        spec.executeBy = uint64(ctx.executeBy);
-        spec.failFinalAt = uint64(ctx.executeBy) + ctx.settleWindow;
         spec.origin = ctx.origin;
+        spec.allowedMutability = AllowedMutability.NONE;
         spec.logic = t.logic;
-        spec.allowedMutability = t.allowedMutability;
         spec.reads = new Read[](t.reads.length);
         for (uint256 i; i < t.reads.length; ++i) {
             spec.reads[i] = _buildRead(t.reads[i], i, ctx.params, cea[i]);
@@ -66,17 +66,17 @@ library JobSpecBuilder {
         }
     }
 
-    /// @dev The AGW's CEA for every read that needs one (a CEA fill, or a CEA-target check on it), else zero.
+    /// @dev The AGW's CEA for every read that needs one (a CEA fill, or the `left[0]` read of a CEA-target check), else
+    ///      zero.
     function _ceas(JobSpecTemplate memory t, address agw) private view returns (address[] memory cea) {
         cea = new address[](t.reads.length);
         for (uint256 i; i < t.reads.length; ++i) {
             if (_hasCEAFill(t.reads[i])) cea[i] = _ceaOf(agw, t.reads[i]);
         }
         for (uint256 j; j < t.checks.length; ++j) {
-            uint8 r = t.checks[j].read;
-            if (t.checks[j].source == TargetSource.CEA && cea[r] == address(0)) {
-                cea[r] = _ceaOf(agw, t.reads[r]);
-            }
+            if (t.checks[j].source != TargetSource.CEA) continue;
+            uint8 r = t.checks[j].left[0];
+            if (cea[r] == address(0)) cea[r] = _ceaOf(agw, t.reads[r]);
         }
     }
 
@@ -114,7 +114,8 @@ library JobSpecBuilder {
             selector: r.selector,
             args: args,
             outputs: r.outputs,
-            field: r.field
+            field: r.field,
+            at: r.at
         });
     }
 
@@ -133,9 +134,9 @@ library JobSpecBuilder {
         } else if (c.source == TargetSource.PARAM) {
             target = ctx.params[uint256(c.value)];
         } else if (c.source == TargetSource.CEA) {
-            target = int256(uint256(uint160(cea[c.read])));
+            target = int256(uint256(uint160(cea[c.left[0]])));
         }
-        return Check({read: c.read, evaluation: c.evaluation, operation: c.operation, target: target});
+        return Check({left: c.left, right: c.right, evaluation: c.evaluation, operation: c.operation, target: target});
     }
 
     /// @dev The AGW's CEA on the read's chain, from the caller (the marketplace, under DELEGATECALL). The key is

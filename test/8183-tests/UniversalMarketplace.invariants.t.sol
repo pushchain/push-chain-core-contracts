@@ -10,22 +10,17 @@ import {UniversalMarketplaceErrors} from "../../src/agentic-commerce-8183/librar
 import {IAgenticCommerce} from "../../src/agentic-commerce-8183/interfaces/IAgenticCommerce.sol";
 import {UniversalMarketplace} from "../../src/agentic-commerce-8183/UniversalMarketplace.sol";
 import {JobSpec} from "../../src/agentic-commerce-8183/libraries/JobSpecTypes.sol";
-import {
-    AgentCard,
-    AgentCardRules,
-    JobInputs,
-    OpenJobParams
-} from "../../src/agentic-commerce-8183/libraries/Types.sol";
+import {AgentCard, JobInputs, OpenJobParams} from "../../src/agentic-commerce-8183/libraries/Types.sol";
 
-/// @notice Drives openJob through honest and misbehaving wallets on a swap card (one param), card registration by
-///         a small set of providers, the card's update, cancels and time. Records what every opened job must look
-///         like.
+/// @notice Drives openJob through honest and misbehaving wallets on a TWO-RULE swap card (Sepolia + Base, one
+///         param), card registration by a small set of providers, the card's update, cancels and time. Records what
+///         every opened job must look like.
 contract MarketplaceHandler is MarketplaceFixtures {
     uint256 public cardId;
     address[] public agws;
     uint256[] public jobs;
     mapping(uint256 => bytes32) public expectedOrigin;
-    /// @notice Per opened job: the policy initData the wallet was granted, and the job's principal (MI07).
+    /// @notice Per opened job: the policy initData of its first (principal) rule, and the job's principal (MI07).
     mapping(uint256 => bytes) public grantedInitData;
     mapping(uint256 => uint256) public grantedPrincipal;
     address[3] public providers;
@@ -46,7 +41,10 @@ contract MarketplaceHandler is MarketplaceFixtures {
 
     constructor() {
         setUp();
-        cardId = _registerSwap();
+        _allowMaxRules();
+        AgentCard memory c = _card();
+        c.jobType = keccak256("SWAP");
+        cardId = _registerRulesAs(provider, c, _twoRules(), _swapTemplate());
         providers = [provider, provider2, makeAddr("provider3")];
         userTokenStart = token.balanceOf(user);
         userAssetStart = pUSDC.balanceOf(user);
@@ -73,30 +71,30 @@ contract MarketplaceHandler is MarketplaceFixtures {
         return (token.balanceOf(who), pUSDC.balanceOf(who), who.balance);
     }
 
-    function principalAssetOf(uint256 id) external view returns (uint8) {
-        return abi.decode(mkt.getAgentCard(id).rules, (AgentCardRules)).principalAsset;
+    function rulesEnabled(bytes32 id, address agw) external view returns (bool) {
+        return engine.isPermissionEnabled(id, agw);
     }
 
-    /// @param misbehave 0 honest · 1 wallet creates two jobs · 2 wallet creates the job from another address.
-    ///        An honest open on a free wallet MUST succeed; a misbehaving one MUST fail with its named error.
-    function open(uint256 principalSeed, uint256 executeSeed, uint256 paramSeed, uint8 misbehave) external {
-        uint8 mode = misbehave % 3;
+    /// @param misbehave 0 honest · 1 wallet creates two jobs · 2 wallet creates the job from another address ·
+    ///        3 wallet grants without enabling the rules. An honest open on a free wallet MUST succeed; a misbehaving
+    ///        one MUST fail with its named error.
+    function open(uint256 principalSeed, uint256 paramSeed, uint8 misbehave) external {
+        uint8 mode = misbehave % 4;
         (uint96 index, address agw, bool deployed) = _freeWallet();
         JobInputs memory j = _swapInputs(int256(bound(paramSeed, 1, 1e30)));
-        j.principal = bound(principalSeed, 100e6, 1_000e6);
-        j.executeBy = uint48(bound(executeSeed, block.timestamp + 10 minutes, j.expiredAt - 2 hours));
-        OpenJobParams memory p = _readyAt(cardId, index, _rules(), j);
-
+        j.principal = bound(principalSeed, 1, 1e30);
         if (mode != 0 && !deployed) {
+            OpenJobParams memory first = _readyAtN(cardId, index, _twoRules(), j);
             vm.prank(user);
-            factory.deployWalletWithSig(p.intent, "", "");
+            factory.deployWalletWithSig(first.intent, "", "");
             deployed = true;
         }
-        if (deployed) MockAGW(payable(agw)).setMode(MockAGW.Mode(mode));
+        if (deployed) MockAGW(payable(agw)).setMode(mode == 3 ? MockAGW.Mode.SkipEnable : MockAGW.Mode(mode));
+        OpenJobParams memory p = _readyAtN(cardId, index, _twoRules(), j);
 
         uint256 before = kernel.jobCounter();
         vm.prank(relayer);
-        try mkt.openJob(p) returns (uint256 jobId, address, bytes32) {
+        try mkt.openJob(p) returns (uint256 jobId, address, bytes32[] memory) {
             if (mode == 0) {
                 opened++;
                 _record(agw, jobId, j.principal);
@@ -110,7 +108,9 @@ contract MarketplaceHandler is MarketplaceFixtures {
                 refused++;
                 bytes memory expected = mode == 1
                     ? abi.encodeWithSelector(UniversalMarketplaceErrors.UnexpectedJobCount.selector, before, before + 2)
-                    : abi.encodeWithSelector(UniversalMarketplaceErrors.JobMismatch.selector);
+                    : mode == 2
+                        ? abi.encodeWithSelector(UniversalMarketplaceErrors.JobMismatch.selector)
+                        : abi.encodeWithSelector(UniversalMarketplaceErrors.RulesNotGranted.selector, 0);
                 if (keccak256(err) != keccak256(expected)) wrongRefusal++;
             }
         }
@@ -123,7 +123,7 @@ contract MarketplaceHandler is MarketplaceFixtures {
         address who = providers[seed % providers.length];
         bool had = mkt.agentCardOf(who) != 0;
         AgentCard memory c = _card();
-        bytes memory r = abi.encode(_rules());
+        bytes memory r = abi.encode(_rulesOf(_rules()));
         bytes memory e = abi.encode(_lendingTemplate());
         vm.prank(who);
         try mkt.registerAgentCard(c, r, e) returns (uint256) {
@@ -139,7 +139,7 @@ contract MarketplaceHandler is MarketplaceFixtures {
     function update() external {
         AgentCard memory c = _card();
         c.jobType = keccak256("SWAP");
-        bytes memory r = abi.encode(_rules());
+        bytes memory r = abi.encode(_twoRules());
         bytes memory e = abi.encode(_swapTemplate());
         vm.prank(provider);
         mkt.updateAgentCard(cardId, c, r, e);
@@ -169,7 +169,8 @@ contract MarketplaceHandler is MarketplaceFixtures {
     function _record(address agw, uint256 jobId, uint256 principal) internal {
         jobs.push(jobId);
         expectedOrigin[jobId] = keccak256(abi.encode(address(mkt), cardId, mkt.agentCardVersion(cardId), principal));
-        grantedInitData[jobId] = MockAGW(payable(agw)).lastPolicyInitData();
+        MockAGW w = MockAGW(payable(agw));
+        grantedInitData[jobId] = w.grantedInitData(w.grantedCount() - 2); // this job's first rule: the principal
         grantedPrincipal[jobId] = principal;
         for (uint256 i; i < agws.length; ++i) {
             if (agws[i] == agw) return;
@@ -274,15 +275,28 @@ contract UniversalMarketplaceInvariants is Test {
     }
 
     /// @notice The rules granted for every opened job cap the principal asset's lifetime total at exactly that
-    ///         job's principal (D3).
+    ///         job's principal (D3). The principal is asset 0 of the card's first (Sepolia) rule.
     function invariant_MI07_principalCapEqualsPrincipal() public view {
-        uint8 principalAsset = h.principalAssetOf(h.cardId());
         uint256 n = h.jobCount();
         for (uint256 i; i < n; ++i) {
             uint256 id = h.jobs(i);
             (,, bytes memory body) = abi.decode(h.grantedInitData(id), (uint16, string, bytes));
             UniversalTerms memory t = abi.decode(body, (UniversalTerms));
-            assertEq(t.assets[principalAsset].maxTotal, h.grantedPrincipal(id), "maxTotal == principal");
+            assertEq(t.assets[0].maxTotal, h.grantedPrincipal(id), "maxTotal == principal");
+        }
+    }
+
+    /// @notice Every opened job records one rules set per card rule, each enabled on the wallet's engine.
+    function invariant_MI08_everyRuleOfEveryJobGranted() public view {
+        uint256 n = h.jobCount();
+        for (uint256 i; i < n; ++i) {
+            uint256 id = h.jobs(i);
+            bytes32[] memory ids = mkt.rulesOfJob(id);
+            assertEq(ids.length, 2, "one rules set per card rule");
+            assertTrue(ids[0] != ids[1], "distinct rules sets");
+            for (uint256 k; k < ids.length; ++k) {
+                assertTrue(h.rulesEnabled(ids[k], mkt.agwOfJob(id)), "granted and enabled");
+            }
         }
     }
 

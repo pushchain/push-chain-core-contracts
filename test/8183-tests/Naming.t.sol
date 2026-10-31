@@ -22,18 +22,20 @@ contract RulesSelectorsHarness is UniversalMarketplaceRules {
     }
 }
 
-/// @title Naming — the marketplace's v2 surface (PRD 12 §3, §6.8), pinned against LITERAL signatures.
+/// @title Naming — the marketplace's v2.1 surface (PRD 12 §3, §6.8; sdk_iterations_v2), pinned against LITERAL
+///        signatures.
 /// @notice A rename that drifts from the PRD, or a type change that moved a selector, fails here.
 contract NamingTest is Test {
     // The struct tuples, spelled out: a field change moves every selector that takes one.
-    string internal constant AGENT_CARD =
-        "(address,bytes32,string,bytes32,string,uint256,address,uint256,uint256,uint32,uint32,uint32,uint32,bool)";
-    string internal constant JOB_INPUTS = "(uint256,uint48,uint48,int256[])";
+    string internal constant AGENT_CARD = "(address,bytes32,string,bytes32,uint256,address,uint32,uint32,bool)";
+    string internal constant JOB_INPUTS = "(uint256,uint48,int256[])";
     string internal constant OWNER_INTENT =
         "(address,address,address,uint96,bytes32,bytes32,bytes32,uint192,uint64,uint64,uint48,uint256)";
     string internal constant SESSION =
         "(address,bytes,bytes32,(address,bytes)[],((bytes32,string[])[],(address,bytes)[]),(bytes4,address,(address,bytes)[])[],bool)";
-    string internal constant SESSION_CONTEXT = "(address,bytes32,uint256,uint48,address)";
+    string internal constant SESSIONS =
+        "(address,bytes,bytes32,(address,bytes)[],((bytes32,string[])[],(address,bytes)[]),(bytes4,address,(address,bytes)[])[],bool)[]";
+    string internal constant SESSION_CONTEXT = "(address,uint256,uint48,address[])";
 
     function _sel(string memory sig) internal pure returns (bytes4) {
         return bytes4(keccak256(bytes(sig)));
@@ -44,7 +46,7 @@ contract NamingTest is Test {
             IUniversalMarketplace.openJob.selector,
             _sel(
                 string.concat(
-                    "openJob((uint256,uint256,", JOB_INPUTS, ",", SESSION, ",", OWNER_INTENT, ",bytes,string))"
+                    "openJob((uint256,uint256,", JOB_INPUTS, ",", SESSIONS, ",", OWNER_INTENT, ",bytes,string))"
                 )
             )
         );
@@ -74,37 +76,45 @@ contract NamingTest is Test {
         assertEq(IUniversalMarketplace.version.selector, _sel("version()"));
         assertEq(IUniversalMarketplace.AGW_FACTORY.selector, _sel("AGW_FACTORY()"));
         assertEq(IUniversalMarketplace.KERNEL.selector, _sel("KERNEL()"));
+        assertEq(IUniversalMarketplace.rulesOfJob.selector, _sel("rulesOfJob(uint256)"));
+        assertEq(IUniversalMarketplace.maxRulesPerCard.selector, _sel("maxRulesPerCard()"));
+        assertEq(IUniversalMarketplace.setMaxRulesPerCard.selector, _sel("setMaxRulesPerCard(uint8)"));
+        assertEq(
+            IUniversalMarketplace.buildCreateJobCalldata.selector,
+            _sel(string.concat("buildCreateJobCalldata(uint256,address,uint96,", JOB_INPUTS, ",", SESSIONS, ")"))
+        );
         assertEq(
             IUniversalMarketplace.previewIntent.selector,
             _sel(
-                string.concat(
-                    "previewIntent((uint256,address,uint96,", JOB_INPUTS, ",uint48,uint256),", SESSION, ")"
-                )
+                string.concat("previewIntent((uint256,address,uint96,", JOB_INPUTS, ",uint48,uint256),", SESSIONS, ")")
             )
         );
         assertEq(
-            IUniversalMarketplaceRules.validateAgentCardRules.selector, _sel("validateAgentCardRules(bytes)")
+            IUniversalMarketplaceRules.validateAgentCardRules.selector, _sel("validateAgentCardRules(bytes,uint256)")
         );
         assertEq(
             IUniversalMarketplaceRules.checkRulesMatchCard.selector,
-            _sel(string.concat("checkRulesMatchCard(bytes,", SESSION, ",", SESSION_CONTEXT, ")"))
+            _sel(string.concat("checkRulesMatchCard(bytes,", SESSIONS, ",", SESSION_CONTEXT, ")"))
         );
     }
 
     function test_naming_marketplaceEvents() public pure {
         assertEq(
             IUniversalMarketplace.AgentCardRegistered.selector,
-            keccak256("AgentCardRegistered(uint256,address,bytes32,string,bytes32,bytes32,bytes32,uint256)")
+            keccak256("AgentCardRegistered(uint256,address,bytes32,bytes32,bytes32,bytes32,uint256)")
         );
         assertEq(
             IUniversalMarketplace.AgentCardUpdated.selector,
             keccak256("AgentCardUpdated(uint256,uint256,bytes32,bytes32,bytes32,uint256)")
         );
-        assertEq(IUniversalMarketplace.AgentCardStatusChanged.selector, keccak256("AgentCardStatusChanged(uint256,bool)"));
+        assertEq(
+            IUniversalMarketplace.AgentCardStatusChanged.selector, keccak256("AgentCardStatusChanged(uint256,bool)")
+        );
         assertEq(IUniversalMarketplace.AgentCardDisabled.selector, keccak256("AgentCardDisabled(uint256)"));
         assertEq(IUniversalMarketplace.AgentCardVerified.selector, keccak256("AgentCardVerified(uint256,uint256)"));
         assertEq(
-            IUniversalMarketplace.AgentCardVerificationRevoked.selector, keccak256("AgentCardVerificationRevoked(uint256)")
+            IUniversalMarketplace.AgentCardVerificationRevoked.selector,
+            keccak256("AgentCardVerificationRevoked(uint256)")
         );
         assertEq(IUniversalMarketplace.AgentRatingSet.selector, keccak256("AgentRatingSet(address,uint256)"));
         assertEq(IUniversalMarketplace.HookUpdated.selector, keccak256("HookUpdated(address)"));
@@ -114,8 +124,9 @@ contract NamingTest is Test {
         );
         assertEq(
             IUniversalMarketplace.JobOpened.selector,
-            keccak256("JobOpened(uint256,address,address,uint256,bytes32,uint256,uint256)")
+            keccak256("JobOpened(uint256,address,address,uint256,bytes32[],uint256,uint256)")
         );
+        assertEq(IUniversalMarketplace.MaxRulesPerCardUpdated.selector, keccak256("MaxRulesPerCardUpdated(uint8)"));
     }
 
     function test_naming_hookTopicsAndErrors() public pure {
@@ -138,20 +149,37 @@ contract NamingTest is Test {
             UniversalMarketplaceErrors.AgentCardVersionMismatch.selector,
             _sel("AgentCardVersionMismatch(uint256,uint256)")
         );
-        assertEq(UniversalMarketplaceErrors.AgentCardIdentityImmutable.selector, _sel("AgentCardIdentityImmutable()"));
         assertEq(UniversalMarketplaceErrors.WalletHasActiveJob.selector, _sel("WalletHasActiveJob(address,uint256)"));
-        assertEq(UniversalMarketplaceErrors.PrincipalCapMismatch.selector, _sel("PrincipalCapMismatch()"));
-        assertEq(UniversalMarketplaceErrors.GasCapMismatch.selector, _sel("GasCapMismatch()"));
-        assertEq(UniversalMarketplaceErrors.AssetMismatch.selector, _sel("AssetMismatch(uint256)"));
+        // every rules = card error names the card rule / session pair
+        assertEq(UniversalMarketplaceErrors.GasCapMismatch.selector, _sel("GasCapMismatch(uint256)"));
+        assertEq(UniversalMarketplaceErrors.AssetMismatch.selector, _sel("AssetMismatch(uint256,uint256)"));
         // new
         assertEq(
             UniversalMarketplaceErrors.AgentCardAlreadyRegistered.selector, _sel("AgentCardAlreadyRegistered(address)")
         );
-        assertEq(UniversalMarketplaceErrors.EnvelopeVersionMismatch.selector, _sel("EnvelopeVersionMismatch(uint256)"));
         assertEq(
-            UniversalMarketplaceErrors.AssetCountMismatch.selector, _sel("AssetCountMismatch(uint256,uint256)")
+            UniversalMarketplaceErrors.EnvelopeVersionMismatch.selector,
+            _sel("EnvelopeVersionMismatch(uint256,uint256)")
         );
-        assertEq(UniversalMarketplaceErrors.PinMismatch.selector, _sel("PinMismatch(uint256,uint256)"));
+        assertEq(
+            UniversalMarketplaceErrors.AssetCountMismatch.selector, _sel("AssetCountMismatch(uint256,uint256,uint256)")
+        );
+        assertEq(UniversalMarketplaceErrors.PinMismatch.selector, _sel("PinMismatch(uint256,uint256,uint256)"));
+        // sdk_iterations_v2: several rules per card, one signature
+        assertEq(UniversalMarketplaceErrors.RulesEmpty.selector, _sel("RulesEmpty()"));
+        assertEq(UniversalMarketplaceErrors.TooManyRules.selector, _sel("TooManyRules(uint256,uint256)"));
+        assertEq(UniversalMarketplaceErrors.DuplicateChain.selector, _sel("DuplicateChain(uint256)"));
+        assertEq(UniversalMarketplaceErrors.RuleHasAgent.selector, _sel("RuleHasAgent(uint256)"));
+        assertEq(UniversalMarketplaceErrors.NoPrincipal.selector, _sel("NoPrincipal()"));
+        assertEq(UniversalMarketplaceErrors.ManyPrincipals.selector, _sel("ManyPrincipals()"));
+        assertEq(UniversalMarketplaceErrors.UnpinnedApprove.selector, _sel("UnpinnedApprove(uint256,uint256)"));
+        assertEq(UniversalMarketplaceErrors.UnpinnedTransfer.selector, _sel("UnpinnedTransfer(uint256,uint256)"));
+        assertEq(UniversalMarketplaceErrors.ZeroPrincipal.selector, _sel("ZeroPrincipal()"));
+        assertEq(
+            UniversalMarketplaceErrors.SessionCountMismatch.selector, _sel("SessionCountMismatch(uint256,uint256)")
+        );
+        assertEq(UniversalMarketplaceErrors.RulesNotGranted.selector, _sel("RulesNotGranted(uint256)"));
+        assertEq(UniversalMarketplaceErrors.InvalidMaxRules.selector, _sel("InvalidMaxRules(uint8)"));
     }
 
     function test_naming_hookViews() public {

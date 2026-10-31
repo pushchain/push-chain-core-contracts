@@ -19,16 +19,33 @@ library UniversalMarketplaceErrors {
     error InvalidAgentCard(string reason);
     /// @dev `provided` is not the card's `current` version (openJob, verifyAgentCard).
     error AgentCardVersionMismatch(uint256 provided, uint256 current);
-    /// @dev `updateAgentCard` tried to change the card's execution chain.
-    error AgentCardIdentityImmutable();
     /// @dev One card per provider; a disabled card still counts.
     error AgentCardAlreadyRegistered(address provider);
+    /// @dev `setMaxRulesPerCard` outside 1..MAX_RULES.
+    error InvalidMaxRules(uint8 n);
+
+    // ───────── card rules (registration) ─────────
+
+    error RulesEmpty();
+    /// @dev The card has `n` rules; the live cap is `max` (`maxRulesPerCard`).
+    error TooManyRules(uint256 n, uint256 max);
+    /// @dev Rule `rule` names a chain an earlier rule already names.
+    error DuplicateChain(uint256 rule);
+    /// @dev Rule `rule` fills a per-job field (`validUntil` or `expectedCEA`) the card must leave blank.
+    error RuleHasAgent(uint256 rule);
+    /// @dev No asset across the card's rules has `maxTotal == MARKER_PRINCIPAL`.
+    error NoPrincipal();
+    /// @dev More than one asset across the card's rules has `maxTotal == MARKER_PRINCIPAL`.
+    error ManyPrincipals();
+    /// @dev Call `call` of rule `rule` is an `approve` without a clean spender EQ pin.
+    error UnpinnedApprove(uint256 rule, uint256 call);
+    /// @dev Call `call` of rule `rule` is a `transfer` / `transferFrom` whose recipient is not the user's wallet.
+    error UnpinnedTransfer(uint256 rule, uint256 call);
 
     // ───────── openJob: the job ─────────
 
-    error PrincipalOutOfRange();
+    error ZeroPrincipal();
     error ExpiryOutOfRange();
-    error ExecuteByOutOfRange();
     /// @dev The configured evaluator is the card's provider (the evaluator changed after registration).
     error ProviderIsEvaluator();
     error ParamCountMismatch(uint256 expected, uint256 actual);
@@ -48,24 +65,28 @@ library UniversalMarketplaceErrors {
     error WalletHasActiveJob(address agw, uint256 jobId);
     error AGWMismatch(address expected, address actual);
     error WalletOwnerMismatch(address expected, address actual);
+    /// @dev After the batch, rule `rule`'s computed rulesId is not enabled on the engine for the AGW.
+    error RulesNotGranted(uint256 rule);
 
-    // ───────── openJob: rules = card ─────────
+    // ───────── openJob: rules = card (every error names the card rule / session pair) ─────────
 
-    error AgentMismatch();
-    error ActionCount();
-    error PolicyShape(uint256 i);
+    /// @dev `sessions` does not hold one session per card rule.
+    error SessionCountMismatch(uint256 expected, uint256 actual);
+    error AgentMismatch(uint256 rule);
+    error ActionCount(uint256 rule);
+    error PolicyShape(uint256 rule);
     /// @dev The envelope's first word is not `ENVELOPE_VERSION`; 0 when the envelope is shorter than one word.
-    error EnvelopeVersionMismatch(uint256 actual);
-    error ChainMismatch(uint256 i);
-    error AssetCountMismatch(uint256 expected, uint256 actual);
-    error AssetMismatch(uint256 index);
-    error PrincipalCapMismatch();
-    error GasCapMismatch();
-    error ActionsMismatch();
-    /// @dev Pin `pin` of allowed call `call` does not hold the card's value, with markers filled in.
-    error PinMismatch(uint256 call, uint256 pin);
-    error ExpiryMismatch();
-    error ExpectedCEAMismatch(address expected, address actual);
+    error EnvelopeVersionMismatch(uint256 rule, uint256 actual);
+    error ChainMismatch(uint256 rule);
+    error AssetCountMismatch(uint256 rule, uint256 expected, uint256 actual);
+    /// @dev Asset `index` of rule `rule`: another token, or caps other than the card's with the principal filled in.
+    error AssetMismatch(uint256 rule, uint256 index);
+    error GasCapMismatch(uint256 rule);
+    error ActionsMismatch(uint256 rule);
+    /// @dev Pin `pin` of allowed call `call` of rule `rule` does not hold the card's value, with markers filled in.
+    error PinMismatch(uint256 rule, uint256 call, uint256 pin);
+    error ExpiryMismatch(uint256 rule);
+    error ExpectedCEAMismatch(uint256 rule, address expected, address actual);
 
     // ───────── openJob: the created job ─────────
 
