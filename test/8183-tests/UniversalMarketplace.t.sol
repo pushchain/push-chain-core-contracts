@@ -1211,9 +1211,7 @@ contract UniversalMarketplaceTest is MarketplaceFixtures {
         p.job.principal = PRINCIPAL + 1;
         _expectExecMismatch(p, 0);
 
-        p = _readyAt(id, 0, _rules(), _swapInputs(0.5e18));
-        p.job.executeBy += 1;
-        _expectExecMismatch(p, 0);
+        // executeBy is not bound: it only has to fit the card's windows (the JobSpec no longer carries it)
 
         p = _readyAt(id, 0, _rules(), _swapInputs(0.5e18));
         p.job.expiredAt += 1;
@@ -1610,7 +1608,7 @@ contract UniversalMarketplaceTest is MarketplaceFixtures {
         assertTrue(_calldataHash(id, 0, j) != base, "principal");
         j = _swapInputs(0.5e18);
         j.executeBy += 1;
-        assertTrue(_calldataHash(id, 0, j) != base, "executeBy");
+        assertEq(_calldataHash(id, 0, j), base, "executeBy is not in the job");
         j = _swapInputs(0.5e18);
         j.expiredAt += 1;
         assertTrue(_calldataHash(id, 0, j) != base, "expiredAt");
