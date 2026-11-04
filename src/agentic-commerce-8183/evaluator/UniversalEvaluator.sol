@@ -24,6 +24,7 @@ import {
     IReadStateViews
 } from "./EvaluationTypes.sol";
 import {JobSpecLib} from "./JobSpecLib.sol";
+import {JobDescription} from "../libraries/JobDescription.sol";
 import {EvmReadLib, FireParams} from "./EvmReadLib.sol";
 import {UniversalEvaluatorErrors, JobSpecErrors} from "../libraries/Errors.sol";
 
@@ -508,9 +509,10 @@ contract UniversalEvaluator is IUniversalEvaluator, ReentrancyGuard {
 
     // ═════════════════════════════════ internal ═════════════════════════════════
 
-    /// @dev Specs are checked by `JobSpecLib.validate` when frozen, so decoding a frozen spec never fails.
+    /// @dev Specs are checked by `JobSpecLib.validate` when frozen, so decoding a frozen spec never fails. A recurring
+    ///      job's description carries a prefix and a `Recurrence`; the spec is decoded without them.
     function _decodeSpec(bytes memory spec) internal pure returns (JobSpec memory) {
-        return abi.decode(spec, (JobSpec));
+        return abi.decode(JobDescription.specBytes(spec), (JobSpec));
     }
 
     /// @dev The frozen spec: the stored replacement, or the createJob description.
