@@ -599,6 +599,167 @@ contract UniversalHookRecurringTest is UniversalEvalBase {
         assertEq(uint256(vm.load(address(hook), ofJob)), id);
     }
 
+    // ═════════════════════════════ more evaluator paths ═════════════════════════════
+
+    /// @notice The retry path re-decodes the frozen description, prefix and all.
+    function test_RJ12_evaluator_retryEvaluation_onRecurringJob() public {
+        uint256 id = _openSeries(3);
+        _answerSnapshot(id, SWAP_PRE, 0);
+        _advance();
+        _submit(id);
+        uint64 fixedBlock = ue.endHeightOf(id, 0);
+        _answer(id, 0, ""); // unreadable
+        assertEq(uint8(ue.evaluationOf(id).verdict), uint8(Verdict.INCONCLUSIVE));
+        uint256 firstRequest = ue.requestOf(id, 0);
+        vm.recordLogs();
+        vm.prank(provider);
+        ue.retryEvaluation{value: READ_COST}(id);
+        assertTrue(ue.requestOf(id, 0) != firstRequest, "sent again");
+        assertEq(_readSpecFromLogs(ue.requestOf(id, 0)).blockNumber, fixedBlock);
+        _answer(id, 0, abi.encode(PASS_VALUE));
+        assertEq(uint8(kernel.getJob(id).status), uint8(IAgenticCommerce.JobStatus.Completed));
+    }
+
+    /// @notice A renewed period's unspent read prepayment goes back to the wallet that paid it.
+    function test_RJ13_renewedPeriod_unspentPrepaidBackToWallet() public {
+        uint256 id = _openSeries(3);
+        _pass(id);
+        uint256 job = _renew(id, 1);
+        _price(job);
+        _fundNext(id, 1);
+        _pass(job);
+        uint256 left = ue.prepaidOf(job);
+        assertGt(left, 0, "headroom left over");
+        uint256 before = address(agw).balance;
+        ue.claimPrepaid(job);
+        assertEq(address(agw).balance, before + left);
+        assertEq(ue.prepaidOf(job), 0);
+    }
+
+    // ═════════════════════════════ criteria can't move ═════════════════════════════
+
+    function test_RJ42_provider_cannotReplaceSeriesCriteria() public {
+        Recurrence memory r = _rec(3, 0);
+        vm.prank(owner);
+        agw.execute(
+            address(kernel),
+            0,
+            abi.encodeCall(
+                kernel.createJob,
+                (provider, address(ue), t0 + WINDOW, string(_recurring(_swapSpec(), r)), address(hook))
+            )
+        );
+        uint256 id = kernel.jobCounter();
+        vm.prank(provider);
+        vm.expectRevert(
+            abi.encodeWithSelector(UniversalHookErrors.SpecChangeNotAllowed.selector, AllowedMutability.NONE)
+        );
+        kernel.setBudget(id, BUDGET, abi.encode(_anySpec()));
+    }
+
+    /// @notice Only the createJob description decides a series: a replacement that carries the prefix is judged as
+    ///         a spec, and no series opens.
+    function test_RJ43_prefixedReplacement_opensNoSeries() public {
+        JobSpec memory s = _swapSpec();
+        s.allowedMutability = AllowedMutability.BOTH;
+        uint256 id = _createSpec(s);
+        bytes memory replacement = _recurring(s, _rec(3, 0));
+        (uint256 snap, uint256 eval_) = ue.prefundCost(id);
+        _prefund(id, snap + eval_);
+        _fundWith(id, abi.encode(RULES, keccak256(replacement), replacement));
+        assertEq(uint8(kernel.getJob(id).status), uint8(IAgenticCommerce.JobStatus.Funded));
+        assertEq(ue.specHashOf(id), keccak256(replacement));
+        assertEq(hook.liveSeriesOf(address(agw)), 0);
+        assertEq(hook.seriesOfJob(id), 0);
+        assertEq(scheduler.count(), 0);
+    }
+
+    // ═════════════════════════════ timing and wallet edge cases ═════════════════════════════
+
+    /// @notice The scheduler runs `fundNext` only after the period's job expired: the fund fails, a miss.
+    function test_RJ64_lateFundNext_jobExpired_missed() public {
+        uint256 id = _openSeries(4);
+        _pass(id);
+        uint256 job = _renew(id, 1);
+        _price(job);
+        _warp(id, 1, WINDOW);
+        _advance();
+        vm.expectEmit(address(hook));
+        emit PeriodMissed(id, 1, job, abi.encodeWithSelector(IAgenticCommerce.WrongStatus.selector));
+        _runFundNext(1);
+        assertEq(hook.seriesOf(id).misses, 1);
+        assertEq(uint8(hook.seriesOf(id).status), uint8(UniversalHook.SeriesStatus.Live));
+    }
+
+    /// @notice A wallet that reports a job other than the one it was asked to create is not believed.
+    function test_RJ65_walletReportsWrongJob_renewFails() public {
+        uint256 id = _openSeries(3);
+        _pass(id);
+        agw.setForcedReturn(true, abi.encode(id)); // an existing, Completed job with another description
+        _warp(id, 1, 0);
+        vm.expectEmit(address(hook));
+        emit RenewFailed(id, 1, abi.encode(id));
+        assertTrue(scheduler.run(0));
+        assertEq(hook.seriesOf(id).pendingJob, 0);
+
+        agw.setForcedReturn(true, hex"1234"); // not even a job id
+        _call(abi.encodeCall(UniversalHook.renew, (id)));
+        assertEq(hook.seriesOf(id).pendingJob, 0);
+    }
+
+    /// @notice Last period funded but never submitted: past its expiry `fundNext` refunds it, then funds the next.
+    function test_RJ66_fundedNeverSubmitted_refundedThenNextFunded() public {
+        uint256 id = _openSeries(3);
+        uint256 job = _renew(id, 1);
+        _price(job);
+        _fundNext(id, 1);
+        assertEq(uint8(kernel.getJob(id).status), uint8(IAgenticCommerce.JobStatus.Expired));
+        assertEq(uint8(kernel.getJob(job).status), uint8(IAgenticCommerce.JobStatus.Funded));
+        assertEq(hook.seriesOf(id).misses, 0);
+    }
+
+    // ═════════════════════════════ fuzz ═════════════════════════════
+
+    /// @notice The window rule: accepted iff FUND_DELAY < window <= period (grace = FUND_DELAY = 1h).
+    /// forge-config: default.fuzz.runs = 128
+    function testFuzz_RJ90_windowRule(uint256 window) public {
+        window = bound(window, 5 minutes + 1, 2 days);
+        uint256 id = _createAt(_recurring(_swapSpec(), _rec(3, 0)), t0 + window);
+        if (window > 1 hours && window <= PERIOD) {
+            _fund(id);
+            assertEq(hook.seriesOf(id).window, window);
+        } else {
+            _expectFundRevert(id, abi.encodeWithSelector(UniversalHookErrors.SeriesWindow.selector, window, PERIOD));
+        }
+    }
+
+    /// @notice A series whose periods are all missed ends after its last period, or lapses at the third miss,
+    ///         whichever comes first, and books nothing after.
+    /// forge-config: default.fuzz.runs = 16
+    function testFuzz_RJ91_allMissed_endsOrLapses(uint16 count) public {
+        count = uint16(bound(count, 2, 7));
+        uint256 id = _openSeries(count);
+        _pass(id);
+        uint16 i = 1;
+        while (hook.seriesOf(id).status == UniversalHook.SeriesStatus.Live) {
+            _renew(id, i);
+            _fundNext(id, i);
+            ++i;
+        }
+        UniversalHook.Series memory s = hook.seriesOf(id);
+        uint16 processed = i - 1;
+        if (count - 1 >= 3) {
+            assertEq(uint8(s.status), uint8(UniversalHook.SeriesStatus.Lapsed));
+            assertEq(processed, 3);
+        } else {
+            assertEq(uint8(s.status), uint8(UniversalHook.SeriesStatus.Ended));
+            assertEq(processed, count - 1);
+        }
+        assertEq(s.misses, processed);
+        assertEq(scheduler.count(), 2 * uint256(processed), "period 0 booked period 1; the closing period books none");
+        assertEq(hook.liveSeriesOf(address(agw)), 0);
+    }
+
     // ═════════════════════════════ helpers ═════════════════════════════
 
     function _rec(uint16 count, uint16 index) internal view returns (Recurrence memory) {

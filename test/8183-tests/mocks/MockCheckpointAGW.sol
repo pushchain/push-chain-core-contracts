@@ -52,10 +52,20 @@ contract MockCheckpointAGW {
         renewalBroken = broken;
     }
 
+    /// @notice When set, `executeRenewal` returns this without calling: a wallet lying about what it did.
+    bytes public forcedReturn;
+    bool public forceReturn;
+
+    function setForcedReturn(bool force, bytes calldata ret) external {
+        forceReturn = force;
+        forcedReturn = ret;
+    }
+
     /// @notice The renewal door (`IAGWRenewal`): the hook's calls, no owner tick.
     function executeRenewal(address target, uint256 value, bytes calldata data) external returns (bytes memory ret) {
         require(msg.sender == renewer && renewer != address(0), "not renewer");
         require(!renewalBroken, "no renewal rule");
+        if (forceReturn) return forcedReturn;
         bool ok;
         (ok, ret) = target.call{value: value}(data);
         if (!ok) {
