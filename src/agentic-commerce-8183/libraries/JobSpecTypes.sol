@@ -93,6 +93,21 @@ struct JobSpec {
     bytes32 origin; // keccak256(abi.encode(marketplace, cardId, cardVersion, principal)); opaque to hook and evaluator
 }
 
+// ─────────────────────────────── recurring jobs ───────────────────────────────
+
+// Magic prefix of a recurring job's description: `RECURRING_JOB_PREFIX ‖ abi.encode(JobSpec, Recurrence)`.
+// A one-off job's description stays `abi.encode(JobSpec)`.
+bytes4 constant RECURRING_JOB_PREFIX = bytes4(keccak256("UNIVERSAL_RECURRING_JOB"));
+
+/// @notice One job of a series: period `index` of `count`, each `period` seconds long, starting at `start`.
+struct Recurrence {
+    uint64 start; // when period 0 starts
+    uint32 period; // seconds between periods
+    uint16 count; // periods in the series
+    uint16 index; // this job's period
+    uint256 feePerPeriod; // the budget the client agrees to fund each period
+}
+
 // ─────────────────────────────── return-type codes (`Read.outputs`) ───────────────────────────────
 
 uint8 constant T_UINT = 1;
