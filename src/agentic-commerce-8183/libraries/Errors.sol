@@ -148,6 +148,34 @@ library UniversalHookErrors {
     error FlagChanged(AllowedMutability expected, AllowedMutability got);
     /// @notice The spec being frozen is not the one the client agreed to.
     error SpecHashMismatch(bytes32 expected, bytes32 actual);
+    /// @notice `setScheduler` was not called by the proxy's admin.
+    error CallerIsNotProxyAdmin(address caller);
+    /// @notice `renew` / `fundNext` were not called by the scheduler.
+    error CallerIsNotScheduler(address caller);
+    /// @notice `fundPeriod` is the hook's own call.
+    error CallerIsNotSelf(address caller);
+    /// @notice Only the series' AGW may cancel it.
+    error CallerIsNotSeriesWallet(address caller);
+    /// @notice The series is not live.
+    error SeriesNotLive(uint256 seriesId);
+    /// @notice The AGW has a live series: no other job until it ends or is cancelled.
+    error SeriesRunning(address agw, uint256 seriesId);
+    /// @notice A recurring job needs the scheduler, and none is set.
+    error SchedulerNotSet();
+    /// @notice A recurring job must be judged by the UniversalEvaluator.
+    error RecurringNeedsEvaluator(uint256 jobId);
+    /// @notice A later period of a series can only be opened by `renew`.
+    error NotSeriesJob(uint256 jobId);
+    /// @notice A series needs at least two periods.
+    error SeriesTooShort(uint16 count);
+    /// @notice Period 0 must be funded during period 0.
+    error OutsidePeriodZero(uint64 start, uint32 period);
+    /// @notice The job window must outlast `FUND_DELAY` and, with the kernel's grace, end before the next `fundNext`.
+    error SeriesWindow(uint256 window, uint32 period);
+    /// @notice Period 0's budget is not the series' fee per period.
+    error SeriesFeeMismatch(uint256 budget, uint256 feePerPeriod);
+    /// @notice A series' criteria must be `NONE`: every period reuses them as the client signed them.
+    error SeriesSpecReplaceable(AllowedMutability flag);
 }
 
 /// @title UniversalEvaluatorErrors

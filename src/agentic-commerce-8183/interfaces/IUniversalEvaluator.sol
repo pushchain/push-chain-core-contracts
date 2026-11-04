@@ -16,4 +16,10 @@ interface IUniversalEvaluator {
     /// @notice Fix the end blocks and send the POST_EXECUTION reads from prepaid PC (called from submit). Reverts
     ///         if the end blocks can't be fixed; a failure to send the reads is caught inside.
     function verifyFromSubmit(uint256 jobId) external;
+
+    /// @notice Adds `msg.value` to the job's prepaid PC. Anyone may pay.
+    function prefund(uint256 jobId) external payable;
+
+    /// @notice What the job's snapshot and evaluation reads cost at current fees.
+    function prefundCost(uint256 jobId) external view returns (uint256 snapshot, uint256 evaluation);
 }
