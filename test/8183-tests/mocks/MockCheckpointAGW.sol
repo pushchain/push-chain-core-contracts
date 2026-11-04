@@ -38,5 +38,32 @@ contract MockCheckpointAGW {
         }
     }
 
+    /// @notice The only caller of `executeRenewal` (the UniversalHook), set by the owner; zero = none.
+    address public renewer;
+    /// @notice When set, `executeRenewal` reverts, as a wallet without the renewal rule would.
+    bool public renewalBroken;
+
+    function setRenewer(address renewer_) external {
+        require(msg.sender == owner, "not owner");
+        renewer = renewer_;
+    }
+
+    function setRenewalBroken(bool broken) external {
+        renewalBroken = broken;
+    }
+
+    /// @notice The renewal door (`IAGWRenewal`): the hook's calls, no owner tick.
+    function executeRenewal(address target, uint256 value, bytes calldata data) external returns (bytes memory ret) {
+        require(msg.sender == renewer && renewer != address(0), "not renewer");
+        require(!renewalBroken, "no renewal rule");
+        bool ok;
+        (ok, ret) = target.call{value: value}(data);
+        if (!ok) {
+            assembly {
+                revert(add(ret, 0x20), mload(ret))
+            }
+        }
+    }
+
     receive() external payable {}
 }
